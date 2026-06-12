@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Placeholder values: nothing in CI talks to a real Supabase project yet.
+  # The DB-backed E2E stage (local supabase stack) lands in M1.
+  NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+  SANDBOX_JWT_SECRET: ci-only-secret-not-a-real-one
+  NEXT_PUBLIC_PLATFORM_URL: http://localhost:3000
+  NEXT_PUBLIC_BUGGYSHOP_URL: http://localhost:3001
+  BILLING_ENABLED: "false"
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Validate curriculum content
+        run: pnpm --filter @qa-mastery/curriculum sync
+
+      - name: Build both apps
+        run: pnpm build
+
+      - name: Manifest leak check (client bundles)
+        run: |
+          if grep -rl "title_internal\|repro_steps_internal" apps/platform/.next/static apps/buggyshop/.next/static 2>/dev/null; then
+            echo "::error::Internal bug-manifest fields found in a client bundle — grading integrity broken."
+            exit 1
+          fi
+          echo "No manifest fields in client bundles."
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @qa-mastery/e2e exec playwright install --with-deps chromium webkit
+
+      - name: E2E smoke (production builds, Chromium + WebKit)
+        run: pnpm e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
+          retention-days: 7
