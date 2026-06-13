@@ -24,6 +24,9 @@ export const SEEDED_BUGS = {
   // BS-001 — signup email validator is too lax (accepts user@@domain..com).
   // A validation/equivalence-partitioning bug; not fixed in the 1.x line.
   "BS-001": { introduced: "1.0" },
+  // BS-006 — login error leaks account existence ("User does not exist" on a
+  // wrong password instead of a generic message).
+  "BS-006": { introduced: "1.0" },
   // BS-007 — product-detail quantity field accepts 0 (adds a $0 line item).
   // Boundary/validation bug; fixed in v1.1 (the BS-021 regression reintroduces it).
   "BS-007": { introduced: "1.0", fixed: "1.1" },
@@ -36,6 +39,10 @@ export const SEEDED_BUGS = {
   // BS-010 — product-list search doesn't trim input, so leading/trailing spaces
   // yield zero results.
   "BS-010": { introduced: "1.0" },
+  // BS-012 — cart free shipping applies at exactly $999 (rule is strictly > $999).
+  "BS-012": { introduced: "1.0" },
+  // BS-016 — checkout ZIP field accepts letters (should be digits only).
+  "BS-016": { introduced: "1.0" },
 } as const satisfies Record<string, SeededBugSpec>;
 
 export type SeededBugId = keyof typeof SEEDED_BUGS;
