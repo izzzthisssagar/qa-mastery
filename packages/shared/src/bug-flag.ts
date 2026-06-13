@@ -21,6 +21,9 @@ export interface SeededBugSpec {
  * an id with no entry is never active, so a half-built bug stays dormant.
  */
 export const SEEDED_BUGS = {
+  // BS-001 — signup email validator is too lax (accepts user@@domain..com).
+  // A validation/equivalence-partitioning bug; not fixed in the 1.x line.
+  "BS-001": { introduced: "1.0" },
   // BS-008 — product-list price filter excludes the item priced exactly at the
   // max (uses `<` where it should use `<=`). Fixed in v1.1 so the A5 retest
   // lessons have a genuine "verify the fix" to do.
