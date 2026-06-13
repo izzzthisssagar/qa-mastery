@@ -58,7 +58,7 @@ test.describe("learn — boundary-value-analysis", () => {
     await expect(
       page.getByRole("heading", { name: /your learning/i }),
     ).toBeVisible();
-    await page.getByTestId("start-bva").click();
+    await page.getByTestId("lesson-link-boundary-value-analysis").click();
 
     // lands on the lesson page and renders its title + the "See it" widget
     await expect(page).toHaveURL(new RegExp(`/learn/${SLUG}`));
@@ -131,5 +131,95 @@ test.describe("learn — boundary-value-analysis", () => {
     await expect(result).toBeVisible();
     await expect(result).toContainText(/BS-008/);
     await expect(page.getByTestId("bug-file-another")).toBeVisible();
+  });
+});
+
+test.describe("learn — equivalence-partitioning", () => {
+  const EP_SLUG = "equivalence-partitioning";
+
+  test("dashboard links to the lesson and it renders its title", async ({ page }) => {
+    await signUpFreshLearner(page);
+    await page.getByTestId("lesson-link-equivalence-partitioning").click();
+    await expect(page).toHaveURL(new RegExp(`/learn/${EP_SLUG}`));
+    await expect(
+      page.getByRole("heading", { name: /equivalence partitioning/i }),
+    ).toBeVisible();
+  });
+
+  test("Do it lab — reporting the signup email bug matches BS-001", async ({ page }) => {
+    await signUpFreshLearner(page);
+    await page.goto(`http://localhost:3000/learn/${EP_SLUG}`);
+
+    await expect(page.getByTestId("bug-report-lab")).toBeVisible();
+
+    // report the invalid-email-accepted bug found on BuggyShop's signup page
+    await page.getByTestId("bug-page").selectOption("signup");
+    await page.getByTestId("bug-feature").selectOption("email-validation");
+    await page.getByTestId("bug-category").selectOption("validation");
+    await page.getByTestId("bug-severity").selectOption("major");
+    await page.getByTestId("bug-title").fill("Invalid email accepted at signup");
+    await page
+      .getByTestId("bug-steps")
+      .fill("Open Sign up\nEnter user@@domain..com\nIt is accepted");
+    await page.getByTestId("bug-expected").fill("Invalid address should be rejected");
+    await page.getByTestId("bug-actual").fill("Invalid address is accepted");
+
+    const submit = page.getByTestId("bug-submit");
+    await expect(submit).toBeEnabled();
+    await submit.click();
+
+    const result = page.getByTestId("bug-result");
+    await expect(result).toBeVisible();
+    await expect(result).toContainText(/BS-001/);
+  });
+});
+
+test.describe("learn — all Track A lessons render", () => {
+  // MDX compiles at request time, so a render check catches a broken lesson
+  // body or quiz that the build can't. Covers the whole track.
+  const TRACK_A_SLUGS = [
+    // A1
+    "what-is-software-testing",
+    "sdlc-how-software-gets-built",
+    "stlc-testers-lifecycle",
+    "what-is-a-bug",
+    "cost-of-bugs-and-agile",
+    // A2
+    "verification-vs-validation",
+    "testing-levels",
+    "testing-types",
+    "black-white-grey-box",
+    "seven-testing-principles",
+    // A3
+    "why-design-tests",
+    "equivalence-partitioning",
+    "boundary-value-analysis",
+    "decision-tables",
+    "state-transition-testing",
+    "error-guessing",
+    // A4
+    "writing-test-cases",
+    "test-data-and-preconditions",
+    "priority-vs-severity",
+    "bug-report-that-gets-fixed",
+    "jira-and-test-management",
+    "bug-hunt-i",
+    // A5
+    "exploratory-testing-sbtm",
+    "smoke-sanity-retest-regression",
+    "cross-browser-responsive-compatibility",
+    "uat-reporting-signoff",
+    "working-with-developers",
+    "capstone-full-test-cycle",
+  ];
+
+  test("every Track A lesson renders its body and quiz", async ({ page }) => {
+    await signUpFreshLearner(page);
+    for (const slug of TRACK_A_SLUGS) {
+      await page.goto(`http://localhost:3000/learn/${slug}`);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      await expect(page.getByTestId("quiz-panel")).toBeVisible();
+      await expect(page.getByTestId("quiz-submit")).toBeVisible();
+    }
   });
 });

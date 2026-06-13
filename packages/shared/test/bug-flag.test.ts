@@ -33,6 +33,12 @@ describe("bugFlag (registry)", () => {
     expect(SEEDED_BUGS["BS-008"]).toEqual({ introduced: "1.0", fixed: "1.1" });
   });
 
+  it("BS-001 is active across all releases (never fixed in the 1.x line)", () => {
+    expect(bugFlag("BS-001", "1.0")).toBe(true);
+    expect(bugFlag("BS-001", "1.1")).toBe(true);
+    expect(bugFlag("BS-001", "2.0")).toBe(true);
+  });
+
   it("unknown bug ids are never active", () => {
     expect(bugFlag("BS-999", "1.0")).toBe(false);
     expect(bugFlag("not-a-bug", "2.0")).toBe(false);

@@ -14,11 +14,11 @@ export default function ShopHomePage() {
           <Link href="/products" data-testid="nav-products" className="hover:text-shop-accent">
             Products
           </Link>
+          <Link href="/signup" data-testid="nav-signup" className="hover:text-shop-accent">
+            Sign up
+          </Link>
           <span className="cursor-not-allowed opacity-60" data-testid="nav-cart">
             Cart (0)
-          </span>
-          <span className="cursor-not-allowed opacity-60" data-testid="nav-login">
-            Log in
           </span>
         </nav>
       </header>

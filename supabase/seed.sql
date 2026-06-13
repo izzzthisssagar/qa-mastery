@@ -13,6 +13,13 @@ insert into buggyshop.bs_bug_manifest
   (bug_id, release, fixed_in, page, feature, category, severity,
    title_internal, trigger_internal, repro_steps, expected, points, teaches)
 values
+  ('BS-001', '1.0', null, 'signup', 'email-validation', 'validation', 'major',
+   'Signup accepts invalid email addresses',
+   'Email regex is too lax — accepts double @ and consecutive dots',
+   '["Open the Sign up page", "Enter an invalid address such as user@@domain..com", "Submit and see it accepted"]'::jsonb,
+   'An invalid email such as user@@domain..com should be rejected.',
+   10,
+   '{A3.2}'),
   ('BS-008', '1.0', '1.1', 'product-list', 'price-filter', 'boundary', 'major',
    'Max-boundary item excluded from the price filter',
    'Filter compares price < max instead of price <= max',

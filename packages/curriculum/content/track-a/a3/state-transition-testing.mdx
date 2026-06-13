@@ -1,0 +1,64 @@
+---
+slug: state-transition-testing
+title: State Transition Testing
+track: track-a
+module: A3
+order: 5
+free: true
+duration_min: 20
+widgets: []
+lab_type: none
+status: published
+flashcards:
+  - front: What four things do you need to model before deriving state transition tests?
+    back: States, events (triggers), valid transitions between states, and guards/conditions on those transitions.
+  - front: Why are invalid transitions worth testing explicitly?
+    back: Bugs hide where the system should refuse an event but doesn't. A weak app lets you cancel a Shipped order, refund twice, or pay a cancelled order.
+  - front: In the order example, when is Cancel a valid event?
+    back: Only from Placed or Paid. Once the order reaches Shipped or Delivered, Cancel must be rejected.
+  - front: What is a "guard" in a state model?
+    back: A condition that must be true for an event to fire a transition, e.g. Cancel is only allowed while status is before Shipped.
+---
+
+## Some bugs only show up when you do things in the wrong order
+
+Many features are not about a single input being right or wrong. They are about *sequence*: what happens when you fire an event while the system is in a particular state. Pay an order, then pay it again. Cancel an order that already shipped. Refund something that was never paid. State transition testing is how you find these bugs on purpose instead of by accident in production.
+
+The idea: model the feature as a set of **states**, a set of **events**, and the **transitions** that move you from one state to another. Then test the transitions that should work, and just as deliberately, test the events that should be refused.
+
+## See it — the order lifecycle
+
+Take a shop order. It has four states and moves through them via events.
+
+| Current state | Event       | Allowed? | Next state |
+|---------------|-------------|----------|------------|
+| Placed        | Pay         | yes      | Paid       |
+| Placed        | Cancel      | yes      | Cancelled  |
+| Paid          | Ship        | yes      | Shipped    |
+| Paid          | Cancel      | yes      | Cancelled  |
+| Shipped       | Deliver     | yes      | Delivered  |
+| Shipped       | Cancel      | NO       | (rejected) |
+| Delivered     | Cancel      | NO       | (rejected) |
+| Cancelled     | Pay         | NO       | (rejected) |
+
+The valid path is `Placed -> Paid -> Shipped -> Delivered`. Cancel is only valid from `Placed` or `Paid` — that "before Shipped" rule is the **guard**.
+
+## Try it — read tests off the model
+
+Two kinds of tests fall out of the table.
+
+**Valid transitions** — one test per allowed row. Place an order, pay it, confirm status is Paid. Then ship it, confirm Shipped. Then deliver, confirm Delivered. Each step asserts the new state *and* that the side effects fired (Pay charges the card, Ship emails tracking).
+
+**Invalid transitions** — one test per event the system must refuse. Get an order to `Shipped`, then attempt Cancel. The correct behaviour is: the order stays Shipped, no refund is issued, and the user sees a clear error. A passing test here asserts *nothing changed*.
+
+Notice the trap: a naive Cancel handler just sets `status = Cancelled` and refunds, without checking the current state. That ships, customers cancel delivered goods, and money leaves. That is exactly the class of defect logged as BuggyShop **BS-014**.
+
+## Do it — the lab
+
+In BuggyShop, drive an order to the Shipped state, then hit Cancel. Watch what happens. Does the status flip to Cancelled? Does a refund appear? Compare that against the table above and write it up as a defect if the transition was illegally allowed. Then build a small transition table for one other BuggyShop flow (for example a coupon: Issued -> Redeemed, and try to redeem an already-Redeemed coupon). List every valid transition as a test and every "must be refused" event as its own test.
+
+(A richer interactive state-diagram builder is planned for this lesson.)
+
+## Prove it
+
+Five questions to check you can read tests off a state model.
