@@ -6,6 +6,14 @@ export {
 } from "./releases";
 
 export {
+  SEEDED_BUGS,
+  isBugActive,
+  bugFlag,
+  type SeededBugSpec,
+  type SeededBugId,
+} from "./bug-flag";
+
+export {
   HANDOFF_TTL_SECONDS,
   SESSION_TTL_SECONDS,
   mintHandoffToken,
