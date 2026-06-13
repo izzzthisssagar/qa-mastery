@@ -101,4 +101,35 @@ test.describe("learn — boundary-value-analysis", () => {
     // grading swaps Submit for the retry control
     await expect(page.getByTestId("quiz-retry")).toBeVisible();
   });
+
+  test("Do it lab — a correct bug report matches the seeded BS-008", async ({
+    page,
+  }) => {
+    await signUpFreshLearner(page);
+    await page.goto(`http://localhost:3000/learn/${SLUG}`);
+
+    const lab = page.getByTestId("bug-report-lab");
+    await expect(lab).toBeVisible();
+
+    // report the price-filter boundary bug the learner finds on BuggyShop
+    await page.getByTestId("bug-page").selectOption("product-list");
+    await page.getByTestId("bug-feature").selectOption("price-filter");
+    await page.getByTestId("bug-category").selectOption("boundary");
+    await page.getByTestId("bug-severity").selectOption("major");
+    await page.getByTestId("bug-title").fill("Max-price item excluded from filter");
+    await page
+      .getByTestId("bug-steps")
+      .fill("Open Products\nSet max price to 100\n$100 item disappears");
+    await page.getByTestId("bug-expected").fill("Item priced at exactly 100 still shows");
+    await page.getByTestId("bug-actual").fill("Item priced at 100 is excluded");
+
+    const submit = page.getByTestId("bug-submit");
+    await expect(submit).toBeEnabled();
+    await submit.click();
+
+    const result = page.getByTestId("bug-result");
+    await expect(result).toBeVisible();
+    await expect(result).toContainText(/BS-008/);
+    await expect(page.getByTestId("bug-file-another")).toBeVisible();
+  });
 });

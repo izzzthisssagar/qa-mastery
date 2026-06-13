@@ -4,6 +4,7 @@ import { MDXRemote } from "next-mdx-remote/rsc";
 import { findLessonBySlug, loadLessonBody, loadQuiz, MODULES } from "@qa-mastery/curriculum";
 import { LessonProgressProvider } from "./progress-context";
 import { SeeWidget } from "./see-widget";
+import { LessonLab } from "./lab-widget";
 import { mdxComponents } from "./mdx-components";
 import { QuizPanel, type PublicQuizQuestion } from "./quiz-panel";
 
@@ -52,7 +53,7 @@ export default async function LessonPage({ params }: PageProps) {
         <div className="text-zinc-300">
           <MDXRemote
             source={body}
-            components={{ ...mdxComponents, BoundarySlider: SeeWidget }}
+            components={{ ...mdxComponents, BoundarySlider: SeeWidget, BugReportLab: LessonLab }}
           />
         </div>
 
