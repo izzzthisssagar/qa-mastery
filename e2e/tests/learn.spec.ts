@@ -173,3 +173,25 @@ test.describe("learn — equivalence-partitioning", () => {
     await expect(result).toContainText(/BS-001/);
   });
 });
+
+test.describe("learn — Module A1 lessons render", () => {
+  // Concept lessons (no lab); MDX compiles at request time, so a render check
+  // catches a broken lesson body or quiz that the build can't.
+  const A1_SLUGS = [
+    "what-is-software-testing",
+    "sdlc-how-software-gets-built",
+    "stlc-testers-lifecycle",
+    "what-is-a-bug",
+    "cost-of-bugs-and-agile",
+  ];
+
+  test("every A1 lesson renders its body and quiz", async ({ page }) => {
+    await signUpFreshLearner(page);
+    for (const slug of A1_SLUGS) {
+      await page.goto(`http://localhost:3000/learn/${slug}`);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      await expect(page.getByTestId("quiz-panel")).toBeVisible();
+      await expect(page.getByTestId("quiz-submit")).toBeVisible();
+    }
+  });
+});
