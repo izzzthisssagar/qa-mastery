@@ -13,7 +13,13 @@ import { submitBugReport, type BugReportResult } from "../actions";
 
 const FIELD = "w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:border-accent focus:outline-none";
 
-export function BugReportLab({ slug }: { slug: string }) {
+export function BugReportLab({
+  slug,
+  onGraded,
+}: {
+  slug: string;
+  onGraded?: (result: BugReportResult) => void;
+}) {
   const [page, setPage] = useState("");
   const [feature, setFeature] = useState("");
   const [category, setCategory] = useState("");
@@ -34,18 +40,18 @@ export function BugReportLab({ slug }: { slug: string }) {
     setSubmitting(true);
     setError(null);
     try {
-      setResult(
-        await submitBugReport(slug, {
-          page,
-          feature,
-          category,
-          severity: severity as Severity,
-          title: title.trim(),
-          steps: steps.split("\n").map((s) => s.trim()).filter(Boolean),
-          expected: expected.trim(),
-          actual: actual.trim(),
-        }),
-      );
+      const graded = await submitBugReport(slug, {
+        page,
+        feature,
+        category,
+        severity: severity as Severity,
+        title: title.trim(),
+        steps: steps.split("\n").map((s) => s.trim()).filter(Boolean),
+        expected: expected.trim(),
+        actual: actual.trim(),
+      });
+      setResult(graded);
+      onGraded?.(graded);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not submit your report.");
     } finally {

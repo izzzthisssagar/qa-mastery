@@ -285,3 +285,35 @@ export async function submitBugReport(
     matchedBugId: outcome.matched?.id ?? null,
   };
 }
+
+export interface HuntStatus {
+  /** Distinct seeded-bug ids this learner has matched on this lesson. */
+  found: string[];
+  /** Seeded bugs available to find in the lesson's release. */
+  total: number;
+}
+
+/** Bug-hunt progress for the current learner: how many distinct seeded bugs
+ *  they've matched on this lesson, out of the total in the release manifest. */
+export async function getHuntStatus(slug: string): Promise<HuntStatus> {
+  const userId = await getAuthedUserId();
+  const service = createServiceClient();
+  const lesson = await requireAccessibleLesson(service, slug);
+  const release = lessonRelease(slug);
+
+  const { count } = await service
+    .schema("buggyshop")
+    .from("bs_bug_manifest")
+    .select("*", { count: "exact", head: true })
+    .eq("release", release);
+
+  const { data } = await service
+    .from("bug_reports")
+    .select("matched_bug_id")
+    .eq("user_id", userId)
+    .eq("lesson_id", lesson.id)
+    .not("matched_bug_id", "is", null);
+
+  const found = [...new Set((data ?? []).map((r) => r.matched_bug_id as string))];
+  return { found, total: count ?? 0 };
+}
