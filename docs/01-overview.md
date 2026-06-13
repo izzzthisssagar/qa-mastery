@@ -25,7 +25,7 @@ repo as two **tracks**:
 
 | Track | Focus | Status |
 |---|---|---|
-| **Track A — Manual Testing Foundation** | SDLC → test design techniques → bug reports → a full test-cycle capstone | Ships first; the opening lesson exists today |
+| **Track A — Manual Testing Foundation** | SDLC → test design techniques → bug reports → a full test-cycle capstone | All 28 lessons authored across modules A1–A5 |
 | **Track B — Automation Foundation** | "Just enough Java" → Selenium WebDriver → TestNG + Page Object Model → CI | **Planned** |
 
 Module/track metadata lives in `packages/curriculum/src/taxonomy.ts`.
@@ -58,6 +58,7 @@ module A3). It is the reference example for everything in these docs — see
 | Data model: registry, progress, quiz, XP, review queue, BuggyShop sandbox | Built (migrations 0001–0004) |
 | Curriculum pipeline: MDX → DB registry sync | Built |
 | First lesson end-to-end: BVA lesson + Boundary Hunter widget + graded quiz | Built (M1) |
+| All 28 Track A lessons authored (MDX + quiz; EP & BVA also have graded labs) | Built |
 | Live "Do it" lab: BuggyShop products page + bug-report form, graded against the manifest | Built (M1) |
 | `bugFlag(id, release)` seeded-bug wrapper | Built (one bug — BS-008 — wired so far) |
 | RLS regression suite (`pnpm test:rls`) | Built |

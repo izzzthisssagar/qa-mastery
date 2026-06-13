@@ -58,7 +58,7 @@ test.describe("learn — boundary-value-analysis", () => {
     await expect(
       page.getByRole("heading", { name: /your learning/i }),
     ).toBeVisible();
-    await page.getByTestId("start-bva").click();
+    await page.getByTestId("lesson-link-boundary-value-analysis").click();
 
     // lands on the lesson page and renders its title + the "See it" widget
     await expect(page).toHaveURL(new RegExp(`/learn/${SLUG}`));
@@ -139,7 +139,7 @@ test.describe("learn — equivalence-partitioning", () => {
 
   test("dashboard links to the lesson and it renders its title", async ({ page }) => {
     await signUpFreshLearner(page);
-    await page.getByTestId("start-ep").click();
+    await page.getByTestId("lesson-link-equivalence-partitioning").click();
     await expect(page).toHaveURL(new RegExp(`/learn/${EP_SLUG}`));
     await expect(
       page.getByRole("heading", { name: /equivalence partitioning/i }),
