@@ -8,6 +8,7 @@ The schema lives in `supabase/migrations/`, applied in order:
 | `20260613000002_buggyshop.sql` | `buggyshop.bs_*` sandbox tables, the seeded-bug manifest, `provision_sandbox`/`reset_sandbox` RPCs |
 | `20260613000003_progress_tables.sql` | `quiz_attempts`, `review_queue`, `xp_events` |
 | `20260613000004_public_grants.sql` | Role grants for the `public` schema (bug fix — see below) |
+| `20260613000005_bug_reports.sql` | `bug_reports` — graded bug-report lab submissions |
 
 **RLS is the authorization model.** Every table has Row-Level Security enabled.
 Table-level GRANTs (migration 0004) decide which roles may touch a table at all;
@@ -45,6 +46,7 @@ why an anonymous visitor can browse the catalog but never sees drafts.
 | `quiz_attempts` | Graded quiz attempts | `attempt_no`, `score`, `max_score`, `passed`, `answers` jsonb | **service role only** | read own — **no insert/update policy** |
 | `review_queue` | Spaced-repetition flashcards (SM-2-lite) | `(user_id, card_key)` PK, `front`, `back`, `due_at`, `interval_days`, `ease`, `reps`, `lapses` | owner (scheduling is self-reported) | read / insert / update own |
 | `xp_events` | Append-only XP ledger | `amount`, `reason`, `ref_id` | **service role only** | read own — **no insert policy** |
+| `bug_reports` | Graded "Do it" lab submissions | `matched_bug_id`, `page`, `feature`, `category`, `severity`, `score`, `matched`, `duplicate`, `feedback` | **service role only** | read own — **no insert policy** |
 
 The split is the heart of **invariant 2** ([04](./04-invariants.md)): anything a
 score depends on (`quiz_attempts`, `xp_events`) has *read-own RLS and no write

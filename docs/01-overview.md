@@ -38,9 +38,9 @@ Every lesson follows one pedagogy, encoded in the lesson MDX and the learn page:
    Analysis, the **Boundary Hunter** lets the learner walk a numeric field's edges
    and *discover* a seeded off-by-one bug themselves.
 2. **Try it** — a guided worked example the learner reasons through.
-3. **Do it** — a lab against the live BuggyShop app (file a real bug report,
-   graded). The live lab is **Planned**; today the lesson locks in the concept
-   with the quiz.
+3. **Do it** — a lab against the live BuggyShop app: find a seeded bug on the
+   products page, then file a structured bug report that's graded against the
+   server-only manifest. (Built for BVA against the BS-008 price-filter bug.)
 4. **Prove it** — a quiz, graded server-side. Passing (≥70%) completes the
    lesson, awards XP, and seeds the lesson's flashcards into a spaced-repetition
    review queue.
@@ -58,8 +58,10 @@ module A3). It is the reference example for everything in these docs — see
 | Data model: registry, progress, quiz, XP, review queue, BuggyShop sandbox | Built (migrations 0001–0004) |
 | Curriculum pipeline: MDX → DB registry sync | Built |
 | First lesson end-to-end: BVA lesson + Boundary Hunter widget + graded quiz | Built (M1) |
-| Live BuggyShop lab (file/grade a real bug report) | **Planned** |
-| `bugFlag(id, release)` seeded-bug wrapper | **Planned** (referenced in `CLAUDE.md` as landing in M1) |
+| Live "Do it" lab: BuggyShop products page + bug-report form, graded against the manifest | Built (M1) |
+| `bugFlag(id, release)` seeded-bug wrapper | Built (one bug — BS-008 — wired so far) |
+| RLS regression suite (`pnpm test:rls`) | Built |
+| BuggyShop beyond the products page (cart, checkout, the other ~19 bugs) | **Planned** |
 | Entitlements / billing (Pro lessons) | **Planned** (M3) |
 | Code runner (Track B automation labs) | **Planned** (`NullRunner` stub exists) |
 

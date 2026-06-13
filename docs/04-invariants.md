@@ -106,9 +106,11 @@ never inlined.
 **Why.** Bugs must be toggleable per release (BuggyShop ships v1.0 → v2.0 with
 different active bugs) and auditable in one place.
 
-**How enforced.** **Planned.** `CLAUDE.md` lists this as landing in M1; a
-`releases.ts` exists but the `bugFlag` wrapper is not yet implemented. Until it
-lands, treat this as a convention to uphold when adding seeded bugs.
+**How enforced.** `bugFlag(id, release)` lives in `packages/shared`
+(`bug-flag.ts`): a registry of seeded bugs keyed by id with an introduced/fixed
+release window, plus a pure `isBugActive` predicate, unit-tested. BuggyShop's
+BS-008 price-filter bug is wired through it (active in v1.0, fixed in v1.1). The
+remaining seeded bugs adopt the same wrapper as they land.
 
 ---
 

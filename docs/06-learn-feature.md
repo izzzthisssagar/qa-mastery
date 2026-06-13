@@ -8,15 +8,27 @@ grading, and progress fit together.
 
 ```
 apps/platform/src/app/(app)/learn/
-├── actions.ts            # server actions: saveProgress, submitQuiz
+├── actions.ts            # server actions: saveProgress, submitQuiz, submitBugReport
 └── [slug]/
     ├── page.tsx          # server component — renders the lesson
     ├── mdx-components.tsx # prose styling for the MDX body (server)
     ├── progress-context.tsx # client — fire-and-forget step tracking
-    ├── see-widget.tsx    # client — the Boundary Hunter, wired to progress
-    └── quiz-panel.tsx    # client — the quiz UI + grading round-trip
+    ├── see-widget.tsx    # client — the Boundary Hunter, wired to progress (See it)
+    ├── lab-panel.tsx     # client — the bug-report form (Do it)
+    ├── lab-widget.tsx    # client — <BugReportLab/> wrapper, slug from context
+    └── quiz-panel.tsx    # client — the quiz UI + grading round-trip (Prove it)
 apps/platform/src/lib/auth.ts   # getAuthedUserId() — used by the actions
 ```
+
+## The "Do it" lab
+
+The lesson MDX embeds `<BugReportLab/>` in its "Do it" section. The learner finds
+the seeded bug on BuggyShop's products page, then files a structured report
+(page / feature / category / severity from the *stripped* taxonomy, plus title /
+steps / expected / actual). `submitBugReport` reads the seeded-bug manifest
+server-side from the deny-all `buggyshop` schema for the lesson's release, grades
+it with `matchBugReport`, records the submission in `bug_reports`, and marks the
+"do" step. The manifest's internal title is revealed only as post-match feedback.
 
 ## The page (`page.tsx`, Server Component)
 

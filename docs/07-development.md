@@ -31,7 +31,8 @@ The placeholders in `.env.example` fail fast on purpose.
 |---|---|
 | `pnpm dev` | Both apps in dev (platform :3000, buggyshop :3001). |
 | `pnpm lint` / `pnpm typecheck` | Turbo-cached across all packages. |
-| `pnpm test` | Unit tests (Vitest) — grading, curriculum, shared. |
+| `pnpm test` | Unit tests (Vitest) — grading, curriculum, shared. No DB needed. |
+| `pnpm test:rls` | RLS regression suite (`@qa-mastery/db`). Needs the live local stack + a synced lesson; pass the Supabase env vars. |
 | `pnpm build` | Production build of everything. |
 | `pnpm e2e` | `turbo build` then Playwright on **Chromium + WebKit** against `next start` of both apps. |
 | `pnpm db:start` / `db:stop` / `db:status` | Local Supabase stack. |
@@ -66,7 +67,9 @@ This platform teaches QA — its own suite is marketing. The bar (`CLAUDE.md`):
 - **Playwright e2e for every learner-facing flow on Chromium AND WebKit** — the
   iframe/token handoff must stay Safari-proof. e2e always runs production builds
   (`next start`); dev-mode cold compiles swallow clicks pre-hydration.
-- **RLS regression tests** — **Planned** (land with the DB-backed CI stage).
+- **RLS regression tests** — `pnpm test:rls` (`packages/db/test/rls.test.ts`):
+  proves read-own/can't-read-others on progress, no self-written scores
+  (quiz/XP/bug-report), and the sealed buggyshop schema. Run in the DB-backed stage.
 
 Locators use `data-testid`s; see `e2e/tests/learn.spec.ts` for the pattern
 (inline `signUpFreshLearner()` helper, `getByTestId`, both browser projects).
