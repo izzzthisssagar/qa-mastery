@@ -43,6 +43,12 @@ export const SEEDED_BUGS = {
   "BS-012": { introduced: "1.0" },
   // BS-016 — checkout ZIP field accepts letters (should be digits only).
   "BS-016": { introduced: "1.0" },
+  // BS-011 — payment offers Card for orders < $100 but rejects it on submit.
+  "BS-011": { introduced: "1.0" },
+  // BS-014 — a Shipped order can still be cancelled (invalid state transition).
+  "BS-014": { introduced: "1.0" },
+  // BS-019 — editing the profile email skips re-validation (accepts invalid).
+  "BS-019": { introduced: "1.0" },
 } as const satisfies Record<string, SeededBugSpec>;
 
 export type SeededBugId = keyof typeof SEEDED_BUGS;
