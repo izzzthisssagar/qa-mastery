@@ -26,6 +26,27 @@ values
    '["Open the Products page", "Set Max price to the exact price of the most expensive item (100)", "Notice that item disappears from the results"]'::jsonb,
    'The item priced exactly at the max price should still appear in the filtered results.',
    15,
-   '{A3.3}')
+   '{A3.3}'),
+  ('BS-009', '1.0', null, 'product-list', 'sort', 'functional', 'major',
+   'Sort by price orders prices as text',
+   'Sort compares String(price) instead of the number, so 100 sorts before 5',
+   '["Open the Products page", "Sort by Price: low to high", "See the $100 item appear before cheaper items"]'::jsonb,
+   'Sorting by price ascending should list the cheapest item first.',
+   10,
+   '{A1.4}'),
+  ('BS-010', '1.0', null, 'product-list', 'search', 'functional', 'minor',
+   'Search does not trim whitespace',
+   'Query is matched without trimming, so a leading/trailing space yields no results',
+   '["Open the Products page", "Search for \"mug \" with a trailing space", "See zero results even though Mug exists"]'::jsonb,
+   'A search with stray surrounding spaces should still find matching products.',
+   5,
+   '{A3.6}'),
+  ('BS-007', '1.0', '1.1', 'product-detail', 'quantity', 'boundary', 'major',
+   'Quantity field accepts 0',
+   'Quantity check uses >= 0 instead of >= 1, so a 0-quantity $0 line is added',
+   '["Open a product detail page", "Set Quantity to 0", "Add to cart and see a $0.00 line accepted"]'::jsonb,
+   'A quantity of 0 should be rejected; the minimum is 1.',
+   10,
+   '{A3.2}')
 on conflict (bug_id) do nothing;
 

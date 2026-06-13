@@ -36,6 +36,7 @@ export const BUG_FEATURES = [
 ] as const;
 
 export const BUG_CATEGORIES = [
+  "functional",
   "boundary",
   "validation",
   "calculation",

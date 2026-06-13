@@ -24,10 +24,18 @@ export const SEEDED_BUGS = {
   // BS-001 — signup email validator is too lax (accepts user@@domain..com).
   // A validation/equivalence-partitioning bug; not fixed in the 1.x line.
   "BS-001": { introduced: "1.0" },
+  // BS-007 — product-detail quantity field accepts 0 (adds a $0 line item).
+  // Boundary/validation bug; fixed in v1.1 (the BS-021 regression reintroduces it).
+  "BS-007": { introduced: "1.0", fixed: "1.1" },
   // BS-008 — product-list price filter excludes the item priced exactly at the
   // max (uses `<` where it should use `<=`). Fixed in v1.1 so the A5 retest
   // lessons have a genuine "verify the fix" to do.
   "BS-008": { introduced: "1.0", fixed: "1.1" },
+  // BS-009 — product-list sort-by-price compares as text (1000 < 200 < 30).
+  "BS-009": { introduced: "1.0" },
+  // BS-010 — product-list search doesn't trim input, so leading/trailing spaces
+  // yield zero results.
+  "BS-010": { introduced: "1.0" },
 } as const satisfies Record<string, SeededBugSpec>;
 
 export type SeededBugId = keyof typeof SEEDED_BUGS;
