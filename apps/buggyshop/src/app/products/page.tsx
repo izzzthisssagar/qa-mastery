@@ -2,12 +2,21 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { filterByMaxPrice, getActiveRelease, PRODUCTS } from "@/lib/catalog";
+import {
+  filterByMaxPrice,
+  getActiveRelease,
+  searchByName,
+  sortByPrice,
+  PRODUCTS,
+  type SortDir,
+} from "@/lib/catalog";
 
 const SESSION_STORAGE_KEY = "bs-session";
 
 export default function ProductsPage() {
   const [maxPriceInput, setMaxPriceInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [sortDir, setSortDir] = useState<SortDir>("none");
 
   // Release decides which seeded bugs are live. Read once from the session if
   // the learner arrived via the handoff; default release otherwise.
@@ -17,7 +26,11 @@ export default function ProductsPage() {
   }, []);
 
   const maxPrice = maxPriceInput.trim() === "" ? null : Number(maxPriceInput);
-  const visible = filterByMaxPrice(PRODUCTS, maxPrice, release);
+  const visible = sortByPrice(
+    filterByMaxPrice(searchByName(PRODUCTS, search, release), maxPrice, release),
+    sortDir,
+    release,
+  );
 
   return (
     <div className="flex flex-1 flex-col">
@@ -45,6 +58,29 @@ export default function ProductsPage() {
         <h1 className="text-2xl font-bold tracking-tight">Products</h1>
 
         <div className="mt-6 flex flex-wrap items-end gap-3 rounded-xl border border-zinc-200 bg-white p-4">
+          <label className="flex flex-col gap-1 text-sm text-zinc-600">
+            Search
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="e.g. mug"
+              data-testid="search-input"
+              className="w-44 rounded-lg border border-zinc-300 px-3 py-1.5 text-zinc-900 focus:border-shop-accent focus:outline-none"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-zinc-600">
+            Sort
+            <select
+              value={sortDir}
+              onChange={(e) => setSortDir(e.target.value as SortDir)}
+              data-testid="sort-select"
+              className="w-44 rounded-lg border border-zinc-300 px-3 py-1.5 text-zinc-900 focus:border-shop-accent focus:outline-none"
+            >
+              <option value="none">Featured</option>
+              <option value="asc">Price: low to high</option>
+            </select>
+          </label>
           <label className="flex flex-col gap-1 text-sm text-zinc-600">
             Max price ($)
             <input
@@ -93,6 +129,13 @@ export default function ProductsPage() {
               >
                 ${product.price}
               </span>
+              <Link
+                href={`/products/${product.id}`}
+                data-testid={`view-${product.id}`}
+                className="mt-2 text-xs font-medium text-shop-accent hover:underline"
+              >
+                View →
+              </Link>
             </li>
           ))}
         </ul>

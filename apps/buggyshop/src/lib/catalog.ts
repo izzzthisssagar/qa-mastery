@@ -44,6 +44,55 @@ export function filterByMaxPrice(
 }
 
 /**
+ * Filter the catalog by a name search.
+ *
+ * BS-010 (active in v1.0): the query is NOT trimmed, so a stray leading/trailing
+ * space (" mug") matches nothing even though "mug" would.
+ */
+export function searchByName(products: Product[], query: string, release: Release): Product[] {
+  const q = bugFlag("BS-010", release) ? query : query.trim();
+  if (q === "") return products;
+  const needle = q.toLowerCase();
+  return products.filter((p) => p.name.toLowerCase().includes(needle));
+}
+
+export type SortDir = "none" | "asc";
+
+/**
+ * Sort the catalog by price ascending.
+ *
+ * BS-009 (active in v1.0): the comparison is done on the price as TEXT, so the
+ * order comes out "100, 12, 18, ... 5, 7, 89" instead of numeric — the classic
+ * "1000 < 200 < 30" string-sort bug.
+ */
+export function sortByPrice(products: Product[], dir: SortDir, release: Release): Product[] {
+  if (dir === "none") return products;
+  const sorted = [...products];
+  if (bugFlag("BS-009", release)) {
+    sorted.sort((a, b) => String(a.price).localeCompare(String(b.price)));
+  } else {
+    sorted.sort((a, b) => a.price - b.price);
+  }
+  return sorted;
+}
+
+export function getProduct(id: string): Product | undefined {
+  return PRODUCTS.find((p) => p.id === id);
+}
+
+/**
+ * Is a quantity acceptable to add to the cart?
+ *
+ * BS-007 (active in v1.0, fixed in v1.1): the check uses `>= 0`, so a quantity
+ * of 0 is wrongly accepted and adds a $0 line item. The correct rule requires
+ * at least 1.
+ */
+export function isQuantityAccepted(qty: number, release: Release): boolean {
+  if (!Number.isInteger(qty)) return false;
+  return bugFlag("BS-007", release) ? qty >= 0 : qty >= 1;
+}
+
+/**
  * The active sandbox release. Reads it from the session token's `release` claim
  * when present (set during the /enter handoff), else the default. Decoding the
  * unverified payload is fine here — the release only chooses which bugs render,

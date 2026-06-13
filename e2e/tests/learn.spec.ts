@@ -174,6 +174,49 @@ test.describe("learn — equivalence-partitioning", () => {
   });
 });
 
+test.describe("learn — Bug Hunt milestone (A4.6)", () => {
+  async function fileBug(
+    page: Page,
+    bug: { p: string; f: string; c: string; s: string; title: string },
+  ) {
+    await page.getByTestId("bug-page").selectOption(bug.p);
+    await page.getByTestId("bug-feature").selectOption(bug.f);
+    await page.getByTestId("bug-category").selectOption(bug.c);
+    await page.getByTestId("bug-severity").selectOption(bug.s);
+    await page.getByTestId("bug-title").fill(bug.title);
+    await page.getByTestId("bug-steps").fill("step one\nstep two");
+    await page.getByTestId("bug-expected").fill("expected behaviour");
+    await page.getByTestId("bug-actual").fill("actual behaviour");
+    await page.getByTestId("bug-submit").click();
+    await expect(page.getByTestId("bug-result")).toBeVisible();
+  }
+
+  test("finding both seeded bugs completes the hunt", async ({ page }) => {
+    await signUpFreshLearner(page);
+    await page.goto("http://localhost:3000/learn/bug-hunt-i");
+
+    const hunt = page.getByTestId("bug-hunt");
+    await expect(hunt).toBeVisible();
+    await expect(page.getByTestId("hunt-count")).toContainText(/0 of \d+/);
+
+    // report the price-filter bug, then file another for the signup email bug
+    await fileBug(page, {
+      p: "product-list", f: "price-filter", c: "boundary", s: "major",
+      title: "Max-price item excluded",
+    });
+    await expect(page.getByTestId("hunt-count")).toContainText(/1 of \d+/);
+
+    await page.getByTestId("bug-file-another").click();
+    await fileBug(page, {
+      p: "signup", f: "email-validation", c: "validation", s: "major",
+      title: "Invalid email accepted",
+    });
+
+    // progress accrues per distinct seeded bug matched
+    await expect(page.getByTestId("hunt-count")).toContainText(/2 of \d+/);
+  });
+});
+
 test.describe("learn — all Track A lessons render", () => {
   // MDX compiles at request time, so a render check catches a broken lesson
   // body or quiz that the build can't. Covers the whole track.
