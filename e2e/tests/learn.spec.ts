@@ -174,20 +174,48 @@ test.describe("learn — equivalence-partitioning", () => {
   });
 });
 
-test.describe("learn — Module A1 lessons render", () => {
-  // Concept lessons (no lab); MDX compiles at request time, so a render check
-  // catches a broken lesson body or quiz that the build can't.
-  const A1_SLUGS = [
+test.describe("learn — all Track A lessons render", () => {
+  // MDX compiles at request time, so a render check catches a broken lesson
+  // body or quiz that the build can't. Covers the whole track.
+  const TRACK_A_SLUGS = [
+    // A1
     "what-is-software-testing",
     "sdlc-how-software-gets-built",
     "stlc-testers-lifecycle",
     "what-is-a-bug",
     "cost-of-bugs-and-agile",
+    // A2
+    "verification-vs-validation",
+    "testing-levels",
+    "testing-types",
+    "black-white-grey-box",
+    "seven-testing-principles",
+    // A3
+    "why-design-tests",
+    "equivalence-partitioning",
+    "boundary-value-analysis",
+    "decision-tables",
+    "state-transition-testing",
+    "error-guessing",
+    // A4
+    "writing-test-cases",
+    "test-data-and-preconditions",
+    "priority-vs-severity",
+    "bug-report-that-gets-fixed",
+    "jira-and-test-management",
+    "bug-hunt-i",
+    // A5
+    "exploratory-testing-sbtm",
+    "smoke-sanity-retest-regression",
+    "cross-browser-responsive-compatibility",
+    "uat-reporting-signoff",
+    "working-with-developers",
+    "capstone-full-test-cycle",
   ];
 
-  test("every A1 lesson renders its body and quiz", async ({ page }) => {
+  test("every Track A lesson renders its body and quiz", async ({ page }) => {
     await signUpFreshLearner(page);
-    for (const slug of A1_SLUGS) {
+    for (const slug of TRACK_A_SLUGS) {
       await page.goto(`http://localhost:3000/learn/${slug}`);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       await expect(page.getByTestId("quiz-panel")).toBeVisible();
