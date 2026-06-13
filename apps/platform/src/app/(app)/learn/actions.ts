@@ -2,7 +2,15 @@
 
 import { createServiceClient } from "@qa-mastery/db";
 import { findLessonBySlug, loadQuiz } from "@qa-mastery/curriculum";
-import { scoreQuiz, type QuizAnswers, type QuizQuestion } from "@qa-mastery/grading";
+import {
+  scoreQuiz,
+  matchBugReport,
+  type QuizAnswers,
+  type QuizQuestion,
+  type BugReportInput,
+  type ManifestBug,
+} from "@qa-mastery/grading";
+import { DEFAULT_RELEASE, isRelease } from "@qa-mastery/shared";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAuthedUserId } from "@/lib/auth";
 
@@ -172,5 +180,108 @@ export async function submitQuiz(
         explanation: quiz.questions.find((qq) => qq.id === q.id)?.explanation ?? null,
       };
     }),
+  };
+}
+
+interface BugManifestRow {
+  bug_id: string;
+  release: string;
+  page: string;
+  feature: string;
+  category: string;
+  severity: ManifestBug["severity"];
+  points: number;
+  title_internal: string;
+  expected: string | null;
+}
+
+export interface BugReportResult {
+  matched: boolean;
+  duplicate: boolean;
+  score: number;
+  feedback: string[];
+  matchedBugId: string | null;
+}
+
+/** The release this lesson's lab grades against — from its frontmatter, server
+ *  side, so the client can't aim grading at a release where the bug is fixed. */
+function lessonRelease(slug: string): string {
+  const source = findLessonBySlug(slug);
+  const declared = source?.frontmatter.requires_release;
+  return declared && isRelease(declared) ? declared : DEFAULT_RELEASE;
+}
+
+/** Grade a bug-report lab submission against the seeded-bug manifest (read
+ *  server-side from the deny-all buggyshop schema), persist it, and mark the
+ *  "do" step. The answer key (title_internal, expected) never reaches the
+ *  client except as post-match feedback. */
+export async function submitBugReport(
+  slug: string,
+  report: BugReportInput,
+): Promise<BugReportResult> {
+  const userId = await getAuthedUserId();
+  const service = createServiceClient();
+  const lesson = await requireAccessibleLesson(service, slug);
+  const release = lessonRelease(slug);
+
+  const { data: rows, error: manifestError } = await service
+    .schema("buggyshop")
+    .from("bs_bug_manifest")
+    .select("bug_id, release, page, feature, category, severity, points, title_internal, expected")
+    .eq("release", release)
+    .returns<BugManifestRow[]>();
+  if (manifestError) throw new Error(manifestError.message);
+
+  const manifest: ManifestBug[] = (rows ?? []).map((r) => ({
+    id: r.bug_id,
+    release: r.release,
+    page: r.page,
+    feature: r.feature,
+    category: r.category,
+    severity: r.severity,
+    points: r.points,
+    titleInternal: r.title_internal,
+    expected: r.expected ?? "",
+  }));
+
+  // Bugs this learner already matched on this lesson — duplicates score 0.
+  const { data: prior } = await service
+    .from("bug_reports")
+    .select("matched_bug_id")
+    .eq("user_id", userId)
+    .eq("lesson_id", lesson.id)
+    .not("matched_bug_id", "is", null);
+  const alreadyMatched = new Set((prior ?? []).map((p) => p.matched_bug_id as string));
+
+  const outcome = matchBugReport(report, manifest, alreadyMatched);
+
+  const { error: insertError } = await service.from("bug_reports").insert({
+    user_id: userId,
+    lesson_id: lesson.id,
+    matched_bug_id: outcome.matched?.id ?? null,
+    page: report.page,
+    feature: report.feature,
+    category: report.category,
+    severity: report.severity,
+    title: report.title,
+    steps: report.steps,
+    expected: report.expected,
+    actual: report.actual,
+    score: outcome.score,
+    matched: outcome.matched !== null,
+    duplicate: outcome.duplicate,
+    feedback: outcome.feedback,
+  });
+  if (insertError) throw new Error(insertError.message);
+
+  // Filing a report counts as doing the lab.
+  await saveProgress(slug, "do");
+
+  return {
+    matched: outcome.matched !== null,
+    duplicate: outcome.duplicate,
+    score: outcome.score,
+    feedback: outcome.feedback,
+    matchedBugId: outcome.matched?.id ?? null,
   };
 }
