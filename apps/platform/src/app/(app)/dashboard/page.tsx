@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Badge, Card, CardBody, CardTitle } from "@qa-mastery/ui";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -18,10 +19,17 @@ export default function DashboardPage() {
             <Badge tone="info">Coming first</Badge>
           </div>
           <CardBody>
-            28 lessons from SDLC to a full test-cycle capstone. The opening
-            lesson — Boundary Value Analysis, with the Boundary Hunter widget —
-            is being built right now.
+            28 lessons from SDLC to a full test-cycle capstone. Start with the
+            opening lesson — Boundary Value Analysis, with the Boundary Hunter
+            widget.
           </CardBody>
+          <Link
+            href="/learn/boundary-value-analysis"
+            data-testid="start-bva"
+            className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-accent hover:text-emerald-300"
+          >
+            Start lesson →
+          </Link>
         </Card>
         <Card>
           <div className="mb-2 flex items-center justify-between">
