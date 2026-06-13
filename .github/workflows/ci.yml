@@ -10,10 +10,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Placeholder values: nothing in CI talks to a real Supabase project yet.
-  # The DB-backed E2E stage (local supabase stack) lands in M1.
-  NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+  # Supabase URL/keys are exported via GITHUB_ENV by the "Export Supabase env"
+  # step (real local stack) — do NOT define them here, workflow env would
+  # shadow the runner env.
   SANDBOX_JWT_SECRET: ci-only-secret-not-a-real-one
   NEXT_PUBLIC_PLATFORM_URL: http://localhost:3000
   NEXT_PUBLIC_BUGGYSHOP_URL: http://localhost:3001
@@ -48,6 +47,18 @@ jobs:
       - name: Validate curriculum content
         run: pnpm --filter @qa-mastery/curriculum sync
 
+      - name: Start local Supabase (applies migrations + seed)
+        run: pnpm exec supabase start
+
+      - name: Export Supabase env
+        run: |
+          eval "$(pnpm exec supabase status -o env | grep -E '^(API_URL|ANON_KEY|SERVICE_ROLE_KEY)=')"
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+          } >> "$GITHUB_ENV"
+
       - name: Build both apps
         run: pnpm build
 
@@ -62,7 +73,7 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm --filter @qa-mastery/e2e exec playwright install --with-deps chromium webkit
 
-      - name: E2E smoke (production builds, Chromium + WebKit)
+      - name: E2E (production builds + live DB, Chromium + WebKit)
         run: pnpm e2e
 
       - name: Upload Playwright report on failure

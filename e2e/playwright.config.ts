@@ -4,8 +4,9 @@ const CI = !!process.env.CI;
 
 /**
  * Cross-app suite: boots BOTH apps (platform :3000, buggyshop :3001).
- * Locally reuses already-running dev servers; in CI runs production builds
- * (`next start`) — CI builds both apps in an earlier step.
+ * Always runs against production builds (`next start`) — dev-mode cold
+ * compiles swallow clicks before hydration and make WebKit flaky. The root
+ * `pnpm e2e` script chains `turbo build` first (cached → cheap).
  * WebKit is in the matrix on purpose: the iframe/token handoff must stay
  * Safari-proof (architecture risk #1).
  */
@@ -24,19 +25,15 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: CI
-        ? "pnpm --filter @qa-mastery/platform start"
-        : "pnpm --filter @qa-mastery/platform dev",
+      command: "pnpm --filter @qa-mastery/platform start",
       url: "http://localhost:3000",
-      reuseExistingServer: !CI,
+      reuseExistingServer: false,
       timeout: 120_000,
     },
     {
-      command: CI
-        ? "pnpm --filter @qa-mastery/buggyshop start"
-        : "pnpm --filter @qa-mastery/buggyshop dev",
+      command: "pnpm --filter @qa-mastery/buggyshop start",
       url: "http://localhost:3001",
-      reuseExistingServer: !CI,
+      reuseExistingServer: false,
       timeout: 120_000,
     },
   ],
