@@ -133,3 +133,43 @@ test.describe("learn — boundary-value-analysis", () => {
     await expect(page.getByTestId("bug-file-another")).toBeVisible();
   });
 });
+
+test.describe("learn — equivalence-partitioning", () => {
+  const EP_SLUG = "equivalence-partitioning";
+
+  test("dashboard links to the lesson and it renders its title", async ({ page }) => {
+    await signUpFreshLearner(page);
+    await page.getByTestId("start-ep").click();
+    await expect(page).toHaveURL(new RegExp(`/learn/${EP_SLUG}`));
+    await expect(
+      page.getByRole("heading", { name: /equivalence partitioning/i }),
+    ).toBeVisible();
+  });
+
+  test("Do it lab — reporting the signup email bug matches BS-001", async ({ page }) => {
+    await signUpFreshLearner(page);
+    await page.goto(`http://localhost:3000/learn/${EP_SLUG}`);
+
+    await expect(page.getByTestId("bug-report-lab")).toBeVisible();
+
+    // report the invalid-email-accepted bug found on BuggyShop's signup page
+    await page.getByTestId("bug-page").selectOption("signup");
+    await page.getByTestId("bug-feature").selectOption("email-validation");
+    await page.getByTestId("bug-category").selectOption("validation");
+    await page.getByTestId("bug-severity").selectOption("major");
+    await page.getByTestId("bug-title").fill("Invalid email accepted at signup");
+    await page
+      .getByTestId("bug-steps")
+      .fill("Open Sign up\nEnter user@@domain..com\nIt is accepted");
+    await page.getByTestId("bug-expected").fill("Invalid address should be rejected");
+    await page.getByTestId("bug-actual").fill("Invalid address is accepted");
+
+    const submit = page.getByTestId("bug-submit");
+    await expect(submit).toBeEnabled();
+    await submit.click();
+
+    const result = page.getByTestId("bug-result");
+    await expect(result).toBeVisible();
+    await expect(result).toContainText(/BS-001/);
+  });
+});

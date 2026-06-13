@@ -19,17 +19,26 @@ export default function DashboardPage() {
             <Badge tone="info">Coming first</Badge>
           </div>
           <CardBody>
-            28 lessons from SDLC to a full test-cycle capstone. Start with the
-            opening lesson — Boundary Value Analysis, with the Boundary Hunter
-            widget.
+            28 lessons from SDLC to a full test-cycle capstone. The first
+            test-design lessons are live — start with Equivalence Partitioning,
+            then Boundary Value Analysis.
           </CardBody>
-          <Link
-            href="/learn/boundary-value-analysis"
-            data-testid="start-bva"
-            className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-accent hover:text-emerald-300"
-          >
-            Start lesson →
-          </Link>
+          <div className="mt-3 flex flex-col gap-1.5 text-sm font-semibold">
+            <Link
+              href="/learn/equivalence-partitioning"
+              data-testid="start-ep"
+              className="inline-flex items-center gap-1 text-accent hover:text-emerald-300"
+            >
+              A3.2 — Equivalence Partitioning →
+            </Link>
+            <Link
+              href="/learn/boundary-value-analysis"
+              data-testid="start-bva"
+              className="inline-flex items-center gap-1 text-accent hover:text-emerald-300"
+            >
+              A3.3 — Boundary Value Analysis →
+            </Link>
+          </div>
         </Card>
         <Card>
           <div className="mb-2 flex items-center justify-between">
