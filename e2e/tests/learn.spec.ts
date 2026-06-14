@@ -287,9 +287,34 @@ test.describe("learn — all Track A lessons render", () => {
     "the-automation-pyramid",
     "how-webdriver-works",
     "locators-and-the-dom",
+    // Track B — B2
+    "first-selenium-test",
+    "finding-elements",
+    "interacting-with-elements",
+    "waits-and-synchronization",
+    "dropdowns-alerts-frames",
+    "actions-and-keyboard",
+    // Track B — B3
+    "testng-basics",
+    "annotations-lifecycle",
+    "data-driven-testing",
+    "page-object-model",
+    "maven-and-suites",
+    // Track B — B4
+    "stable-locators-flakiness",
+    "test-structure-naming",
+    "reporting-and-logging",
+    "ci-for-tests",
+    "automation-capstone",
+    // Track B — B5
+    "git-basics",
+    "branching-and-merging",
+    "remotes-and-prs",
+    "git-in-test-workflow",
   ];
 
   test("every lesson renders its body and quiz", async ({ page }) => {
+    test.slow(); // navigates all 57 lessons
     await signUpFreshLearner(page);
     for (const slug of TRACK_A_SLUGS) {
       await page.goto(`http://localhost:3000/learn/${slug}`);
