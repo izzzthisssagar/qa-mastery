@@ -317,6 +317,37 @@ test.describe("dashboard — progress & XP", () => {
   });
 });
 
+test.describe("entitlements — Pro gating", () => {
+  const CAPSTONE = "capstone-full-test-cycle";
+  const answerAll = async (page: Page) => {
+    for (const i of [1, 2, 3, 4, 5]) {
+      await page.getByTestId(`quiz-opt-a56-q${i}-0`).click();
+    }
+  };
+
+  test("the Pro capstone is gated until upgrade", async ({ page }) => {
+    await signUpFreshLearner(page);
+
+    // non-Pro: submitting the capstone quiz is refused
+    await page.goto(`http://localhost:3000/learn/${CAPSTONE}`);
+    await answerAll(page);
+    await page.getByTestId("quiz-submit").click();
+    await expect(page.getByTestId("quiz-error")).toContainText(/Pro/i);
+
+    // upgrade on the dashboard
+    await page.goto("http://localhost:3000/dashboard");
+    await expect(page.getByTestId("upgrade-pro")).toBeVisible();
+    await page.getByTestId("upgrade-pro").click();
+    await expect(page.getByTestId("pro-badge")).toBeVisible();
+
+    // now the capstone quiz grades normally
+    await page.goto(`http://localhost:3000/learn/${CAPSTONE}`);
+    await answerAll(page);
+    await page.getByTestId("quiz-submit").click();
+    await expect(page.getByTestId("quiz-result-banner")).toBeVisible();
+  });
+});
+
 test.describe("learn — all Track A lessons render", () => {
   // MDX compiles at request time, so a render check catches a broken lesson
   // body or quiz that the build can't. Covers the whole track.
