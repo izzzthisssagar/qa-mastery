@@ -11,6 +11,7 @@ import {
   PartitionPickerWidget,
 } from "./see-widget";
 import { LessonLab, LessonHunt, LessonCapstone } from "./lab-widget";
+import { LocatorLab } from "./locator-lab";
 import { mdxComponents } from "./mdx-components";
 import { QuizPanel, type PublicQuizQuestion } from "./quiz-panel";
 import { Reveal } from "@/components/motion";
@@ -76,6 +77,7 @@ export default async function LessonPage({ params }: PageProps) {
               BugReportLab: LessonLab,
               BugHunt: LessonHunt,
               CapstoneSubmission: LessonCapstone,
+              LocatorLab: LocatorLab,
             }}
           />
         </div>
