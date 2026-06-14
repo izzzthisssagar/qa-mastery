@@ -6,6 +6,8 @@ import { bugFlag, type Release } from "@qa-mastery/shared";
  * enough to exercise the happy path and the seeded failure-message bug.
  */
 const DEMO_EMAIL = "shopper@buggyshop.test";
+// Fake practice-app credential — BuggyShop auth is a curriculum subject, not real
+// identity (invariant 3). Not a secret. gitleaks:allow
 const DEMO_PASSWORD = "password1";
 
 export interface AuthResult {
