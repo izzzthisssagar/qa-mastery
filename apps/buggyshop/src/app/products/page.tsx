@@ -4,14 +4,13 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   filterByMaxPrice,
-  getActiveRelease,
+  readRelease,
   searchByName,
   sortByPrice,
   PRODUCTS,
   type SortDir,
 } from "@/lib/catalog";
 
-const SESSION_STORAGE_KEY = "bs-session";
 
 export default function ProductsPage() {
   const [maxPriceInput, setMaxPriceInput] = useState("");
@@ -20,10 +19,7 @@ export default function ProductsPage() {
 
   // Release decides which seeded bugs are live. Read once from the session if
   // the learner arrived via the handoff; default release otherwise.
-  const release = useMemo(() => {
-    if (typeof window === "undefined") return getActiveRelease(null);
-    return getActiveRelease(localStorage.getItem(SESSION_STORAGE_KEY));
-  }, []);
+  const release = useMemo(() => readRelease(), []);
 
   const maxPrice = maxPriceInput.trim() === "" ? null : Number(maxPriceInput);
   const visible = sortByPrice(

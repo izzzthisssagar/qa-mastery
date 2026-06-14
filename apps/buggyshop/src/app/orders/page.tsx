@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { getActiveRelease } from "@/lib/catalog";
+import { readRelease } from "@/lib/catalog";
 import { canCancel, paymentStatusFor, type OrderStatus } from "@/lib/orders";
 
-const SESSION_STORAGE_KEY = "bs-session";
 
 export default function OrdersPage() {
   const [status, setStatus] = useState<OrderStatus>("Shipped");
@@ -13,10 +12,7 @@ export default function OrdersPage() {
 
   // Release decides which seeded bugs are live. Read once from the session if
   // the learner arrived via the handoff; default release otherwise.
-  const release = useMemo(() => {
-    if (typeof window === "undefined") return getActiveRelease(null);
-    return getActiveRelease(localStorage.getItem(SESSION_STORAGE_KEY));
-  }, []);
+  const release = useMemo(() => readRelease(), []);
 
   const handleCancel = () => {
     if (canCancel(status, release)) {

@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { getActiveRelease } from "@/lib/catalog";
+import { readRelease } from "@/lib/catalog";
 import { authenticate, rememberMeHonored, type AuthResult } from "@/lib/login";
 
-const SESSION_STORAGE_KEY = "bs-session";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -14,10 +13,7 @@ export default function LoginPage() {
   const [result, setResult] = useState<AuthResult | null>(null);
   const [rememberHonored, setRememberHonored] = useState(false);
 
-  const release = useMemo(() => {
-    if (typeof window === "undefined") return getActiveRelease(null);
-    return getActiveRelease(localStorage.getItem(SESSION_STORAGE_KEY));
-  }, []);
+  const release = useMemo(() => readRelease(), []);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();

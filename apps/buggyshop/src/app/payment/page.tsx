@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { getActiveRelease } from "@/lib/catalog";
+import { readRelease } from "@/lib/catalog";
 import { cardOffered, submitPayment, type PayMethod } from "@/lib/payment";
 
-const SESSION_STORAGE_KEY = "bs-session";
 
 // Fixed demo order total — deliberately under $100 so the BS-011 rule conflict
 // surfaces: Card is offered yet rejected on submit.
@@ -17,10 +16,7 @@ export default function PaymentPage() {
 
   // Release decides which seeded bugs are live. Read once from the session if
   // the learner arrived via the handoff; default release otherwise.
-  const release = useMemo(() => {
-    if (typeof window === "undefined") return getActiveRelease(null);
-    return getActiveRelease(localStorage.getItem(SESSION_STORAGE_KEY));
-  }, []);
+  const release = useMemo(() => readRelease(), []);
 
   const handlePay = () => {
     setResult(submitPayment(ORDER_TOTAL, method, release));

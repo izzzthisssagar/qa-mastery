@@ -3,9 +3,8 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { getActiveRelease, getProduct, isQuantityAccepted } from "@/lib/catalog";
+import { readRelease, getProduct, isQuantityAccepted } from "@/lib/catalog";
 
-const SESSION_STORAGE_KEY = "bs-session";
 
 function ShopHeader() {
   return (
@@ -34,10 +33,7 @@ export default function ProductDetailPage() {
   const [qtyInput, setQtyInput] = useState("1");
   const [line, setLine] = useState<{ qty: number; accepted: boolean } | null>(null);
 
-  const release = useMemo(() => {
-    if (typeof window === "undefined") return getActiveRelease(null);
-    return getActiveRelease(localStorage.getItem(SESSION_STORAGE_KEY));
-  }, []);
+  const release = useMemo(() => readRelease(), []);
 
   if (!product) {
     return (
