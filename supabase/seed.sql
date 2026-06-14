@@ -89,6 +89,13 @@ values
    '["Open /profile","Clear the email field and type bad@@x","Click Save"]'::jsonb,
    'An invalid email should be rejected; instead it is saved',
    10,
-   '{A3.2}')
+   '{A3.2}'),
+  ('BS-015', '1.0', null, 'order-history', 'order-status', 'state-transition', 'major',
+   'Delivered order shows payment Pending',
+   'View order #1043 on the orders page: fulfillment is Delivered but payment reads Pending',
+   '["Go to /orders","Find order #1043","Note fulfillment Delivered but payment Pending"]'::jsonb,
+   'A Delivered order must have been paid, so payment should read Paid — the two states should agree',
+   10,
+   '{A3.5}')
 on conflict (bug_id) do nothing;
 

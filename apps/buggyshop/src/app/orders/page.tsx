@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { getActiveRelease } from "@/lib/catalog";
-import { canCancel, type OrderStatus } from "@/lib/orders";
+import { canCancel, paymentStatusFor, type OrderStatus } from "@/lib/orders";
 
 const SESSION_STORAGE_KEY = "bs-session";
 
@@ -74,6 +74,28 @@ export default function OrdersPage() {
           >
             Cancel
           </button>
+        </div>
+
+        <div
+          data-testid="order-card-2"
+          className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-zinc-200 bg-white p-4"
+        >
+          <div className="flex flex-col">
+            <span className="font-medium text-zinc-900">Order #1043</span>
+            <span className="text-sm text-zinc-500">Tester Mug</span>
+            <span className="mt-2 text-sm">
+              Fulfillment:{" "}
+              <span data-testid="order2-fulfillment" className="font-semibold text-shop-accent">
+                Delivered
+              </span>
+            </span>
+            <span className="text-sm">
+              Payment:{" "}
+              <span data-testid="order2-payment" className="font-semibold text-zinc-700">
+                {paymentStatusFor("Delivered", release)}
+              </span>
+            </span>
+          </div>
         </div>
 
         {status === "Cancelled" && (

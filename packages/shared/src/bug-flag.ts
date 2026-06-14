@@ -47,6 +47,8 @@ export const SEEDED_BUGS = {
   "BS-011": { introduced: "1.0" },
   // BS-014 — a Shipped order can still be cancelled (invalid state transition).
   "BS-014": { introduced: "1.0" },
+  // BS-015 — a Delivered order still shows payment "Pending" (state mismatch).
+  "BS-015": { introduced: "1.0" },
   // BS-019 — editing the profile email skips re-validation (accepts invalid).
   "BS-019": { introduced: "1.0" },
 } as const satisfies Record<string, SeededBugSpec>;

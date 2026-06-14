@@ -24,4 +24,11 @@ test.describe("buggyshop — order cancel state transition (BS-014)", () => {
     await expect(page.getByTestId("cancel-result")).toBeVisible();
     await expect(page.getByTestId("cancel-result")).toHaveText("Order cancelled");
   });
+
+  test("BS-015: a Delivered order still shows payment Pending", async ({ page }) => {
+    await page.goto(ORDERS_URL);
+    await expect(page.getByTestId("order2-fulfillment")).toHaveText("Delivered");
+    // the mismatch: delivered goods but payment never reconciled to Paid
+    await expect(page.getByTestId("order2-payment")).toHaveText("Pending");
+  });
 });

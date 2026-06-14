@@ -217,6 +217,28 @@ test.describe("learn — Bug Hunt milestone (A4.6)", () => {
   });
 });
 
+test.describe("learn — state-machine widget (A3.5)", () => {
+  test("walking the lifecycle then an invalid transition is refused", async ({ page }) => {
+    await signUpFreshLearner(page);
+    await page.goto("http://localhost:3000/learn/state-transition-testing");
+
+    const widget = page.getByTestId("widget-state-machine");
+    await expect(widget).toBeVisible();
+    await expect(page.getByTestId("current-state")).toHaveText("Placed");
+
+    // happy path
+    await page.getByTestId("event-Pay").click();
+    await expect(page.getByTestId("current-state")).toHaveText("Paid");
+    await page.getByTestId("event-Ship").click();
+    await expect(page.getByTestId("current-state")).toHaveText("Shipped");
+
+    // invalid: Cancel after Shipped is refused, state unchanged
+    await page.getByTestId("event-Cancel").click();
+    await expect(page.getByTestId("transition-rejected")).toBeVisible();
+    await expect(page.getByTestId("current-state")).toHaveText("Shipped");
+  });
+});
+
 test.describe("learn — all Track A lessons render", () => {
   // MDX compiles at request time, so a render check catches a broken lesson
   // body or quiz that the build can't. Covers the whole track.
@@ -254,9 +276,20 @@ test.describe("learn — all Track A lessons render", () => {
     "uat-reporting-signoff",
     "working-with-developers",
     "capstone-full-test-cycle",
+    // Track B — B0
+    "java-setup-first-program",
+    "java-variables-and-types",
+    "java-control-flow",
+    "java-methods-and-classes",
+    "java-collections-and-exceptions",
+    // Track B — B1
+    "why-automate",
+    "the-automation-pyramid",
+    "how-webdriver-works",
+    "locators-and-the-dom",
   ];
 
-  test("every Track A lesson renders its body and quiz", async ({ page }) => {
+  test("every lesson renders its body and quiz", async ({ page }) => {
     await signUpFreshLearner(page);
     for (const slug of TRACK_A_SLUGS) {
       await page.goto(`http://localhost:3000/learn/${slug}`);

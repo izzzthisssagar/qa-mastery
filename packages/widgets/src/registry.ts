@@ -11,4 +11,5 @@ type WidgetLoader = () => Promise<{ default: ComponentType<WidgetProps> }>;
  */
 export const widgetRegistry: Record<WidgetName, WidgetLoader> = {
   "boundary-slider": () => import("./boundary-slider"),
+  "state-machine": () => import("./state-machine"),
 };
