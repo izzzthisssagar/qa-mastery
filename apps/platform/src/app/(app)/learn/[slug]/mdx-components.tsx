@@ -1,15 +1,14 @@
 import type { ComponentProps } from "react";
+import { ProseH2 } from "./lesson-prose";
 
 /**
- * Prose styling for the lesson MDX body. Plain (server) components — the only
- * interactive node is the widget, which the page injects separately. Kept
- * minimal: the platform has no @tailwindcss/typography, so each element is
- * styled by hand to match the zinc theme.
+ * Prose styling for the lesson MDX body. Mostly plain (server) elements styled
+ * by hand to match the zinc theme — the platform has no @tailwindcss/typography.
+ * Section headings (`h2`) are the one motion touch: ProseH2 reveals them on
+ * scroll so the See it · Try it · Do it · Prove it beats land as you read.
  */
 export const mdxComponents = {
-  h2: (props: ComponentProps<"h2">) => (
-    <h2 className="mt-10 text-xl font-semibold tracking-tight text-zinc-100" {...props} />
-  ),
+  h2: (props: ComponentProps<"h2">) => <ProseH2 {...props} />,
   h3: (props: ComponentProps<"h3">) => (
     <h3 className="mt-8 text-lg font-semibold text-zinc-100" {...props} />
   ),
