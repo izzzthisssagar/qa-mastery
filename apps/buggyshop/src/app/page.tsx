@@ -47,7 +47,9 @@ export default function ShopHomePage() {
             { href: "/checkout", label: "Checkout", testid: "section-checkout" },
             { href: "/payment", label: "Payment", testid: "section-payment" },
             { href: "/orders", label: "Orders", testid: "section-orders" },
+            { href: "/order-history", label: "Order history", testid: "section-order-history" },
             { href: "/profile", label: "Profile", testid: "section-profile" },
+            { href: "/newsletter", label: "Newsletter", testid: "section-newsletter" },
           ].map((s) => (
             <Link
               key={s.href}

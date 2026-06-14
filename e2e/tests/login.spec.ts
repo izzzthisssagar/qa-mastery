@@ -25,4 +25,15 @@ test.describe("buggyshop — login (BS-006)", () => {
     await page.getByTestId("login-submit").click();
     await expect(page.getByTestId("login-message")).toContainText(/does not exist/i);
   });
+
+  test("BS-005: checking 'Remember me' has no effect — the preference is dropped", async ({ page }) => {
+    await page.goto(LOGIN_URL);
+    await page.getByTestId("login-email").fill("shopper@buggyshop.test");
+    await page.getByTestId("login-password").fill("password1");
+    await page.getByTestId("remember-me").check();
+    await page.getByTestId("login-submit").click();
+    await expect(page.getByTestId("login-message")).toContainText(/Welcome back/i);
+    // Bug: the box was ticked, but the status silently reads "off".
+    await expect(page.getByTestId("remember-status")).toContainText("Remember me: off");
+  });
 });

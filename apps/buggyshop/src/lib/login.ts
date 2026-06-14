@@ -34,3 +34,18 @@ export function authenticate(email: string, password: string, release: Release):
     message: bugFlag("BS-006", release) ? "User does not exist" : "Incorrect email or password",
   };
 }
+
+/**
+ * Does the "Remember me" preference actually get honored?
+ *
+ * BS-006 covers the failure message; BS-005 (v1.0) lives here: the login page
+ * offers a "Remember me" checkbox that promises to keep you signed in, but the
+ * buggy branch silently drops the preference — `rememberMeHonored` always
+ * returns false no matter what the user ticked, so a checked box has no effect.
+ * A correct app returns the box's own value (ticked → honored). The bug lives
+ * behind `bugFlag` so the fixed release reuses this same code.
+ */
+export function rememberMeHonored(checked: boolean, release: Release): boolean {
+  if (bugFlag("BS-005", release)) return false;
+  return checked;
+}

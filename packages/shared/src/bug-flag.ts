@@ -24,6 +24,10 @@ export const SEEDED_BUGS = {
   // BS-001 — signup email validator is too lax (accepts user@@domain..com).
   // A validation/equivalence-partitioning bug; not fixed in the 1.x line.
   "BS-001": { introduced: "1.0" },
+  // BS-004 — newsletter signup terms gate bypass via double-click.
+  "BS-004": { introduced: "1.0" },
+  // BS-005 — login remember-me preference is silently dropped.
+  "BS-005": { introduced: "1.0" },
   // BS-006 — login error leaks account existence ("User does not exist" on a
   // wrong password instead of a generic message).
   "BS-006": { introduced: "1.0" },
@@ -51,6 +55,8 @@ export const SEEDED_BUGS = {
   "BS-015": { introduced: "1.0" },
   // BS-019 — editing the profile email skips re-validation (accepts invalid).
   "BS-019": { introduced: "1.0" },
+  // BS-020 — order history leaks another user's order data.
+  "BS-020": { introduced: "1.0" },
 } as const satisfies Record<string, SeededBugSpec>;
 
 export type SeededBugId = keyof typeof SEEDED_BUGS;

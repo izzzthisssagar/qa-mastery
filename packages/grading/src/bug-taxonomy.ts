@@ -15,6 +15,7 @@ export const BUG_PAGES = [
   "checkout",
   "order-history",
   "profile",
+  "newsletter",
 ] as const;
 
 export const BUG_FEATURES = [
@@ -33,6 +34,8 @@ export const BUG_FEATURES = [
   "payment",
   "order-status",
   "profile-email",
+  "remember-me",
+  "terms",
 ] as const;
 
 export const BUG_CATEGORIES = [
