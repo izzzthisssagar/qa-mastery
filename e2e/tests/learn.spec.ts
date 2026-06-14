@@ -327,6 +327,28 @@ test.describe("learn — locator lab (B1)", () => {
     await page.getByTestId("locator-run").click();
     await expect(page.getByTestId("locator-pass")).toBeVisible();
   });
+
+  test("empty and invalid locators surface a clear, non-passing message", async ({ page }) => {
+    await signUpFreshLearner(page);
+    await page.goto("http://localhost:3000/learn/locators-and-the-dom");
+    await expect(page.getByTestId("locator-lab")).toBeVisible();
+
+    // Empty input prompts for one.
+    await page.getByTestId("locator-run").click();
+    await expect(page.getByTestId("locator-result")).toContainText(/type a locator/i);
+
+    // Invalid CSS is reported as such, not as a pass.
+    await page.getByTestId("locator-input").fill(":::");
+    await page.getByTestId("locator-run").click();
+    await expect(page.getByTestId("locator-result")).toContainText(/valid CSS selector/i);
+    await expect(page.getByTestId("locator-pass")).toHaveCount(0);
+
+    // Invalid XPath is caught in XPath mode.
+    await page.getByTestId("locator-mode-xpath").click();
+    await page.getByTestId("locator-input").fill("//[");
+    await page.getByTestId("locator-run").click();
+    await expect(page.getByTestId("locator-result")).toContainText(/valid XPath expression/i);
+  });
 });
 
 test.describe("dashboard — progress & XP", () => {

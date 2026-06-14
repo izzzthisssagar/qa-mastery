@@ -27,6 +27,13 @@ describe("gradeCapstone", () => {
     expect(result.score).toBe(75);
   });
 
+  it("scope check is an inclusive 30-character boundary", () => {
+    const at29 = gradeCapstone({ ...PASSING, scope: "x".repeat(29) });
+    expect(at29.checklist.find((c) => c.label.startsWith("Scope"))?.passed).toBe(false);
+    const at30 = gradeCapstone({ ...PASSING, scope: "x".repeat(30) });
+    expect(at30.checklist.find((c) => c.label.startsWith("Scope"))?.passed).toBe(true);
+  });
+
   it("requires at least three risks, counting non-empty lines only", () => {
     const twoRisks = gradeCapstone({ ...PASSING, risks: "Risk one\n\n   \nRisk two" });
     expect(twoRisks.checklist.find((c) => c.label.includes("risks"))?.passed).toBe(false);

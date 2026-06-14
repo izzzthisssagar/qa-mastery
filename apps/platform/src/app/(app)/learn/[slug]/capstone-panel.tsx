@@ -77,20 +77,27 @@ export function CapstonePanel({ slug }: { slug: string }) {
       {result && (
         <div
           data-testid="capstone-result"
+          role="status"
+          aria-live="polite"
           className="mt-4 rounded-xl border border-accent/40 bg-accent/10 px-4 py-3"
         >
           <p className="text-sm font-semibold text-zinc-100">Rubric — {result.score}%</p>
           <ul data-testid="capstone-checklist" className="mt-2 space-y-1 text-xs">
             {result.checklist.map((c) => (
-              <li key={c.label} className={c.passed ? "text-emerald-300" : "text-amber-300"}>
-                {c.passed ? "✓" : "✗"} {c.label}
+              <li key={c.label} className={c.passed ? "text-accent" : "text-amber-300"}>
+                <span className="sr-only">{c.passed ? "Passed: " : "Failed: "}</span>
+                <span aria-hidden="true">{c.passed ? "✓" : "✗"}</span> {c.label}
               </li>
             ))}
           </ul>
         </div>
       )}
 
-      {error && <p data-testid="capstone-error" className="mt-4 text-sm text-red-400">{error}</p>}
+      {error && (
+        <p data-testid="capstone-error" role="alert" className="mt-4 text-sm text-red-400">
+          {error}
+        </p>
+      )}
 
       {!result && (
         <div className="mt-5">
