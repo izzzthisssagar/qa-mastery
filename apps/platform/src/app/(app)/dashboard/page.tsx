@@ -11,6 +11,7 @@ interface TrackRef {
 }
 
 interface LessonRow {
+  id: string;
   slug: string;
   title: string;
   free: boolean;
@@ -71,13 +72,23 @@ export default async function DashboardPage() {
   const { data } = await supabase
     .from("lessons")
     .select(
-      "slug, title, free, order_index, modules!inner(slug, title, order_index, tracks!inner(slug, title, order_index))",
+      "id, slug, title, free, order_index, modules!inner(slug, title, order_index, tracks!inner(slug, title, order_index))",
     )
     .eq("status", "published");
 
   const rows = (data ?? []) as unknown as LessonRow[];
   const tracks = groupByTrack(rows);
   const lessonCount = rows.length;
+
+  // The learner's own progress + XP (read-own RLS scopes these to them).
+  const { data: progressRows } = await supabase
+    .from("progress")
+    .select("lesson_id, status")
+    .eq("status", "completed");
+  const completed = new Set((progressRows ?? []).map((p) => p.lesson_id as string));
+
+  const { data: xpRows } = await supabase.from("xp_events").select("amount");
+  const totalXp = (xpRows ?? []).reduce((sum, x) => sum + (x.amount as number), 0);
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -87,10 +98,44 @@ export default async function DashboardPage() {
         while in beta.
       </p>
 
+      <div className="mt-5 flex gap-3">
+        <div
+          data-testid="stat-xp"
+          className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-3"
+        >
+          <div className="text-2xl font-semibold text-accent">{totalXp}</div>
+          <div className="text-xs text-zinc-500">XP earned</div>
+        </div>
+        <div
+          data-testid="stat-completed"
+          className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-3"
+        >
+          <div className="text-2xl font-semibold text-zinc-100">
+            {completed.size}
+            <span className="text-base font-normal text-zinc-500"> / {lessonCount}</span>
+          </div>
+          <div className="text-xs text-zinc-500">lessons complete</div>
+        </div>
+      </div>
+
       <div className="mt-8 space-y-10">
-        {tracks.map((track) => (
+        {tracks.map((track) => {
+          const trackLessons = track.modules.flatMap((m) => m.lessons);
+          const trackDone = trackLessons.filter((l) => completed.has(l.id)).length;
+          const trackPct = trackLessons.length
+            ? Math.round((trackDone / trackLessons.length) * 100)
+            : 0;
+          return (
           <section key={track.slug} data-testid={`track-${track.slug}`}>
-            <h2 className="text-lg font-semibold">{track.title}</h2>
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-lg font-semibold">{track.title}</h2>
+              <span data-testid={`track-progress-${track.slug}`} className="text-xs text-zinc-500">
+                {trackDone} / {trackLessons.length}
+              </span>
+            </div>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded bg-zinc-800">
+              <div className="h-1.5 bg-accent" style={{ width: `${trackPct}%` }} aria-hidden />
+            </div>
             <div className="mt-3 space-y-5">
               {track.modules.map((module) => (
                 <div key={module.slug} data-testid={`module-${module.slug}`}>
@@ -111,7 +156,16 @@ export default async function DashboardPage() {
                             </span>{" "}
                             <span className="text-zinc-100">{lesson.title}</span>
                           </span>
-                          <span className="text-accent">→</span>
+                          {completed.has(lesson.id) ? (
+                            <span
+                              data-testid={`lesson-done-${lesson.slug}`}
+                              className="text-emerald-400"
+                            >
+                              ✓ done
+                            </span>
+                          ) : (
+                            <span className="text-accent">→</span>
+                          )}
                         </Link>
                       </li>
                     ))}
@@ -120,7 +174,8 @@ export default async function DashboardPage() {
               ))}
             </div>
           </section>
-        ))}
+          );
+        })}
 
         {tracks.length === 0 && (
           <p className="text-sm text-zinc-500">Lessons are being published — check back shortly.</p>

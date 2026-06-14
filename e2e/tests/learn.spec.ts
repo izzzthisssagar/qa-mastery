@@ -295,6 +295,28 @@ test.describe("learn — partition-picker widget (A3.2)", () => {
   });
 });
 
+test.describe("dashboard — progress & XP", () => {
+  test("completing a lesson shows XP and a done marker", async ({ page }) => {
+    await signUpFreshLearner(page);
+    await page.goto(`http://localhost:3000/learn/${SLUG}`);
+
+    // pass the BVA quiz (awards XP + marks the lesson complete)
+    for (const [qid, optionIndex] of Object.entries(CORRECT_ANSWERS)) {
+      await page.getByTestId(`quiz-opt-${qid}-${optionIndex}`).click();
+    }
+    await page.getByTestId("quiz-submit").click();
+    await expect(page.getByTestId("quiz-result-banner")).toContainText(/passed/i);
+
+    // the dashboard now reflects it
+    await page.goto("http://localhost:3000/dashboard");
+    await expect(page.getByTestId("stat-xp")).toContainText("50");
+    await expect(page.getByTestId("stat-completed")).toContainText("1");
+    await expect(page.getByTestId(`lesson-done-${SLUG}`)).toBeVisible();
+    // BVA is in Track A, so that track's progress reflects 1 of 28
+    await expect(page.getByTestId("track-progress-track-a")).toHaveText("1 / 28");
+  });
+});
+
 test.describe("learn — all Track A lessons render", () => {
   // MDX compiles at request time, so a render check catches a broken lesson
   // body or quiz that the build can't. Covers the whole track.
