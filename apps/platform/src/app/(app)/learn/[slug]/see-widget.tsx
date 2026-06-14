@@ -1,6 +1,12 @@
 "use client";
 
-import { BoundarySlider, StateMachine, DecisionTable, TriageGrid } from "@qa-mastery/widgets";
+import {
+  BoundarySlider,
+  StateMachine,
+  DecisionTable,
+  TriageGrid,
+  PartitionPicker,
+} from "@qa-mastery/widgets";
 import { useLessonProgress } from "./progress-context";
 
 /**
@@ -61,6 +67,21 @@ export function TriageGridWidget() {
         lessonSlug={slug}
         onMilestone={(milestone) => {
           if (milestone === "triaged-divergent") markStep("see");
+        }}
+      />
+    </div>
+  );
+}
+
+/** The equivalence-partition picker, mapped into the MDX as `<PartitionPicker />`. */
+export function PartitionPickerWidget() {
+  const { slug, markStep } = useLessonProgress();
+  return (
+    <div className="my-6">
+      <PartitionPicker
+        lessonSlug={slug}
+        onMilestone={(milestone) => {
+          if (milestone === "covered-all-partitions") markStep("see");
         }}
       />
     </div>

@@ -8,6 +8,7 @@ import {
   StateMachineWidget,
   DecisionTableWidget,
   TriageGridWidget,
+  PartitionPickerWidget,
 } from "./see-widget";
 import { LessonLab, LessonHunt } from "./lab-widget";
 import { mdxComponents } from "./mdx-components";
@@ -64,6 +65,7 @@ export default async function LessonPage({ params }: PageProps) {
               StateMachine: StateMachineWidget,
               DecisionTable: DecisionTableWidget,
               TriageGrid: TriageGridWidget,
+              PartitionPicker: PartitionPickerWidget,
               BugReportLab: LessonLab,
               BugHunt: LessonHunt,
             }}
