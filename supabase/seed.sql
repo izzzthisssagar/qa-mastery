@@ -96,6 +96,27 @@ values
    '["Go to /orders","Find order #1043","Note fulfillment Delivered but payment Pending"]'::jsonb,
    'A Delivered order must have been paid, so payment should read Paid — the two states should agree',
    10,
-   '{A3.5}')
+   '{A3.5}'),
+  ('BS-004', '1.0', null, 'newsletter', 'terms', 'functional', 'major',
+   'Double-click bypasses the required terms checkbox',
+   'On the newsletter page, leave the terms unchecked and double-click Subscribe',
+   '["Go to /newsletter","Leave the terms checkbox unchecked","Double-click Subscribe","See it subscribe anyway"]'::jsonb,
+   'Subscription should be blocked until the terms checkbox is accepted, no matter how the button is clicked',
+   10,
+   '{A3.6}'),
+  ('BS-005', '1.0', null, 'login', 'remember-me', 'functional', 'minor',
+   'Remember me preference is silently dropped',
+   'On the login page, check Remember me and log in',
+   '["Go to /login","Check Remember me","Log in with valid credentials","Note Remember me reads off"]'::jsonb,
+   'A checked Remember me should be honored, not silently ignored',
+   5,
+   '{A2.1}'),
+  ('BS-020', '1.0', null, 'order-history', 'order-status', 'security', 'critical',
+   'Order history leaks another account''s order',
+   'Open /order-history signed in as shopper@buggyshop.test',
+   '["Open the Order History page","Inspect the owner shown on each order row","Spot an order owned by another account"]'::jsonb,
+   'Only orders owned by the signed-in account should appear; another account''s order must not be visible',
+   10,
+   '{A5.1}')
 on conflict (bug_id) do nothing;
 
