@@ -1,6 +1,6 @@
 "use client";
 
-import { BoundarySlider } from "@qa-mastery/widgets";
+import { BoundarySlider, StateMachine } from "@qa-mastery/widgets";
 import { useLessonProgress } from "./progress-context";
 
 /**
@@ -16,6 +16,21 @@ export function SeeWidget() {
         lessonSlug={slug}
         onMilestone={(milestone) => {
           if (milestone === "found-boundary-bug") markStep("see");
+        }}
+      />
+    </div>
+  );
+}
+
+/** The order-lifecycle state machine, mapped into the MDX as `<StateMachine />`. */
+export function StateMachineWidget() {
+  const { slug, markStep } = useLessonProgress();
+  return (
+    <div className="my-6">
+      <StateMachine
+        lessonSlug={slug}
+        onMilestone={(milestone) => {
+          if (milestone === "found-invalid-transition") markStep("see");
         }}
       />
     </div>

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { MDXRemote } from "next-mdx-remote/rsc";
 import { findLessonBySlug, loadLessonBody, loadQuiz, MODULES } from "@qa-mastery/curriculum";
 import { LessonProgressProvider } from "./progress-context";
-import { SeeWidget } from "./see-widget";
+import { SeeWidget, StateMachineWidget } from "./see-widget";
 import { LessonLab, LessonHunt } from "./lab-widget";
 import { mdxComponents } from "./mdx-components";
 import { QuizPanel, type PublicQuizQuestion } from "./quiz-panel";
@@ -56,6 +56,7 @@ export default async function LessonPage({ params }: PageProps) {
             components={{
               ...mdxComponents,
               BoundarySlider: SeeWidget,
+              StateMachine: StateMachineWidget,
               BugReportLab: LessonLab,
               BugHunt: LessonHunt,
             }}
