@@ -8,6 +8,7 @@ export const WIDGET_NAMES = [
   "state-machine",
   "decision-table",
   "triage-grid",
+  "partition-picker",
 ] as const;
 
 export type WidgetName = (typeof WIDGET_NAMES)[number];

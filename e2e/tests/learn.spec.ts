@@ -276,6 +276,25 @@ test.describe("learn — triage-grid widget (A4.3)", () => {
   });
 });
 
+test.describe("learn — partition-picker widget (A3.2)", () => {
+  test("a minimal 3-value set covers all three classes", async ({ page }) => {
+    await signUpFreshLearner(page);
+    await page.goto("http://localhost:3000/learn/equivalence-partitioning");
+
+    await expect(page.getByTestId("widget-partition-picker")).toBeVisible();
+    await expect(page.getByTestId("coverage-valid")).toContainText("○");
+
+    // one representative per class: 10 (low), 35 (valid), 80 (high)
+    await page.getByTestId("candidate-10").click();
+    await page.getByTestId("candidate-35").click();
+    await page.getByTestId("candidate-80").click();
+
+    await expect(page.getByTestId("selected-count")).toHaveText("3");
+    await expect(page.getByTestId("partition-covered")).toBeVisible();
+    await expect(page.getByTestId("partition-covered")).toContainText(/Minimal and complete/);
+  });
+});
+
 test.describe("learn — all Track A lessons render", () => {
   // MDX compiles at request time, so a render check catches a broken lesson
   // body or quiz that the build can't. Covers the whole track.

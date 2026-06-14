@@ -14,4 +14,5 @@ export const widgetRegistry: Record<WidgetName, WidgetLoader> = {
   "state-machine": () => import("./state-machine"),
   "decision-table": () => import("./decision-table"),
   "triage-grid": () => import("./triage-grid"),
+  "partition-picker": () => import("./partition-picker"),
 };
