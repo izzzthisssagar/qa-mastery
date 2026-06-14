@@ -2,11 +2,8 @@
 
 import { useState } from "react";
 import { Button } from "@qa-mastery/ui";
-import {
-  submitCapstone,
-  type CapstoneResult,
-  type ShipRecommendation,
-} from "../actions";
+import type { CapstoneResult, ShipRecommendation } from "@qa-mastery/grading";
+import { submitCapstone } from "../actions";
 
 const FIELD =
   "w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:border-accent focus:outline-none";
