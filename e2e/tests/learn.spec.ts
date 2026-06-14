@@ -348,6 +348,33 @@ test.describe("entitlements — Pro gating", () => {
   });
 });
 
+test.describe("capstone — graded submission", () => {
+  test("a Pro learner submits the test plan and gets a rubric", async ({ page }) => {
+    await signUpFreshLearner(page);
+    // capstone is Pro — upgrade first
+    await page.goto("http://localhost:3000/dashboard");
+    await page.getByTestId("upgrade-pro").click();
+    await expect(page.getByTestId("pro-badge")).toBeVisible();
+
+    await page.goto("http://localhost:3000/learn/capstone-full-test-cycle");
+    await expect(page.getByTestId("capstone-panel")).toBeVisible();
+    await page
+      .getByTestId("cap-scope")
+      .fill("In scope: coupon apply, remove and validate at checkout. Out: the payment gateway.");
+    await page
+      .getByTestId("cap-risks")
+      .fill("Discount stacks negative (high)\nCoupon reuse after order (medium)\nExpired coupon accepted (medium)");
+    await page
+      .getByTestId("cap-approach")
+      .fill("Boundary value analysis on coupon length; a decision table for the stacking rules.");
+    await page.getByTestId("cap-recommendation").selectOption("go-with-conditions");
+    await page.getByTestId("cap-submit").click();
+
+    await expect(page.getByTestId("capstone-result")).toBeVisible();
+    await expect(page.getByTestId("capstone-result")).toContainText("100%");
+  });
+});
+
 test.describe("learn — all Track A lessons render", () => {
   // MDX compiles at request time, so a render check catches a broken lesson
   // body or quiz that the build can't. Covers the whole track.

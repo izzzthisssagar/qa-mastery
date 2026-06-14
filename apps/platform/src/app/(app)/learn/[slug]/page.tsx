@@ -10,7 +10,7 @@ import {
   TriageGridWidget,
   PartitionPickerWidget,
 } from "./see-widget";
-import { LessonLab, LessonHunt } from "./lab-widget";
+import { LessonLab, LessonHunt, LessonCapstone } from "./lab-widget";
 import { mdxComponents } from "./mdx-components";
 import { QuizPanel, type PublicQuizQuestion } from "./quiz-panel";
 
@@ -68,6 +68,7 @@ export default async function LessonPage({ params }: PageProps) {
               PartitionPicker: PartitionPickerWidget,
               BugReportLab: LessonLab,
               BugHunt: LessonHunt,
+              CapstoneSubmission: LessonCapstone,
             }}
           />
         </div>
