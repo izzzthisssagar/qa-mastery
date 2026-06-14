@@ -24,11 +24,22 @@ interface LessonRegistryRow {
 
 const XP_LESSON_COMPLETED = 50;
 
-/** Look up a published, accessible lesson by slug. M1 gate: free lessons only
- *  (entitlements land in M3). Throws if the lesson isn't available. */
+/** Does this learner hold the Pro entitlement? */
+async function hasProEntitlement(service: SupabaseClient, userId: string): Promise<boolean> {
+  const { count } = await service
+    .from("entitlements")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("kind", "pro");
+  return (count ?? 0) > 0;
+}
+
+/** Look up a published, accessible lesson by slug. Free lessons are open to all;
+ *  paid lessons require the learner's Pro entitlement. Throws otherwise. */
 async function requireAccessibleLesson(
   service: SupabaseClient,
   slug: string,
+  userId: string,
 ): Promise<LessonRegistryRow> {
   const { data, error } = await service
     .from("lessons")
@@ -37,8 +48,29 @@ async function requireAccessibleLesson(
     .maybeSingle<LessonRegistryRow>();
   if (error) throw new Error(error.message);
   if (!data || data.status !== "published") throw new Error("Lesson not available");
-  if (!data.free) throw new Error("Lesson requires Pro"); // TODO(M3): check entitlements
+  if (!data.free && !(await hasProEntitlement(service, userId))) {
+    throw new Error("Lesson requires Pro");
+  }
   return data;
+}
+
+/** Whether the current learner has Pro (for UI gating). */
+export async function getProStatus(): Promise<{ pro: boolean }> {
+  const userId = await getAuthedUserId();
+  const service = createServiceClient();
+  return { pro: await hasProEntitlement(service, userId) };
+}
+
+/** Mock "upgrade to Pro" — grants the entitlement via the service role. A real
+ *  billing webhook would write the same row. */
+export async function grantPro(): Promise<{ ok: true }> {
+  const userId = await getAuthedUserId();
+  const service = createServiceClient();
+  const { error } = await service
+    .from("entitlements")
+    .upsert({ user_id: userId, kind: "pro" }, { onConflict: "user_id,kind" });
+  if (error) throw new Error(error.message);
+  return { ok: true };
 }
 
 /** Record progress. `step` marks one of the see/try/do/prove milestones; no
@@ -46,7 +78,7 @@ async function requireAccessibleLesson(
 export async function saveProgress(slug: string, step?: Step): Promise<{ ok: true }> {
   const userId = await getAuthedUserId();
   const service = createServiceClient();
-  const lesson = await requireAccessibleLesson(service, slug);
+  const lesson = await requireAccessibleLesson(service, slug, userId);
 
   const { data: existing } = await service
     .from("progress")
@@ -95,7 +127,7 @@ export async function submitQuiz(
 ): Promise<SubmitQuizResult> {
   const userId = await getAuthedUserId();
   const service = createServiceClient();
-  const lesson = await requireAccessibleLesson(service, slug);
+  const lesson = await requireAccessibleLesson(service, slug, userId);
 
   const quiz = loadQuiz(slug);
   const questions = quiz.questions as QuizQuestion[];
@@ -221,7 +253,7 @@ export async function submitBugReport(
 ): Promise<BugReportResult> {
   const userId = await getAuthedUserId();
   const service = createServiceClient();
-  const lesson = await requireAccessibleLesson(service, slug);
+  const lesson = await requireAccessibleLesson(service, slug, userId);
   const release = lessonRelease(slug);
 
   const { data: rows, error: manifestError } = await service
@@ -298,7 +330,7 @@ export interface HuntStatus {
 export async function getHuntStatus(slug: string): Promise<HuntStatus> {
   const userId = await getAuthedUserId();
   const service = createServiceClient();
-  const lesson = await requireAccessibleLesson(service, slug);
+  const lesson = await requireAccessibleLesson(service, slug, userId);
   const release = lessonRelease(slug);
 
   const { count } = await service

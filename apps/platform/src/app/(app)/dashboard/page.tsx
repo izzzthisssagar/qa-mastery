@@ -4,6 +4,7 @@ import { Reveal } from "@/components/motion";
 import { StatCard } from "@/components/stat-card";
 import { TrackProgressBar } from "@/components/track-progress-bar";
 import { LessonRow } from "@/components/lesson-row";
+import { UpgradeButton } from "@/components/upgrade-button";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -93,6 +94,12 @@ export default async function DashboardPage() {
   const { data: xpRows } = await supabase.from("xp_events").select("amount");
   const totalXp = (xpRows ?? []).reduce((sum, x) => sum + (x.amount as number), 0);
 
+  const { count: proCount } = await supabase
+    .from("entitlements")
+    .select("*", { count: "exact", head: true })
+    .eq("kind", "pro");
+  const isPro = (proCount ?? 0) > 0;
+
   const overallPct = lessonCount ? Math.round((completed.size / lessonCount) * 100) : 0;
 
   return (
@@ -105,13 +112,26 @@ export default async function DashboardPage() {
 
       <div className="mx-auto max-w-4xl">
         <Reveal>
-          <p className="text-xs font-medium uppercase tracking-widest text-accent">Dashboard</p>
+          <div className="flex items-start justify-between gap-4">
+            <p className="text-xs font-medium uppercase tracking-widest text-accent">Dashboard</p>
+            {isPro ? (
+              <span
+                data-testid="pro-badge"
+                className="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent/10 px-3 py-1 text-xs font-semibold text-accent"
+              >
+                ★ Pro
+              </span>
+            ) : (
+              <UpgradeButton />
+            )}
+          </div>
           <h1 className="font-display mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
             Your learning
           </h1>
           <p className="mt-2 max-w-prose text-sm leading-6 text-zinc-400">
             {lessonCount} lessons live across {tracks.length} track
-            {tracks.length === 1 ? "" : "s"}, free while in beta.
+            {tracks.length === 1 ? "" : "s"}.{" "}
+            {isPro ? "Pro unlocked." : "Pro lessons unlock the capstone."}
           </p>
         </Reveal>
 
