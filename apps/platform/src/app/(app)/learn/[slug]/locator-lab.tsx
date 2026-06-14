@@ -133,21 +133,26 @@ export function LocatorLab() {
       data-testid="locator-lab"
       className="mt-6 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/40"
     >
-      <style>{`.${RING}{outline:2px solid var(--color-accent,#34d399);outline-offset:2px;border-radius:3px;}`}</style>
+      <style>{`.${RING}{outline:2px solid var(--color-accent);outline-offset:2px;border-radius:3px;}`}</style>
 
       <div className="border-b border-zinc-800 px-5 py-4">
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-accent">
             Locator Lab · challenge {index + 1} / {CHALLENGES.length}
           </p>
-          <div className="flex gap-1 rounded-lg bg-zinc-800 p-0.5 text-xs">
+          <div
+            role="group"
+            aria-label="Locator language"
+            className="flex gap-1 rounded-lg bg-zinc-800 p-0.5 text-xs"
+          >
             {(["css", "xpath"] as const).map((m) => (
               <button
                 key={m}
                 type="button"
                 data-testid={`locator-mode-${m}`}
+                aria-pressed={mode === m}
                 onClick={() => setMode(m)}
-                className={`rounded-md px-2.5 py-1 font-medium transition ${
+                className={`rounded-md px-2.5 py-1 font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                   mode === m ? "bg-accent text-zinc-950" : "text-zinc-400 hover:text-zinc-200"
                 }`}
               >
@@ -163,7 +168,7 @@ export function LocatorLab() {
 
       {/* The page under test — real DOM, queried by ref. */}
       <div className="px-5 py-4">
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">
           Page under test
         </p>
         <div
@@ -212,6 +217,7 @@ export function LocatorLab() {
         <div className="flex flex-col gap-2 sm:flex-row">
           <input
             data-testid="locator-input"
+            aria-label="Locator (CSS selector or XPath)"
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => {
@@ -221,13 +227,13 @@ export function LocatorLab() {
             spellCheck={false}
             autoCapitalize="off"
             autoCorrect="off"
-            className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-sm text-emerald-300 outline-none focus:border-accent"
+            className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-sm text-accent outline-none focus:border-accent"
           />
           <button
             type="button"
             data-testid="locator-run"
             onClick={run}
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-emerald-400"
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             Run locator
           </button>
@@ -236,11 +242,13 @@ export function LocatorLab() {
         {result && (
           <div
             data-testid="locator-result"
+            role="status"
+            aria-live="polite"
             className={`mt-3 rounded-lg border px-3 py-2 text-sm ${
               result.error
                 ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
                 : result.ok
-                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                  ? "border-accent/40 bg-accent/10 text-accent"
                   : "border-zinc-700 bg-zinc-800/50 text-zinc-300"
             }`}
           >
@@ -251,6 +259,11 @@ export function LocatorLab() {
                 Matched {result.matched} element{result.matched === 1 ? "" : "s"} — exactly the
                 target. Clean locator.
               </span>
+            ) : result.matched === result.target ? (
+              <>
+                Matched {result.matched} — the right count, but not the target element
+                {result.target === 1 ? "" : "s"}. Check the highlights.
+              </>
             ) : (
               <>
                 Matched {result.matched}, need {result.target}.{" "}
@@ -267,7 +280,7 @@ export function LocatorLab() {
             type="button"
             data-testid="locator-reveal"
             onClick={() => setShowReveal((s) => !s)}
-            className="text-zinc-500 underline underline-offset-2 hover:text-zinc-300"
+            className="text-zinc-400 underline underline-offset-2 hover:text-zinc-200"
           >
             {showReveal ? "Hide answer" : "Show answer"}
           </button>
@@ -276,7 +289,7 @@ export function LocatorLab() {
               type="button"
               data-testid="locator-next"
               onClick={() => go(index + 1)}
-              className="font-semibold text-accent hover:text-emerald-300"
+              className="font-semibold text-accent hover:text-accent/80"
             >
               Next challenge →
             </button>
