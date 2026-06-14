@@ -108,3 +108,21 @@ export function getActiveRelease(sessionToken: string | null): Release {
     return DEFAULT_RELEASE;
   }
 }
+
+const RELEASE_STORAGE_KEY = "bs-release";
+
+/**
+ * The release the shopper is currently browsing. An explicit override (set by
+ * the release switcher) wins, then the sandbox session's release, then the
+ * default. Lets a learner flip between v1.0 and a later release to retest fixes.
+ */
+export function readRelease(): Release {
+  if (typeof window === "undefined") return DEFAULT_RELEASE;
+  const override = localStorage.getItem(RELEASE_STORAGE_KEY);
+  if (override && isRelease(override)) return override;
+  return getActiveRelease(localStorage.getItem("bs-session"));
+}
+
+export function setRelease(release: Release): void {
+  if (typeof window !== "undefined") localStorage.setItem(RELEASE_STORAGE_KEY, release);
+}

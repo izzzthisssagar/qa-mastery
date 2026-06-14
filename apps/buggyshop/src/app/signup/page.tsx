@@ -2,19 +2,15 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { getActiveRelease } from "@/lib/catalog";
+import { readRelease } from "@/lib/catalog";
 import { isEmailAccepted } from "@/lib/signup";
 
-const SESSION_STORAGE_KEY = "bs-session";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState<{ email: string; accepted: boolean } | null>(null);
 
-  const release = useMemo(() => {
-    if (typeof window === "undefined") return getActiveRelease(null);
-    return getActiveRelease(localStorage.getItem(SESSION_STORAGE_KEY));
-  }, []);
+  const release = useMemo(() => readRelease(), []);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();

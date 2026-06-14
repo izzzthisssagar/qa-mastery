@@ -2,18 +2,14 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { getActiveRelease } from "@/lib/catalog";
+import { readRelease } from "@/lib/catalog";
 import { CURRENT_USER, visibleOrders } from "@/lib/order-history";
 
-const SESSION_STORAGE_KEY = "bs-session";
 
 export default function OrderHistoryPage() {
   // Release decides which seeded bugs are live. Read once from the session if
   // the learner arrived via the handoff; default release otherwise.
-  const release = useMemo(() => {
-    if (typeof window === "undefined") return getActiveRelease(null);
-    return getActiveRelease(localStorage.getItem(SESSION_STORAGE_KEY));
-  }, []);
+  const release = useMemo(() => readRelease(), []);
 
   const orders = visibleOrders(CURRENT_USER, release);
 

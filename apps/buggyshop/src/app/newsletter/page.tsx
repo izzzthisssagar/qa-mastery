@@ -2,20 +2,16 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { getActiveRelease } from "@/lib/catalog";
+import { readRelease } from "@/lib/catalog";
 import { submissionAllowed } from "@/lib/newsletter";
 
-const SESSION_STORAGE_KEY = "bs-session";
 
 export default function NewsletterPage() {
   const [email, setEmail] = useState("");
   const [termsChecked, setTermsChecked] = useState(false);
   const [submitted, setSubmitted] = useState<{ email: string; subscribed: boolean } | null>(null);
 
-  const release = useMemo(() => {
-    if (typeof window === "undefined") return getActiveRelease(null);
-    return getActiveRelease(localStorage.getItem(SESSION_STORAGE_KEY));
-  }, []);
+  const release = useMemo(() => readRelease(), []);
 
   function submit(isDoubleClick: boolean) {
     setSubmitted({

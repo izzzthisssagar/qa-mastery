@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { getActiveRelease } from "@/lib/catalog";
+import { readRelease } from "@/lib/catalog";
 import { shippingLabel } from "@/lib/cart";
 
-const SESSION_STORAGE_KEY = "bs-session";
 
 const UNIT_PRICE = 999;
 
@@ -14,10 +13,7 @@ export default function CartPage() {
 
   // Release decides which seeded bugs are live. Read once from the session if
   // the learner arrived via the handoff; default release otherwise.
-  const release = useMemo(() => {
-    if (typeof window === "undefined") return getActiveRelease(null);
-    return getActiveRelease(localStorage.getItem(SESSION_STORAGE_KEY));
-  }, []);
+  const release = useMemo(() => readRelease(), []);
 
   const subtotal = UNIT_PRICE * qty;
   const shipping = shippingLabel(subtotal, release);
