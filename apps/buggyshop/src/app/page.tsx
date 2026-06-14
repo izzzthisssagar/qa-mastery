@@ -30,14 +30,35 @@ export default function ShopHomePage() {
         <p data-testid="hero-tagline" className="mt-3 text-lg text-zinc-500">
           everything for testers who shop
         </p>
-        <p
-          data-testid="release-notice"
-          className="mt-10 max-w-md rounded-xl border border-dashed border-zinc-300 bg-white px-6 py-4 text-sm text-zinc-500"
-        >
-          Release v1.0 — the <Link href="/products" className="text-shop-accent underline">products</Link>{" "}
-          page is open (mind the price filter). Cart, checkout and the rest of
-          the 20 seeded bugs are being stocked.
+        <p data-testid="release-notice" className="mt-6 max-w-md text-sm text-zinc-500">
+          Release v1.0 is open for testing. Every area below hides at least one
+          intentional bug — go find them.
         </p>
+
+        <nav
+          data-testid="shop-sections"
+          className="mt-8 grid w-full max-w-2xl grid-cols-2 gap-3 sm:grid-cols-3"
+        >
+          {[
+            { href: "/products", label: "Products", testid: "section-products" },
+            { href: "/signup", label: "Sign up", testid: "section-signup" },
+            { href: "/login", label: "Log in", testid: "section-login" },
+            { href: "/cart", label: "Cart", testid: "section-cart" },
+            { href: "/checkout", label: "Checkout", testid: "section-checkout" },
+            { href: "/payment", label: "Payment", testid: "section-payment" },
+            { href: "/orders", label: "Orders", testid: "section-orders" },
+            { href: "/profile", label: "Profile", testid: "section-profile" },
+          ].map((s) => (
+            <Link
+              key={s.href}
+              href={s.href}
+              data-testid={s.testid}
+              className="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm font-medium text-zinc-800 hover:border-shop-accent hover:text-shop-accent"
+            >
+              {s.label}
+            </Link>
+          ))}
+        </nav>
       </main>
 
       <footer className="border-t border-zinc-200 px-6 py-4 text-center text-xs text-zinc-400">
