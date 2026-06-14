@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { Reveal } from "@/components/motion";
+import { StatCard } from "@/components/stat-card";
+import { TrackProgressBar } from "@/components/track-progress-bar";
+import { LessonRow } from "@/components/lesson-row";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -90,96 +93,109 @@ export default async function DashboardPage() {
   const { data: xpRows } = await supabase.from("xp_events").select("amount");
   const totalXp = (xpRows ?? []).reduce((sum, x) => sum + (x.amount as number), 0);
 
-  return (
-    <div className="mx-auto max-w-4xl">
-      <h1 className="text-2xl font-semibold">Your learning</h1>
-      <p className="mt-1 text-sm text-zinc-400">
-        {lessonCount} lessons live across {tracks.length} track{tracks.length === 1 ? "" : "s"}, free
-        while in beta.
-      </p>
+  const overallPct = lessonCount ? Math.round((completed.size / lessonCount) * 100) : 0;
 
-      <div className="mt-5 flex gap-3">
-        <div
-          data-testid="stat-xp"
-          className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-3"
-        >
-          <div className="text-2xl font-semibold text-accent">{totalXp}</div>
-          <div className="text-xs text-zinc-500">XP earned</div>
-        </div>
-        <div
-          data-testid="stat-completed"
-          className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-3"
-        >
-          <div className="text-2xl font-semibold text-zinc-100">
-            {completed.size}
-            <span className="text-base font-normal text-zinc-500"> / {lessonCount}</span>
-          </div>
-          <div className="text-xs text-zinc-500">lessons complete</div>
-        </div>
+  return (
+    <div className="relative isolate">
+      {/* Atmosphere — sits behind everything, never intercepts clicks. */}
+      <div aria-hidden className="grain pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute inset-0 bg-grid [mask-image:radial-gradient(80%_60%_at_50%_0%,black,transparent)]" />
+        <div className="absolute inset-x-0 top-0 h-80 bg-glow" />
       </div>
 
-      <div className="mt-8 space-y-10">
-        {tracks.map((track) => {
-          const trackLessons = track.modules.flatMap((m) => m.lessons);
-          const trackDone = trackLessons.filter((l) => completed.has(l.id)).length;
-          const trackPct = trackLessons.length
-            ? Math.round((trackDone / trackLessons.length) * 100)
-            : 0;
-          return (
-          <section key={track.slug} data-testid={`track-${track.slug}`}>
-            <div className="flex items-baseline justify-between">
-              <h2 className="text-lg font-semibold">{track.title}</h2>
-              <span data-testid={`track-progress-${track.slug}`} className="text-xs text-zinc-500">
-                {trackDone} / {trackLessons.length}
-              </span>
-            </div>
-            <div className="mt-2 h-1.5 w-full overflow-hidden rounded bg-zinc-800">
-              <div className="h-1.5 bg-accent" style={{ width: `${trackPct}%` }} aria-hidden />
-            </div>
-            <div className="mt-3 space-y-5">
-              {track.modules.map((module) => (
-                <div key={module.slug} data-testid={`module-${module.slug}`}>
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-accent">
-                    {module.slug.toUpperCase()} — {module.title}
-                  </h3>
-                  <ul className="mt-2 divide-y divide-zinc-800 rounded-xl border border-zinc-800">
-                    {module.lessons.map((lesson) => (
-                      <li key={lesson.slug}>
-                        <Link
-                          href={`/learn/${lesson.slug}`}
-                          data-testid={`lesson-link-${lesson.slug}`}
-                          className="flex items-center justify-between px-4 py-3 text-sm hover:bg-zinc-900"
-                        >
-                          <span>
-                            <span className="text-zinc-500">
-                              {module.slug.toUpperCase()}.{lesson.order_index}
-                            </span>{" "}
-                            <span className="text-zinc-100">{lesson.title}</span>
-                          </span>
-                          {completed.has(lesson.id) ? (
-                            <span
-                              data-testid={`lesson-done-${lesson.slug}`}
-                              className="text-emerald-400"
-                            >
-                              ✓ done
-                            </span>
-                          ) : (
-                            <span className="text-accent">→</span>
-                          )}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          </section>
-          );
-        })}
+      <div className="mx-auto max-w-4xl">
+        <Reveal>
+          <p className="text-xs font-medium uppercase tracking-widest text-accent">Dashboard</p>
+          <h1 className="font-display mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
+            Your learning
+          </h1>
+          <p className="mt-2 max-w-prose text-sm leading-6 text-zinc-400">
+            {lessonCount} lessons live across {tracks.length} track
+            {tracks.length === 1 ? "" : "s"}, free while in beta.
+          </p>
+        </Reveal>
 
-        {tracks.length === 0 && (
-          <p className="text-sm text-zinc-500">Lessons are being published — check back shortly.</p>
-        )}
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+          <StatCard
+            testId="stat-xp"
+            value={totalXp}
+            label="XP earned"
+            accent
+            delay={0.05}
+          />
+          <StatCard
+            testId="stat-completed"
+            value={completed.size}
+            label="lessons complete"
+            suffix={
+              <span className="font-sans text-lg font-normal text-zinc-500"> / {lessonCount}</span>
+            }
+            delay={0.12}
+          />
+          <StatCard
+            testId="stat-overall"
+            value={overallPct}
+            label="overall progress"
+            suffix={<span className="font-sans text-lg font-normal text-zinc-500">%</span>}
+            delay={0.19}
+          />
+        </div>
+
+        <div className="mt-12 space-y-12">
+          {tracks.map((track, trackIndex) => {
+            const trackLessons = track.modules.flatMap((m) => m.lessons);
+            const trackDone = trackLessons.filter((l) => completed.has(l.id)).length;
+            const trackPct = trackLessons.length
+              ? Math.round((trackDone / trackLessons.length) * 100)
+              : 0;
+            return (
+              <Reveal key={track.slug} delay={0.05 + trackIndex * 0.04}>
+                <section data-testid={`track-${track.slug}`}>
+                  <div className="flex items-baseline justify-between gap-4">
+                    <h2 className="font-display text-xl font-semibold tracking-tight">
+                      {track.title}
+                    </h2>
+                    <span
+                      data-testid={`track-progress-${track.slug}`}
+                      className="shrink-0 font-mono text-xs text-zinc-500"
+                    >
+                      {trackDone} / {trackLessons.length}
+                    </span>
+                  </div>
+                  <TrackProgressBar pct={trackPct} />
+
+                  <div className="mt-5 space-y-5">
+                    {track.modules.map((module) => (
+                      <div key={module.slug} data-testid={`module-${module.slug}`}>
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-accent">
+                          {module.slug.toUpperCase()} — {module.title}
+                        </h3>
+                        <ul className="mt-2 divide-y divide-zinc-800/80 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/30">
+                          {module.lessons.map((lesson, lessonIndex) => (
+                            <LessonRow
+                              key={lesson.slug}
+                              slug={lesson.slug}
+                              label={`${module.slug.toUpperCase()}.${lesson.order_index}`}
+                              title={lesson.title}
+                              done={completed.has(lesson.id)}
+                              index={lessonIndex}
+                            />
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </Reveal>
+            );
+          })}
+
+          {tracks.length === 0 && (
+            <p className="text-sm text-zinc-500">
+              Lessons are being published — check back shortly.
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
