@@ -1,6 +1,6 @@
 "use client";
 
-import { BoundarySlider, StateMachine } from "@qa-mastery/widgets";
+import { BoundarySlider, StateMachine, DecisionTable } from "@qa-mastery/widgets";
 import { useLessonProgress } from "./progress-context";
 
 /**
@@ -31,6 +31,21 @@ export function StateMachineWidget() {
         lessonSlug={slug}
         onMilestone={(milestone) => {
           if (milestone === "found-invalid-transition") markStep("see");
+        }}
+      />
+    </div>
+  );
+}
+
+/** The free-shipping decision table, mapped into the MDX as `<DecisionTable />`. */
+export function DecisionTableWidget() {
+  const { slug, markStep } = useLessonProgress();
+  return (
+    <div className="my-6">
+      <DecisionTable
+        lessonSlug={slug}
+        onMilestone={(milestone) => {
+          if (milestone === "explored-decision-table") markStep("see");
         }}
       />
     </div>

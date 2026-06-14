@@ -239,6 +239,28 @@ test.describe("learn — state-machine widget (A3.5)", () => {
   });
 });
 
+test.describe("learn — decision-table widget (A3.4)", () => {
+  test("free shipping only when all three conditions hold", async ({ page }) => {
+    await signUpFreshLearner(page);
+    await page.goto("http://localhost:3000/learn/decision-tables");
+
+    await expect(page.getByTestId("widget-decision-table")).toBeVisible();
+    // nothing on -> standard shipping
+    await expect(page.getByTestId("dt-action")).toHaveText("Standard shipping");
+
+    // turn all three on -> free shipping
+    await page.getByTestId("cond-0").click();
+    await page.getByTestId("cond-1").click();
+    await page.getByTestId("cond-2").click();
+    await expect(page.getByTestId("dt-action")).toHaveText("Free shipping");
+
+    // turning one back off -> standard again, and the exploration milestone fired
+    await page.getByTestId("cond-2").click();
+    await expect(page.getByTestId("dt-action")).toHaveText("Standard shipping");
+    await expect(page.getByTestId("dt-explored")).toBeVisible();
+  });
+});
+
 test.describe("learn — all Track A lessons render", () => {
   // MDX compiles at request time, so a render check catches a broken lesson
   // body or quiz that the build can't. Covers the whole track.
