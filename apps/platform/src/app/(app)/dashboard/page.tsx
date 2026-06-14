@@ -119,9 +119,23 @@ export default async function DashboardPage() {
       </div>
 
       <div className="mt-8 space-y-10">
-        {tracks.map((track) => (
+        {tracks.map((track) => {
+          const trackLessons = track.modules.flatMap((m) => m.lessons);
+          const trackDone = trackLessons.filter((l) => completed.has(l.id)).length;
+          const trackPct = trackLessons.length
+            ? Math.round((trackDone / trackLessons.length) * 100)
+            : 0;
+          return (
           <section key={track.slug} data-testid={`track-${track.slug}`}>
-            <h2 className="text-lg font-semibold">{track.title}</h2>
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-lg font-semibold">{track.title}</h2>
+              <span data-testid={`track-progress-${track.slug}`} className="text-xs text-zinc-500">
+                {trackDone} / {trackLessons.length}
+              </span>
+            </div>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded bg-zinc-800">
+              <div className="h-1.5 bg-accent" style={{ width: `${trackPct}%` }} aria-hidden />
+            </div>
             <div className="mt-3 space-y-5">
               {track.modules.map((module) => (
                 <div key={module.slug} data-testid={`module-${module.slug}`}>
@@ -160,7 +174,8 @@ export default async function DashboardPage() {
               ))}
             </div>
           </section>
-        ))}
+          );
+        })}
 
         {tracks.length === 0 && (
           <p className="text-sm text-zinc-500">Lessons are being published — check back shortly.</p>

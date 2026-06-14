@@ -312,6 +312,8 @@ test.describe("dashboard — progress & XP", () => {
     await expect(page.getByTestId("stat-xp")).toContainText("50");
     await expect(page.getByTestId("stat-completed")).toContainText("1");
     await expect(page.getByTestId(`lesson-done-${SLUG}`)).toBeVisible();
+    // BVA is in Track A, so that track's progress reflects 1 of 28
+    await expect(page.getByTestId("track-progress-track-a")).toHaveText("1 / 28");
   });
 });
 
