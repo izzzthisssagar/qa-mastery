@@ -349,3 +349,72 @@ export async function getHuntStatus(slug: string): Promise<HuntStatus> {
   const found = [...new Set((data ?? []).map((r) => r.matched_bug_id as string))];
   return { found, total: count ?? 0 };
 }
+
+export type ShipRecommendation = "go" | "no-go" | "go-with-conditions";
+
+export interface CapstoneInput {
+  scope: string;
+  risks: string;
+  approach: string;
+  recommendation: ShipRecommendation;
+}
+
+export interface CapstoneCheck {
+  label: string;
+  passed: boolean;
+}
+
+export interface CapstoneResult {
+  checklist: CapstoneCheck[];
+  score: number; // 0–100
+}
+
+const TECHNIQUE_WORDS =
+  /\b(equivalence|partition|boundary|bva|decision[\s-]?table|state[\s-]?transition|error[\s-]?guess)/i;
+
+/** Grade a capstone deliverable with structured auto-checks (the rubric items a
+ *  reviewer would tick). Stored server-side; the capstone is a Pro lesson so the
+ *  access check gates it. Returns the checklist + a 0–100 score. */
+export async function submitCapstone(
+  slug: string,
+  input: CapstoneInput,
+): Promise<CapstoneResult> {
+  const userId = await getAuthedUserId();
+  const service = createServiceClient();
+  const lesson = await requireAccessibleLesson(service, slug, userId);
+
+  const scope = input.scope.trim();
+  const risks = input.risks.trim();
+  const approach = input.approach.trim();
+
+  // Risks are one per line; count non-empty lines.
+  const riskCount = risks.split("\n").map((l) => l.trim()).filter(Boolean).length;
+
+  const checklist: CapstoneCheck[] = [
+    { label: "Scope defines what's in and out of test", passed: scope.length >= 30 },
+    { label: "At least three risks identified", passed: riskCount >= 3 },
+    { label: "Approach names a test-design technique", passed: TECHNIQUE_WORDS.test(approach) },
+    {
+      label: "A clear ship / no-ship recommendation is made",
+      passed: ["go", "no-go", "go-with-conditions"].includes(input.recommendation),
+    },
+  ];
+  const score = Math.round((checklist.filter((c) => c.passed).length / checklist.length) * 100);
+
+  const { error } = await service.from("capstone_submissions").insert({
+    user_id: userId,
+    lesson_id: lesson.id,
+    scope,
+    risks,
+    approach,
+    recommendation: input.recommendation,
+    checklist,
+    score,
+  });
+  if (error) throw new Error(error.message);
+
+  // A submitted capstone counts as doing the lab.
+  await saveProgress(slug, "do");
+
+  return { checklist, score };
+}

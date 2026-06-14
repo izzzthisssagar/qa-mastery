@@ -3,6 +3,7 @@
 import { useLessonProgress } from "./progress-context";
 import { BugReportLab } from "./lab-panel";
 import { HuntPanel } from "./hunt-panel";
+import { CapstonePanel } from "./capstone-panel";
 
 /**
  * The lesson's "Do it" lab, mapped into the MDX as `<BugReportLab />`. Pulls the
@@ -17,4 +18,10 @@ export function LessonLab() {
 export function LessonHunt() {
   const { slug } = useLessonProgress();
   return <HuntPanel slug={slug} />;
+}
+
+/** The graded capstone deliverable, mapped into the MDX as `<CapstoneSubmission />`. */
+export function LessonCapstone() {
+  const { slug } = useLessonProgress();
+  return <CapstonePanel slug={slug} />;
 }
