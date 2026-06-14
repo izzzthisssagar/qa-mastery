@@ -295,6 +295,40 @@ test.describe("learn — partition-picker widget (A3.2)", () => {
   });
 });
 
+test.describe("learn — locator lab (B1)", () => {
+  test("a too-broad selector is rejected; the exact one passes and unlocks the next", async ({
+    page,
+  }) => {
+    await signUpFreshLearner(page);
+    await page.goto("http://localhost:3000/learn/locators-and-the-dom");
+
+    const lab = page.getByTestId("locator-lab");
+    await expect(lab).toBeVisible();
+    // Challenge 1 wants exactly the Sign in button.
+    await expect(page.getByTestId("locator-prompt")).toContainText(/Sign in button/i);
+
+    // A broad selector matches too much (2 inputs, not the 1 button) → not a pass.
+    await page.getByTestId("locator-input").fill("input");
+    await page.getByTestId("locator-run").click();
+    await expect(page.getByTestId("locator-result")).toBeVisible();
+    await expect(page.getByTestId("locator-pass")).toHaveCount(0);
+
+    // The precise id matches exactly one → pass, and Next appears.
+    await page.getByTestId("locator-input").fill("#login-btn");
+    await page.getByTestId("locator-run").click();
+    await expect(page.getByTestId("locator-pass")).toBeVisible();
+
+    await page.getByTestId("locator-next").click();
+    await expect(page.getByTestId("locator-prompt")).toContainText(/navigation link/i);
+
+    // XPath mode should grade the same way.
+    await page.getByTestId("locator-mode-xpath").click();
+    await page.getByTestId("locator-input").fill("//nav//a");
+    await page.getByTestId("locator-run").click();
+    await expect(page.getByTestId("locator-pass")).toBeVisible();
+  });
+});
+
 test.describe("dashboard — progress & XP", () => {
   test("completing a lesson shows XP and a done marker", async ({ page }) => {
     await signUpFreshLearner(page);
