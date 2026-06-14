@@ -21,12 +21,15 @@ export default async function AppLayout({
 
   return (
     <div className="flex flex-1 flex-col">
-      <header className="flex items-center justify-between border-b border-zinc-800 px-6 py-3 sm:px-10">
+      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-zinc-800/80 bg-zinc-950/70 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-zinc-950/60 sm:px-10">
         <nav className="flex items-center gap-6 text-sm">
           <Link href="/dashboard" className="text-base font-bold tracking-tight">
             QA<span className="text-accent">Mastery</span>
           </Link>
-          <Link href="/dashboard" className="text-zinc-300 hover:text-zinc-50">
+          <Link
+            href="/dashboard"
+            className="relative text-zinc-300 transition-colors hover:text-zinc-50 after:absolute after:-bottom-1 after:left-0 after:h-px after:w-full after:origin-left after:scale-x-0 after:bg-accent after:transition-transform hover:after:scale-x-100"
+          >
             Dashboard
           </Link>
         </nav>
@@ -35,7 +38,7 @@ export default async function AppLayout({
           <form action={logout}>
             <button
               type="submit"
-              className="rounded-lg border border-zinc-700 px-3 py-1.5 text-zinc-300 hover:border-zinc-500 hover:text-zinc-50"
+              className="rounded-lg border border-zinc-700 px-3 py-1.5 text-zinc-300 transition-colors hover:border-zinc-500 hover:text-zinc-50"
             >
               Sign out
             </button>
