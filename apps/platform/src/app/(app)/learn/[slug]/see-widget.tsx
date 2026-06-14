@@ -1,6 +1,6 @@
 "use client";
 
-import { BoundarySlider, StateMachine, DecisionTable } from "@qa-mastery/widgets";
+import { BoundarySlider, StateMachine, DecisionTable, TriageGrid } from "@qa-mastery/widgets";
 import { useLessonProgress } from "./progress-context";
 
 /**
@@ -46,6 +46,21 @@ export function DecisionTableWidget() {
         lessonSlug={slug}
         onMilestone={(milestone) => {
           if (milestone === "explored-decision-table") markStep("see");
+        }}
+      />
+    </div>
+  );
+}
+
+/** The severity x priority triage grid, mapped into the MDX as `<TriageGrid />`. */
+export function TriageGridWidget() {
+  const { slug, markStep } = useLessonProgress();
+  return (
+    <div className="my-6">
+      <TriageGrid
+        lessonSlug={slug}
+        onMilestone={(milestone) => {
+          if (milestone === "triaged-divergent") markStep("see");
         }}
       />
     </div>

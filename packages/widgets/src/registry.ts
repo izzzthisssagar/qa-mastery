@@ -13,4 +13,5 @@ export const widgetRegistry: Record<WidgetName, WidgetLoader> = {
   "boundary-slider": () => import("./boundary-slider"),
   "state-machine": () => import("./state-machine"),
   "decision-table": () => import("./decision-table"),
+  "triage-grid": () => import("./triage-grid"),
 };
