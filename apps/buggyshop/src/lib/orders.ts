@@ -19,3 +19,18 @@ export function canCancel(status: OrderStatus, release: Release): boolean {
   }
   return status === "Placed" || status === "Paid";
 }
+
+export type PaymentStatus = "Paid" | "Pending";
+
+/**
+ * The payment status shown for an order. A delivered (or shipped) order must
+ * have been paid, so it should read "Paid".
+ *
+ * BS-015 (active in v1.0): a state mismatch — a Delivered order still shows its
+ * payment as "Pending", so fulfillment and payment disagree.
+ */
+export function paymentStatusFor(fulfillment: OrderStatus, release: Release): PaymentStatus {
+  if (bugFlag("BS-015", release) && fulfillment === "Delivered") return "Pending";
+  if (fulfillment === "Placed" || fulfillment === "Cancelled") return "Pending";
+  return "Paid";
+}
