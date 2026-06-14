@@ -254,9 +254,20 @@ test.describe("learn — all Track A lessons render", () => {
     "uat-reporting-signoff",
     "working-with-developers",
     "capstone-full-test-cycle",
+    // Track B — B0
+    "java-setup-first-program",
+    "java-variables-and-types",
+    "java-control-flow",
+    "java-methods-and-classes",
+    "java-collections-and-exceptions",
+    // Track B — B1
+    "why-automate",
+    "the-automation-pyramid",
+    "how-webdriver-works",
+    "locators-and-the-dom",
   ];
 
-  test("every Track A lesson renders its body and quiz", async ({ page }) => {
+  test("every lesson renders its body and quiz", async ({ page }) => {
     await signUpFreshLearner(page);
     for (const slug of TRACK_A_SLUGS) {
       await page.goto(`http://localhost:3000/learn/${slug}`);
