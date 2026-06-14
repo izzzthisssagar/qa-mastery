@@ -3,7 +3,12 @@
  * imports this file under plain Node to validate lesson frontmatter
  * `widgets:` entries without pulling in any JSX.
  */
-export const WIDGET_NAMES = ["boundary-slider", "state-machine", "decision-table"] as const;
+export const WIDGET_NAMES = [
+  "boundary-slider",
+  "state-machine",
+  "decision-table",
+  "triage-grid",
+] as const;
 
 export type WidgetName = (typeof WIDGET_NAMES)[number];
 

@@ -261,6 +261,21 @@ test.describe("learn — decision-table widget (A3.4)", () => {
   });
 });
 
+test.describe("learn — triage-grid widget (A4.3)", () => {
+  test("the divergent bug (low severity, high priority) triages and explains", async ({ page }) => {
+    await signUpFreshLearner(page);
+    await page.goto("http://localhost:3000/learn/priority-vs-severity");
+
+    await expect(page.getByTestId("widget-triage-grid")).toBeVisible();
+    // first bug is the divergent one: low severity, high priority
+    await page.getByTestId("cell-low-high").click();
+    const feedback = page.getByTestId("triage-feedback");
+    await expect(feedback).toBeVisible();
+    await expect(feedback).toContainText("Spot on");
+    await expect(feedback).toContainText(/Severity Low, Priority High/);
+  });
+});
+
 test.describe("learn — all Track A lessons render", () => {
   // MDX compiles at request time, so a render check catches a broken lesson
   // body or quiz that the build can't. Covers the whole track.
