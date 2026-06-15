@@ -457,31 +457,77 @@ function getRunnerForLesson(slug: string) {
   return judge0;
 }
 
+/** Code execution is compute-heavy and paid; cap a learner's runs per UTC day. */
+const MAX_CODE_RUNS_PER_DAY = 100;
+
+async function assertCodeRunQuota(service: SupabaseClient, userId: string): Promise<void> {
+  const startOfDay = new Date();
+  startOfDay.setUTCHours(0, 0, 0, 0);
+  const { count } = await service
+    .from("code_runs")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .gte("created_at", startOfDay.toISOString());
+  if ((count ?? 0) >= MAX_CODE_RUNS_PER_DAY) {
+    throw new Error(`Daily code-run limit reached (${MAX_CODE_RUNS_PER_DAY}). Try again tomorrow.`);
+  }
+}
+
 export async function submitCodeLab(slug: string, code: string): Promise<{ runId: string }> {
   const userId = await getAuthedUserId();
   const service = createServiceClient();
-  await requireAccessibleLesson(service, slug, userId);
+  const lesson = await requireAccessibleLesson(service, slug, userId);
 
-  // Validate before forwarding to the (compute-heavy) runner.
+  // Validate, then rate-limit, before forwarding to the (compute-heavy) runner.
   const validated = validateCodeSubmission(code);
+  await assertCodeRunQuota(service, userId);
 
-  return getRunnerForLesson(slug).submit({
+  const runner = getRunnerForLesson(slug);
+  const { runId } = await runner.submit({
     lessonSlug: slug,
     userId,
     payload: { code: validated },
   });
+
+  // Record the run for quota accounting + ownership on poll.
+  const { error } = await service.from("code_runs").insert({
+    user_id: userId,
+    lesson_id: lesson.id,
+    runner: runner.name,
+    run_id: runId,
+    status: "queued",
+  });
+  if (error) throw new Error(error.message);
+
+  return { runId };
 }
 
 export async function pollCodeRun(slug: string, runId: string): Promise<RunResult> {
   const userId = await getAuthedUserId();
   const service = createServiceClient();
   await requireAccessibleLesson(service, slug, userId);
-  
+
+  // Ownership: a run_id is only pollable by the learner who started it.
+  const { data: run } = await service
+    .from("code_runs")
+    .select("id")
+    .eq("run_id", runId)
+    .eq("user_id", userId)
+    .maybeSingle<{ id: string }>();
+  if (!run) throw new Error("Run not found.");
+
   const result = await getRunnerForLesson(slug).getResult(runId);
-  
+
+  // Persist the latest status; mark the lab done on a pass.
+  await service
+    .from("code_runs")
+    .update({ status: result.status, passed: result.passed })
+    .eq("run_id", runId)
+    .eq("user_id", userId);
+
   if (result.passed) {
     await saveProgress(slug, "do");
   }
-  
+
   return result;
 }
