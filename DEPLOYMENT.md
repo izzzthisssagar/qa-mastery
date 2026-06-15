@@ -89,6 +89,9 @@ curriculum on each push to main. It's inert until these are set in GitHub:
 - [ ] Tutor: `GEMINI_API_KEY` set with free-tier quota (§3) — verify a reply.
 - [ ] Billing (optional at launch): Paddle product/webhook + the §4 vars; flip `NEXT_PUBLIC_BILLING_ENABLED=true`.
 - [ ] CI green on `main` (lint/types/test/build/e2e + security + deploy-staging).
+- [ ] Point an uptime monitor at `https://<platform-url>/api/health` (readiness:
+      200 `{status:ok,db:up}` / 503 if the DB is unreachable) and
+      `https://<shop-url>/api/health` (liveness).
 
 ## What stays manual vs automatic
 
