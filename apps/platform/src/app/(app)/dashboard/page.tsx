@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Reveal } from "@/components/motion";
 import { StatCard } from "@/components/stat-card";
@@ -184,6 +185,15 @@ export default async function DashboardPage() {
                     </span>
                   </div>
                   <TrackProgressBar pct={trackPct} />
+                  {trackPct === 100 && (
+                    <Link
+                      href={`/certificate/${track.slug}`}
+                      data-testid={`certificate-link-${track.slug}`}
+                      className="mt-2 inline-block text-xs font-medium text-accent hover:text-emerald-300"
+                    >
+                      🏆 View your certificate →
+                    </Link>
+                  )}
 
                   <div className="mt-5 space-y-5">
                     {track.modules.map((module) => (
