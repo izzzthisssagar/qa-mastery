@@ -6,6 +6,7 @@ import {
   scoreQuiz,
   matchBugReport,
   gradeCapstone,
+  validateCodeSubmission,
   type QuizAnswers,
   type QuizQuestion,
   type BugReportInput,
@@ -460,11 +461,14 @@ export async function submitCodeLab(slug: string, code: string): Promise<{ runId
   const userId = await getAuthedUserId();
   const service = createServiceClient();
   await requireAccessibleLesson(service, slug, userId);
-  
+
+  // Validate before forwarding to the (compute-heavy) runner.
+  const validated = validateCodeSubmission(code);
+
   return getRunnerForLesson(slug).submit({
     lessonSlug: slug,
     userId,
-    payload: { code }
+    payload: { code: validated },
   });
 }
 
