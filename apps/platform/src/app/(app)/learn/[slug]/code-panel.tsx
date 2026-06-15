@@ -55,6 +55,7 @@ export function CodeRunnerLab({ slug }: { slug: string }) {
       </p>
 
       <textarea
+        aria-label="Java code editor"
         value={code}
         onChange={(e) => setCode(e.target.value)}
         onKeyDown={handleKeyDown}
@@ -70,10 +71,10 @@ export function CodeRunnerLab({ slug }: { slug: string }) {
         {result?.status === "passed" && <span className="text-xs font-semibold text-emerald-400">Execution completed</span>}
       </div>
 
-      {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
+      {error && <p role="alert" className="mt-4 text-sm text-red-400">{error}</p>}
 
       {result && (
-        <div className="mt-4">
+        <div className="mt-4" role="status" aria-live="polite">
           <p className="text-xs font-semibold text-zinc-400 mb-1">Console Output:</p>
           <pre className={`w-full bg-black border ${result.passed ? 'border-zinc-800' : 'border-red-900/50'} rounded-lg p-4 font-mono text-xs text-zinc-300 overflow-auto whitespace-pre-wrap`}>
             {result.console || "No output."}

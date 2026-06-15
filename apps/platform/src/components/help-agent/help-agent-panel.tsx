@@ -124,7 +124,11 @@ export function HelpAgentPanel({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed bottom-20 right-4 z-50 flex h-[480px] w-[360px] flex-col overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl sm:right-6">
+    <div
+      role="dialog"
+      aria-label="QA tutor"
+      className="fixed bottom-20 right-4 z-50 flex h-[480px] w-[360px] flex-col overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl sm:right-6"
+    >
       <header className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
         <div>
           <p className="text-sm font-semibold text-zinc-50">QA Tutor</p>
@@ -144,7 +148,12 @@ export function HelpAgentPanel({ onClose }: { onClose: () => void }) {
         </button>
       </header>
 
-      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
+      <div
+        role="log"
+        aria-live="polite"
+        aria-label="Tutor conversation"
+        className="flex-1 space-y-3 overflow-y-auto px-4 py-3"
+      >
         {messages.length === 0 && (
           <p className="text-sm text-zinc-500">
             Stuck on a lesson? Ask me — I&apos;ll hint first, then explain more if you need it.
@@ -177,6 +186,7 @@ export function HelpAgentPanel({ onClose }: { onClose: () => void }) {
       >
         <input
           type="text"
+          aria-label="Ask the tutor a question"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask a question…"
