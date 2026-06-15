@@ -12,10 +12,16 @@ const nextConfig: NextConfig = {
       {
         source: "/:path*",
         headers: [
+          // BuggyShop is iframe-embedded by the platform, so it allows that one
+          // origin as a frame ancestor (rather than X-Frame-Options: DENY).
           {
             key: "Content-Security-Policy",
             value: `frame-ancestors 'self' ${PLATFORM_URL}`,
           },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
         ],
       },
     ];
