@@ -1,4 +1,4 @@
-import { guardFallback, guardResponse, streamChat, wouldGuard } from "@qa-mastery/agent";
+import { guardedStream, streamChat } from "@qa-mastery/agent";
 import { buildAgentContext } from "@/lib/help-agent/context";
 import {
   persistMessage,
@@ -88,53 +88,23 @@ export async function POST(request: Request) {
   ];
 
   const encoder = new TextEncoder();
-  // Streaming-safe guard: only ever flush text that is already guard-clean, and
-  // hold back a trailing window so a forbidden phrase can never be sent while it
-  // is still forming at the tail. The guard runs *before* the client sees text —
-  // not after the whole reply has already streamed.
-  const HOLDBACK = 160;
-  let fullResponse = "";
-  let flushedLen = 0;
 
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        let blocked = false;
-        for await (const chunk of streamChat(llmMessages)) {
-          fullResponse += chunk;
-          if (wouldGuard(fullResponse, assistantTurn)) {
-            blocked = true;
-            break;
-          }
-          const safeUpto = fullResponse.length - HOLDBACK;
-          if (safeUpto > flushedLen) {
-            controller.enqueue(encoder.encode(fullResponse.slice(flushedLen, safeUpto)));
-            flushedLen = safeUpto;
-          }
-        }
-
-        let persisted: string;
-        if (blocked) {
-          // Everything already flushed was guard-clean; replace the rest (where
-          // the trip lives, inside the held-back window) with a safe redirect.
-          controller.enqueue(encoder.encode("\n\n" + guardFallback()));
-          persisted = guardFallback();
-        } else {
-          const guarded = guardResponse(fullResponse, assistantTurn);
-          if (guarded !== fullResponse) {
-            // A pattern lived entirely inside the held-back tail — never flushed.
-            controller.enqueue(encoder.encode("\n\n" + guardFallback()));
-            persisted = guardFallback();
-          } else {
-            controller.enqueue(encoder.encode(fullResponse.slice(flushedLen)));
-            persisted = fullResponse;
-          }
+        // guardedStream applies the streaming-safe guard (flush only guard-clean
+        // text, hold back a forming tail) and returns the text to persist.
+        const gen = guardedStream(streamChat(llmMessages), assistantTurn);
+        let res = await gen.next();
+        while (!res.done) {
+          controller.enqueue(encoder.encode(res.value));
+          res = await gen.next();
         }
 
         await persistMessage({
           userId: user.id,
           role: "assistant",
-          content: persisted,
+          content: res.value,
           pathname,
           lessonSlug,
           sessionId: body.sessionId,

@@ -12,6 +12,8 @@ export {
 
 export { guardResponse, wouldGuard, guardFallback } from "./guard";
 
+export { guardedStream } from "./streaming-guard";
+
 export {
   chat,
   streamChat,
