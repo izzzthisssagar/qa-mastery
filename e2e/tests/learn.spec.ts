@@ -381,6 +381,18 @@ test.describe("entitlements — Pro gating", () => {
     }
   };
 
+  test("the dashboard flags gated lessons with a Pro lock until upgrade", async ({ page }) => {
+    await signUpFreshLearner(page);
+
+    // a free learner sees the Pro lock on the gated capstone lesson
+    await expect(page.getByTestId(`lesson-locked-${CAPSTONE}`)).toBeVisible();
+
+    // upgrading removes the lock
+    await page.getByTestId("upgrade-pro").click();
+    await expect(page.getByTestId("pro-badge")).toBeVisible();
+    await expect(page.getByTestId(`lesson-locked-${CAPSTONE}`)).toHaveCount(0);
+  });
+
   test("the Pro capstone is gated until upgrade", async ({ page }) => {
     await signUpFreshLearner(page);
 
