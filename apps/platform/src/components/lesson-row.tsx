@@ -15,12 +15,15 @@ export function LessonRow({
   label,
   title,
   done,
+  locked,
   index,
 }: {
   slug: string;
   label: string;
   title: string;
   done: boolean;
+  /** Gated (Pro) lesson the current learner hasn't unlocked. */
+  locked?: boolean;
   index: number;
 }) {
   const reduce = useReducedMotion();
@@ -50,6 +53,13 @@ export function LessonRow({
             className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400"
           >
             <span aria-hidden>✓</span> done
+          </span>
+        ) : locked ? (
+          <span
+            data-testid={`lesson-locked-${slug}`}
+            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-300"
+          >
+            <span aria-hidden>🔒</span> Pro
           </span>
         ) : (
           <span className="shrink-0 text-accent transition-transform duration-300 group-hover:translate-x-1">

@@ -199,6 +199,7 @@ export default async function DashboardPage() {
                               label={`${module.slug.toUpperCase()}.${lesson.order_index}`}
                               title={lesson.title}
                               done={completed.has(lesson.id)}
+                              locked={!lesson.free && !isPro}
                               index={lessonIndex}
                             />
                           ))}
