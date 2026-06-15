@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { motion, useReducedMotion } from "motion/react";
+
+const PANEL_EASE = [0.16, 1, 0.3, 1] as const;
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -25,6 +28,7 @@ export function HelpAgentPanel({ onClose }: { onClose: () => void }) {
   const [brain, setBrain] = useState<BrainInfo | null>(null);
   const [sessionId] = useState(newSessionId);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const reduce = useReducedMotion();
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -124,19 +128,27 @@ export function HelpAgentPanel({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div
+    <motion.div
       role="dialog"
       aria-label="QA tutor"
-      className="fixed bottom-20 right-4 z-50 flex h-[480px] w-[360px] flex-col overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl sm:right-6"
+      initial={reduce ? false : { opacity: 0, y: 16, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={reduce ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.98 }}
+      transition={{ duration: 0.22, ease: PANEL_EASE }}
+      className="fixed bottom-20 right-4 z-50 flex h-[480px] w-[360px] flex-col overflow-hidden rounded-2xl border border-zinc-700/70 bg-zinc-900/95 shadow-2xl shadow-black/40 backdrop-blur sm:right-6"
     >
-      <header className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
-        <div>
-          <p className="text-sm font-semibold text-zinc-50">QA Tutor</p>
-          <p className="text-xs text-zinc-500">
-            {brain
-              ? `${brain.brain_label} · Day ${brain.brain_day_count}`
-              : "Getting to know you…"}
-          </p>
+      <header className="relative flex items-center justify-between border-b border-zinc-800 px-4 py-3">
+        <span aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/60 to-transparent" />
+        <div className="flex items-center gap-2">
+          <span aria-hidden className="h-2 w-2 rounded-full bg-accent shadow-[0_0_8px_var(--color-accent)]" />
+          <div>
+            <p className="font-display text-sm font-semibold tracking-tight text-zinc-50">QA Tutor</p>
+            <p className="text-xs text-zinc-500">
+              {brain
+                ? `${brain.brain_label} · Day ${brain.brain_day_count}`
+                : "Getting to know you…"}
+            </p>
+          </div>
         </div>
         <button
           type="button"
@@ -162,10 +174,10 @@ export function HelpAgentPanel({ onClose }: { onClose: () => void }) {
         {messages.map((m, i) => (
           <div
             key={i}
-            className={`max-w-[90%] rounded-lg px-3 py-2 text-sm ${
+            className={`max-w-[90%] rounded-2xl border px-3 py-2 text-sm leading-relaxed ${
               m.role === "user"
-                ? "ml-auto bg-accent/20 text-zinc-100"
-                : "bg-zinc-800 text-zinc-300"
+                ? "ml-auto border-accent/25 bg-accent/15 text-zinc-100"
+                : "border-zinc-700/60 bg-zinc-800/80 text-zinc-300"
             }`}
           >
             {m.content}
@@ -201,6 +213,6 @@ export function HelpAgentPanel({ onClose }: { onClose: () => void }) {
           Send
         </button>
       </form>
-    </div>
+    </motion.div>
   );
 }
