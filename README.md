@@ -1,12 +1,17 @@
 # QA Mastery
 
 The hands-on QA learning platform — **"Don't watch testing. Do it."**
-Learners study every QA concept visually, practice on a deliberately flawed
-e-commerce app (**BuggyShop**), and get their work auto-graded.
 
-Product plan & curriculum live in the notes repo
-(`../My Qa Projecct/QA-Learning-Platform-Plan.md` + `Product/`). This repo is
-the platform itself.
+Learners study every QA concept visually, practice on a deliberately flawed
+e-commerce app (**BuggyShop**), and get their work auto-graded. We've transformed theoretical testing education into a highly interactive, gamified, and premium experience.
+
+## Features & Philosophy
+
+- **No "Wall of Text":** Lessons are powered by MDX and broken up by beautiful, interactive React widgets built with Framer Motion. 
+- **Track A (Manual Testing):** Students interact with an SDLC Visualizer, an interactive Kanban Jira Board, a Testing Types sorter, and a Session-Based Exploratory Testing timer.
+- **Track B (Automation):** Students interact with a Boundary Value slider, the Automation Pyramid, WebDriver architecture flows, TestNG Lifecycles, and a Page Object Model (POM) visualizer.
+- **The "Prove it" Loop:** Every lesson ends with a Quiz Panel. Passing (>70%) fires a dopamine-inducing confetti explosion and unlocks Spaced Repetition Flashcards.
+- **Integrated Practice (BuggyShop):** A purpose-built, sandboxed Next.js e-commerce app (port 3001) seeded with intentional defects for students to hunt, write test plans for, and automate against.
 
 ## Layout
 
@@ -15,10 +20,10 @@ the platform itself.
 | `apps/platform` | The learning platform (Next.js, port 3000) — auth, lessons, grading |
 | `apps/buggyshop` | The practice app (Next.js, port 3001) — fake auth, sandboxed data, seeded bugs |
 | `packages/curriculum` | Lesson MDX + frontmatter schema + content→DB sync script |
-| `packages/widgets` | Interactive lesson widgets (registry-validated) |
+| `packages/widgets` | Interactive lesson widgets (registry-validated & animated) |
 | `packages/grading` | Pure scoring functions: quizzes, bug-report matching, runner seam |
 | `packages/shared` | Sandbox token contract (platform ↔ BuggyShop handoff) |
-| `packages/db` | Supabase client factories + (soon) generated types |
+| `packages/db` | Supabase client factories + generated types |
 | `packages/ui` / `packages/config` | Design-system primitives / shared tsconfig |
 | `supabase/` | Migrations, seed, local-stack config (one DB, `public` + `buggyshop` schemas) |
 | `e2e/` | Cross-app Playwright suite (Chromium + WebKit) |
@@ -37,16 +42,19 @@ Quality gates (all must stay green; CI runs the same):
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm e2e
-pnpm --filter @qa-mastery/curriculum sync   # validate lesson content
+pnpm --filter curriculum sync --apply   # validate and sync lesson content
 ```
 
-## Status — M0 scaffold
+## Status — Feature Complete (V1)
 
-Done: monorepo, both apps, packages, migration 0001 (profiles/registry/
-progress/sandboxes + RLS), email+password auth, dashboard shell, BuggyShop
-shell + `/enter` handoff stub, CI workflow, 17 unit tests + 4 e2e smoke tests.
+**Done:** 
+- Full monorepo scaffolding and Supabase RLS migrations.
+- Both Tracks (Manual & Automation) are fully mapped with MDX content.
+- 10+ premium, animated interactive widgets deployed.
+- UX Gamification (Milestone Unlocked badges, Quiz Confetti, Flashcard queues).
+- Full sync pipeline for the curriculum.
 
-Pending cloud wiring (needs accounts): Docker Desktop (local DB), GitHub
-remote, Vercel projects ×2, Supabase cloud projects (staging + prod), domain,
-PostHog. Then M1: the walking skeleton (first lesson + mini-BuggyShop + first
-graded bug report).
+**Next Horizons:**
+- Integrate the grading engine with a Sandbox execution environment to safely run user-submitted Playwright scripts.
+- Expand BuggyShop features with more complex, stateful defects.
+- Deploy to Vercel and Supabase Cloud.

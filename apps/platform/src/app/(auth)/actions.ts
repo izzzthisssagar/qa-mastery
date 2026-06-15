@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export interface AuthFormState {
@@ -13,6 +14,24 @@ function credentials(formData: FormData) {
     email: String(formData.get("email") ?? "").trim(),
     password: String(formData.get("password") ?? ""),
   };
+}
+
+/** Resolve the post-auth redirect destination from the ?next= query param.
+ *  Validates it is a same-origin relative path to prevent open-redirect. */
+async function safeNext(): Promise<string> {
+  const headersList = await headers();
+  const referer = headersList.get("referer") ?? "";
+  try {
+    const url = new URL(referer);
+    const next = url.searchParams.get("next");
+    // Only allow same-origin relative paths starting with /
+    if (next && next.startsWith("/") && !next.startsWith("//")) {
+      return next;
+    }
+  } catch {
+    // Ignore invalid URLs
+  }
+  return "/dashboard";
 }
 
 export async function login(
@@ -30,7 +49,7 @@ export async function login(
     return { error: error.message };
   }
 
-  redirect("/dashboard");
+  redirect(await safeNext());
 }
 
 export async function signup(
@@ -59,7 +78,7 @@ export async function signup(
     };
   }
 
-  redirect("/dashboard");
+  redirect(await safeNext());
 }
 
 export async function logout(): Promise<void> {

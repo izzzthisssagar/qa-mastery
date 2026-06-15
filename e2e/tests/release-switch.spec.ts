@@ -13,7 +13,7 @@ test.describe("buggyshop — release switch & retest", () => {
   });
 
   test("v1.1 fixes BS-008: the $100 item survives the max-price filter", async ({ page }) => {
-    await page.addInitScript(() => localStorage.setItem("bs-release", "1.1"));
+    await page.addInitScript('localStorage.setItem("bs-release", "1.1")');
     await page.goto("http://localhost:3001/products");
     await expect(page.getByTestId("release-select")).toHaveValue("1.1");
 
@@ -23,7 +23,7 @@ test.describe("buggyshop — release switch & retest", () => {
   });
 
   test("v1.1 fixes BS-007: quantity 0 is rejected", async ({ page }) => {
-    await page.addInitScript(() => localStorage.setItem("bs-release", "1.1"));
+    await page.addInitScript('localStorage.setItem("bs-release", "1.1")');
     await page.goto("http://localhost:3001/products/tester-mug");
     await page.getByTestId("qty-input").fill("0");
     await page.getByTestId("add-to-cart").click();

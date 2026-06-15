@@ -9,11 +9,21 @@ import {
   DecisionTableWidget,
   TriageGridWidget,
   PartitionPickerWidget,
+  AutomationPyramidWidget,
+  WebDriverArchitectureWidget,
+  LifecycleVisualizerWidget,
+  POMVisualizerWidget,
+  SDLCVisualizerWidget,
+  JiraBoardWidget,
+  ExploratoryTimerWidget,
+  TestingTypeSorterWidget,
+  PairwiseVisualizerWidget,
 } from "./see-widget";
 import { LessonLab, LessonHunt, LessonCapstone } from "./lab-widget";
 import { LocatorLab } from "./locator-lab";
 import { mdxComponents } from "./mdx-components";
 import { QuizPanel, type PublicQuizQuestion } from "./quiz-panel";
+import { CodeRunnerLab } from "./code-panel";
 import { Reveal } from "@/components/motion";
 
 interface PageProps {
@@ -78,9 +88,20 @@ export default async function LessonPage({ params }: PageProps) {
               BugHunt: LessonHunt,
               CapstoneSubmission: LessonCapstone,
               LocatorLab: LocatorLab,
+              AutomationPyramid: AutomationPyramidWidget,
+              WebDriverArchitecture: WebDriverArchitectureWidget,
+              LifecycleVisualizer: LifecycleVisualizerWidget,
+              POMVisualizer: POMVisualizerWidget,
+              SDLCVisualizer: SDLCVisualizerWidget,
+              JiraBoard: JiraBoardWidget,
+              ExploratoryTimer: ExploratoryTimerWidget,
+              TestingTypeSorter: TestingTypeSorterWidget,
+              PairwiseVisualizer: PairwiseVisualizerWidget,
             }}
           />
         </div>
+
+        {fm.lab_type === "code_run" && <CodeRunnerLab slug={slug} />}
 
         <QuizPanel slug={slug} questions={publicQuestions} />
       </article>

@@ -15,4 +15,5 @@ export const widgetRegistry: Record<WidgetName, WidgetLoader> = {
   "decision-table": () => import("./decision-table"),
   "triage-grid": () => import("./triage-grid"),
   "partition-picker": () => import("./partition-picker"),
+  "pairwise-visualizer": () => import("./pairwise-visualizer"),
 };

@@ -29,6 +29,7 @@ export const MODULES: Record<string, ModuleMeta> = {
   A3: { track: "track-a", title: "Test Design Techniques", order: 3 },
   A4: { track: "track-a", title: "Test Cases, Bug Reports & Tools", order: 4 },
   A5: { track: "track-a", title: "Real-World Manual QA", order: 5 },
+  A6: { track: "track-a", title: "Advanced Test Design", order: 6 },
   B0: { track: "track-b", title: "Just Enough Java", order: 1 },
   B1: { track: "track-b", title: "How Automation Actually Works", order: 2 },
   B2: { track: "track-b", title: "Selenium WebDriver Core", order: 3 },

@@ -33,6 +33,7 @@ export interface BugReportInput {
   steps: string[];
   expected: string;
   actual: string;
+  evidenceUrl?: string;
 }
 
 export interface MatchOutcome {

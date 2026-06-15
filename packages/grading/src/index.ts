@@ -33,6 +33,9 @@ export {
   type RunnerProvider,
 } from "./runner";
 
+// Runner *implementations* (Judge0/Docker/Playwright) pull node:child_process,
+// so they live behind the server-only "@qa-mastery/grading/runners" entry —
+// importing them here would taint every client that touches this barrel.
 export {
   SHIP_RECOMMENDATIONS,
   MIN_SCOPE_LENGTH,
