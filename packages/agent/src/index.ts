@@ -10,7 +10,7 @@ export {
   type TopicMasteryMap,
 } from "./brain";
 
-export { guardResponse } from "./guard";
+export { guardResponse, wouldGuard, guardFallback } from "./guard";
 
 export {
   chat,

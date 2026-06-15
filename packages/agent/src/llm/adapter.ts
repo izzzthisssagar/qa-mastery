@@ -1,6 +1,8 @@
 import { geminiChat, streamGeminiChat } from "./gemini";
 import { groqChat, streamGroqChat } from "./groq";
 import { ollamaChat, ollamaHealthy, streamOllamaChat } from "./ollama";
+import { openAiChat, streamOpenAiChat } from "./openai";
+import { xaiChat, streamXaiChat } from "./xai";
 import type { ChatMessage, LlmEnv, ResolvedProvider } from "./types";
 
 export function readLlmEnv(env: NodeJS.ProcessEnv = process.env): LlmEnv {
@@ -12,6 +14,10 @@ export function readLlmEnv(env: NodeJS.ProcessEnv = process.env): LlmEnv {
     geminiModel: env.GEMINI_MODEL ?? "gemini-2.0-flash",
     groqApiKey: env.GROQ_API_KEY,
     groqModel: env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
+    xaiApiKey: env.XAI_API_KEY,
+    xaiModel: env.XAI_MODEL ?? "grok-2-latest",
+    openaiApiKey: env.OPENAI_API_KEY,
+    openaiModel: env.OPENAI_MODEL ?? "gpt-4o-mini",
   };
 }
 
@@ -27,32 +33,45 @@ export async function resolveProvider(env: LlmEnv = readLlmEnv()): Promise<Resol
     env.geminiApiKey ? { name: "gemini", model: env.geminiModel! } : null;
   const tryGroq = (): ResolvedProvider | null =>
     env.groqApiKey ? { name: "groq", model: env.groqModel! } : null;
+  const tryXai = (): ResolvedProvider | null =>
+    env.xaiApiKey ? { name: "xai", model: env.xaiModel! } : null;
+  const tryOpenai = (): ResolvedProvider | null =>
+    env.openaiApiKey ? { name: "openai", model: env.openaiModel! } : null;
 
+  // Explicit selection — fail loudly if the chosen provider isn't configured.
   if (preference === "ollama") {
     const ollama = await tryOllama();
     if (ollama) return ollama;
     throw new Error("Ollama is not reachable. Start Ollama or set HELP_AGENT_PROVIDER=gemini.");
   }
   if (preference === "gemini") {
-    const gemini = tryGemini();
-    if (gemini) return gemini;
+    if (tryGemini()) return tryGemini()!;
     throw new Error("GEMINI_API_KEY is not configured.");
   }
   if (preference === "groq") {
-    const groq = tryGroq();
-    if (groq) return groq;
+    if (tryGroq()) return tryGroq()!;
     throw new Error("GROQ_API_KEY is not configured.");
   }
+  if (preference === "xai") {
+    if (tryXai()) return tryXai()!;
+    throw new Error("XAI_API_KEY is not configured.");
+  }
+  if (preference === "openai") {
+    if (tryOpenai()) return tryOpenai()!;
+    throw new Error("OPENAI_API_KEY is not configured.");
+  }
 
+  // Auto: free providers first (local Ollama, then free API tiers), and the
+  // paid providers (xAI, OpenAI) only when no free option is configured.
   const ollama = await tryOllama();
   if (ollama) return ollama;
-  const gemini = tryGemini();
-  if (gemini) return gemini;
-  const groq = tryGroq();
-  if (groq) return groq;
+  const free = tryGemini() ?? tryGroq();
+  if (free) return free;
+  const paid = tryXai() ?? tryOpenai();
+  if (paid) return paid;
 
   throw new Error(
-    "No LLM provider configured. Set OLLAMA_BASE_URL, GEMINI_API_KEY, or GROQ_API_KEY.",
+    "No LLM provider configured. Set OLLAMA_BASE_URL, GEMINI_API_KEY, GROQ_API_KEY, XAI_API_KEY, or OPENAI_API_KEY.",
   );
 }
 
@@ -71,6 +90,12 @@ async function* streamWithProvider(
     case "groq":
       yield* streamGroqChat(env.groqApiKey!, provider.model, messages);
       break;
+    case "xai":
+      yield* streamXaiChat(env.xaiApiKey!, provider.model, messages);
+      break;
+    case "openai":
+      yield* streamOpenAiChat(env.openaiApiKey!, provider.model, messages);
+      break;
   }
 }
 
@@ -86,6 +111,10 @@ async function chatWithProvider(
       return geminiChat(env.geminiApiKey!, provider.model, messages);
     case "groq":
       return groqChat(env.groqApiKey!, provider.model, messages);
+    case "xai":
+      return xaiChat(env.xaiApiKey!, provider.model, messages);
+    case "openai":
+      return openAiChat(env.openaiApiKey!, provider.model, messages);
   }
 }
 
