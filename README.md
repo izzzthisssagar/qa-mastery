@@ -45,6 +45,24 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm e2e
 pnpm --filter curriculum sync --apply   # validate and sync lesson content
 ```
 
+### Help-agent tutor (free)
+
+The in-app tutor resolves an LLM provider **free-first**: Ollama (local) →
+Gemini → Groq, and only uses a paid provider (xAI/OpenAI) when one is selected
+explicitly via `HELP_AGENT_PROVIDER`. The zero-cost, no-quota path is Ollama:
+
+```bash
+brew install ollama           # or https://ollama.com/download
+brew services start ollama    # local server on :11434
+ollama pull llama3.2:3b       # ~2 GB, one-time
+# then in apps/platform/.env.local:
+#   OLLAMA_BASE_URL=http://127.0.0.1:11434
+```
+
+With that set, the tutor runs entirely locally for free. A Gemini free-tier key
+(`GEMINI_API_KEY`, from aistudio.google.com) works too and is the recommended
+free option for hosted deploys. See `.env.example` for all provider vars.
+
 ## Status — Feature Complete (V1)
 
 **Done:** 
