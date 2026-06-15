@@ -12,8 +12,10 @@ import {
   type ManifestBug,
   type CapstoneInput,
   type CapstoneResult,
+  type RunResult,
 } from "@qa-mastery/grading";
-import { DEFAULT_RELEASE, isRelease } from "@qa-mastery/shared";
+import { Judge0Runner, DockerPlaywrightRunner } from "@qa-mastery/grading/runners";
+import { DEFAULT_RELEASE, isRelease, mintHandoffToken } from "@qa-mastery/shared";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAuthedUserId } from "@/lib/auth";
 
@@ -302,6 +304,7 @@ export async function submitBugReport(
     steps: report.steps,
     expected: report.expected,
     actual: report.actual,
+    evidence_url: report.evidenceUrl ?? null,
     score: outcome.score,
     matched: outcome.matched !== null,
     duplicate: outcome.duplicate,
@@ -353,6 +356,51 @@ export async function getHuntStatus(slug: string): Promise<HuntStatus> {
   return { found, total: count ?? 0 };
 }
 
+/** Provision a BuggyShop sandbox for this user if they don't have one, and return
+ *  the handoff URL populated with a short-lived JWT. */
+export async function launchSandbox(slug: string): Promise<string> {
+  const userId = await getAuthedUserId();
+  const service = createServiceClient();
+  // Ensure the user has access to the lesson (throws if not)
+  await requireAccessibleLesson(service, slug, userId);
+  const release = lessonRelease(slug);
+
+  let sandboxId: string;
+  const { data: existing } = await service
+    .from("sandboxes")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (existing) {
+    sandboxId = existing.id;
+  } else {
+    // Provision sandbox row
+    const { data: newSbx, error: insertError } = await service
+      .from("sandboxes")
+      .insert({ user_id: userId, current_release: release })
+      .select("id")
+      .single();
+    if (insertError || !newSbx) throw new Error("Could not provision sandbox");
+    sandboxId = newSbx.id;
+
+    // Seed data via the deny-all service-role RPC
+    const { error: resetError } = await service.rpc("reset_sandbox", { p_sandbox_id: sandboxId });
+    if (resetError) throw new Error(`Sandbox seeding failed: ${resetError.message}`);
+  }
+
+  const secret = process.env.SANDBOX_JWT_SECRET;
+  if (!secret) throw new Error("SANDBOX_JWT_SECRET is missing");
+
+  // Typecast to any is a simple bypass since lessonRelease returns a string
+  // and the Token minting expects a strict Release union (which is checked).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const token = await mintHandoffToken({ userId, sandboxId, release: release as any }, secret);
+
+  const baseUrl = process.env.NEXT_PUBLIC_BUGGYSHOP_URL || "http://localhost:3001";
+  return `${baseUrl}/enter#t=${token}`;
+}
+
 // The capstone rubric grading lives in @qa-mastery/grading (pure + unit-tested).
 // Client components import its types straight from the grading package — a
 // "use server" module may only export async functions, never types.
@@ -371,20 +419,65 @@ export async function submitCapstone(
   const result = gradeCapstone(input);
   const { normalized, checklist, score } = result;
 
-  const { error } = await service.from("capstone_submissions").insert({
-    user_id: userId,
-    lesson_id: lesson.id,
-    scope: normalized.scope,
-    risks: normalized.risks,
-    approach: normalized.approach,
-    recommendation: input.recommendation,
-    checklist,
-    score,
-  });
+  // Upsert: the capstone is one deliverable per lesson, so a resubmission
+  // overwrites the prior plan rather than stacking a duplicate row.
+  const { error } = await service.from("capstone_submissions").upsert(
+    {
+      user_id: userId,
+      lesson_id: lesson.id,
+      scope: normalized.scope,
+      risks: normalized.risks,
+      approach: normalized.approach,
+      recommendation: input.recommendation,
+      checklist,
+      score,
+    },
+    { onConflict: "user_id,lesson_id" },
+  );
   if (error) throw new Error(error.message);
 
   // A submitted capstone counts as doing the lab.
   await saveProgress(slug, "do");
 
+  return result;
+}
+
+const judge0 = new Judge0Runner();
+const playwright = new DockerPlaywrightRunner();
+
+function getRunnerForLesson(slug: string) {
+  const lesson = findLessonBySlug(slug);
+  if (!lesson) throw new Error("Lesson not found");
+  
+  // Track B (automation) uses Playwright; Track B0 (java) uses Judge0
+  if (lesson.frontmatter.module !== "B0" && lesson.frontmatter.track === "track-b") {
+    return playwright;
+  }
+  return judge0;
+}
+
+export async function submitCodeLab(slug: string, code: string): Promise<{ runId: string }> {
+  const userId = await getAuthedUserId();
+  const service = createServiceClient();
+  await requireAccessibleLesson(service, slug, userId);
+  
+  return getRunnerForLesson(slug).submit({
+    lessonSlug: slug,
+    userId,
+    payload: { code }
+  });
+}
+
+export async function pollCodeRun(slug: string, runId: string): Promise<RunResult> {
+  const userId = await getAuthedUserId();
+  const service = createServiceClient();
+  await requireAccessibleLesson(service, slug, userId);
+  
+  const result = await getRunnerForLesson(slug).getResult(runId);
+  
+  if (result.passed) {
+    await saveProgress(slug, "do");
+  }
+  
   return result;
 }

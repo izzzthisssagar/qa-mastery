@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Button } from "@qa-mastery/ui";
 import { BugReportLab } from "./lab-panel";
-import { getHuntStatus, type HuntStatus } from "../actions";
+import { getHuntStatus, launchSandbox, type HuntStatus } from "../actions";
 
 /**
  * The Bug Hunt milestone surface. Reuses the bug-report form, but tracks how
@@ -11,6 +12,19 @@ import { getHuntStatus, type HuntStatus } from "../actions";
  */
 export function HuntPanel({ slug }: { slug: string }) {
   const [status, setStatus] = useState<HuntStatus | null>(null);
+  const [launching, setLaunching] = useState(false);
+
+  async function onLaunch() {
+    setLaunching(true);
+    try {
+      const url = await launchSandbox(slug);
+      window.open(url, "_blank");
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Could not launch sandbox");
+    } finally {
+      setLaunching(false);
+    }
+  }
 
   // Best-effort progress fetch; called from an event handler after each report.
   async function refresh() {
@@ -45,6 +59,16 @@ export function HuntPanel({ slug }: { slug: string }) {
 
   return (
     <section data-testid="bug-hunt" className="my-6">
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-zinc-100">Practice Lab</h2>
+          <p className="text-sm text-zinc-400">Launch your sandbox and hunt for the seeded bugs.</p>
+        </div>
+        <Button onClick={onLaunch} disabled={launching} data-testid="launch-sandbox-btn">
+          {launching ? "Provisioning..." : "Launch BuggyShop Sandbox"}
+        </Button>
+      </div>
+
       <div
         className={
           complete

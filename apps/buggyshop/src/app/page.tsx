@@ -17,9 +17,9 @@ export default function ShopHomePage() {
           <Link href="/signup" data-testid="nav-signup" className="hover:text-shop-accent">
             Sign up
           </Link>
-          <span className="cursor-not-allowed opacity-60" data-testid="nav-cart">
+          <Link href="/cart" data-testid="nav-cart" className="hover:text-shop-accent">
             Cart (0)
-          </span>
+          </Link>
         </nav>
       </header>
 

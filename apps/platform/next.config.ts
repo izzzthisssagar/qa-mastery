@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
   // Internal workspace packages ship TS source; Next transpiles them in-place.
   transpilePackages: [
+    "@qa-mastery/agent",
     "@qa-mastery/curriculum",
     "@qa-mastery/db",
     "@qa-mastery/grading",

@@ -14,7 +14,8 @@ interface TrackRef {
   order_index: number;
 }
 
-interface LessonRow {
+/** DB row shape — renamed from LessonRow to avoid clashing with the LessonRow component. */
+interface LessonRegistryRow {
   id: string;
   slug: string;
   title: string;
@@ -27,7 +28,7 @@ interface ModuleGroup {
   slug: string;
   title: string;
   order: number;
-  lessons: LessonRow[];
+  lessons: LessonRegistryRow[];
 }
 
 interface TrackGroup {
@@ -38,7 +39,7 @@ interface TrackGroup {
 }
 
 /** Group published lessons by track, then module, each ordered. */
-function groupByTrack(rows: LessonRow[]): TrackGroup[] {
+function groupByTrack(rows: LessonRegistryRow[]): TrackGroup[] {
   const tracks = new Map<string, TrackGroup>();
   const moduleByKey = new Map<string, ModuleGroup>();
 
@@ -80,7 +81,7 @@ export default async function DashboardPage() {
     )
     .eq("status", "published");
 
-  const rows = (data ?? []) as unknown as LessonRow[];
+  const rows = (data ?? []) as unknown as LessonRegistryRow[];
   const tracks = groupByTrack(rows);
   const lessonCount = rows.length;
 

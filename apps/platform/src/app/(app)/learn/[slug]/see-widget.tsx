@@ -1,89 +1,248 @@
 "use client";
 
+import React, { useState } from "react";
 import {
   BoundarySlider,
   StateMachine,
   DecisionTable,
   TriageGrid,
   PartitionPicker,
+  AutomationPyramid,
+  WebDriverArchitecture,
+  LifecycleVisualizer,
+  POMVisualizer,
+  SDLCVisualizer,
+  JiraBoard,
+  ExploratoryTimer,
+  TestingTypeSorter,
+  PairwiseVisualizer,
 } from "@qa-mastery/widgets";
 import { useLessonProgress } from "./progress-context";
+import { motion, AnimatePresence } from "framer-motion";
 
-/**
- * The lesson's "See it" widget, mapped into the MDX as `<BoundarySlider />`.
- * Renders the Boundary Hunter and marks the `see` step done once the learner
- * discovers the seeded off-by-one bug by walking the edge.
- */
+function SuccessBadge({ show }: { show: boolean }) {
+  return (
+    <AnimatePresence>
+      {show && (
+        <motion.div
+          initial={{ opacity: 0, y: -10, scale: 0.9 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          className="mt-4 flex items-center justify-center gap-2 rounded-lg bg-emerald-500/10 py-3 text-emerald-400 border border-emerald-500/20 shadow-lg shadow-emerald-500/5"
+        >
+          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-zinc-950">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <span className="font-bold tracking-wide uppercase text-sm">Milestone Unlocked</span>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function WidgetWrapper({ children, isDone }: { children: React.ReactNode; isDone: boolean }) {
+  return (
+    <div className="my-6">
+      {children}
+      <SuccessBadge show={isDone} />
+    </div>
+  );
+}
+
 export function SeeWidget() {
   const { slug, markStep } = useLessonProgress();
+  const [done, setDone] = useState(false);
   return (
-    <div className="my-6">
+    <WidgetWrapper isDone={done}>
       <BoundarySlider
         lessonSlug={slug}
-        onMilestone={(milestone) => {
-          if (milestone === "found-boundary-bug") markStep("see");
+        onMilestone={(m) => {
+          if (m === "found-boundary-bug") { markStep("see"); setDone(true); }
         }}
       />
-    </div>
+    </WidgetWrapper>
   );
 }
 
-/** The order-lifecycle state machine, mapped into the MDX as `<StateMachine />`. */
 export function StateMachineWidget() {
   const { slug, markStep } = useLessonProgress();
+  const [done, setDone] = useState(false);
   return (
-    <div className="my-6">
+    <WidgetWrapper isDone={done}>
       <StateMachine
         lessonSlug={slug}
-        onMilestone={(milestone) => {
-          if (milestone === "found-invalid-transition") markStep("see");
+        onMilestone={(m) => {
+          if (m === "found-invalid-transition") { markStep("see"); setDone(true); }
         }}
       />
-    </div>
+    </WidgetWrapper>
   );
 }
 
-/** The free-shipping decision table, mapped into the MDX as `<DecisionTable />`. */
 export function DecisionTableWidget() {
   const { slug, markStep } = useLessonProgress();
+  const [done, setDone] = useState(false);
   return (
-    <div className="my-6">
+    <WidgetWrapper isDone={done}>
       <DecisionTable
         lessonSlug={slug}
-        onMilestone={(milestone) => {
-          if (milestone === "explored-decision-table") markStep("see");
+        onMilestone={(m) => {
+          if (m === "explored-decision-table") { markStep("see"); setDone(true); }
         }}
       />
-    </div>
+    </WidgetWrapper>
   );
 }
 
-/** The severity x priority triage grid, mapped into the MDX as `<TriageGrid />`. */
 export function TriageGridWidget() {
   const { slug, markStep } = useLessonProgress();
+  const [done, setDone] = useState(false);
   return (
-    <div className="my-6">
+    <WidgetWrapper isDone={done}>
       <TriageGrid
         lessonSlug={slug}
-        onMilestone={(milestone) => {
-          if (milestone === "triaged-divergent") markStep("see");
+        onMilestone={(m) => {
+          if (m === "triaged-divergent") { markStep("see"); setDone(true); }
         }}
       />
-    </div>
+    </WidgetWrapper>
   );
 }
 
-/** The equivalence-partition picker, mapped into the MDX as `<PartitionPicker />`. */
 export function PartitionPickerWidget() {
   const { slug, markStep } = useLessonProgress();
+  const [done, setDone] = useState(false);
   return (
-    <div className="my-6">
+    <WidgetWrapper isDone={done}>
       <PartitionPicker
         lessonSlug={slug}
-        onMilestone={(milestone) => {
-          if (milestone === "covered-all-partitions") markStep("see");
+        onMilestone={(m) => {
+          if (m === "covered-all-partitions") { markStep("see"); setDone(true); }
         }}
       />
-    </div>
+    </WidgetWrapper>
+  );
+}
+
+export function AutomationPyramidWidget() {
+  const { markStep } = useLessonProgress();
+  const [done, setDone] = useState(false);
+  return (
+    <WidgetWrapper isDone={done}>
+      <AutomationPyramid
+        onMilestone={(m) => {
+          if (m === "toggled-ice-cream" || m === "explored-layers") { markStep("see"); setDone(true); }
+        }}
+      />
+    </WidgetWrapper>
+  );
+}
+
+export function WebDriverArchitectureWidget() {
+  const { markStep } = useLessonProgress();
+  const [done, setDone] = useState(false);
+  return (
+    <WidgetWrapper isDone={done}>
+      <WebDriverArchitecture
+        onMilestone={(m) => {
+          if (m === "completed-flow") { markStep("see"); setDone(true); }
+        }}
+      />
+    </WidgetWrapper>
+  );
+}
+
+export function LifecycleVisualizerWidget() {
+  const { markStep } = useLessonProgress();
+  const [done, setDone] = useState(false);
+  return (
+    <WidgetWrapper isDone={done}>
+      <LifecycleVisualizer
+        onMilestone={(m) => {
+          if (m === "completed-lifecycle") { markStep("see"); setDone(true); }
+        }}
+      />
+    </WidgetWrapper>
+  );
+}
+
+export function POMVisualizerWidget() {
+  const { markStep } = useLessonProgress();
+  const [done, setDone] = useState(false);
+  return (
+    <WidgetWrapper isDone={done}>
+      <POMVisualizer
+        onMilestone={(m) => {
+          if (m === "completed-pom-flow") { markStep("see"); setDone(true); }
+        }}
+      />
+    </WidgetWrapper>
+  );
+}
+
+export function SDLCVisualizerWidget() {
+  const { markStep } = useLessonProgress();
+  const [done, setDone] = useState(false);
+  return (
+    <WidgetWrapper isDone={done}>
+      <SDLCVisualizer
+        onMilestone={(m) => {
+          if (m === "viewed-production-cost") { markStep("see"); setDone(true); }
+        }}
+      />
+    </WidgetWrapper>
+  );
+}
+
+export function JiraBoardWidget() {
+  const { markStep } = useLessonProgress();
+  const [done, setDone] = useState(false);
+  return (
+    <WidgetWrapper isDone={done}>
+      <JiraBoard
+        onMilestone={(m) => {
+          if (m === "completed-ticket") { markStep("see"); setDone(true); }
+        }}
+      />
+    </WidgetWrapper>
+  );
+}
+
+export function ExploratoryTimerWidget() {
+  const { markStep } = useLessonProgress();
+  const [done, setDone] = useState(false);
+  return (
+    <WidgetWrapper isDone={done}>
+      <ExploratoryTimer
+        onMilestone={(m) => {
+          if (m === "completed-session") { markStep("see"); setDone(true); }
+        }}
+      />
+    </WidgetWrapper>
+  );
+}
+
+export function TestingTypeSorterWidget() {
+  const { markStep } = useLessonProgress();
+  const [done, setDone] = useState(false);
+  return (
+    <WidgetWrapper isDone={done}>
+      <TestingTypeSorter
+        onMilestone={(m) => {
+          if (m === "sorted-all-types") { markStep("see"); setDone(true); }
+        }}
+      />
+    </WidgetWrapper>
+  );
+}
+
+// PairwiseVisualizer is self-contained (no milestone callback), so it just
+// renders inside the standard wrapper.
+export function PairwiseVisualizerWidget() {
+  return (
+    <WidgetWrapper isDone={false}>
+      <PairwiseVisualizer />
+    </WidgetWrapper>
   );
 }

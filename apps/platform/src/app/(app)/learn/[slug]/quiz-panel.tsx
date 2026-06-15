@@ -46,7 +46,18 @@ export function QuizPanel({
     setSubmitting(true);
     setError(null);
     try {
-      setResult(await submitQuiz(slug, answers));
+      const res = await submitQuiz(slug, answers);
+      setResult(res);
+      if (res.passed) {
+        import("canvas-confetti").then((confetti) => {
+          confetti.default({
+            particleCount: 100,
+            spread: 70,
+            origin: { y: 0.6 },
+            colors: ["#10b981", "#f43f5e", "#8b5cf6", "#f59e0b"]
+          });
+        });
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong grading your quiz.");
     } finally {
@@ -77,7 +88,7 @@ export function QuizPanel({
         >
           <p className="text-sm font-semibold text-zinc-100">
             {result.passed ? "🎉 Passed" : "Not yet — keep going"} · {result.score}/{result.maxScore}{" "}
-            ({Math.round((result.score / result.maxScore) * 100)}%)
+            ({result.maxScore > 0 ? Math.round((result.score / result.maxScore) * 100) : 0}%)
           </p>
           <p className="mt-1 text-xs text-zinc-400">
             {result.passed

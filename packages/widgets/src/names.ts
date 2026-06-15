@@ -4,11 +4,12 @@
  * `widgets:` entries without pulling in any JSX.
  */
 export const WIDGET_NAMES = [
+  "partition-picker",
   "boundary-slider",
-  "state-machine",
   "decision-table",
   "triage-grid",
-  "partition-picker",
+  "state-machine",
+  "pairwise-visualizer",
 ] as const;
 
 export type WidgetName = (typeof WIDGET_NAMES)[number];

@@ -79,7 +79,7 @@ export function AuthForm({
                 name="password"
                 label="Password"
                 type="password"
-                autoComplete="current-password"
+                autoComplete={altHref === "/login" ? "new-password" : "current-password"}
                 required
                 minLength={8}
                 placeholder="••••••••"

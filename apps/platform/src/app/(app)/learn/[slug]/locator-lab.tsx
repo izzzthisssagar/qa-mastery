@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useLessonProgress } from "./progress-context";
 
 /**
  * Locator Lab — a safe, infra-free "code runner" for the single most-practiced
@@ -50,6 +51,7 @@ const CHALLENGES: Challenge[] = [
 const RING = "lab-locator-hit";
 
 export function LocatorLab() {
+  const { markStep } = useLessonProgress();
   const stageRef = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
   const [mode, setMode] = useState<Mode>("css");
@@ -117,6 +119,11 @@ export function LocatorLab() {
 
     matched.forEach((el) => el.classList.add(RING));
     setResult({ matched: matched.length, target: targetNodes.size, ok });
+
+    // Mark the "Try it" progress step when the learner passes the last challenge.
+    if (ok && index === CHALLENGES.length - 1) {
+      markStep("try");
+    }
   }
 
   function go(next: number) {

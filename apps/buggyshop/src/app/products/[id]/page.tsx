@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { readRelease, getProduct, isQuantityAccepted } from "@/lib/catalog";
+import { bugFlag, DEFAULT_RELEASE } from "@qa-mastery/shared";
 
 
 function ShopHeader() {
@@ -32,8 +33,20 @@ export default function ProductDetailPage() {
   const product = getProduct(params.id);
   const [qtyInput, setQtyInput] = useState("1");
   const [line, setLine] = useState<{ qty: number; accepted: boolean } | null>(null);
+  const [networkError, setNetworkError] = useState(false);
 
-  const release = useMemo(() => readRelease(), []);
+  const [release, setReleaseState] = useState(DEFAULT_RELEASE);
+  useEffect(() => {
+    let cancelled = false;
+    // Yield once so the first setState never fires synchronously in the effect.
+    void (async () => {
+      await Promise.resolve();
+      if (!cancelled) setReleaseState(readRelease());
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (!product) {
     return (
@@ -50,6 +63,15 @@ export default function ProductDetailPage() {
   }
 
   function addToCart() {
+    setNetworkError(false);
+    
+    // BS-022: Chaos Mode (30% chance to fail)
+    if (bugFlag("BS-022", release) && Math.random() < 0.3) {
+      setNetworkError(true);
+      setLine(null);
+      return;
+    }
+
     const qty = Number(qtyInput);
     setLine({ qty, accepted: isQuantityAccepted(qty, release) });
   }
@@ -77,6 +99,8 @@ export default function ProductDetailPage() {
               type="number"
               value={qtyInput}
               onChange={(e) => setQtyInput(e.target.value)}
+              min={0}
+              step={1}
               data-testid="qty-input"
               className="w-28 rounded-lg border border-zinc-300 px-3 py-1.5 text-zinc-900 focus:border-shop-accent focus:outline-none"
             />
@@ -90,6 +114,15 @@ export default function ProductDetailPage() {
             Add to cart
           </button>
         </div>
+
+        {networkError && (
+          <p
+            data-testid="network-error"
+            className="mt-4 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800"
+          >
+            Network error: the request failed intermittently. Please try again.
+          </p>
+        )}
 
         {line &&
           (line.accepted ? (

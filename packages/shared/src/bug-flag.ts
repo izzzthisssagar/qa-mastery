@@ -57,6 +57,8 @@ export const SEEDED_BUGS = {
   "BS-019": { introduced: "1.0" },
   // BS-020 — order history leaks another user's order data.
   "BS-020": { introduced: "1.0" },
+  // BS-022 — Chaos Mode: 'Add to Cart' fails intermittently (30% chance).
+  "BS-022": { introduced: "2.0" },
 } as const satisfies Record<string, SeededBugSpec>;
 
 export type SeededBugId = keyof typeof SEEDED_BUGS;
