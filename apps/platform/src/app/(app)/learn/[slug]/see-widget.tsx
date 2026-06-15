@@ -18,7 +18,7 @@ import {
   PairwiseVisualizer,
 } from "@qa-mastery/widgets";
 import { useLessonProgress } from "./progress-context";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 
 function SuccessBadge({ show }: { show: boolean }) {
   return (

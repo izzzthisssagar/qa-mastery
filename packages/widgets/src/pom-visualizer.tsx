@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 
 export function POMVisualizer({ onMilestone }: { onMilestone?: (m: string) => void }) {
   const [step, setStep] = useState(0);

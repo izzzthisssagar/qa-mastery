@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 
 const LIFECYCLE_STEPS = [
   { id: "suite-start", label: "@BeforeSuite", desc: "Runs once before the entire suite starts (e.g. set up DB connection)." },
