@@ -67,6 +67,21 @@ export async function getProStatus(): Promise<{ pro: boolean }> {
   return { pro: await hasProEntitlement(service, userId) };
 }
 
+/** Append a sensitive-operation record to the audit trail. Best-effort: an
+ *  audit-write failure must never break the operation it records. */
+async function recordAuditEvent(
+  service: SupabaseClient,
+  event: { actorId: string; action: string; target?: string; metadata?: Record<string, unknown> },
+): Promise<void> {
+  const { error } = await service.from("audit_events").insert({
+    actor_id: event.actorId,
+    action: event.action,
+    target: event.target ?? null,
+    metadata: event.metadata ?? {},
+  });
+  if (error) console.error("audit_events insert failed:", error.message);
+}
+
 /** Mock "upgrade to Pro" — grants the entitlement via the service role. A real
  *  billing webhook would write the same row. */
 export async function grantPro(): Promise<{ ok: true }> {
@@ -76,6 +91,7 @@ export async function grantPro(): Promise<{ ok: true }> {
     .from("entitlements")
     .upsert({ user_id: userId, kind: "pro" }, { onConflict: "user_id,kind" });
   if (error) throw new Error(error.message);
+  await recordAuditEvent(service, { actorId: userId, action: "pro.granted" });
   return { ok: true };
 }
 
@@ -184,6 +200,13 @@ export async function submitQuiz(
         amount: XP_LESSON_COMPLETED,
         reason: "lesson_completed",
         ref_id: slug,
+      });
+
+      await recordAuditEvent(service, {
+        actorId: userId,
+        action: "lesson.completed",
+        target: slug,
+        metadata: { score: result.score, maxScore: result.maxScore },
       });
 
       const flashcards = findLessonBySlug(slug)?.frontmatter.flashcards ?? [];
@@ -313,6 +336,15 @@ export async function submitBugReport(
   });
   if (insertError) throw new Error(insertError.message);
 
+  if (outcome.matched && !outcome.duplicate) {
+    await recordAuditEvent(service, {
+      actorId: userId,
+      action: "bug_report.matched",
+      target: outcome.matched.id,
+      metadata: { slug, score: outcome.score },
+    });
+  }
+
   // Filing a report counts as doing the lab.
   await saveProgress(slug, "do");
 
@@ -437,6 +469,13 @@ export async function submitCapstone(
   );
   if (error) throw new Error(error.message);
 
+  await recordAuditEvent(service, {
+    actorId: userId,
+    action: "capstone.submitted",
+    target: slug,
+    metadata: { score },
+  });
+
   // A submitted capstone counts as doing the lab.
   await saveProgress(slug, "do");
 
@@ -498,6 +537,13 @@ export async function submitCodeLab(slug: string, code: string): Promise<{ runId
     status: "queued",
   });
   if (error) throw new Error(error.message);
+
+  await recordAuditEvent(service, {
+    actorId: userId,
+    action: "code_run.submitted",
+    target: slug,
+    metadata: { runner: runner.name, runId },
+  });
 
   return { runId };
 }

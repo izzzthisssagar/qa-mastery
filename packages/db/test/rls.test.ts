@@ -149,6 +149,18 @@ describe.skipIf(!hasEnv)("RLS regression", () => {
     expect(error).not.toBeNull();
   });
 
+  it("the audit log is not readable by learners (service-role only)", async () => {
+    // service role writes an event for A …
+    const { error: seedError } = await service.from("audit_events").insert({
+      actor_id: userA,
+      action: "test.event",
+    });
+    expect(seedError).toBeNull();
+    // … and A cannot read it back (RLS-on, no policy → deny-all).
+    const { data, error } = await clientA.from("audit_events").select("id");
+    expect(error !== null || (data?.length ?? 0) === 0).toBe(true);
+  });
+
   it("the buggyshop schema is sealed from learners (invariant 1 & 4)", async () => {
     const { data, error } = await clientA
       .schema("buggyshop")
