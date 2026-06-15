@@ -3,7 +3,7 @@ import { groqChat, streamGroqChat } from "./groq";
 import { ollamaChat, ollamaHealthy, streamOllamaChat } from "./ollama";
 import { openAiChat, streamOpenAiChat } from "./openai";
 import { xaiChat, streamXaiChat } from "./xai";
-import type { ChatMessage, LlmEnv, ResolvedProvider } from "./types";
+import { FREE_PROVIDERS, type ChatMessage, type LlmEnv, type ResolvedProvider } from "./types";
 
 export function readLlmEnv(env: NodeJS.ProcessEnv = process.env): LlmEnv {
   return {
@@ -21,85 +21,77 @@ export function readLlmEnv(env: NodeJS.ProcessEnv = process.env): LlmEnv {
   };
 }
 
-export async function resolveProvider(env: LlmEnv = readLlmEnv()): Promise<ResolvedProvider> {
+const KEY_ENV: Record<string, string> = {
+  ollama: "OLLAMA_BASE_URL",
+  gemini: "GEMINI_API_KEY",
+  groq: "GROQ_API_KEY",
+  xai: "XAI_API_KEY",
+  openai: "OPENAI_API_KEY",
+};
+
+/** Every configured provider, in free-first order (Ollama probed for health). */
+async function buildCandidates(env: LlmEnv): Promise<ResolvedProvider[]> {
+  const out: ResolvedProvider[] = [];
+  if (env.ollamaBaseUrl && (await ollamaHealthy(env.ollamaBaseUrl)))
+    out.push({ name: "ollama", model: env.ollamaModel! });
+  if (env.geminiApiKey) out.push({ name: "gemini", model: env.geminiModel! });
+  if (env.groqApiKey) out.push({ name: "groq", model: env.groqModel! });
+  if (env.xaiApiKey) out.push({ name: "xai", model: env.xaiModel! });
+  if (env.openaiApiKey) out.push({ name: "openai", model: env.openaiModel! });
+  return out;
+}
+
+/**
+ * Ordered provider chain to try. In `auto` mode this is FREE providers only —
+ * the tutor never silently bills a paid backend (the "must be free" rule). Paid
+ * providers (xAI, OpenAI) are reachable only by selecting them explicitly via
+ * HELP_AGENT_PROVIDER. A multi-entry chain enables failover (see streamChat).
+ */
+export async function availableProviders(env: LlmEnv = readLlmEnv()): Promise<ResolvedProvider[]> {
   const preference = (env.provider ?? "auto").toLowerCase();
+  const candidates = await buildCandidates(env);
 
-  const tryOllama = async (): Promise<ResolvedProvider | null> => {
-    if (!env.ollamaBaseUrl) return null;
-    const ok = await ollamaHealthy(env.ollamaBaseUrl);
-    return ok ? { name: "ollama", model: env.ollamaModel! } : null;
-  };
-  const tryGemini = (): ResolvedProvider | null =>
-    env.geminiApiKey ? { name: "gemini", model: env.geminiModel! } : null;
-  const tryGroq = (): ResolvedProvider | null =>
-    env.groqApiKey ? { name: "groq", model: env.groqModel! } : null;
-  const tryXai = (): ResolvedProvider | null =>
-    env.xaiApiKey ? { name: "xai", model: env.xaiModel! } : null;
-  const tryOpenai = (): ResolvedProvider | null =>
-    env.openaiApiKey ? { name: "openai", model: env.openaiModel! } : null;
-
-  // Explicit selection — fail loudly if the chosen provider isn't configured.
-  if (preference === "ollama") {
-    const ollama = await tryOllama();
-    if (ollama) return ollama;
-    throw new Error("Ollama is not reachable. Start Ollama or set HELP_AGENT_PROVIDER=gemini.");
-  }
-  if (preference === "gemini") {
-    if (tryGemini()) return tryGemini()!;
-    throw new Error("GEMINI_API_KEY is not configured.");
-  }
-  if (preference === "groq") {
-    if (tryGroq()) return tryGroq()!;
-    throw new Error("GROQ_API_KEY is not configured.");
-  }
-  if (preference === "xai") {
-    if (tryXai()) return tryXai()!;
-    throw new Error("XAI_API_KEY is not configured.");
-  }
-  if (preference === "openai") {
-    if (tryOpenai()) return tryOpenai()!;
-    throw new Error("OPENAI_API_KEY is not configured.");
+  if (preference !== "auto") {
+    const picked = candidates.filter((c) => c.name === preference);
+    if (picked.length) return picked;
+    if (preference === "ollama") {
+      throw new Error("Ollama is not reachable. Start Ollama or set HELP_AGENT_PROVIDER=gemini.");
+    }
+    throw new Error(`${KEY_ENV[preference] ?? preference} is not configured.`);
   }
 
-  // Auto: free providers first (local Ollama, then free API tiers), and the
-  // paid providers (xAI, OpenAI) only when no free option is configured.
-  const ollama = await tryOllama();
-  if (ollama) return ollama;
-  const free = tryGemini() ?? tryGroq();
-  if (free) return free;
-  const paid = tryXai() ?? tryOpenai();
-  if (paid) return paid;
-
+  const free = candidates.filter((c) => FREE_PROVIDERS.has(c.name));
+  if (free.length) return free;
   throw new Error(
-    "No LLM provider configured. Set OLLAMA_BASE_URL, GEMINI_API_KEY, GROQ_API_KEY, XAI_API_KEY, or OPENAI_API_KEY.",
+    "No free LLM provider configured. Set GEMINI_API_KEY, GROQ_API_KEY, or OLLAMA_BASE_URL — " +
+      "or choose a paid provider explicitly with HELP_AGENT_PROVIDER=xai|openai.",
   );
 }
 
-async function* streamWithProvider(
+export async function resolveProvider(env: LlmEnv = readLlmEnv()): Promise<ResolvedProvider> {
+  return (await availableProviders(env))[0];
+}
+
+function streamWithProvider(
   provider: ResolvedProvider,
   env: LlmEnv,
   messages: ChatMessage[],
 ): AsyncGenerator<string> {
   switch (provider.name) {
     case "ollama":
-      yield* streamOllamaChat(env.ollamaBaseUrl!, provider.model, messages);
-      break;
+      return streamOllamaChat(env.ollamaBaseUrl!, provider.model, messages);
     case "gemini":
-      yield* streamGeminiChat(env.geminiApiKey!, provider.model, messages);
-      break;
+      return streamGeminiChat(env.geminiApiKey!, provider.model, messages);
     case "groq":
-      yield* streamGroqChat(env.groqApiKey!, provider.model, messages);
-      break;
+      return streamGroqChat(env.groqApiKey!, provider.model, messages);
     case "xai":
-      yield* streamXaiChat(env.xaiApiKey!, provider.model, messages);
-      break;
+      return streamXaiChat(env.xaiApiKey!, provider.model, messages);
     case "openai":
-      yield* streamOpenAiChat(env.openaiApiKey!, provider.model, messages);
-      break;
+      return streamOpenAiChat(env.openaiApiKey!, provider.model, messages);
   }
 }
 
-async function chatWithProvider(
+function chatWithProvider(
   provider: ResolvedProvider,
   env: LlmEnv,
   messages: ChatMessage[],
@@ -118,18 +110,46 @@ async function chatWithProvider(
   }
 }
 
+/**
+ * Stream a reply, failing over to the next provider in the chain if one errors
+ * *before* producing any output (e.g. a 429 quota error on connect). Once a
+ * provider has started streaming we commit to it — partial output can't be
+ * un-sent.
+ */
 export async function* streamChat(
   messages: ChatMessage[],
   env: LlmEnv = readLlmEnv(),
 ): AsyncGenerator<string> {
-  const provider = await resolveProvider(env);
-  yield* streamWithProvider(provider, env, messages);
+  const providers = await availableProviders(env);
+  let lastErr: unknown;
+  for (const provider of providers) {
+    let started = false;
+    try {
+      for await (const chunk of streamWithProvider(provider, env, messages)) {
+        started = true;
+        yield chunk;
+      }
+      return;
+    } catch (err) {
+      if (started) throw err;
+      lastErr = err;
+    }
+  }
+  throw lastErr ?? new Error("All LLM providers failed.");
 }
 
 export async function chat(
   messages: ChatMessage[],
   env: LlmEnv = readLlmEnv(),
 ): Promise<string> {
-  const provider = await resolveProvider(env);
-  return chatWithProvider(provider, env, messages);
+  const providers = await availableProviders(env);
+  let lastErr: unknown;
+  for (const provider of providers) {
+    try {
+      return await chatWithProvider(provider, env, messages);
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr ?? new Error("All LLM providers failed.");
 }

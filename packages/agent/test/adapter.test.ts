@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveProvider } from "../src/llm/adapter";
+import { availableProviders, resolveProvider } from "../src/llm/adapter";
 import type { LlmEnv } from "../src/llm/types";
 
 // No ollamaBaseUrl in these envs, so the Ollama health probe is skipped (no
@@ -28,13 +28,26 @@ describe("resolveProvider — free-first auto resolution", () => {
     expect((await resolveProvider(env)).name).toBe("groq");
   });
 
-  it("uses a paid provider only when no free option is configured", async () => {
+  it("never silently uses a paid provider in auto mode (free-only)", async () => {
     const env: LlmEnv = { xaiApiKey: "x", xaiModel: "grok-2-latest" };
-    expect((await resolveProvider(env)).name).toBe("xai");
+    await expect(resolveProvider(env)).rejects.toThrow(/No free LLM provider/);
   });
 
   it("throws when nothing is configured", async () => {
-    await expect(resolveProvider({})).rejects.toThrow(/No LLM provider/);
+    await expect(resolveProvider({})).rejects.toThrow(/No free LLM provider/);
+  });
+
+  it("returns a free failover chain (gemini → groq) for auto", async () => {
+    const env: LlmEnv = {
+      geminiApiKey: "g",
+      geminiModel: "gemini-2.0-flash",
+      groqApiKey: "gr",
+      groqModel: "llama-3.3-70b-versatile",
+      openaiApiKey: "o",
+      openaiModel: "gpt-4o-mini",
+    };
+    const chain = await availableProviders(env);
+    expect(chain.map((p) => p.name)).toEqual(["gemini", "groq"]); // paid excluded
   });
 });
 

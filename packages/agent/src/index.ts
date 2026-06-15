@@ -16,6 +16,7 @@ export {
   chat,
   streamChat,
   resolveProvider,
+  availableProviders,
   readLlmEnv,
 } from "./llm/adapter";
 
