@@ -38,12 +38,64 @@ other) and redeploy. Custom domain later replaces the `.vercel.app` URLs
    add `https://*-qa-mastery-platform.vercel.app/**` to Redirect URLs
    (covers preview deploys).
 
-## 3. What stays manual vs automatic
+## 3. Help-agent tutor LLM (free by default)
+
+The tutor resolves a provider free-first (Ollama → Gemini → Groq); paid (xAI/
+OpenAI) only when chosen via `HELP_AGENT_PROVIDER`. For a hosted deploy, set the
+recommended free option in **both** Vercel projects' env (platform needs it):
+
+| Variable | Value |
+|---|---|
+| `GEMINI_API_KEY` | a free-tier key from aistudio.google.com (`AIza…`). The free default. |
+| `HELP_AGENT_PROVIDER` | leave unset (`auto`) for free-first, or pin a provider |
+
+(Ollama is the local-dev free path — not available on Vercel serverless.)
+
+## 4. Billing (Paddle) — when you flip Pro live
+
+The checkout + webhook are built; activating them is config only:
+
+| Variable | Where | Value |
+|---|---|---|
+| `NEXT_PUBLIC_BILLING_ENABLED` | platform (Vercel) | `true` to switch from mock-grant to Paddle checkout |
+| `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` | platform | Paddle → Developer Tools → Authentication (client-side token) |
+| `PADDLE_API_KEY` | platform (secret) | Paddle API key — webhook uses it |
+| `PADDLE_WEBHOOK_SECRET` | platform (secret) | Paddle → Notifications → webhook signing secret |
+
+In Paddle: create the Pro product + price, point a webhook at
+`https://<platform-url>/api/webhooks/paddle` for `transaction.completed`. The
+handler grants the `pro` entitlement (same row the mock `grantPro` writes).
+
+## 5. Automated staging deploy
+
+`deploy-staging.yml` applies new `supabase/migrations/` + republishes the
+curriculum on each push to main. It's inert until these are set in GitHub:
+
+| Secret | Value |
+|---|---|
+| `SUPABASE_ACCESS_TOKEN` | Supabase account → Access Tokens |
+| `STAGING_SERVICE_ROLE_KEY` | staging `service_role` key |
+
+| Repo variable | Value |
+|---|---|
+| `SUPABASE_PROJECT_REF` | `rnmxbtokqebkqibsjmrt` |
+| `STAGING_SUPABASE_URL` | `https://rnmxbtokqebkqibsjmrt.supabase.co` |
+
+## 6. Go-live checklist
+
+- [ ] **Rotate** any API keys shared outside a vault; put real ones only in Vercel/GitHub env.
+- [ ] Vercel: both projects imported (§1), env vars set, `*_URL` vars back-filled + redeployed.
+- [ ] Supabase staging: schemas exposed + auth URLs (§2); migrations `0001–0012` applied.
+- [ ] Tutor: `GEMINI_API_KEY` set with free-tier quota (§3) — verify a reply.
+- [ ] Billing (optional at launch): Paddle product/webhook + the §4 vars; flip `NEXT_PUBLIC_BILLING_ENABLED=true`.
+- [ ] CI green on `main` (lint/types/test/build/e2e + security + deploy-staging).
+
+## What stays manual vs automatic
 
 - Every `git push` → CI runs (GitHub Actions: lint/types/tests/builds/e2e
-  against a fresh local Supabase) and Vercel builds previews/production.
-- Schema changes: new files in `supabase/migrations/` — applied to staging
-  via MCP/CLI for now; the gated `deploy-staging.yml` workflow can take over
-  once `SUPABASE_ACCESS_TOKEN` + project ref are added as GitHub secrets.
+  against a fresh local Supabase, **seeded via `sync --apply`**) and Vercel
+  builds previews/production.
+- Schema changes: new files in `supabase/migrations/` — auto-applied to staging
+  by `deploy-staging.yml` once §5 secrets are set.
 - Prod Supabase project: create at launch (M3/M4) — keeps the free-tier slot
   open until then.
