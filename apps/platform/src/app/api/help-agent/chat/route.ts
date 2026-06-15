@@ -1,4 +1,4 @@
-import { guardResponse, streamChat } from "@qa-mastery/agent";
+import { guardFallback, guardResponse, streamChat, wouldGuard } from "@qa-mastery/agent";
 import { buildAgentContext } from "@/lib/help-agent/context";
 import {
   persistMessage,
@@ -88,28 +88,53 @@ export async function POST(request: Request) {
   ];
 
   const encoder = new TextEncoder();
+  // Streaming-safe guard: only ever flush text that is already guard-clean, and
+  // hold back a trailing window so a forbidden phrase can never be sent while it
+  // is still forming at the tail. The guard runs *before* the client sees text —
+  // not after the whole reply has already streamed.
+  const HOLDBACK = 160;
   let fullResponse = "";
+  let flushedLen = 0;
 
   const stream = new ReadableStream({
     async start(controller) {
       try {
+        let blocked = false;
         for await (const chunk of streamChat(llmMessages)) {
           fullResponse += chunk;
-          controller.enqueue(encoder.encode(chunk));
+          if (wouldGuard(fullResponse, assistantTurn)) {
+            blocked = true;
+            break;
+          }
+          const safeUpto = fullResponse.length - HOLDBACK;
+          if (safeUpto > flushedLen) {
+            controller.enqueue(encoder.encode(fullResponse.slice(flushedLen, safeUpto)));
+            flushedLen = safeUpto;
+          }
         }
 
-        const guarded = guardResponse(fullResponse, assistantTurn);
-        if (guarded !== fullResponse) {
-          controller.enqueue(
-            encoder.encode("\n\n(I'll guide you step-by-step rather than giving the answer directly.)"),
-          );
-          fullResponse = guarded;
+        let persisted: string;
+        if (blocked) {
+          // Everything already flushed was guard-clean; replace the rest (where
+          // the trip lives, inside the held-back window) with a safe redirect.
+          controller.enqueue(encoder.encode("\n\n" + guardFallback()));
+          persisted = guardFallback();
+        } else {
+          const guarded = guardResponse(fullResponse, assistantTurn);
+          if (guarded !== fullResponse) {
+            // A pattern lived entirely inside the held-back tail — never flushed.
+            controller.enqueue(encoder.encode("\n\n" + guardFallback()));
+            persisted = guardFallback();
+          } else {
+            controller.enqueue(encoder.encode(fullResponse.slice(flushedLen)));
+            persisted = fullResponse;
+          }
         }
 
         await persistMessage({
           userId: user.id,
           role: "assistant",
-          content: guarded,
+          content: persisted,
           pathname,
           lessonSlug,
           sessionId: body.sessionId,
@@ -117,13 +142,11 @@ export async function POST(request: Request) {
 
         controller.close();
       } catch (err) {
-        const msg = (err as Error).message;
+        // Keep the learner-facing message generic; log the cause server-side.
         controller.enqueue(
-          encoder.encode(
-            "Sorry, I couldn't reach the tutor right now. Check that Ollama is running or a cloud API key is set.",
-          ),
+          encoder.encode("Sorry, the tutor is unavailable right now. Please try again in a moment."),
         );
-        console.error("help-agent chat error:", msg);
+        console.error("help-agent chat error:", (err as Error).message);
         controller.close();
       }
     },

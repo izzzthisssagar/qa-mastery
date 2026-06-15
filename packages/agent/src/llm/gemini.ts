@@ -1,4 +1,4 @@
-import type { ChatMessage } from "./types";
+import { TUTOR_GENERATION, type ChatMessage } from "./types";
 
 function toGeminiContents(messages: ChatMessage[]) {
   return messages
@@ -24,6 +24,10 @@ export async function* streamGeminiChat(
     body: JSON.stringify({
       systemInstruction: system ? { parts: [{ text: system }] } : undefined,
       contents,
+      generationConfig: {
+        temperature: TUTOR_GENERATION.temperature,
+        maxOutputTokens: TUTOR_GENERATION.maxOutputTokens,
+      },
     }),
   });
   if (!res.ok) {

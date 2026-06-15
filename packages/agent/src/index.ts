@@ -10,12 +10,13 @@ export {
   type TopicMasteryMap,
 } from "./brain";
 
-export { guardResponse } from "./guard";
+export { guardResponse, wouldGuard, guardFallback } from "./guard";
 
 export {
   chat,
   streamChat,
   resolveProvider,
+  availableProviders,
   readLlmEnv,
 } from "./llm/adapter";
 
