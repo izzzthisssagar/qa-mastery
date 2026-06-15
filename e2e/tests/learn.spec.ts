@@ -450,6 +450,16 @@ test.describe("capstone — graded submission", () => {
   });
 });
 
+test.describe("certificate — track completion", () => {
+  test("a fresh learner sees the certificate locked until the track is done", async ({ page }) => {
+    await signUpFreshLearner(page);
+    await page.goto("http://localhost:3000/certificate/track-a");
+    await expect(page.getByTestId("certificate-locked")).toBeVisible();
+    await expect(page.getByTestId("certificate-locked")).toContainText(/0 \/ \d+ lessons/);
+    await expect(page.getByTestId("certificate-earned")).toHaveCount(0);
+  });
+});
+
 test.describe("learn — all Track A lessons render", () => {
   // MDX compiles at request time, so a render check catches a broken lesson
   // body or quiz that the build can't. Covers the whole track.
