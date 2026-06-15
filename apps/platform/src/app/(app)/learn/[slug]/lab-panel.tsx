@@ -48,11 +48,21 @@ export function BugReportLab({
       const ext = file.name.split(".").pop();
       const filename = `${Math.random().toString(36).slice(2)}.${ext}`;
       const supabase = createBrowserSupabase();
-      
-      const { error: uploadError } = await supabase.storage.from("evidence").upload(filename, file);
+
+      // Upload into the learner's own folder (evidence/<uid>/…) — the storage
+      // policy only permits writes scoped to the uploader.
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Please sign in to attach evidence.");
+      const path = `${user.id}/${filename}`;
+
+      const { error: uploadError } = await supabase.storage.from("evidence").upload(path, file);
       if (uploadError) throw new Error(uploadError.message);
-      
-      const { data: { publicUrl } } = supabase.storage.from("evidence").getPublicUrl(filename);
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("evidence").getPublicUrl(path);
       setEvidenceUrl(publicUrl);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Evidence upload failed.");
