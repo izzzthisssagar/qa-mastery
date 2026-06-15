@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 
 const PHASES = [
   { id: "req", name: "Requirements", cost: "$100", desc: "Cheapest to fix. Erase a sentence." },
