@@ -1,8 +1,16 @@
 # Deployment — one-time setup
 
 State: GitHub `izzzthisssagar/qa-mastery` (private) ✓ · Supabase staging
-`qa-mastery-staging` (`rnmxbtokqebkqibsjmrt`, ap-south-1, migrations applied) ✓
-· Vercel projects: **pending (steps below)** · Prod Supabase: deferred to launch.
+`qa-mastery-staging` (`rnmxbtokqebkqibsjmrt`, ap-south-1) — **all 13 migrations
+applied + `schema_migrations` history repaired to file-versions (clean for
+`supabase db push`)** ✓ · Curriculum registry on staging: pending (needs staging
+service key / `deploy-staging.yml`) · Vercel projects: **pending — blocked on the
+GitHub-account decision below** · Prod Supabase: deferred to launch.
+
+> **Vercel blocker (must decide first):** Vercel is connected to GitHub account
+> `temporary-fun111`, but the repo is `izzzthisssagar/qa-mastery`. Vercel can't
+> see the repo until you connect the owning account (or install the Vercel
+> GitHub App on it). Resolve this before §1.
 
 ## 1. Vercel — import the repo TWICE (once per app)
 
@@ -85,7 +93,8 @@ curriculum on each push to main. It's inert until these are set in GitHub:
 
 - [ ] **Rotate** any API keys shared outside a vault; put real ones only in Vercel/GitHub env.
 - [ ] Vercel: both projects imported (§1), env vars set, `*_URL` vars back-filled + redeployed.
-- [ ] Supabase staging: schemas exposed + auth URLs (§2); migrations `0001–0012` applied.
+- [x] Supabase staging: migrations `0001–0013` applied + history repaired (done).
+- [ ] Supabase staging: schemas exposed + auth URLs (§2) — dashboard switches still pending.
 - [ ] Tutor: `GEMINI_API_KEY` set with free-tier quota (§3) — verify a reply.
 - [ ] Billing (optional at launch): Paddle product/webhook + the §4 vars; flip `NEXT_PUBLIC_BILLING_ENABLED=true`.
 - [ ] CI green on `main` (lint/types/test/build/e2e + security + deploy-staging).
