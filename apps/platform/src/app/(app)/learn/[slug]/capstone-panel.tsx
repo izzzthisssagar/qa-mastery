@@ -90,6 +90,14 @@ export function CapstonePanel({ slug }: { slug: string }) {
               </li>
             ))}
           </ul>
+          <button
+            type="button"
+            data-testid="cap-revise"
+            onClick={() => setResult(null)}
+            className="mt-3 text-xs font-medium text-accent underline underline-offset-2 hover:text-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            Revise &amp; resubmit
+          </button>
         </div>
       )}
 
