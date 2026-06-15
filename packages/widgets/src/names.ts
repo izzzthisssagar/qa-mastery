@@ -1,19 +1,4 @@
-/**
- * Canonical widget names. React-free on purpose: the curriculum sync script
- * imports this file under plain Node to validate lesson frontmatter
- * `widgets:` entries without pulling in any JSX.
- */
-export const WIDGET_NAMES = [
-  "partition-picker",
-  "boundary-slider",
-  "decision-table",
-  "triage-grid",
-  "state-machine",
-  "pairwise-visualizer",
-] as const;
-
-export type WidgetName = (typeof WIDGET_NAMES)[number];
-
-export function isWidgetName(value: string): value is WidgetName {
-  return (WIDGET_NAMES as readonly string[]).includes(value);
-}
+// The canonical widget-name list lives in @qa-mastery/shared so the curriculum
+// (content/registry) layer doesn't have to depend on this UI package. Re-export
+// it here for the registry and the existing "@qa-mastery/widgets/names" entry.
+export { WIDGET_NAMES, isWidgetName, type WidgetName } from "@qa-mastery/shared/widget-names";

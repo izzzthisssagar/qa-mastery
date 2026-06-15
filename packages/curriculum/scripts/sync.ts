@@ -14,7 +14,7 @@
  * See the architecture plan §Content↔DB registry sync.
  */
 import { createServiceClient } from "@qa-mastery/db";
-import { isWidgetName } from "@qa-mastery/widgets/names";
+import { isWidgetName } from "@qa-mastery/shared/widget-names";
 import { listLessonFiles, parseLessonFile, type LessonSource } from "../src/load";
 import { MODULES, TRACKS, moduleSlug } from "../src/taxonomy";
 
