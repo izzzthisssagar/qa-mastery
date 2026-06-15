@@ -27,6 +27,8 @@ export {
 
 export {
   NullRunner,
+  MAX_CODE_LENGTH,
+  validateCodeSubmission,
   type RunRequest,
   type RunResult,
   type RunStatus,

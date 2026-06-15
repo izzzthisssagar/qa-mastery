@@ -17,6 +17,21 @@ export interface RunRequest {
   payload: Record<string, unknown>;
 }
 
+/** Upper bound on a code submission — generous for a lesson, but a hard cap so
+ *  oversized payloads can't be forwarded to the (paid/compute-heavy) runner. */
+export const MAX_CODE_LENGTH = 10_000;
+
+/** Validate + normalise a code submission before it reaches a runner. Throws a
+ *  learner-facing message on empty or oversized input. */
+export function validateCodeSubmission(code: string): string {
+  const trimmed = (code ?? "").trim();
+  if (!trimmed) throw new Error("Write some code before running it.");
+  if (trimmed.length > MAX_CODE_LENGTH) {
+    throw new Error(`Submission too large (max ${MAX_CODE_LENGTH.toLocaleString()} characters).`);
+  }
+  return trimmed;
+}
+
 export interface RunResult {
   status: RunStatus;
   passed: boolean;
