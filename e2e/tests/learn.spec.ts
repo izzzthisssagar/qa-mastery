@@ -428,6 +428,13 @@ test.describe("capstone — graded submission", () => {
 
     await expect(page.getByTestId("capstone-result")).toBeVisible();
     await expect(page.getByTestId("capstone-result")).toContainText("100%");
+
+    // Revise: the form unlocks (keeping prior input) and a resubmit re-grades.
+    await page.getByTestId("cap-revise").click();
+    await expect(page.getByTestId("capstone-result")).toHaveCount(0);
+    await expect(page.getByTestId("cap-scope")).toBeEditable();
+    await page.getByTestId("cap-submit").click();
+    await expect(page.getByTestId("capstone-result")).toContainText("100%");
   });
 });
 
