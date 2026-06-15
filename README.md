@@ -63,16 +63,31 @@ With that set, the tutor runs entirely locally for free. A Gemini free-tier key
 (`GEMINI_API_KEY`, from aistudio.google.com) works too and is the recommended
 free option for hosted deploys. See `.env.example` for all provider vars.
 
-## Status — Feature Complete (V1)
+## Status — Phase 1 complete (code), deploy-ready
 
-**Done:** 
-- Full monorepo scaffolding and Supabase RLS migrations.
-- Both Tracks (Manual & Automation) are fully mapped with MDX content.
-- 10+ premium, animated interactive widgets deployed.
-- UX Gamification (Milestone Unlocked badges, Quiz Confetti, Flashcard queues).
-- Full sync pipeline for the curriculum.
+Phase 1 of the [product plan](../QA-Learning-Platform-Plan.md) (Web MVP: Manual +
+Automation) is **feature-complete and green** (`main` CI passes). Built:
 
-**Next Horizons:**
-- Integrate the grading engine with a Sandbox execution environment to safely run user-submitted Playwright scripts.
-- Expand BuggyShop features with more complex, stateful defects.
-- Deploy to Vercel and Supabase Cloud.
+- **Curriculum** — 59 lessons (Track A manual ×30, Track B automation ×29) as MDX
+  + server-only quiz keys, synced into a Supabase registry.
+- **Interactive widgets** — boundary slider, decision table, state machine,
+  pairwise visualiser, automation pyramid, and more (all motion + reduced-motion).
+- **Practice app** — BuggyShop with release-flagged seeded bugs across its pages.
+- **Graded work** — quizzes, structured bug reports (matched to the seeded
+  manifest), a rubric-graded capstone, and a live **code runner** (Judge0/Docker)
+  for automation labs.
+- **AI tutor** — Socratic help-agent, free-first LLM (Ollama/Gemini), with a
+  streaming answer-leak guard.
+- **Platform** — XP/progress dashboard, Pro entitlements + lock badge + Paddle
+  checkout (config-gated), spaced-repetition review queue.
+- **Production hardening** — RLS throughout, audit trail, per-day rate limits +
+  ownership on code runs, baseline security headers, `/api/health` probes,
+  founder analytics views + retention, green CI (lint/types/test/build/e2e +
+  gitleaks + dep-audit) and a gated staging-deploy workflow.
+
+**To publish:** the code is done; going live is now a config checklist — see
+[`DEPLOYMENT.md`](./DEPLOYMENT.md) §6 (Vercel import, Supabase env, tutor key,
+optional Paddle). Architecture overview in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+
+**Phase 2 (later):** API/perf/security/DB tracks, richer stateful BuggyShop
+defects, Playwright/JS secondary stack, Android app.
