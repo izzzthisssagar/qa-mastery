@@ -22,3 +22,5 @@ export {
   verifySessionToken,
   type SandboxClaims,
 } from "./sandbox-token";
+
+export { WIDGET_NAMES, isWidgetName, type WidgetName } from "./widget-names";
