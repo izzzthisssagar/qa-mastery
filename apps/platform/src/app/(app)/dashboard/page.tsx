@@ -128,7 +128,10 @@ export default async function DashboardPage() {
             )}
           </div>
           <h1 className="font-display mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
-            Your learning
+            Your{" "}
+            <span className="font-serif-accent font-normal text-accent">
+              learning
+            </span>
           </h1>
           <p className="mt-2 max-w-prose text-sm leading-6 text-zinc-400">
             {lessonCount} lessons live across {tracks.length} track

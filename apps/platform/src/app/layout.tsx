@@ -1,5 +1,10 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Bricolage_Grotesque } from "next/font/google";
+import {
+  Geist,
+  Geist_Mono,
+  Bricolage_Grotesque,
+  Instrument_Serif,
+} from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -19,6 +24,15 @@ const bricolage = Bricolage_Grotesque({
   weight: ["400", "600", "700", "800"],
 });
 
+// Editorial serif used italic, as a sharp typographic accent against the
+// technical grotesque — the one "unexpected" note in the type system.
+const instrumentSerif = Instrument_Serif({
+  variable: "--font-serif",
+  subsets: ["latin"],
+  weight: "400",
+  style: ["normal", "italic"],
+});
+
 export const metadata: Metadata = {
   title: {
     default: "QA Mastery — Don't watch testing. Do it.",
@@ -36,7 +50,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${bricolage.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${bricolage.variable} ${instrumentSerif.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col font-sans">{children}</body>
     </html>
