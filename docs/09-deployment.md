@@ -118,6 +118,11 @@ learner.
   **Re-index after editing lessons:**
   `pnpm --filter @qa-mastery/curriculum embed` (needs `GEMINI_API_KEY` +
   `NEXT_PUBLIC_SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` for the target DB).
+- **Scope guard:** a pre-LLM classifier (`packages/agent/src/scope.ts`) refuses
+  off-topic questions (writing the user's own project code, general non-testing
+  help) BEFORE any answer-generation call — zero answer tokens, jailbreak-
+  resistant — with a system-prompt rule as backstop. Fails open, so a classifier
+  hiccup never blocks a legitimate QA question.
 - **Brain (kept):** per-learner profile (stages new→mentor), topic mastery from
   quizzes, episodic memories, nightly consolidation — `packages/agent` +
   `help_agent_*` tables.
