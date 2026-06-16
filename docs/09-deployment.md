@@ -103,6 +103,25 @@ Dark-first, "engineering precision" aesthetic. Tokens in
 - **Primitives.** `packages/ui` (gradient/glow primary `Button`, `Card`,
   `Badge`); marketing/widget components in `apps/platform/src/components`.
 
+## Tutor — RAG + brain (live)
+
+The help-agent tutor answers grounded in the curriculum and remembers each
+learner.
+
+- **Chat:** free-first `auto` chain = Gemini → Groq failover (`GEMINI_API_KEY`,
+  `GROQ_API_KEY` set on the platform Vercel project). If Gemini chat is
+  quota-limited the chain serves answers via Groq automatically.
+- **RAG:** every lesson is chunked + embedded (Gemini `gemini-embedding-001`,
+  768-dim) into `public.lesson_chunks` (pgvector). For each question the context
+  builder embeds it, calls `match_lesson_chunks`, and injects the top chunks —
+  best-effort, so it degrades to current-lesson context if embeddings are down.
+  **Re-index after editing lessons:**
+  `pnpm --filter @qa-mastery/curriculum embed` (needs `GEMINI_API_KEY` +
+  `NEXT_PUBLIC_SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` for the target DB).
+- **Brain (kept):** per-learner profile (stages new→mentor), topic mastery from
+  quizzes, episodic memories, nightly consolidation — `packages/agent` +
+  `help_agent_*` tables.
+
 ## Ops
 
 - Health probes: `GET /api/health` on both apps (platform returns
