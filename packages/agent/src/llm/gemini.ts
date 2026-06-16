@@ -83,20 +83,33 @@ export async function geminiEmbed(
 ): Promise<number[][]> {
   if (texts.length === 0) return [];
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:batchEmbedContents?key=${apiKey}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      requests: texts.map((text) => ({
-        model: `models/${model}`,
-        content: { parts: [{ text }] },
-      })),
-    }),
+  const body = JSON.stringify({
+    requests: texts.map((text) => ({
+      model: `models/${model}`,
+      content: { parts: [{ text }] },
+      // Pin to the lesson_chunks vector(768) column (gemini-embedding-001
+      // defaults to 3072 and supports 768/1536/3072). Must equal EMBED_DIM.
+      outputDimensionality: 768,
+    })),
   });
-  if (!res.ok) {
+
+  // Retry on 429 (free-tier rate limit) with exponential backoff; the indexer
+  // also throttles between lessons.
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+    if (res.ok) {
+      const json = (await res.json()) as { embeddings?: Array<{ values: number[] }> };
+      if (!json.embeddings) throw new Error("Gemini embed returned no embeddings");
+      return json.embeddings.map((e) => e.values);
+    }
+    if (res.status === 429 && attempt < 6) {
+      await new Promise((r) => setTimeout(r, Math.min(64000, 5000 * 2 ** attempt)));
+      continue;
+    }
     throw new Error(`Gemini embed error ${res.status}: ${await res.text()}`);
   }
-  const json = (await res.json()) as { embeddings?: Array<{ values: number[] }> };
-  if (!json.embeddings) throw new Error("Gemini embed returned no embeddings");
-  return json.embeddings.map((e) => e.values);
 }

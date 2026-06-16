@@ -75,6 +75,7 @@ for (const lesson of lessons) {
 
   totalChunks += chunks.length;
   console.log(`  ✓ ${slug} — ${chunks.length} chunks`);
+  await new Promise((r) => setTimeout(r, 1500)); // throttle the free embedding tier
 }
 
 console.log(`\nindexed ${totalChunks} chunks across ${lessons.length} lessons.`);

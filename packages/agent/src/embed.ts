@@ -9,7 +9,9 @@ export const EMBED_DIM = 768;
 const MAX_BATCH = 100;
 
 function embedModel(): string {
-  return process.env.GEMINI_EMBED_MODEL ?? "text-embedding-004";
+  // gemini-embedding-001 is the current Gemini embedding model (text-embedding-004
+  // is not served on all keys/API versions). 768-dim requested in geminiEmbed.
+  return process.env.GEMINI_EMBED_MODEL ?? "gemini-embedding-001";
 }
 
 /**
