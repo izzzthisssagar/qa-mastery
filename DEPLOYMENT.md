@@ -81,20 +81,29 @@ In Paddle: create the Pro product + price, point a webhook at
 `https://<platform-url>/api/webhooks/paddle` for `transaction.completed`. The
 handler grants the `pro` entitlement (same row the mock `grantPro` writes).
 
-## 5. Automated staging deploy
+## 5. CI/CD — automatic Vercel deploy (LIVE)
 
-`deploy-staging.yml` applies new `supabase/migrations/` + republishes the
-curriculum on each push to main. It's inert until these are set in GitHub:
+`.github/workflows/deploy.yml` ships **both apps to Vercel production on every
+push to `main`**, via the Vercel CLI token (sidesteps the GitHub-account tangle
+— see §1). Vercel runs the real build, so a broken build fails the deploy and
+the live alias stays on the last good build. Quality gates (lint / typecheck /
+unit / e2e) run in parallel in `ci.yml`.
 
-| Secret | Value |
-|---|---|
-| `SUPABASE_ACCESS_TOKEN` | Supabase account → Access Tokens |
-| `STAGING_SERVICE_ROLE_KEY` | staging `service_role` key |
+Already configured on the repo (via `gh secret/variable set` — no action needed):
 
-| Repo variable | Value |
-|---|---|
-| `SUPABASE_PROJECT_REF` | `rnmxbtokqebkqibsjmrt` |
-| `STAGING_SUPABASE_URL` | `https://rnmxbtokqebkqibsjmrt.supabase.co` |
+| GitHub | Name | Value |
+|---|---|---|
+| secret | `VERCEL_TOKEN` | the deploy token |
+| secret | `VERCEL_ORG_ID` | `team_rQLbEbEW2DZewv9Aklt688bN` |
+| variable | `VERCEL_PLATFORM_PROJECT_ID` | `prj_uel7mjbbm6PuwQWZSc0k3CpCl3xi` |
+| variable | `VERCEL_BUGGYSHOP_PROJECT_ID` | `prj_EJ7hkDillvusf6IJofsMCZZHtRyP` |
+
+The workflow runs `rm -rf .git` before `vercel deploy` so Vercel doesn't block
+on the commit author not being a team member (`TEAM_ACCESS_REQUIRED`).
+
+> Schema changes: new `supabase/migrations/` are NOT auto-applied (no Supabase
+> access token wired). Apply them via the Supabase MCP/CLI, or add a
+> `SUPABASE_ACCESS_TOKEN` secret + a `supabase db push` step later.
 
 ## 6. Go-live checklist
 

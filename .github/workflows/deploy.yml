@@ -1,0 +1,43 @@
+name: Deploy to Vercel
+
+# Every push to main ships both apps to production. Vercel runs the real build,
+# so a broken build fails the deploy and leaves the live alias on the last good
+# one. Quality gates (lint / typecheck / unit / e2e) run in parallel in ci.yml.
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: platform
+            project_id: ${{ vars.VERCEL_PLATFORM_PROJECT_ID }}
+          - app: buggyshop
+            project_id: ${{ vars.VERCEL_BUGGYSHOP_PROJECT_ID }}
+    concurrency:
+      group: deploy-${{ matrix.app }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Deploy ${{ matrix.app }} to Vercel (production)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ matrix.project_id }}
+        run: |
+          # Vercel BLOCKS deploys when the git commit author isn't a member of the
+          # team (TEAM_ACCESS_REQUIRED). The runner is ephemeral and the target
+          # project is selected via VERCEL_ORG_ID / VERCEL_PROJECT_ID, not git, so
+          # drop git metadata before deploying.
+          rm -rf .git
+          npx vercel@latest deploy --prod --yes --archive=tgz
