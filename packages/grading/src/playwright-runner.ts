@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import { writeFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import os from "node:os";
 import type { RunnerProvider, RunRequest, RunResult, RunStatus } from "./runner";
 
 const execAsync = promisify(exec);
@@ -32,9 +33,9 @@ export class PlaywrightRunner implements RunnerProvider {
       staticChecks: [],
     });
 
-    // In Next.js, process.cwd() is the platform app root.
-    // We create a temporary directory for this test run.
-    const tmpDir = join(process.cwd(), ".sandbox-tmp", runId);
+    // Use the OS temp dir (writable on serverless, where process.cwd() =
+    // /var/task is read-only and mkdir would throw EACCES).
+    const tmpDir = join(os.tmpdir(), "sandbox-pw", runId);
     
     try {
       await mkdir(tmpDir, { recursive: true });

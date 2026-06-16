@@ -107,7 +107,9 @@ export function matchBugReport(
     );
   }
 
-  feedback.push(`Matched seeded bug ${candidate.id}: ${candidate.titleInternal}`);
+  // INVARIANT 1: never leak manifest internals to the client. The bug ID is a
+  // safe reference; titleInternal is the answer key and must stay server-side.
+  feedback.push(`Matched seeded bug ${candidate.id}.`);
 
   return {
     matched: candidate,

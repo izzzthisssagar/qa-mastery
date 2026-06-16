@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import { writeFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import os from "node:os";
 import type { RunnerProvider, RunRequest, RunResult, RunStatus } from "./runner";
 
 const execAsync = promisify(exec);
@@ -14,7 +15,8 @@ export class DockerPlaywrightRunner implements RunnerProvider {
 
   async submit(req: RunRequest): Promise<{ runId: string }> {
     const runId = randomUUID();
-    const tmpDir = join(process.cwd(), ".sandbox-tmp", runId);
+    // OS temp dir — process.cwd() (/var/task) is read-only on serverless.
+    const tmpDir = join(os.tmpdir(), "sandbox-docker", runId);
 
     // Create an isolated directory for this run
     await mkdir(tmpDir, { recursive: true });

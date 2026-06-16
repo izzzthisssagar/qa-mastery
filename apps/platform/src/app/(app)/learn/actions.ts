@@ -155,23 +155,34 @@ export async function submitQuiz(
   const questions = quiz.questions as QuizQuestion[];
   const result = scoreQuiz(questions, answers);
 
-  const { count } = await service
-    .from("quiz_attempts")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .eq("lesson_id", lesson.id);
-  const attemptNo = (count ?? 0) + 1;
+  // attempt_no is unique per (user, lesson). A naive count-then-insert races on
+  // rapid re-submit (double-click / retry) and the second insert hits 23505.
+  // Retry on conflict, recomputing the next number each pass, so concurrency
+  // never fails the learner. (A max+1 DB trigger would NOT fix this — both
+  // transactions read the same max and the second still collides.)
+  for (let attempt = 0; ; attempt++) {
+    const { count } = await service
+      .from("quiz_attempts")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("lesson_id", lesson.id);
+    const attemptNo = (count ?? 0) + 1 + attempt;
 
-  const { error: insertError } = await service.from("quiz_attempts").insert({
-    user_id: userId,
-    lesson_id: lesson.id,
-    attempt_no: attemptNo,
-    score: result.score,
-    max_score: result.maxScore,
-    passed: result.passed,
-    answers,
-  });
-  if (insertError) throw new Error(insertError.message);
+    const { error: insertError } = await service.from("quiz_attempts").insert({
+      user_id: userId,
+      lesson_id: lesson.id,
+      attempt_no: attemptNo,
+      score: result.score,
+      max_score: result.maxScore,
+      passed: result.passed,
+      answers,
+    });
+    if (!insertError) break;
+    if (insertError.code !== "23505") throw new Error(insertError.message);
+    if (attempt >= 4) {
+      throw new Error("Could not record quiz attempt (too many concurrent submissions)");
+    }
+  }
 
   if (result.passed) {
     const { data: prog } = await service

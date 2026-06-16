@@ -91,34 +91,48 @@ export async function POST(request: Request) {
 
   const stream = new ReadableStream({
     async start(controller) {
+      let streamedAny = false;
+      let fullText = "";
       try {
-        // guardedStream applies the streaming-safe guard (flush only guard-clean
-        // text, hold back a forming tail) and returns the text to persist.
+        // guardedStream flushes only guard-clean text and returns the full text
+        // to persist as its final value.
         const gen = guardedStream(streamChat(llmMessages), assistantTurn);
         let res = await gen.next();
         while (!res.done) {
+          streamedAny = true;
           controller.enqueue(encoder.encode(res.value));
           res = await gen.next();
         }
+        fullText = res.value;
+      } catch (err) {
+        console.error("help-agent chat error:", (err as Error).message);
+        // Only surface the fallback if nothing was streamed yet — never append
+        // an error after the learner has already received a full answer.
+        if (!streamedAny) {
+          controller.enqueue(
+            encoder.encode("Sorry, the tutor is unavailable right now. Please try again in a moment."),
+          );
+        }
+        controller.close();
+        return;
+      }
 
+      // Persist AFTER a successful generation. A persistence failure must not
+      // corrupt the client stream — the learner already has the answer — so log
+      // it and close cleanly rather than throwing the error into the stream.
+      try {
         await persistMessage({
           userId: user.id,
           role: "assistant",
-          content: res.value,
+          content: fullText,
           pathname,
           lessonSlug,
           sessionId: body.sessionId,
         });
-
-        controller.close();
       } catch (err) {
-        // Keep the learner-facing message generic; log the cause server-side.
-        controller.enqueue(
-          encoder.encode("Sorry, the tutor is unavailable right now. Please try again in a moment."),
-        );
-        console.error("help-agent chat error:", (err as Error).message);
-        controller.close();
+        console.error("help-agent persist error:", (err as Error).message);
       }
+      controller.close();
     },
   });
 

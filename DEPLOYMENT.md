@@ -38,13 +38,20 @@ After both first deploys: fill the two `*_URL` vars in (they reference each
 other) and redeploy. Custom domain later replaces the `.vercel.app` URLs
 (subdomains of ONE domain: `app.…` + `shop.…` — required for the iframe).
 
-## 2. Supabase staging — two dashboard switches
+## 2. Supabase staging — auth config (last manual step)
 
-1. **Settings → Data API → Exposed schemas**: add `buggyshop`
-   (local config.toml handles this locally; cloud is a dashboard setting).
-2. **Authentication → URL Configuration**: Site URL = platform URL;
-   add `https://*-qa-mastery-platform.vercel.app/**` to Redirect URLs
-   (covers preview deploys).
+1. ~~**Data API → Exposed schemas**: add `buggyshop`~~ — **DONE via SQL**
+   (`alter role authenticator set pgrst.db_schemas = 'public, graphql_public, buggyshop'`).
+   No dashboard action needed.
+2. **Authentication → Sign In / Providers → Email → Confirm email = OFF** — for an
+   instant-signup demo. Supabase cloud defaults this **ON**, so otherwise every new
+   learner must click an emailed confirmation link before they can log in. This is
+   the one thing currently blocking a frictionless signup on the live site.
+3. **Authentication → URL Configuration** (only if you KEEP email confirm ON):
+   - Site URL = `https://qa-mastery-platform.vercel.app`
+   - Redirect URLs: add `https://qa-mastery-platform.vercel.app/**` and
+     `https://*-qa-mastery-platform.vercel.app/**`.
+   Without this the confirmation-email link redirects to localhost and fails.
 
 ## 3. Help-agent tutor LLM (free by default)
 
