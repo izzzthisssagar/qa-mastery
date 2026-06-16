@@ -70,3 +70,33 @@ export async function geminiChat(
   }
   return out;
 }
+
+/**
+ * Embed a batch of texts with a Gemini embedding model (default
+ * `text-embedding-004`, 768-dim). Used to index the curriculum and to embed a
+ * learner's question at retrieval time (the RAG path).
+ */
+export async function geminiEmbed(
+  apiKey: string,
+  model: string,
+  texts: string[],
+): Promise<number[][]> {
+  if (texts.length === 0) return [];
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:batchEmbedContents?key=${apiKey}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      requests: texts.map((text) => ({
+        model: `models/${model}`,
+        content: { parts: [{ text }] },
+      })),
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Gemini embed error ${res.status}: ${await res.text()}`);
+  }
+  const json = (await res.json()) as { embeddings?: Array<{ values: number[] }> };
+  if (!json.embeddings) throw new Error("Gemini embed returned no embeddings");
+  return json.embeddings.map((e) => e.values);
+}

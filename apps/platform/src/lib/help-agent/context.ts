@@ -1,5 +1,6 @@
 import "server-only";
 
+import { embedQuery } from "@qa-mastery/agent";
 import { findLessonBySlug, loadLessonBody, loadQuiz } from "@qa-mastery/curriculum";
 import { createServiceClient } from "@qa-mastery/db";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -10,6 +11,8 @@ interface BuildContextInput {
   userId: string;
   pathname: string | null;
   assistantTurn: number;
+  /** The learner's current question — drives RAG retrieval across all lessons. */
+  message?: string;
 }
 
 export async function buildAgentContext(input: BuildContextInput): Promise<{
@@ -20,14 +23,22 @@ export async function buildAgentContext(input: BuildContextInput): Promise<{
   const service = createServiceClient();
   const lessonSlug = parseLessonSlug(input.pathname);
 
-  const [profile, memories, recentMessages, lessonBlock] = await Promise.all([
+  const [profile, memories, recentMessages, lessonBlock, retrieved] = await Promise.all([
     loadProfile(service, input.userId),
     loadMemories(service, input.userId, lessonSlug),
     loadRecentMessages(service, input.userId),
     lessonSlug ? loadLessonBlock(service, input.userId, lessonSlug, input.assistantTurn) : null,
+    loadRetrievedChunks(service, input.message),
   ]);
 
   const parts: string[] = [];
+
+  if (retrieved.length > 0) {
+    parts.push(
+      "Relevant curriculum (retrieved by similarity to the question — ground your answer in this and cite the lesson; do NOT reveal quiz answers):",
+      ...retrieved.map((c) => `- ${c}`),
+    );
+  }
 
   if (profile) {
     parts.push(
@@ -64,6 +75,41 @@ export async function buildAgentContext(input: BuildContextInput): Promise<{
     lessonSlug,
     profile,
   };
+}
+
+interface RetrievedChunk {
+  title: string;
+  lesson_slug: string;
+  content: string;
+  similarity: number;
+}
+
+/**
+ * RAG: embed the learner's question and pull the most relevant lesson chunks
+ * across the whole curriculum. Best-effort — if embeddings are unavailable (no
+ * Gemini key / quota), return nothing and let the tutor answer from the
+ * current-lesson context + memory instead of failing.
+ */
+async function loadRetrievedChunks(
+  service: SupabaseClient,
+  message: string | undefined,
+): Promise<string[]> {
+  if (!message || message.trim().length < 3) return [];
+  try {
+    const queryEmbedding = await embedQuery(message);
+    const { data, error } = await service.rpc("match_lesson_chunks", {
+      query_embedding: JSON.stringify(queryEmbedding),
+      match_count: 6,
+      min_similarity: 0.45,
+    });
+    if (error || !data) return [];
+    return (data as RetrievedChunk[]).map(
+      (r) => `[${r.title} · ${r.lesson_slug}] ${r.content}`,
+    );
+  } catch (err) {
+    console.error("RAG retrieval skipped:", (err as Error).message);
+    return [];
+  }
 }
 
 async function loadProfile(

@@ -56,6 +56,7 @@ export async function POST(request: Request) {
     userId: user.id,
     pathname,
     assistantTurn,
+    message,
   });
 
   const updatedProfile = await touchProfileOnMessage(user.id);

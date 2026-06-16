@@ -22,4 +22,6 @@ export {
   readLlmEnv,
 } from "./llm/adapter";
 
+export { EMBED_DIM, embedTexts, embedQuery } from "./embed";
+
 export type { ChatMessage, ChatRole, LlmEnv, ProviderName, ResolvedProvider } from "./llm/types";
