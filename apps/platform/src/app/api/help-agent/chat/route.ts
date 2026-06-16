@@ -1,4 +1,9 @@
-import { guardedStream, streamChat } from "@qa-mastery/agent";
+import {
+  classifyInScope,
+  guardedStream,
+  SCOPE_REFUSAL,
+  streamChat,
+} from "@qa-mastery/agent";
 import { buildAgentContext } from "@/lib/help-agent/context";
 import {
   persistMessage,
@@ -6,6 +11,7 @@ import {
 } from "@/lib/help-agent/brain-consolidation";
 import { buildSystemPrompt } from "@/lib/help-agent/prompt";
 import { assertWithinRateLimit } from "@/lib/help-agent/rate-limit";
+import { parseLessonSlug } from "@/lib/help-agent/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 interface ChatRequestBody {
@@ -51,6 +57,32 @@ export async function POST(request: Request) {
   const pathname = body.pathname ?? null;
   const history = body.history ?? [];
   const assistantTurn = history.filter((m) => m.role === "assistant").length + 1;
+
+  // Scope guard — refuse off-topic questions BEFORE spending an answer call
+  // (saves tokens and resists jailbreaks into long off-topic replies). Records
+  // the exchange so the panel shows the refusal in history.
+  if (!(await classifyInScope(message))) {
+    const slug = parseLessonSlug(pathname);
+    await persistMessage({
+      userId: user.id,
+      role: "user",
+      content: message,
+      pathname,
+      lessonSlug: slug,
+      sessionId: body.sessionId,
+    });
+    await persistMessage({
+      userId: user.id,
+      role: "assistant",
+      content: SCOPE_REFUSAL,
+      pathname,
+      lessonSlug: slug,
+      sessionId: body.sessionId,
+    });
+    return new Response(SCOPE_REFUSAL, {
+      headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache" },
+    });
+  }
 
   const { contextBlock, lessonSlug, profile } = await buildAgentContext({
     userId: user.id,
