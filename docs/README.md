@@ -7,11 +7,11 @@ This folder documents the **QA Mastery** monorepo: the learning platform
 shared packages, and the Supabase data model. It answers *what / why / how* for
 every major part so a new engineer can understand and extend the system.
 
-These docs describe **what the code actually does today**. Where something is
-designed-for-but-not-yet-built (entitlements, the live BuggyShop lab, the
-runner), it is labelled **Planned**. The source of engineering truth is the
-code; the product "why" comes from the sibling notes repo
-(`../QA-Learning-Platform-Plan.md`, `../Product/`).
+These docs describe **what the code actually does today**. Phase 1 is built and
+**live** — both apps run on Vercel and the full learner loop is verified in
+production; entitlements, the BuggyShop lab, grading, and the code runner all
+ship. The source of engineering truth is the code; the product "why" comes from
+the sibling notes repo (`../QA-Learning-Platform-Plan.md`, `../Product/`).
 
 ## Start here
 
@@ -35,11 +35,13 @@ New to the codebase? Read in this order:
 | [06-learn-feature.md](./06-learn-feature.md) | Deep dive on the M1 learn route: RSC MDX, the lesson flow, server actions, answer-key secrecy. |
 | [07-development.md](./07-development.md) | Runbook: prerequisites, commands, env setup, adding a lesson/widget, the testing bar. |
 | [08-decisions.md](./08-decisions.md) | ADR-style records for the notable engineering decisions. |
+| [09-deployment.md](./09-deployment.md) | Live URLs, the Vercel CLI-token deploy, CI/CD auto-deploy, the two deploy gotchas, the design system, and ops. |
 
 ## Conventions in these docs
 
 - File paths are repo-relative, e.g. `apps/platform/src/app/(app)/learn/[slug]/page.tsx`.
-- **Planned** marks behaviour that is designed but not yet implemented.
-- Milestones referenced throughout: **M0** = scaffold (done), **M1** = walking
-  skeleton / first lesson + lab, **M2–M4** = depth, **M3** = billing &
-  entitlements. These come from the product plan.
+- **Phase 2** marks future work (fuller BuggyShop defects, API/perf/security/DB
+  tracks, Android). Everything else described here is built and live.
+- Milestones referenced throughout (**M0** scaffold, **M1** first lesson + lab,
+  **M2–M4** depth, **M3** billing & entitlements) have all shipped — Phase 1 is
+  live. They come from the product plan.

@@ -20,7 +20,7 @@ title: Boundary Value Analysis
 track: track-a
 module: A3                         # must exist in taxonomy.ts; track must match
 order: 3
-free: true                         # false ⇒ Pro (entitlements are Planned, M3)
+free: true                         # false ⇒ Pro (gated by entitlements)
 duration_min: 25
 widgets: [boundary-slider]         # must exist in widgets/src/names.ts
 lab_type: bug_report

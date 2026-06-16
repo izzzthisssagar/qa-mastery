@@ -100,4 +100,46 @@ automatic via default privileges). ([03](./03-data-model.md).)
 
 ---
 
+## ADR-7 — Deploy via the Vercel CLI token, not the dashboard Git integration
+
+**Context.** Vercel's GitHub integration is connected to account
+`temporary-fun111`, but the repo is owned by `izzzthisssagar` — so the dashboard
+"import the repo" path can't see it, and the owning account can't be connected
+without credentials we won't enter on the user's behalf.
+
+**Decision.** Deploy with the **Vercel CLI token** instead, which targets a
+project by `VERCEL_ORG_ID`/`VERCEL_PROJECT_ID` and sidesteps GitHub entirely.
+Projects were created via the REST API with `rootDirectory` set (monorepo).
+CI (`deploy.yml`) does the same on every push to `main`.
+
+**Consequences.** Fully automated CD without resolving the account tangle. Two
+gotchas had to be handled: Vercel blocks deploys when the git commit author
+isn't a team member (`TEAM_ACCESS_REQUIRED`) → drop git metadata before
+deploying (`rm -rf .git` in CI; move `.git` aside locally); and the multi-GB
+`.turbo` cache + symlinked `node_modules` abort the upload → `.vercelignore` +
+`--archive=tgz`. ([09](./09-deployment.md).)
+
+---
+
+## ADR-8 — Trace curriculum content into the serverless bundle
+
+**Context.** Lesson pages, quiz grading, and the tutor read lesson MDX / quiz
+JSON from `packages/curriculum/content` **at request time**. Next's file tracer
+follows static imports, not a path computed at runtime, so on Vercel those files
+were absent from the serverless functions — every lesson/quiz/tutor route
+returned 500 (the original "can't open any lesson" bug). A passing build hides
+it, because the build never reads content.
+
+**Decision.** Set `outputFileTracingRoot` (repo root) + `outputFileTracingIncludes`
+in `apps/platform/next.config.ts` to force-bundle `packages/curriculum/content`
+(and the `pnpm-workspace.yaml` marker `findContentRoot` walks up to) into the
+functions.
+
+**Consequences.** Lessons render in production. Lesson learned: dynamic
+`fs`-reads of files outside the app dir need explicit tracing includes — local
+`next start` works regardless, so this only surfaces on a real serverless
+deploy. ([09](./09-deployment.md).)
+
+---
+
 Back to the [index](./README.md).

@@ -1,20 +1,27 @@
-# Deployment — one-time setup
+# Deployment
 
-State: GitHub `izzzthisssagar/qa-mastery` (private) ✓ · Supabase staging
+**Status: LIVE.** Both apps run on Vercel and redeploy on every push to `main`
+(`.github/workflows/deploy.yml`). This file is the config reference; the
+operational runbook + the two deploy gotchas are in
+[`docs/09-deployment.md`](./docs/09-deployment.md).
+
+State: GitHub `izzzthisssagar/qa-mastery` (private) ✓ · Supabase
 `qa-mastery-staging` (`rnmxbtokqebkqibsjmrt`, ap-south-1) — **all 13 migrations
-applied + `schema_migrations` history repaired to file-versions (clean for
-`supabase db push`)** ✓ · Curriculum registry on staging: pending (needs staging
-service key / `deploy-staging.yml`) · Vercel projects: **pending — blocked on the
-GitHub-account decision below** · Prod Supabase: deferred to launch.
+applied + `schema_migrations` repaired to file-versions** ✓ · Curriculum registry
+synced to staging (59 lessons) ✓ · `buggyshop` schema exposed to the API ✓ ·
+Vercel: **both apps deployed via CLI** ✓ · CI/CD auto-deploy ✓ · Prod Supabase:
+deferred to launch.
 
-> **Vercel blocker (must decide first):** Vercel is connected to GitHub account
-> `temporary-fun111`, but the repo is `izzzthisssagar/qa-mastery`. Vercel can't
-> see the repo until you connect the owning account (or install the Vercel
-> GitHub App on it). Resolve this before §1.
+> **Why CLI, not dashboard import:** Vercel's GitHub integration is connected to
+> account `temporary-fun111`, but the repo is owned by `izzzthisssagar` — so the
+> dashboard "import the repo" path can't see it. We deploy with the Vercel CLI
+> token instead, which sidesteps GitHub entirely (`docs/09-deployment.md`).
 
-## 1. Vercel — import the repo TWICE (once per app)
+## 1. Vercel projects (done — via CLI token)
 
-At https://vercel.com/new → Import `izzzthisssagar/qa-mastery`:
+Both projects already exist and deploy from this monorepo; the table below is the
+**reference** for the env vars set on each (e.g. to re-set or rotate them). To
+re-create from scratch you'd configure each project as:
 
 | Setting | Project 1 | Project 2 |
 |---|---|---|
@@ -108,7 +115,8 @@ on the commit author not being a team member (`TEAM_ACCESS_REQUIRED`).
 ## 6. Go-live checklist
 
 - [ ] **Rotate** any API keys shared outside a vault; put real ones only in Vercel/GitHub env.
-- [ ] Vercel: both projects imported (§1), env vars set, `*_URL` vars back-filled + redeployed.
+- [x] Vercel: both apps deployed via CLI (§1), env vars set, cross-app URLs correct.
+- [x] CI/CD: push to `main` auto-deploys both apps (`.github/workflows/deploy.yml`).
 - [x] Supabase staging: migrations `0001–0013` applied + history repaired (done).
 - [ ] Supabase staging: schemas exposed + auth URLs (§2) — dashboard switches still pending.
 - [ ] Tutor: `GEMINI_API_KEY` set with free-tier quota (§3) — verify a reply.

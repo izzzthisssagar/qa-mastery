@@ -55,7 +55,7 @@ rapid iteration. Internal packages ship TS source; apps list them in
 exports (`@qa-mastery/grading/runners` keeps `node:child_process` out of client
 bundles).
 
-## Data model (Postgres, 12 migrations)
+## Data model (Postgres, 13 migrations)
 
 **`public` schema — learner data.** RLS read-own; scores/XP/entitlements are
 written only by the service role (invariant 2 — learners never write scores).
@@ -88,6 +88,18 @@ never reach a client bundle (invariant 1, CI-checked).
   builds lesson/learner context → streams via `guardedStream` (a streaming-safe
   guard that withholds any answer/manifest leak before it reaches the client) →
   persists + audit-logs.
+
+## Deployment & CI/CD
+
+Two Vercel projects (one per app, rooted at `apps/platform` / `apps/buggyshop`)
+build from this monorepo on a shared Supabase cloud project.
+`.github/workflows/deploy.yml` ships both apps to production on every push to
+`main` via the Vercel CLI token; `ci.yml` runs the quality gates in parallel.
+Vercel's own build gates the deploy — a red build leaves the live alias on the
+last good one. The platform's `next.config.ts` traces
+`packages/curriculum/content` into the serverless bundle so lesson/quiz/tutor
+routes can read it at request time. Full runbook, the two deploy gotchas, and
+the design system: [`docs/09-deployment.md`](./docs/09-deployment.md).
 
 ## Invariants
 

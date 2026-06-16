@@ -33,8 +33,8 @@ plan (June 2026).
    slug; removed lessons get archived, never deleted.
 6. **Widgets are registry-validated.** Lesson frontmatter `widgets:` must name
    entries in `packages/widgets/src/names.ts`; the sync script enforces it.
-7. **Seeded bugs go behind `bugFlag(id, release)`** (lands in M1) — never
-   inline bug logic without the flag wrapper.
+7. **Seeded bugs go behind `bugFlag(id, release)`** — never inline bug logic
+   without the flag wrapper.
 
 ## Stack notes
 
@@ -52,5 +52,27 @@ plan (June 2026).
 
 This platform teaches QA — its own suite is marketing. Unit tests for every
 pure function (grading especially), Playwright e2e for every learner-facing
-flow on Chromium AND WebKit (iframe/token handoff must stay Safari-proof),
-RLS regression tests once the DB-backed CI stage lands (M1).
+flow on Chromium AND WebKit (iframe/token handoff must stay Safari-proof), and
+RLS regression tests (`pnpm test:rls`) that run in the DB-backed CI stage.
+
+## Deployment & design (live)
+
+Both apps run on Vercel and **redeploy on every push to `main`** via
+`.github/workflows/deploy.yml`. Full detail: `docs/09-deployment.md`. Keep in
+mind when deploying:
+
+- **Live:** platform `qa-mastery-platform.vercel.app`, buggyshop
+  `qa-mastery-buggyshop.vercel.app`. One Supabase cloud project backs both.
+- **Vercel blocks deploys (`TEAM_ACCESS_REQUIRED`)** when the git commit author
+  isn't a team member. Deploy with no git metadata: CI does `rm -rf .git`; a
+  local deploy moves `.git` aside (`mv .git /tmp/x …; mv /tmp/x .git`). Always
+  use `--archive=tgz` and rely on `.vercelignore` (excludes the multi-GB
+  `.turbo` + symlinked `node_modules`) or the upload aborts.
+- **Runtime content reads need file tracing.** Lesson/quiz/tutor routes read
+  `packages/curriculum/content` at request time, so `apps/platform/next.config.ts`
+  sets `outputFileTracingRoot` + `outputFileTracingIncludes`. Don't remove it —
+  it's the difference between lessons rendering and a 500.
+- **Design tokens** (`apps/platform/src/app/globals.css`): `--accent` emerald,
+  `--bug` amber; fonts Bricolage Grotesque (display), Geist (body/mono),
+  Instrument Serif italic (`.font-serif-accent`). Atmosphere via `.bg-grid` /
+  `.bg-glow` / `.grain`. Respect `prefers-reduced-motion`.

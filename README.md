@@ -2,6 +2,10 @@
 
 The hands-on QA learning platform — **"Don't watch testing. Do it."**
 
+**Live:** [qa-mastery-platform.vercel.app](https://qa-mastery-platform.vercel.app)
+· practice app [qa-mastery-buggyshop.vercel.app](https://qa-mastery-buggyshop.vercel.app)
+· every push to `main` auto-deploys both (see [`docs/09-deployment.md`](./docs/09-deployment.md)).
+
 Learners study every QA concept visually, practice on a deliberately flawed
 e-commerce app (**BuggyShop**), and get their work auto-graded. We've transformed theoretical testing education into a highly interactive, gamified, and premium experience.
 
@@ -42,7 +46,7 @@ Quality gates (all must stay green; CI runs the same):
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm e2e
-pnpm --filter curriculum sync --apply   # validate and sync lesson content
+pnpm --filter @qa-mastery/curriculum sync --apply   # validate and sync lesson content
 ```
 
 ### Help-agent tutor (free)
@@ -63,10 +67,12 @@ With that set, the tutor runs entirely locally for free. A Gemini free-tier key
 (`GEMINI_API_KEY`, from aistudio.google.com) works too and is the recommended
 free option for hosted deploys. See `.env.example` for all provider vars.
 
-## Status — Phase 1 complete (code), deploy-ready
+## Status — Phase 1 LIVE
 
 Phase 1 of the [product plan](../QA-Learning-Platform-Plan.md) (Web MVP: Manual +
-Automation) is **feature-complete and green** (`main` CI passes). Built:
+Automation) is **built, deployed, and verified** — both apps run on Vercel, the
+full learner loop (signup → lesson → widget → graded quiz → completion + XP) is
+confirmed in production, and every push to `main` redeploys automatically. Built:
 
 - **Curriculum** — 59 lessons (Track A manual ×30, Track B automation ×29) as MDX
   + server-only quiz keys, synced into a Supabase registry.
@@ -85,9 +91,14 @@ Automation) is **feature-complete and green** (`main` CI passes). Built:
   founder analytics views + retention, green CI (lint/types/test/build/e2e +
   gitleaks + dep-audit) and a gated staging-deploy workflow.
 
-**To publish:** the code is done; going live is now a config checklist — see
-[`DEPLOYMENT.md`](./DEPLOYMENT.md) §6 (Vercel import, Supabase env, tutor key,
-optional Paddle). Architecture overview in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+- **Deployment** — two Vercel projects from this monorepo, deployed via the
+  Vercel CLI token; `.github/workflows/deploy.yml` ships both apps to production
+  on every push to `main`. See [`docs/09-deployment.md`](./docs/09-deployment.md).
+
+**Remaining owner toggles** (not code — config): Supabase email-confirm off, a
+free `GEMINI_API_KEY` for the tutor, optional Paddle keys. See
+[`DEPLOYMENT.md`](./DEPLOYMENT.md) §2–§4. Architecture in
+[`ARCHITECTURE.md`](./ARCHITECTURE.md); full docs in [`docs/`](./docs/README.md).
 
 **Phase 2 (later):** API/perf/security/DB tracks, richer stateful BuggyShop
 defects, Playwright/JS secondary stack, Android app.

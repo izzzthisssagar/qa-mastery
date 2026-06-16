@@ -25,8 +25,10 @@ repo as two **tracks**:
 
 | Track | Focus | Status |
 |---|---|---|
-| **Track A — Manual Testing Foundation** | SDLC → test design techniques → bug reports → a full test-cycle capstone | All 28 lessons authored across modules A1–A5 |
-| **Track B — Automation Foundation** | "Just enough Java" → Selenium WebDriver → TestNG + Page Object Model → CI | **Planned** |
+| **Track A — Manual Testing Foundation** | SDLC → test design techniques → bug reports → a full test-cycle capstone | Authored across modules A1–A6 |
+| **Track B — Automation Foundation** | "Just enough Java" → Selenium WebDriver → TestNG + Page Object Model → CI | Authored across modules B0–B5 |
+
+The two tracks total **59 lessons**, all live.
 
 Module/track metadata lives in `packages/curriculum/src/taxonomy.ts`.
 
@@ -45,25 +47,26 @@ Every lesson follows one pedagogy, encoded in the lesson MDX and the learn page:
    lesson, awards XP, and seeds the lesson's flashcards into a spaced-repetition
    review queue.
 
-The one fully-built vertical today is **Boundary Value Analysis** (Track A,
-module A3). It is the reference example for everything in these docs — see
-[06 — The Learn feature](./06-learn-feature.md).
+**Boundary Value Analysis** (Track A, module A3) is the reference vertical these
+docs walk through end to end — see [06 — The Learn feature](./06-learn-feature.md).
 
-## What exists today vs. Planned
+## What exists today
+
+Phase 1 is **built, deployed, and verified in production**. Current build state:
 
 | Capability | State |
 |---|---|
-| Monorepo, both apps, all packages, CI | Built (M0) |
+| Monorepo, both apps, all packages | Built |
 | Auth (signup/login, Supabase SSR), authenticated app shell | Built |
-| Data model: registry, progress, quiz, XP, review queue, BuggyShop sandbox | Built (migrations 0001–0004) |
+| Data model: registry, progress, quiz, XP, review queue, bug reports, capstone, entitlements, code runs, tutor memory, audit | Built (migrations 0001–0013) |
 | Curriculum pipeline: MDX → DB registry sync | Built |
-| First lesson end-to-end: BVA lesson + Boundary Hunter widget + graded quiz | Built (M1) |
-| All 28 Track A lessons authored (MDX + quiz; EP & BVA also have graded labs) | Built |
-| Live "Do it" lab: BuggyShop products page + bug-report form, graded against the manifest | Built (M1) |
-| `bugFlag(id, release)` seeded-bug wrapper | Built (one bug — BS-008 — wired so far) |
-| RLS regression suite (`pnpm test:rls`) | Built |
-| BuggyShop beyond the products page (cart, checkout, the other ~19 bugs) | **Planned** |
-| Entitlements / billing (Pro lessons) | **Planned** (M3) |
-| Code runner (Track B automation labs) | **Planned** (`NullRunner` stub exists) |
+| Lessons: 59 across Track A (A1–A6) + Track B (B0–B5), MDX + server-only quiz keys | Built |
+| Interactive widgets (boundary slider, decision table, state machine, automation pyramid, …) | Built |
+| Graded work: quizzes, manifest-matched bug reports, rubric capstone, code runner (Judge0/Docker) | Built |
+| AI tutor (free-first LLM, streaming answer-leak guard) | Built |
+| Entitlements / Pro + Paddle checkout | Built (config-gated by `NEXT_PUBLIC_BILLING_ENABLED`) |
+| RLS regression suite (`pnpm test:rls`) + manifest-leak CI grep | Built |
+| Deployment: two Vercel projects + `deploy.yml` auto-deploy on push to `main` | Built — **live** |
+| Fuller stateful BuggyShop defects, API/perf/security/DB tracks, Android | Phase 2 |
 
 Next: [02 — Architecture](./02-architecture.md).

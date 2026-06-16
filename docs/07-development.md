@@ -76,8 +76,16 @@ Locators use `data-testid`s; see `e2e/tests/learn.spec.ts` for the pattern
 
 ## CI
 
-`.github/workflows/` runs lint, typecheck, unit tests, the curriculum sync
-validation, the production build, and greps `.next/static` for the manifest
-answer-key strings (invariant 1).
+`ci.yml` runs lint, typecheck, unit tests, the curriculum sync validation, the
+production build, the manifest-leak grep (`.next/static`, invariant 1), and the
+Playwright e2e against a fresh local Supabase stack on Chromium + WebKit.
+
+## Deploy
+
+`deploy.yml` deploys **both apps to Vercel production on every push to `main`**
+(Vercel CLI token; Vercel's own build gates it). For a local one-off deploy,
+move `.git` aside first so Vercel doesn't block on the commit author, and pass
+`--archive=tgz`. Full runbook + the two deploy gotchas:
+[09 — Deployment](./09-deployment.md).
 
 Next: [08 — Decisions](./08-decisions.md).
