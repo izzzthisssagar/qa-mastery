@@ -13,6 +13,7 @@ export default function LoginPage() {
       altText="New here?"
       altHref="/signup"
       altLinkLabel="Create an account"
+      showForgot
     />
   );
 }

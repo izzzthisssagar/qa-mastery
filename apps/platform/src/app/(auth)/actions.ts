@@ -34,6 +34,17 @@ async function safeNext(): Promise<string> {
   return "/dashboard";
 }
 
+/** Absolute site origin for building email redirect links. Prefers the
+ *  configured platform URL; falls back to the forwarded request host. */
+async function siteOrigin(): Promise<string> {
+  const explicit = process.env.NEXT_PUBLIC_PLATFORM_URL;
+  if (explicit) return explicit.replace(/\/$/, "");
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  const proto = h.get("x-forwarded-proto") ?? "http";
+  return `${proto}://${host}`;
+}
+
 export async function login(
   _prev: AuthFormState,
   formData: FormData,
@@ -65,7 +76,12 @@ export async function signup(
   }
 
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.auth.signUp({ email, password });
+  const origin = await siteOrigin();
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: `${origin}/auth/callback` },
+  });
   if (error) {
     return { error: error.message };
   }
@@ -74,11 +90,62 @@ export async function signup(
   if (!data.session) {
     return {
       error: null,
-      message: "Check your inbox to confirm your account, then log in.",
+      message: "Check your inbox to confirm your email, then log in.",
     };
   }
 
   redirect(await safeNext());
+}
+
+/** Send a password-reset email. The link lands on /auth/callback which
+ *  exchanges the code for a recovery session, then forwards to /reset-password.
+ *  Always returns a neutral message so we don't leak which emails exist. */
+export async function requestPasswordReset(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const email = String(formData.get("email") ?? "").trim();
+  if (!email) return { error: "Email is required." };
+
+  const supabase = await createSupabaseServerClient();
+  const origin = await siteOrigin();
+  await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${origin}/auth/callback?next=/reset-password`,
+  });
+
+  return {
+    error: null,
+    message: "If an account exists for that email, a reset link is on its way.",
+  };
+}
+
+/** Set a new password. Runs inside the recovery session established by the
+ *  callback, so updateUser is authorized. */
+export async function updatePassword(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const password = String(formData.get("password") ?? "");
+  const confirm = String(formData.get("confirm") ?? "");
+  if (password.length < 8) {
+    return { error: "Password must be at least 8 characters." };
+  }
+  if (password !== confirm) {
+    return { error: "Passwords don't match." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Reset link expired. Request a new one from the login page." };
+  }
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) return { error: error.message };
+
+  redirect("/dashboard");
 }
 
 export async function logout(): Promise<void> {

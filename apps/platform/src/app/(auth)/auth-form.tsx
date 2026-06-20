@@ -17,6 +17,8 @@ export interface AuthFormProps {
   altText: string;
   altHref: string;
   altLinkLabel: string;
+  /** Show a "Forgot password?" link under the password field (login only). */
+  showForgot?: boolean;
 }
 
 export function AuthForm({
@@ -26,6 +28,7 @@ export function AuthForm({
   altText,
   altHref,
   altLinkLabel,
+  showForgot = false,
 }: AuthFormProps) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
 
@@ -85,6 +88,19 @@ export function AuthForm({
                 placeholder="••••••••"
               />
             </Reveal>
+
+            {showForgot ? (
+              <Reveal delay={0.3}>
+                <div className="-mt-2 text-right">
+                  <Link
+                    href="/forgot-password"
+                    className="text-xs font-medium text-zinc-400 underline-offset-4 transition-colors hover:text-accent hover:underline"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
+              </Reveal>
+            ) : null}
 
             {state.error ? (
               <motion.p
