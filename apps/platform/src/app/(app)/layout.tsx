@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { HelpAgentWidget } from "@/components/help-agent/help-agent-widget";
+import { FeedbackWidget } from "@/components/feedback/feedback-widget";
 import { logout } from "../(auth)/actions";
 
 /**
@@ -48,6 +49,7 @@ export default async function AppLayout({
       </header>
       <main className="flex-1 px-6 py-10 sm:px-10">{children}</main>
       <HelpAgentWidget />
+      <FeedbackWidget />
     </div>
   );
 }
