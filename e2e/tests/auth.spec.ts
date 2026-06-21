@@ -49,7 +49,9 @@ test.describe("auth", () => {
     await page.getByLabel("Email").fill(`nobody-${randomUUID()}@e2e.local`);
     await page.getByLabel("Password").fill("definitely-wrong-1");
     await page.getByRole("button", { name: /^log in$/i }).click();
-    await expect(page.getByRole("alert")).toBeVisible();
+    // Target the form's own error, not Next's framework route-announcer
+    // (which is also role="alert") — avoids a strict-mode 2-match on WebKit.
+    await expect(page.getByTestId("form-error")).toBeVisible();
     await expect(page).toHaveURL(/\/login/);
   });
 });
