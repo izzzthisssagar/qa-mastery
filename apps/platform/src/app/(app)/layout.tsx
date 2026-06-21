@@ -40,6 +40,12 @@ export default async function AppLayout({
           >
             Portfolio
           </Link>
+          <Link
+            href="/test-cases"
+            className="relative text-zinc-300 transition-colors hover:text-zinc-50 after:absolute after:-bottom-1 after:left-0 after:h-px after:w-full after:origin-left after:scale-x-0 after:bg-accent after:transition-transform hover:after:scale-x-100"
+          >
+            Test cases
+          </Link>
         </nav>
         <div className="flex items-center gap-4 text-sm">
           <span className="hidden text-zinc-500 sm:inline">{user.email}</span>
