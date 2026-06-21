@@ -61,7 +61,13 @@ export function AuthField({ id, name, label, type, ...inputProps }: AuthFieldPro
           <button
             type="button"
             onClick={() => setReveal((v) => !v)}
-            aria-label={reveal ? "Hide password" : "Show password"}
+            // Accessible name deliberately avoids the word "password" so it does
+            // not collide with getByLabel("Password") for the field (the input
+            // must stay the sole match — see the e2e label contract). `title`
+            // gives sighted users the conventional tooltip without changing the
+            // accessible name (aria-label wins).
+            aria-label={reveal ? "Hide entered text" : "Show entered text"}
+            title={reveal ? "Hide password" : "Show password"}
             aria-pressed={reveal}
             tabIndex={-1}
             className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-zinc-500 transition-colors hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
