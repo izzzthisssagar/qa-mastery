@@ -268,3 +268,64 @@ export async function getPublicProfile(handle: string): Promise<ActionResult<Pub
     },
   };
 }
+
+/** Onboarding role chooser. Sets profiles.talent_role and records the funnel
+ *  event. */
+export async function selectRole(role: string): Promise<ActionResult> {
+  const parsed = z.enum(["tester", "client", "both"]).safeParse(role);
+  if (!parsed.success) return { ok: false, error: "Pick a role" };
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Please sign in" };
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ talent_role: parsed.data })
+    .eq("id", user.id);
+  if (error) return { ok: false, error: "Couldn't save your choice — try again" };
+
+  await emitTalentEvent(user.id, "talent.role_selected", { role: parsed.data });
+  return { ok: true, data: null };
+}
+
+export type ReusableArtifact = {
+  source_table: "bug_reports" | "test_cases";
+  source_id: string;
+  title: string;
+  meta: string;
+};
+
+/** The caller's existing learning-side artifacts that can be linked into the
+ *  portfolio (Arch ADR-003 — reuse, don't duplicate). RLS read-own applies. */
+export async function getReusableArtifacts(): Promise<ActionResult<ReusableArtifact[]>> {
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Please sign in" };
+
+  const [bugs, cases] = await Promise.all([
+    supabase
+      .from("bug_reports")
+      .select("id, title, severity, created_at")
+      .order("created_at", { ascending: false })
+      .limit(25),
+    supabase
+      .from("test_cases")
+      .select("id, title, priority, created_at")
+      .order("created_at", { ascending: false })
+      .limit(25),
+  ]);
+
+  const items: ReusableArtifact[] = [
+    ...(bugs.data ?? []).map((b) => ({
+      source_table: "bug_reports" as const,
+      source_id: b.id as string,
+      title: b.title as string,
+      meta: `bug · ${b.severity as string}`,
+    })),
+    ...(cases.data ?? []).map((c) => ({
+      source_table: "test_cases" as const,
+      source_id: c.id as string,
+      title: c.title as string,
+      meta: `test case · ${c.priority as string}`,
+    })),
+  ];
+  return { ok: true, data: items };
+}
