@@ -21,6 +21,8 @@ export function TesterCard({ tester }: { tester: TesterCardData }) {
               alt=""
               width={36}
               height={36}
+              loading="lazy"
+              decoding="async"
               className="size-9 rounded-full object-cover"
             />
           )}

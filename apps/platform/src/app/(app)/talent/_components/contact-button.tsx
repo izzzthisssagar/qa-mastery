@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Button } from "@qa-mastery/ui";
+import { Button, Spinner } from "@qa-mastery/ui";
 import { contactTester } from "@/app/(app)/talent/actions";
 
 /** Opens (or reuses) a conversation with this tester, then jumps to the inbox
@@ -28,7 +28,13 @@ export function ContactButton({ handle }: { handle: string }) {
   return (
     <div className="flex flex-col items-start gap-1">
       <Button onClick={contact} disabled={pending}>
-        {pending ? "Opening…" : "Contact"}
+        {pending ? (
+          <>
+            <Spinner /> Opening…
+          </>
+        ) : (
+          "Contact"
+        )}
       </Button>
       {error && <span className="text-xs text-red-300">{error}</span>}
     </div>
