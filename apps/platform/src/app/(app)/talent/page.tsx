@@ -44,6 +44,12 @@ export default async function TalentHubPage() {
         >
           Post a project
         </Link>
+        <Link
+          href="/talent/inbox"
+          className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-200 hover:border-zinc-500"
+        >
+          Inbox
+        </Link>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">

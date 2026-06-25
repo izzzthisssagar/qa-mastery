@@ -4,6 +4,7 @@ import { Badge } from "@qa-mastery/ui";
 import { getPublicProfile } from "@/app/(app)/talent/actions";
 import { labelFor } from "@/lib/talent/taxonomy";
 import { availabilityTone, portfolioTypeTone } from "@/lib/talent/status";
+import { ContactButton } from "@/app/(app)/talent/_components/contact-button";
 
 type Params = { params: Promise<{ handle: string }> };
 
@@ -41,6 +42,7 @@ export default async function PublicProfilePage({ params }: Params) {
         {(profile.headline as string) && (
           <p className="max-w-2xl text-lg text-zinc-300">{profile.headline as string}</p>
         )}
+        <ContactButton handle={profile.handle as string} />
         {(profile.location as string) && (
           <p className="text-sm text-zinc-500">{profile.location as string}</p>
         )}
