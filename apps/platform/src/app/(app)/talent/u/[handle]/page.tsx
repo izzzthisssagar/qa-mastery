@@ -5,6 +5,7 @@ import { getPublicProfile } from "@/app/(app)/talent/actions";
 import { labelFor } from "@/lib/talent/taxonomy";
 import { availabilityTone, portfolioTypeTone } from "@/lib/talent/status";
 import { ContactButton } from "@/app/(app)/talent/_components/contact-button";
+import { ReportButton } from "@/app/(app)/talent/_components/report-button";
 
 type Params = { params: Promise<{ handle: string }> };
 
@@ -141,6 +142,10 @@ export default async function PublicProfilePage({ params }: Params) {
           </div>
         )}
       </section>
+
+      <footer className="border-t border-zinc-900 pt-4">
+        <ReportButton targetType="profile" targetId={profile.id as string} />
+      </footer>
     </div>
   );
 }

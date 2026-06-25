@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createServiceClient } from "@qa-mastery/db";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { emitTalentEvent } from "@/lib/talent/events";
+import { withinRate } from "@/lib/talent/rate-limit";
 import {
   AVAILABILITY,
   DEVICE_KINDS,
@@ -467,6 +468,9 @@ export async function postProject(input: ProjectInput): Promise<ActionResult<{ i
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: "Please sign in" };
 
+  if (!(await withinRate(user.id, "talent.project_posted")))
+    return { ok: false, error: "You've posted several projects recently — try again later." };
+
   const p = parsed.data;
   const { data, error } = await supabase
     .from("talent_projects")
@@ -512,6 +516,8 @@ export async function contactTester(input: {
 }): Promise<ActionResult<{ conversationId: string }>> {
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: "Please sign in" };
+  if (!(await withinRate(user.id, "talent.contact_initiated")))
+    return { ok: false, error: "You're contacting a lot of testers — try again later." };
 
   const { data: tester } = await supabase
     .from("talent_profiles")
@@ -668,6 +674,8 @@ export async function sendMessage(
   }
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: "Please sign in" };
+  if (!(await withinRate(user.id, "talent.message_sent")))
+    return { ok: false, error: "Slow down a moment — you've sent a lot of messages." };
 
   const { data: convo } = await supabase
     .from("talent_conversations")
@@ -699,4 +707,146 @@ export async function markRead(conversationId: string): Promise<ActionResult> {
   if (!user) return { ok: false, error: "Please sign in" };
   const { error } = await supabase.rpc("talent_mark_read", { conv: conversationId });
   return error ? { ok: false, error: "Couldn't update read status" } : { ok: true, data: null };
+}
+
+// ── M5: applications + moderation ────────────────────────────────────────────
+
+export type ProjectCardData = {
+  id: string;
+  title: string;
+  project_type: string;
+  required_types: string[];
+  engagement: string;
+  nda_required: boolean;
+  created_at: string;
+};
+
+/** Open projects for testers to browse, keyset-paginated newest-first. */
+export async function getOpenProjects(
+  cursor?: string,
+): Promise<ActionResult<{ items: ProjectCardData[]; nextCursor: string | null }>> {
+  const supabase = await createSupabaseServerClient();
+  let q = supabase
+    .from("talent_projects")
+    .select("id, title, project_type, required_types, engagement, nda_required, created_at")
+    .eq("status", "open");
+  if (cursor) q = q.lt("created_at", cursor);
+  const { data, error } = await q.order("created_at", { ascending: false }).limit(PAGE + 1);
+  if (error) return { ok: false, error: "Couldn't load projects" };
+  const rows = (data ?? []) as ProjectCardData[];
+  const page = rows.slice(0, PAGE);
+  const nextCursor = rows.length > PAGE ? page[page.length - 1].created_at : null;
+  return { ok: true, data: { items: page, nextCursor } };
+}
+
+export type ProjectDetail = {
+  project: Record<string, unknown>;
+  applications: Record<string, unknown>[];
+  isOwner: boolean;
+  myApplication: Record<string, unknown> | null;
+};
+
+/** A project + its applications. RLS scopes what's visible: the owner sees all
+ *  applications; a tester sees only their own. */
+export async function getProject(id: string): Promise<ActionResult<ProjectDetail>> {
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Please sign in" };
+  const { data: project } = await supabase.from("talent_projects").select("*").eq("id", id).maybeSingle();
+  if (!project) return { ok: false, error: "Project not found" };
+
+  const isOwner = project.owner_id === user.id;
+  const { data: applications } = await supabase
+    .from("talent_applications")
+    .select("*")
+    .eq("project_id", id)
+    .order("created_at", { ascending: false });
+  const apps = (applications ?? []) as Array<Record<string, unknown>>;
+  const myApplication = apps.find((a) => a.tester_id === user.id) ?? null;
+
+  return { ok: true, data: { project, applications: isOwner ? apps : [], isOwner, myApplication } };
+}
+
+/** Tester applies to a project (RLS: tester submits own; unique per project). */
+export async function applyToProject(
+  projectId: string,
+  note?: string,
+): Promise<ActionResult<{ id: string }>> {
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Please sign in" };
+  if (!(await withinRate(user.id, "talent.application_submitted")))
+    return { ok: false, error: "You've applied to a lot of projects — try again later." };
+
+  const trimmedNote = (note ?? "").trim().slice(0, 2000) || null;
+  const { data, error } = await supabase
+    .from("talent_applications")
+    .insert({ project_id: projectId, tester_id: user.id, note: trimmedNote })
+    .select("id")
+    .single();
+  if (error || !data) {
+    if (error?.code === "23505") return { ok: false, error: "You've already applied to this project" };
+    return { ok: false, error: "Couldn't submit your application" };
+  }
+  await emitTalentEvent(user.id, "talent.application_submitted", {
+    project_id: projectId,
+    tester_id: user.id,
+  });
+  return { ok: true, data: { id: data.id as string } };
+}
+
+/** Project owner moves an application through its lifecycle (RLS: owner only). */
+export async function setApplicationStatus(
+  applicationId: string,
+  status: string,
+): Promise<ActionResult> {
+  const parsed = z.enum(["applied", "shortlisted", "declined", "hired"]).safeParse(status);
+  if (!parsed.success) return { ok: false, error: "Invalid status" };
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Please sign in" };
+
+  const { data: app } = await supabase
+    .from("talent_applications")
+    .select("project_id, tester_id")
+    .eq("id", applicationId)
+    .maybeSingle();
+  const { error } = await supabase
+    .from("talent_applications")
+    .update({ status: parsed.data })
+    .eq("id", applicationId);
+  if (error) return { ok: false, error: "Couldn't update the application" };
+
+  if (parsed.data === "hired" && app) {
+    await emitTalentEvent(user.id, "talent.hire_marked", {
+      project_id: app.project_id as string,
+      tester_id: app.tester_id as string,
+    });
+  }
+  return { ok: true, data: null };
+}
+
+/** Report a profile/project/message for moderation (insert-own; service-role
+ *  triage). */
+export async function reportContent(
+  targetType: string,
+  targetId: string,
+  reason: string,
+): Promise<ActionResult> {
+  const tt = z.enum(["profile", "project", "message"]).safeParse(targetType);
+  if (!tt.success) return { ok: false, error: "Invalid report target" };
+  const trimmed = reason.trim();
+  if (trimmed.length < 1 || trimmed.length > 2000) return { ok: false, error: "Add a short reason" };
+
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Please sign in" };
+  if (!(await withinRate(user.id, "talent.reported")))
+    return { ok: false, error: "You've filed several reports recently." };
+
+  const { error } = await supabase.from("talent_reports").insert({
+    reporter_id: user.id,
+    target_type: tt.data,
+    target_id: targetId,
+    reason: trimmed,
+  });
+  if (error) return { ok: false, error: "Couldn't file the report" };
+  await emitTalentEvent(user.id, "talent.reported", { target_type: tt.data, target_id: targetId });
+  return { ok: true, data: null };
 }
