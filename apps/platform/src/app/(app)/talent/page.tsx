@@ -31,6 +31,21 @@ export default async function TalentHubPage() {
         </p>
       </header>
 
+      <div className="flex flex-wrap gap-3">
+        <Link
+          href="/talent/testers"
+          className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-200 hover:border-zinc-500"
+        >
+          Find testers
+        </Link>
+        <Link
+          href="/talent/post"
+          className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-200 hover:border-zinc-500"
+        >
+          Post a project
+        </Link>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <Link
           href="/talent/profile"
