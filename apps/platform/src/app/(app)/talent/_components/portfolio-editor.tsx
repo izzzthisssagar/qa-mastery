@@ -170,10 +170,13 @@ export function PortfolioEditor({
           aria-label="Repo URL"
         />
         <label className="block text-sm text-zinc-400">
-          <span className="mb-1 block">Attach a file (bug-report sheet, coverage PDF — optional)</span>
+          <span className="mb-1 block">
+            Attach a file — bug-report sheet, test plan, coverage report (PDF, Excel, Word,
+            CSV or image — optional)
+          </span>
           <input
             type="file"
-            accept="image/png,image/jpeg,image/webp,application/pdf,text/csv,text/plain"
+            accept=".pdf,.csv,.txt,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.docx,.doc,application/pdf,text/csv,text/plain,image/png,image/jpeg,image/webp,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
             onChange={onFile}
             className="block w-full text-xs text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-zinc-200"
           />
