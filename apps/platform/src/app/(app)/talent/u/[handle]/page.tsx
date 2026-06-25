@@ -4,6 +4,7 @@ import { Badge } from "@qa-mastery/ui";
 import { getPublicProfile } from "@/app/(app)/talent/actions";
 import { labelFor } from "@/lib/talent/taxonomy";
 import { availabilityTone, portfolioTypeTone } from "@/lib/talent/status";
+import { avatarUrl } from "@/lib/talent/avatar";
 import { ContactButton } from "@/app/(app)/talent/_components/contact-button";
 import { ReportButton } from "@/app/(app)/talent/_components/report-button";
 
@@ -36,6 +37,16 @@ export default async function PublicProfilePage({ params }: Params) {
     <div className="space-y-8 py-2">
       <header className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">
+          {avatarUrl(profile.avatar_path as string | null) && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={avatarUrl(profile.avatar_path as string | null)!}
+              alt={`${profile.handle as string} avatar`}
+              width={56}
+              height={56}
+              className="size-14 rounded-full object-cover"
+            />
+          )}
           <h1 className="font-display text-3xl font-bold tracking-tight">{profile.handle as string}</h1>
           <Badge tone={availabilityTone[availability] ?? "default"}>{labelFor(availability)}</Badge>
           {(profile.verification_status as string) === "verified" && <Badge tone="success">Verified</Badge>}
