@@ -499,3 +499,204 @@ export async function postProject(input: ProjectInput): Promise<ActionResult<{ i
   });
   return { ok: true, data: { id: data.id as string } };
 }
+
+// ── M4: contact (consent boundary) + messaging ───────────────────────────────
+
+/** Open (or reuse) a conversation with a tester. The caller is the client; the
+ *  conversation row is the consent boundary — no message can exist without it
+ *  (RLS). Idempotent per (client, tester, project). */
+export async function contactTester(input: {
+  handle: string;
+  projectId?: string;
+  from?: "directory" | "project";
+}): Promise<ActionResult<{ conversationId: string }>> {
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Please sign in" };
+
+  const { data: tester } = await supabase
+    .from("talent_profiles")
+    .select("id")
+    .eq("handle", input.handle.toLowerCase())
+    .eq("is_public", true)
+    .maybeSingle();
+  if (!tester) return { ok: false, error: "Tester not found" };
+  const testerId = tester.id as string;
+  if (testerId === user.id) return { ok: false, error: "You can't contact yourself" };
+
+  let existingQ = supabase
+    .from("talent_conversations")
+    .select("id")
+    .eq("client_id", user.id)
+    .eq("tester_id", testerId);
+  existingQ = input.projectId ? existingQ.eq("project_id", input.projectId) : existingQ.is("project_id", null);
+  const { data: existing } = await existingQ.maybeSingle();
+  if (existing?.id) return { ok: true, data: { conversationId: existing.id as string } };
+
+  const { data: created, error } = await supabase
+    .from("talent_conversations")
+    .insert({
+      client_id: user.id,
+      tester_id: testerId,
+      project_id: input.projectId ?? null,
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
+  if (error || !created) return { ok: false, error: "Couldn't start the conversation" };
+
+  const conversationId = created.id as string;
+  await emitTalentEvent(user.id, "talent.contact_initiated", {
+    conversation_id: conversationId,
+    client_id: user.id,
+    tester_id: testerId,
+    from: input.from ?? "directory",
+  });
+  return { ok: true, data: { conversationId } };
+}
+
+export type ConversationSummary = {
+  id: string;
+  otherId: string;
+  otherHandle: string | null;
+  role: "client" | "tester";
+  lastMessage: string | null;
+  lastAt: string | null;
+};
+
+/** The caller's conversations (RLS: participant-only), newest first, with the
+ *  other party's handle and last-message preview (batched, no N+1). */
+export async function getConversations(): Promise<ActionResult<ConversationSummary[]>> {
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Please sign in" };
+
+  const { data: convos } = await supabase
+    .from("talent_conversations")
+    .select("id, client_id, tester_id, created_at")
+    .or(`client_id.eq.${user.id},tester_id.eq.${user.id}`)
+    .order("created_at", { ascending: false });
+  const rows = (convos ?? []) as Array<Record<string, unknown>>;
+  if (!rows.length) return { ok: true, data: [] };
+
+  const convoIds = rows.map((c) => c.id as string);
+  const otherIds = rows.map((c) =>
+    c.client_id === user.id ? (c.tester_id as string) : (c.client_id as string),
+  );
+
+  const [{ data: profiles }, { data: msgs }] = await Promise.all([
+    supabase.from("talent_profiles").select("id, handle").in("id", otherIds),
+    supabase
+      .from("talent_messages")
+      .select("conversation_id, body, created_at")
+      .in("conversation_id", convoIds)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  const handleById = new Map((profiles ?? []).map((p) => [p.id as string, p.handle as string]));
+  const lastByConvo = new Map<string, { body: string; at: string }>();
+  for (const m of msgs ?? []) {
+    const cid = m.conversation_id as string;
+    if (!lastByConvo.has(cid)) lastByConvo.set(cid, { body: m.body as string, at: m.created_at as string });
+  }
+
+  const items: ConversationSummary[] = rows.map((c) => {
+    const otherId = c.client_id === user.id ? (c.tester_id as string) : (c.client_id as string);
+    const last = lastByConvo.get(c.id as string);
+    return {
+      id: c.id as string,
+      otherId,
+      otherHandle: handleById.get(otherId) ?? null,
+      role: c.client_id === user.id ? "client" : "tester",
+      lastMessage: last?.body ?? null,
+      lastAt: last?.at ?? null,
+    };
+  });
+  return { ok: true, data: items };
+}
+
+export type Message = {
+  id: string;
+  sender_id: string;
+  body: string;
+  created_at: string;
+  read_at: string | null;
+};
+
+/** Messages in a conversation (RLS participant-only), oldest first. */
+export async function getMessages(conversationId: string): Promise<ActionResult<Message[]>> {
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Please sign in" };
+  const { data } = await supabase
+    .from("talent_messages")
+    .select("id, sender_id, body, created_at, read_at")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: true });
+  return { ok: true, data: (data ?? []) as Message[] };
+}
+
+/** Emit talent.connection_made once both sides have spoken (the North-Star
+ *  event). Uses the service role to read the full message set + check it hasn't
+ *  already fired. */
+async function maybeEmitConnection(conversationId: string, clientId: string, testerId: string) {
+  const service = createServiceClient();
+  const { data: existing } = await service
+    .from("audit_events")
+    .select("id")
+    .eq("action", "talent.connection_made")
+    .contains("metadata", { conversation_id: conversationId })
+    .limit(1);
+  if (existing && existing.length) return;
+
+  const { data: senders } = await service
+    .from("talent_messages")
+    .select("sender_id")
+    .eq("conversation_id", conversationId);
+  const set = new Set((senders ?? []).map((s) => s.sender_id as string));
+  if (set.has(clientId) && set.has(testerId)) {
+    await emitTalentEvent(clientId, "talent.connection_made", { conversation_id: conversationId });
+  }
+}
+
+/** Send a message (RLS: participant + sender = self). Emits message_sent and,
+ *  when this crosses both-sides-have-spoken, connection_made. */
+export async function sendMessage(
+  conversationId: string,
+  body: string,
+): Promise<ActionResult<{ id: string }>> {
+  const trimmed = body.trim();
+  if (trimmed.length < 1 || trimmed.length > 8000) {
+    return { ok: false, error: "Message must be 1–8000 characters" };
+  }
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Please sign in" };
+
+  const { data: convo } = await supabase
+    .from("talent_conversations")
+    .select("client_id, tester_id")
+    .eq("id", conversationId)
+    .maybeSingle();
+  if (!convo) return { ok: false, error: "Conversation not found" };
+
+  const { data: msg, error } = await supabase
+    .from("talent_messages")
+    .insert({ conversation_id: conversationId, sender_id: user.id, body: trimmed })
+    .select("id")
+    .single();
+  if (error || !msg) return { ok: false, error: "Couldn't send your message" };
+
+  const senderRole = convo.client_id === user.id ? "client" : "tester";
+  await emitTalentEvent(user.id, "talent.message_sent", {
+    conversation_id: conversationId,
+    sender_role: senderRole,
+  });
+  await maybeEmitConnection(conversationId, convo.client_id as string, convo.tester_id as string);
+
+  return { ok: true, data: { id: msg.id as string } };
+}
+
+/** Mark the other party's messages in a conversation as read (scoped RPC). */
+export async function markRead(conversationId: string): Promise<ActionResult> {
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Please sign in" };
+  const { error } = await supabase.rpc("talent_mark_read", { conv: conversationId });
+  return error ? { ok: false, error: "Couldn't update read status" } : { ok: true, data: null };
+}
