@@ -77,8 +77,25 @@ export function ConversationThread({
       if (!res.ok) {
         setError(res.error);
         setDraft(body);
+        return;
       }
-      // The inserted row also arrives via the realtime subscription.
+      // Render it immediately (don't depend on the realtime echo, which can lag
+      // or — in some environments — not arrive). The realtime INSERT, if/when it
+      // arrives, dedups by id in the subscription handler.
+      setMessages((prev) =>
+        prev.some((m) => m.id === res.data.id)
+          ? prev
+          : [
+              ...prev,
+              {
+                id: res.data.id,
+                sender_id: currentUserId,
+                body,
+                created_at: new Date().toISOString(),
+                read_at: null,
+              },
+            ],
+      );
     });
   }
 
