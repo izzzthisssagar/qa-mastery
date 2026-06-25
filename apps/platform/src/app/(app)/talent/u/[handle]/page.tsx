@@ -8,6 +8,7 @@ import { avatarUrl } from "@/lib/talent/avatar";
 import { ContactButton } from "@/app/(app)/talent/_components/contact-button";
 import { ReportButton } from "@/app/(app)/talent/_components/report-button";
 import { AssetDownload } from "@/app/(app)/talent/_components/asset-download";
+import { CvDownload } from "@/app/(app)/talent/_components/cv-download";
 
 type Params = { params: Promise<{ handle: string }> };
 
@@ -28,11 +29,15 @@ export default async function PublicProfilePage({ params }: Params) {
   const { handle } = await params;
   const res = await getPublicProfile(handle);
   if (!res.ok) notFound();
-  const { profile, portfolio, devices, badges } = res.data;
+  const { profile, portfolio, devices, badges, experience } = res.data;
 
   const specialties = (profile.specialties as string[] | null) ?? [];
   const stack = (profile.stack as string[] | null) ?? [];
   const availability = (profile.availability as string) ?? "open";
+  const years = profile.years_experience as number | null;
+  const linkedin = profile.linkedin_url as string | null;
+  const github = profile.github_url as string | null;
+  const hasCv = Boolean(profile.cv_path);
 
   return (
     <div className="space-y-8 py-2">
@@ -55,10 +60,39 @@ export default async function PublicProfilePage({ params }: Params) {
         {(profile.headline as string) && (
           <p className="max-w-2xl text-lg text-zinc-300">{profile.headline as string}</p>
         )}
-        <ContactButton handle={profile.handle as string} />
-        {(profile.location as string) && (
-          <p className="text-sm text-zinc-500">{profile.location as string}</p>
-        )}
+        <p className="text-sm text-zinc-500">
+          {[
+            profile.location as string | null,
+            years != null ? `${years} yr${years === 1 ? "" : "s"} experience` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+
+        <div className="flex flex-wrap items-center gap-3 pt-1">
+          <ContactButton handle={profile.handle as string} />
+          {linkedin && (
+            <a
+              href={linkedin}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-accent hover:underline"
+            >
+              LinkedIn ↗
+            </a>
+          )}
+          {github && (
+            <a
+              href={github}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-accent hover:underline"
+            >
+              GitHub ↗
+            </a>
+          )}
+          {hasCv && <CvDownload handle={profile.handle as string} />}
+        </div>
       </header>
 
       {badges.length > 0 && (
@@ -115,6 +149,31 @@ export default async function PublicProfilePage({ params }: Params) {
               </span>
             ))}
           </div>
+        </section>
+      )}
+
+      {experience.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-medium text-zinc-400">Experience</h2>
+          <ul className="space-y-3">
+            {experience.map((e) => (
+              <li
+                key={e.id as string}
+                className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4"
+              >
+                <p className="font-medium text-zinc-100">
+                  {e.role as string} ·{" "}
+                  <span className="text-zinc-300">{e.company as string}</span>
+                </p>
+                <p className="text-xs text-zinc-500">
+                  {e.start_year as number} – {(e.end_year as number | null) ?? "present"}
+                </p>
+                {(e.summary as string) && (
+                  <p className="mt-1 text-sm text-zinc-400">{e.summary as string}</p>
+                )}
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

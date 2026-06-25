@@ -46,6 +46,9 @@ const ProfileSchema = z.object({
   specialties: z.array(inSet(SPECIALTIES, "Unknown specialty")).max(13).default([]),
   stack: z.array(inSet(STACK, "Unknown tool")).max(20).default([]),
   rateCents: z.coerce.number().int().min(0).max(100_000_00).optional(),
+  linkedinUrl: z.string().trim().url().max(300).optional().or(z.literal("")),
+  githubUrl: z.string().trim().url().max(300).optional().or(z.literal("")),
+  yearsExperience: z.coerce.number().int().min(0).max(60).optional(),
 });
 
 export type ProfileInput = z.input<typeof ProfileSchema>;
@@ -80,6 +83,9 @@ export async function upsertTesterProfile(input: ProfileInput): Promise<ActionRe
     specialties: p.specialties,
     stack: p.stack,
     rate_cents: p.rateCents ?? null,
+    linkedin_url: p.linkedinUrl || null,
+    github_url: p.githubUrl || null,
+    years_experience: p.yearsExperience ?? null,
     updated_at: new Date().toISOString(),
   });
 
@@ -240,6 +246,7 @@ export type PublicProfile = {
   portfolio: Record<string, unknown>[];
   devices: Record<string, unknown>[];
   badges: Record<string, unknown>[];
+  experience: Record<string, unknown>[];
 };
 
 /** Public tester profile by handle. Reads the PII-safe view + related rows in
@@ -254,7 +261,7 @@ export async function getPublicProfile(handle: string): Promise<ActionResult<Pub
   if (!profile) return { ok: false, error: "Profile not found" };
 
   const testerId = profile.id as string;
-  const [portfolio, devices, badges] = await Promise.all([
+  const [portfolio, devices, badges, experience] = await Promise.all([
     supabase.from("talent_portfolio_items").select("*").eq("tester_id", testerId),
     supabase.from("talent_devices").select("*").eq("tester_id", testerId),
     supabase
@@ -262,6 +269,11 @@ export async function getPublicProfile(handle: string): Promise<ActionResult<Pub
       .select("*")
       .eq("tester_id", testerId)
       .order("score", { ascending: false }),
+    supabase
+      .from("talent_experience")
+      .select("*")
+      .eq("tester_id", testerId)
+      .order("start_year", { ascending: false }),
   ]);
 
   return {
@@ -271,6 +283,7 @@ export async function getPublicProfile(handle: string): Promise<ActionResult<Pub
       portfolio: portfolio.data ?? [],
       devices: devices.data ?? [],
       badges: badges.data ?? [],
+      experience: experience.data ?? [],
     },
   };
 }
@@ -885,6 +898,81 @@ export async function getPortfolioSignedUrl(
   const path = (item?.asset_path as string | null) ?? null;
   if (!path) return { ok: false, error: "Not available" };
 
+  const service = createServiceClient();
+  const { data, error } = await service.storage.from(PORTFOLIO_BUCKET).createSignedUrl(path, 120);
+  if (error || !data) return { ok: false, error: "Couldn't generate a download link" };
+  return { ok: true, data: { url: data.signedUrl } };
+}
+
+// ── Experience, CV & social links (the experienced-pro path) ─────────────────
+
+const ExperienceSchema = z.object({
+  company: z.string().trim().min(1).max(120),
+  role: z.string().trim().min(1).max(120),
+  startYear: z.coerce.number().int().min(1980).max(2100),
+  endYear: z.coerce.number().int().min(1980).max(2100).optional(),
+  summary: z.string().trim().max(2000).optional(),
+});
+export type ExperienceInput = z.input<typeof ExperienceSchema>;
+
+export async function addExperience(
+  input: ExperienceInput,
+): Promise<ActionResult<{ id: string }>> {
+  const parsed = ExperienceSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid entry" };
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Please sign in" };
+  const e = parsed.data;
+  const { data, error } = await supabase
+    .from("talent_experience")
+    .insert({
+      tester_id: user.id,
+      company: e.company,
+      role: e.role,
+      start_year: e.startYear,
+      end_year: e.endYear ?? null,
+      summary: e.summary ?? null,
+    })
+    .select("id")
+    .single();
+  if (error || !data) return { ok: false, error: "Couldn't add the role" };
+  return { ok: true, data: { id: data.id as string } };
+}
+
+export async function removeExperience(id: string): Promise<ActionResult> {
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Please sign in" };
+  const { error } = await supabase
+    .from("talent_experience")
+    .delete()
+    .eq("id", id)
+    .eq("tester_id", user.id);
+  return error ? { ok: false, error: "Couldn't remove the role" } : { ok: true, data: null };
+}
+
+/** Save the caller's uploaded CV path (file already in the private portfolio
+ *  bucket under their own folder; storage RLS owns that write). */
+export async function setCvPath(path: string): Promise<ActionResult> {
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Please sign in" };
+  if (!path.startsWith(`${user.id}/`)) return { ok: false, error: "Invalid CV path" };
+  const { error } = await supabase
+    .from("talent_profiles")
+    .update({ cv_path: path })
+    .eq("id", user.id);
+  return error ? { ok: false, error: "Couldn't save your CV" } : { ok: true, data: null };
+}
+
+/** Signed URL for a public tester's CV (private bucket → service-role signed). */
+export async function getCvSignedUrl(handle: string): Promise<ActionResult<{ url: string }>> {
+  const supabase = await createSupabaseServerClient();
+  const { data: profile } = await supabase
+    .from("talent_public_profile")
+    .select("cv_path")
+    .eq("handle", handle.toLowerCase())
+    .maybeSingle();
+  const path = (profile?.cv_path as string | null) ?? null;
+  if (!path) return { ok: false, error: "No CV available" };
   const service = createServiceClient();
   const { data, error } = await service.storage.from(PORTFOLIO_BUCKET).createSignedUrl(path, 120);
   if (error || !data) return { ok: false, error: "Couldn't generate a download link" };
