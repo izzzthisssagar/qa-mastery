@@ -23,6 +23,9 @@ type Initial = {
   stack?: string[];
   availability?: string;
   isPublic?: boolean;
+  linkedinUrl?: string;
+  githubUrl?: string;
+  yearsExperience?: number;
 };
 
 function Chips({
@@ -71,6 +74,11 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
   const [stack, setStack] = useState<string[]>(initial.stack ?? []);
   const [availability, setAvailability] = useState(initial.availability ?? "open");
   const [isPublic, setIsPublic] = useState(Boolean(initial.isPublic));
+  const [linkedinUrl, setLinkedinUrl] = useState(initial.linkedinUrl ?? "");
+  const [githubUrl, setGithubUrl] = useState(initial.githubUrl ?? "");
+  const [yearsExperience, setYearsExperience] = useState(
+    initial.yearsExperience != null ? String(initial.yearsExperience) : "",
+  );
 
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -102,6 +110,9 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
         stack,
         langs: [],
         discipline: "both",
+        linkedinUrl: linkedinUrl || undefined,
+        githubUrl: githubUrl || undefined,
+        yearsExperience: yearsExperience ? Number(yearsExperience) : undefined,
       };
       const res = await upsertTesterProfile(input);
       if (!res.ok) {
@@ -187,6 +198,42 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
           aria-label="Bio"
         />
       </label>
+
+      <div className="grid gap-4 sm:grid-cols-[1fr_1fr_8rem]">
+        <label className="block text-sm">
+          <span className="mb-1 block text-zinc-400">LinkedIn</span>
+          <input
+            className={field}
+            value={linkedinUrl}
+            onChange={(e) => setLinkedinUrl(e.target.value)}
+            placeholder="https://linkedin.com/in/…"
+            aria-label="LinkedIn URL"
+          />
+        </label>
+        <label className="block text-sm">
+          <span className="mb-1 block text-zinc-400">GitHub</span>
+          <input
+            className={field}
+            value={githubUrl}
+            onChange={(e) => setGithubUrl(e.target.value)}
+            placeholder="https://github.com/…"
+            aria-label="GitHub URL"
+          />
+        </label>
+        <label className="block text-sm">
+          <span className="mb-1 block text-zinc-400">Years exp.</span>
+          <input
+            type="number"
+            min={0}
+            max={60}
+            className={field}
+            value={yearsExperience}
+            onChange={(e) => setYearsExperience(e.target.value)}
+            placeholder="5"
+            aria-label="Years of experience"
+          />
+        </label>
+      </div>
 
       <div className="space-y-2 text-sm">
         <span className="block text-zinc-400">Specialties</span>

@@ -6,6 +6,8 @@ import { DeviceEditor, type DeviceRow } from "../_components/device-editor";
 import { PortfolioEditor, type PortfolioRow } from "../_components/portfolio-editor";
 import { VerifiedSkills } from "../_components/verified-skills";
 import { AvatarUploader } from "../_components/avatar-uploader";
+import { ExperienceEditor, type ExperienceRow } from "../_components/experience-editor";
+import { CvUploader } from "../_components/cv-uploader";
 
 /** Tester profile editor shell (RSC) — loads the caller's profile, devices,
  *  portfolio and reusable artifacts, hands them to the client editor islands. */
@@ -16,24 +18,37 @@ export default async function TalentProfilePage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: profile }, { data: devices }, { data: portfolio }, reusableRes, badgesRes] =
-    await Promise.all([
-      supabase
-        .from("talent_profiles")
-        .select("handle, headline, bio, location, specialties, stack, availability, is_public, avatar_path")
-        .eq("id", user.id)
-        .maybeSingle(),
-      supabase
-        .from("talent_devices")
-        .select("id, kind, device, os, os_version")
-        .eq("tester_id", user.id),
-      supabase
-        .from("talent_portfolio_items")
-        .select("id, type, title, is_nda")
-        .eq("tester_id", user.id),
-      getReusableArtifacts(),
-      getMyVerifiedSkills(),
-    ]);
+  const [
+    { data: profile },
+    { data: devices },
+    { data: portfolio },
+    { data: experience },
+    reusableRes,
+    badgesRes,
+  ] = await Promise.all([
+    supabase
+      .from("talent_profiles")
+      .select(
+        "handle, headline, bio, location, specialties, stack, availability, is_public, avatar_path, linkedin_url, github_url, years_experience, cv_path",
+      )
+      .eq("id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("talent_devices")
+      .select("id, kind, device, os, os_version")
+      .eq("tester_id", user.id),
+    supabase
+      .from("talent_portfolio_items")
+      .select("id, type, title, is_nda")
+      .eq("tester_id", user.id),
+    supabase
+      .from("talent_experience")
+      .select("id, company, role, start_year, end_year, summary")
+      .eq("tester_id", user.id)
+      .order("start_year", { ascending: false }),
+    getReusableArtifacts(),
+    getMyVerifiedSkills(),
+  ]);
 
   const reusable = reusableRes.ok ? reusableRes.data : [];
   const badges = badgesRes.ok ? badgesRes.data : [];
@@ -57,8 +72,20 @@ export default async function TalentProfilePage() {
           stack: (profile?.stack as string[] | null) ?? [],
           availability: profile?.availability ?? "open",
           isPublic: Boolean(profile?.is_public),
+          linkedinUrl: profile?.linkedin_url ?? undefined,
+          githubUrl: profile?.github_url ?? undefined,
+          yearsExperience: (profile?.years_experience as number | null) ?? undefined,
         }}
       />
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-medium text-zinc-300">Experience &amp; CV</h2>
+        <p className="text-xs text-zinc-500">
+          Real-world track record — for pros who didn&apos;t come through the labs, this is your proof.
+        </p>
+        <CvUploader userId={user.id} hasCv={Boolean(profile?.cv_path)} />
+        <ExperienceEditor initial={(experience as ExperienceRow[] | null) ?? []} />
+      </section>
 
       <section className="space-y-3">
         <h2 className="text-sm font-medium text-zinc-300">Verified skills</h2>
