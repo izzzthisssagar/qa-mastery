@@ -8,7 +8,9 @@ import {
   AVAILABILITY,
   DEVICE_KINDS,
   DISCIPLINES,
+  ENGAGEMENTS,
   PORTFOLIO_TYPES,
+  PROJECT_TYPES,
   SPECIALTIES,
   STACK,
 } from "@/lib/talent/taxonomy";
@@ -359,4 +361,141 @@ export async function refreshMyVerifiedSkills(): Promise<ActionResult> {
   const { error } = await service.rpc("derive_verified_skills", { target: user.id });
   if (error) return { ok: false, error: "Couldn't refresh badges right now — try again" };
   return { ok: true, data: null };
+}
+
+// ── M3: directory + project posting ──────────────────────────────────────────
+
+const PAGE = 24;
+
+export type TesterFilters = {
+  specialties?: string[];
+  stack?: string[];
+  availability?: string;
+  verifiedOnly?: boolean;
+  cursor?: string;
+};
+
+export type TesterCardData = {
+  handle: string;
+  headline: string | null;
+  location: string | null;
+  availability: string;
+  specialties: string[];
+  stack: string[];
+  badges: { skill: string; score: number }[];
+};
+
+/** QA-native tester directory. Public profiles, filtered on the GIN-indexed
+ *  array columns, ranked newest-first, keyset-paginated. Badges are fetched in
+ *  one batched query (not N+1). */
+export async function searchTesters(
+  filters: TesterFilters = {},
+): Promise<ActionResult<{ items: TesterCardData[]; nextCursor: string | null }>> {
+  const supabase = await createSupabaseServerClient();
+
+  // Apply filters while `q` is still a filter builder; order/limit at the await.
+  let q = supabase
+    .from("talent_profiles")
+    .select("id, handle, headline, location, availability, specialties, stack, updated_at")
+    .eq("is_public", true);
+
+  const specialties = (filters.specialties ?? []).filter((s) => SPECIALTIES.includes(s as never));
+  const stack = (filters.stack ?? []).filter((s) => STACK.includes(s as never));
+  if (specialties.length) q = q.overlaps("specialties", specialties);
+  if (stack.length) q = q.overlaps("stack", stack);
+  if (filters.availability && AVAILABILITY.includes(filters.availability as never)) {
+    q = q.eq("availability", filters.availability);
+  }
+  if (filters.cursor) q = q.lt("updated_at", filters.cursor);
+
+  const { data, error } = await q.order("updated_at", { ascending: false }).limit(PAGE + 1);
+  if (error) return { ok: false, error: "Couldn't load testers" };
+
+  const rows = (data ?? []) as Array<Record<string, unknown>>;
+  const page = rows.slice(0, PAGE);
+  const nextCursor = rows.length > PAGE ? (page[page.length - 1]?.updated_at as string) : null;
+
+  // Batched badge fetch for the page.
+  const ids = page.map((r) => r.id as string);
+  const badgesByTester = new Map<string, { skill: string; score: number }[]>();
+  if (ids.length) {
+    const { data: badges } = await supabase
+      .from("talent_verified_skills")
+      .select("tester_id, skill, score")
+      .in("tester_id", ids)
+      .order("score", { ascending: false });
+    for (const b of badges ?? []) {
+      const list = badgesByTester.get(b.tester_id as string) ?? [];
+      list.push({ skill: b.skill as string, score: b.score as number });
+      badgesByTester.set(b.tester_id as string, list);
+    }
+  }
+
+  let items: TesterCardData[] = page.map((r) => ({
+    handle: r.handle as string,
+    headline: (r.headline as string) ?? null,
+    location: (r.location as string) ?? null,
+    availability: (r.availability as string) ?? "open",
+    specialties: (r.specialties as string[]) ?? [],
+    stack: (r.stack as string[]) ?? [],
+    badges: (badgesByTester.get(r.id as string) ?? []).slice(0, 3),
+  }));
+
+  if (filters.verifiedOnly) items = items.filter((t) => t.badges.length > 0);
+
+  return { ok: true, data: { items, nextCursor } };
+}
+
+const ProjectSchema = z.object({
+  title: z.string().trim().min(3).max(160),
+  description: z.string().trim().max(8000).optional(),
+  projectType: inSet(PROJECT_TYPES, "Pick a project type"),
+  stack: z.array(inSet(STACK, "Unknown tool")).max(20).default([]),
+  requiredTypes: z.array(inSet(SPECIALTIES, "Unknown testing type")).max(13).default([]),
+  engagement: inSet(ENGAGEMENTS, "Pick an engagement"),
+  budgetCents: z.coerce.number().int().min(0).max(100_000_00).optional(),
+  tooling: z.array(z.string().trim().max(40)).max(20).default([]),
+  ndaRequired: z.boolean().default(false),
+});
+export type ProjectInput = z.input<typeof ProjectSchema>;
+
+/** Post a project (client side). Sets the role to client/both and emits the
+ *  funnel event. */
+export async function postProject(input: ProjectInput): Promise<ActionResult<{ id: string }>> {
+  const parsed = ProjectSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid project" };
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Please sign in" };
+
+  const p = parsed.data;
+  const { data, error } = await supabase
+    .from("talent_projects")
+    .insert({
+      owner_id: user.id,
+      title: p.title,
+      description: p.description ?? null,
+      project_type: p.projectType,
+      stack: p.stack,
+      required_types: p.requiredTypes,
+      engagement: p.engagement,
+      budget_cents: p.budgetCents ?? null,
+      tooling: p.tooling,
+      nda_required: p.ndaRequired,
+    })
+    .select("id")
+    .single();
+  if (error || !data) return { ok: false, error: "Couldn't post your project — try again" };
+
+  // Reflect client intent in the role (tester → both, none → client).
+  const { data: prof } = await supabase.from("profiles").select("talent_role").eq("id", user.id).single();
+  const role = prof?.talent_role as string | undefined;
+  const nextRole = role === "tester" || role === "both" ? "both" : "client";
+  await supabase.from("profiles").update({ talent_role: nextRole }).eq("id", user.id);
+
+  await emitTalentEvent(user.id, "talent.project_posted", {
+    project_id: data.id as string,
+    required_types: p.requiredTypes,
+    engagement: p.engagement,
+  });
+  return { ok: true, data: { id: data.id as string } };
 }
