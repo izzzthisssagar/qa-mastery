@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { createServiceClient } from "@qa-mastery/db";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { emitTalentEvent } from "@/lib/talent/events";
 import {
@@ -328,4 +329,34 @@ export async function getReusableArtifacts(): Promise<ActionResult<ReusableArtif
     })),
   ];
   return { ok: true, data: items };
+}
+
+export type VerifiedSkill = { skill: string; score: number };
+
+/** The caller's verified-skill badges (read-own; public-read RLS allows it). */
+export async function getMyVerifiedSkills(): Promise<ActionResult<VerifiedSkill[]>> {
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Please sign in" };
+  const { data } = await supabase
+    .from("talent_verified_skills")
+    .select("skill, score")
+    .eq("tester_id", user.id)
+    .order("score", { ascending: false });
+  return {
+    ok: true,
+    data: (data ?? []).map((r) => ({ skill: r.skill as string, score: r.score as number })),
+  };
+}
+
+/** Re-derive the caller's badges from their graded labs on demand (PATH A-lite).
+ *  Runs the service-role derivation for this user only; the nightly cron does
+ *  everyone. Badges are never learner-writable — this just triggers the
+ *  service-role re-derive. */
+export async function refreshMyVerifiedSkills(): Promise<ActionResult> {
+  const { user } = await requireUser();
+  if (!user) return { ok: false, error: "Please sign in" };
+  const service = createServiceClient();
+  const { error } = await service.rpc("derive_verified_skills", { target: user.id });
+  if (error) return { ok: false, error: "Couldn't refresh badges right now — try again" };
+  return { ok: true, data: null };
 }

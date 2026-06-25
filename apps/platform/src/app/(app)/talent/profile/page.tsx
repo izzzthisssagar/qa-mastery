@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getReusableArtifacts } from "../actions";
+import { getMyVerifiedSkills, getReusableArtifacts } from "../actions";
 import { ProfileEditor } from "../_components/profile-editor";
 import { DeviceEditor, type DeviceRow } from "../_components/device-editor";
 import { PortfolioEditor, type PortfolioRow } from "../_components/portfolio-editor";
+import { VerifiedSkills } from "../_components/verified-skills";
 
 /** Tester profile editor shell (RSC) — loads the caller's profile, devices,
  *  portfolio and reusable artifacts, hands them to the client editor islands. */
@@ -14,7 +15,7 @@ export default async function TalentProfilePage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: profile }, { data: devices }, { data: portfolio }, reusableRes] =
+  const [{ data: profile }, { data: devices }, { data: portfolio }, reusableRes, badgesRes] =
     await Promise.all([
       supabase
         .from("talent_profiles")
@@ -30,9 +31,11 @@ export default async function TalentProfilePage() {
         .select("id, type, title, is_nda")
         .eq("tester_id", user.id),
       getReusableArtifacts(),
+      getMyVerifiedSkills(),
     ]);
 
   const reusable = reusableRes.ok ? reusableRes.data : [];
+  const badges = badgesRes.ok ? badgesRes.data : [];
 
   return (
     <div className="space-y-10 py-2">
@@ -53,6 +56,14 @@ export default async function TalentProfilePage() {
           isPublic: Boolean(profile?.is_public),
         }}
       />
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-medium text-zinc-300">Verified skills</h2>
+        <p className="text-xs text-zinc-500">
+          Auto-earned from your graded QA Mastery labs — the trust signal teams can&apos;t fake.
+        </p>
+        <VerifiedSkills initial={badges} />
+      </section>
 
       <section className="space-y-3">
         <h2 className="text-sm font-medium text-zinc-300">Device matrix</h2>
