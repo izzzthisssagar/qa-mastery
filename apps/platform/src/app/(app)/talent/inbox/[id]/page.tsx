@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getMessages } from "../../actions";
-import { ConversationThread } from "../../_components/conversation-thread";
+import { ConversationThreadLazy } from "../../_components/conversation-thread-lazy";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -32,7 +32,7 @@ export default async function ConversationPage({ params }: Params) {
       <Link href="/talent/inbox" className="text-sm text-zinc-400 hover:text-zinc-200">
         ← Inbox
       </Link>
-      <ConversationThread conversationId={id} currentUserId={user.id} initial={messages} />
+      <ConversationThreadLazy conversationId={id} currentUserId={user.id} initial={messages} />
     </div>
   );
 }
