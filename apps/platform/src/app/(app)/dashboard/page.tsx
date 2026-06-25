@@ -6,6 +6,7 @@ import { StatCard } from "@/components/stat-card";
 import { TrackProgressBar } from "@/components/track-progress-bar";
 import { LessonRow } from "@/components/lesson-row";
 import { UpgradeButton } from "@/components/upgrade-button";
+import { talentEnabled } from "@/lib/talent/flag";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -165,6 +166,30 @@ export default async function DashboardPage() {
             delay={0.19}
           />
         </div>
+
+        {talentEnabled() && (
+          <Reveal delay={0.24}>
+            <Link
+              href="/talent"
+              className="group mt-8 flex items-center justify-between gap-4 rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.05] px-5 py-4 transition-colors hover:border-emerald-500/50"
+            >
+              <div>
+                <p className="text-xs font-medium uppercase tracking-widest text-accent">
+                  QA Mastery Talent
+                </p>
+                <p className="mt-1 font-medium text-zinc-100">
+                  Turn your progress into work — get hired or hire testers →
+                </p>
+                <p className="mt-0.5 text-sm text-zinc-400">
+                  Publish a proof-forward profile, or post a project and find QA.
+                </p>
+              </div>
+              <span className="hidden shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-zinc-950 transition group-hover:opacity-90 sm:inline">
+                Open
+              </span>
+            </Link>
+          </Reveal>
+        )}
 
         <div className="mt-12 space-y-12">
           {tracks.map((track, trackIndex) => {
