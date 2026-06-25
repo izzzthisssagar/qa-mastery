@@ -156,6 +156,7 @@ const PortfolioSchema = z
     repoUrl: z.string().trim().url().max(500).optional(),
     sourceTable: z.enum(["bug_reports", "test_cases", "capstone_submissions"]).optional(),
     sourceId: z.string().uuid().optional(),
+    assetPath: z.string().trim().max(500).optional(),
     isNda: z.boolean().default(false),
   })
   .refine((v) => (v.sourceId == null) === (v.sourceTable == null), {
@@ -181,6 +182,7 @@ export async function addPortfolioItem(
       repo_url: i.repoUrl ?? null,
       source_table: i.sourceTable ?? null,
       source_id: i.sourceId ?? null,
+      asset_path: i.assetPath ?? null,
       is_nda: i.isNda,
     })
     .select("id")
@@ -864,4 +866,27 @@ export async function setAvatarPath(path: string): Promise<ActionResult> {
     .update({ avatar_path: path })
     .eq("id", user.id);
   return error ? { ok: false, error: "Couldn't save your photo" } : { ok: true, data: null };
+}
+
+const PORTFOLIO_BUCKET = "talent-portfolio";
+
+/** Mint a short-lived signed URL for a portfolio item's attached file. The RLS
+ *  read on talent_portfolio_items gates visibility (NDA items return nothing to
+ *  non-owners); the service role then signs the private object. */
+export async function getPortfolioSignedUrl(
+  itemId: string,
+): Promise<ActionResult<{ url: string }>> {
+  const supabase = await createSupabaseServerClient();
+  const { data: item } = await supabase
+    .from("talent_portfolio_items")
+    .select("asset_path")
+    .eq("id", itemId)
+    .maybeSingle();
+  const path = (item?.asset_path as string | null) ?? null;
+  if (!path) return { ok: false, error: "Not available" };
+
+  const service = createServiceClient();
+  const { data, error } = await service.storage.from(PORTFOLIO_BUCKET).createSignedUrl(path, 120);
+  if (error || !data) return { ok: false, error: "Couldn't generate a download link" };
+  return { ok: true, data: { url: data.signedUrl } };
 }
