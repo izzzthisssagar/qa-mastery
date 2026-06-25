@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { HelpAgentWidget } from "@/components/help-agent/help-agent-widget";
 import { FeedbackWidget } from "@/components/feedback/feedback-widget";
+import { talentEnabled } from "@/lib/talent/flag";
 import { logout } from "../(auth)/actions";
 
 /**
@@ -20,6 +21,8 @@ export default async function AppLayout({
   if (!user) {
     redirect("/login");
   }
+
+  const showTalent = talentEnabled();
 
   return (
     <div className="flex flex-1 flex-col">
@@ -46,6 +49,14 @@ export default async function AppLayout({
           >
             Test cases
           </Link>
+          {showTalent && (
+            <Link
+              href="/talent"
+              className="relative font-medium text-accent transition-colors hover:text-emerald-200 after:absolute after:-bottom-1 after:left-0 after:h-px after:w-full after:origin-left after:scale-x-0 after:bg-accent after:transition-transform hover:after:scale-x-100"
+            >
+              Talent
+            </Link>
+          )}
           <Link
             href="/settings"
             className="relative text-zinc-300 transition-colors hover:text-zinc-50 after:absolute after:-bottom-1 after:left-0 after:h-px after:w-full after:origin-left after:scale-x-0 after:bg-accent after:transition-transform hover:after:scale-x-100"

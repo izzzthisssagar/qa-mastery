@@ -3,6 +3,7 @@ import { Reveal, RevealOnView } from "@/components/motion";
 import { BugHuntCard } from "@/components/marketing/bug-hunt-card";
 import { CtaLink } from "@/components/marketing/cta-link";
 import { TrackSwitch } from "@/components/marketing/track-switch";
+import { talentEnabled } from "@/lib/talent/flag";
 
 const PILLARS = [
   {
@@ -47,6 +48,7 @@ const DISCIPLINES = [
 ];
 
 export default function HomePage() {
+  const showTalent = talentEnabled();
   return (
     <div className="grain relative flex flex-1 flex-col overflow-hidden">
       {/* Atmosphere */}
@@ -239,6 +241,54 @@ export default function HomePage() {
             </RevealOnView>
           </div>
         </section>
+
+        {/* ── Talent marketplace (flag-gated) ────────────────────── */}
+        {showTalent && (
+          <section className="mx-auto w-full max-w-6xl px-6 py-20 sm:px-10">
+            <RevealOnView>
+              <div className="relative overflow-hidden rounded-3xl border border-emerald-500/20 bg-emerald-500/[0.04] px-8 py-14 sm:px-14">
+                <div className="bg-glow pointer-events-none absolute inset-x-0 top-0 h-1/2" />
+                <div className="relative grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-widest text-accent">
+                      New · QA Mastery Talent
+                    </p>
+                    <h2 className="font-display mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
+                      Don&apos;t just learn QA.{" "}
+                      <span className="font-serif-accent font-normal text-accent">Get hired</span>{" "}
+                      for it.
+                    </h2>
+                    <p className="mt-5 max-w-lg text-base leading-7 text-zinc-400">
+                      The hiring layer for testers. Show real proof — bug reports, automation
+                      scripts, your device matrix, lab-verified skill badges — and let developers
+                      and teams find and contact you. Need testing done? Post a project and filter
+                      on what actually matters.
+                    </p>
+                    <div className="mt-8 flex flex-wrap gap-4">
+                      <CtaLink href="/talent">Explore the marketplace</CtaLink>
+                      <CtaLink href="/talent/testers" variant="ghost">
+                        Find a tester
+                      </CtaLink>
+                    </div>
+                  </div>
+                  <ul className="space-y-3 text-sm text-zinc-300">
+                    {[
+                      "Proof-forward profiles — artifacts, not buzzwords",
+                      "Lab-verified skill badges you can’t fake",
+                      "Your real device matrix as a first-class filter",
+                      "Secure, consent-gated on-platform messaging",
+                    ].map((item) => (
+                      <li key={item} className="flex items-start gap-2.5">
+                        <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-accent" />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </RevealOnView>
+          </section>
+        )}
 
         {/* ── Closing CTA ────────────────────────────────────────── */}
         <section className="mx-auto w-full max-w-6xl px-6 pb-24 pt-10 sm:px-10">
