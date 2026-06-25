@@ -29,6 +29,10 @@ export default defineConfig({
       url: "http://localhost:3000",
       reuseExistingServer: false,
       timeout: 120_000,
+      // Talent ships dark behind TALENT_ENABLED; turn it on so the marketplace
+      // e2e can reach /talent. Spread process.env to keep the Supabase vars CI
+      // exports before running e2e.
+      env: { ...process.env, TALENT_ENABLED: "true" },
     },
     {
       command: "pnpm --filter @qa-mastery/buggyshop start",
