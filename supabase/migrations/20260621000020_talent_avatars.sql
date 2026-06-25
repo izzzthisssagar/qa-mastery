@@ -45,11 +45,14 @@ begin
 end
 $$;
 
--- Surface avatar_path on the PII-safe public view (recreated from 0017 + avatar).
+-- Surface avatar_path on the PII-safe public view. `create or replace view`
+-- can only APPEND columns (reordering an existing one errors 42P16), so
+-- avatar_path goes at the END, after updated_at. The app selects by name, so
+-- column order is irrelevant to it.
 create or replace view public.talent_public_profile
 with (security_invoker = true) as
 select p.id, p.handle, p.headline, p.bio, p.location, p.timezone, p.langs,
        p.availability, p.rate_cents, p.discipline, p.specialties, p.stack,
-       p.verification_status, p.avatar_path, p.updated_at
+       p.verification_status, p.updated_at, p.avatar_path
 from public.talent_profiles p
 where p.is_public;
