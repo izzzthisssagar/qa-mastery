@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { type ChangeEvent, useState, useTransition } from "react";
+import { createBrowserSupabase } from "@qa-mastery/db";
 import { Badge, Button } from "@qa-mastery/ui";
 import { PORTFOLIO_TYPES, labelFor } from "@/lib/talent/taxonomy";
 import { portfolioTypeTone } from "@/lib/talent/status";
@@ -10,6 +11,8 @@ import {
   type ReusableArtifact,
 } from "@/app/(app)/talent/actions";
 
+const PORTFOLIO_BUCKET = "talent-portfolio";
+
 export type PortfolioRow = { id: string; type: string; title: string; is_nda?: boolean };
 
 const field =
@@ -18,9 +21,11 @@ const field =
 export function PortfolioEditor({
   initial,
   reusable,
+  userId,
 }: {
   initial: PortfolioRow[];
   reusable: ReusableArtifact[];
+  userId: string;
 }) {
   const [rows, setRows] = useState<PortfolioRow[]>(initial);
   const [type, setType] = useState<string>("automation");
@@ -28,6 +33,7 @@ export function PortfolioEditor({
   const [body, setBody] = useState("");
   const [repoUrl, setRepoUrl] = useState("");
   const [isNda, setIsNda] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
   const [link, setLink] = useState<{ source_table: string; source_id: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -42,6 +48,21 @@ export function PortfolioEditor({
     if (!title.trim()) return;
     setError(null);
     startTransition(async () => {
+      let assetPath: string | undefined;
+      if (file) {
+        const supabase = createBrowserSupabase();
+        const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-60);
+        const objectPath = `${userId}/${crypto.randomUUID()}-${safe}`;
+        const { error: upErr } = await supabase.storage
+          .from(PORTFOLIO_BUCKET)
+          .upload(objectPath, file, { contentType: file.type });
+        if (upErr) {
+          setError("File upload failed — use a PDF/CSV/image under 10MB.");
+          return;
+        }
+        assetPath = objectPath;
+      }
+
       const input: PortfolioInput = {
         type,
         title,
@@ -50,6 +71,7 @@ export function PortfolioEditor({
         isNda,
         sourceTable: link?.source_table as PortfolioInput["sourceTable"],
         sourceId: link?.source_id,
+        assetPath,
       };
       const res = await addPortfolioItem(input);
       if (!res.ok) {
@@ -62,7 +84,12 @@ export function PortfolioEditor({
       setRepoUrl("");
       setIsNda(false);
       setLink(null);
+      setFile(null);
     });
+  }
+
+  function onFile(e: ChangeEvent<HTMLInputElement>) {
+    setFile(e.target.files?.[0] ?? null);
   }
 
   return (
@@ -142,6 +169,15 @@ export function PortfolioEditor({
           placeholder="https://github.com/… (optional)"
           aria-label="Repo URL"
         />
+        <label className="block text-sm text-zinc-400">
+          <span className="mb-1 block">Attach a file (bug-report sheet, coverage PDF — optional)</span>
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp,application/pdf,text/csv,text/plain"
+            onChange={onFile}
+            className="block w-full text-xs text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-zinc-200"
+          />
+        </label>
         <label className="flex items-center gap-2 text-sm text-zinc-400">
           <input type="checkbox" checked={isNda} onChange={(e) => setIsNda(e.target.checked)} />
           Under NDA — hide details from public view

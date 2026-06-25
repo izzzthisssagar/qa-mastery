@@ -7,6 +7,7 @@ import { availabilityTone, portfolioTypeTone } from "@/lib/talent/status";
 import { avatarUrl } from "@/lib/talent/avatar";
 import { ContactButton } from "@/app/(app)/talent/_components/contact-button";
 import { ReportButton } from "@/app/(app)/talent/_components/report-button";
+import { AssetDownload } from "@/app/(app)/talent/_components/asset-download";
 
 type Params = { params: Promise<{ handle: string }> };
 
@@ -138,16 +139,19 @@ export default async function PublicProfilePage({ params }: Params) {
                 {(item.body as string) && (
                   <p className="mt-1 line-clamp-4 text-sm text-zinc-400">{item.body as string}</p>
                 )}
-                {(item.repo_url as string) && (
-                  <a
-                    href={item.repo_url as string}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-2 inline-block text-xs text-accent hover:underline"
-                  >
-                    View repo →
-                  </a>
-                )}
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  {(item.repo_url as string) && (
+                    <a
+                      href={item.repo_url as string}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-accent hover:underline"
+                    >
+                      View repo →
+                    </a>
+                  )}
+                  {(item.asset_path as string) && <AssetDownload itemId={item.id as string} />}
+                </div>
               </article>
             ))}
           </div>

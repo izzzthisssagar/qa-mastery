@@ -78,7 +78,11 @@ export default async function TalentProfilePage() {
 
       <section className="space-y-3">
         <h2 className="text-sm font-medium text-zinc-300">Portfolio</h2>
-        <PortfolioEditor initial={(portfolio as PortfolioRow[] | null) ?? []} reusable={reusable} />
+        <PortfolioEditor
+          initial={(portfolio as PortfolioRow[] | null) ?? []}
+          reusable={reusable}
+          userId={user.id}
+        />
       </section>
     </div>
   );
