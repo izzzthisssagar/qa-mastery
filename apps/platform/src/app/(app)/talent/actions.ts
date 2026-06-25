@@ -383,6 +383,7 @@ export type TesterCardData = {
   availability: string;
   specialties: string[];
   stack: string[];
+  avatarPath: string | null;
   badges: { skill: string; score: number }[];
 };
 
@@ -397,7 +398,7 @@ export async function searchTesters(
   // Apply filters while `q` is still a filter builder; order/limit at the await.
   let q = supabase
     .from("talent_profiles")
-    .select("id, handle, headline, location, availability, specialties, stack, updated_at")
+    .select("id, handle, headline, location, availability, specialties, stack, avatar_path, updated_at")
     .eq("is_public", true);
 
   const specialties = (filters.specialties ?? []).filter((s) => SPECIALTIES.includes(s as never));
@@ -439,6 +440,7 @@ export async function searchTesters(
     availability: (r.availability as string) ?? "open",
     specialties: (r.specialties as string[]) ?? [],
     stack: (r.stack as string[]) ?? [],
+    avatarPath: (r.avatar_path as string) ?? null,
     badges: (badgesByTester.get(r.id as string) ?? []).slice(0, 3),
   }));
 
@@ -849,4 +851,17 @@ export async function reportContent(
   if (error) return { ok: false, error: "Couldn't file the report" };
   await emitTalentEvent(user.id, "talent.reported", { target_type: tt.data, target_id: targetId });
   return { ok: true, data: null };
+}
+
+/** Save the caller's uploaded avatar path (the file already lives in the public
+ *  talent-avatars bucket under their own folder; storage RLS owns that write). */
+export async function setAvatarPath(path: string): Promise<ActionResult> {
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Please sign in" };
+  if (!path.startsWith(`${user.id}/`)) return { ok: false, error: "Invalid avatar path" };
+  const { error } = await supabase
+    .from("talent_profiles")
+    .update({ avatar_path: path })
+    .eq("id", user.id);
+  return error ? { ok: false, error: "Couldn't save your photo" } : { ok: true, data: null };
 }

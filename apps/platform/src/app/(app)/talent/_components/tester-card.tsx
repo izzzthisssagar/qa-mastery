@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Badge } from "@qa-mastery/ui";
 import { labelFor } from "@/lib/talent/taxonomy";
 import { availabilityTone } from "@/lib/talent/status";
+import { avatarUrl } from "@/lib/talent/avatar";
 import type { TesterCardData } from "@/app/(app)/talent/actions";
 
 /** Directory card — proof-forward (verified badges + specialties up front). */
@@ -12,9 +13,21 @@ export function TesterCard({ tester }: { tester: TesterCardData }) {
       className="group flex flex-col gap-3 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 transition-colors hover:border-emerald-500/40"
     >
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <h3 className="font-medium text-zinc-100">{tester.handle}</h3>
-          {tester.location && <p className="text-xs text-zinc-500">{tester.location}</p>}
+        <div className="flex items-center gap-2.5">
+          {avatarUrl(tester.avatarPath) && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={avatarUrl(tester.avatarPath)!}
+              alt=""
+              width={36}
+              height={36}
+              className="size-9 rounded-full object-cover"
+            />
+          )}
+          <div>
+            <h3 className="font-medium text-zinc-100">{tester.handle}</h3>
+            {tester.location && <p className="text-xs text-zinc-500">{tester.location}</p>}
+          </div>
         </div>
         <Badge tone={availabilityTone[tester.availability] ?? "default"}>
           {labelFor(tester.availability)}

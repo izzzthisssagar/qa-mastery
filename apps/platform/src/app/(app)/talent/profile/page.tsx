@@ -5,6 +5,7 @@ import { ProfileEditor } from "../_components/profile-editor";
 import { DeviceEditor, type DeviceRow } from "../_components/device-editor";
 import { PortfolioEditor, type PortfolioRow } from "../_components/portfolio-editor";
 import { VerifiedSkills } from "../_components/verified-skills";
+import { AvatarUploader } from "../_components/avatar-uploader";
 
 /** Tester profile editor shell (RSC) — loads the caller's profile, devices,
  *  portfolio and reusable artifacts, hands them to the client editor islands. */
@@ -19,7 +20,7 @@ export default async function TalentProfilePage() {
     await Promise.all([
       supabase
         .from("talent_profiles")
-        .select("handle, headline, bio, location, specialties, stack, availability, is_public")
+        .select("handle, headline, bio, location, specialties, stack, availability, is_public, avatar_path")
         .eq("id", user.id)
         .maybeSingle(),
       supabase
@@ -43,6 +44,8 @@ export default async function TalentProfilePage() {
         <h1 className="font-display text-2xl font-bold tracking-tight">Your tester profile</h1>
         <p className="text-sm text-zinc-400">Proof first — this is what teams see when they search.</p>
       </header>
+
+      <AvatarUploader userId={user.id} initialPath={(profile?.avatar_path as string | null) ?? null} />
 
       <ProfileEditor
         initial={{
