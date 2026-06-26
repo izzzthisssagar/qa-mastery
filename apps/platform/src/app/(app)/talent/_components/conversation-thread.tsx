@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { createBrowserSupabase } from "@qa-mastery/db";
 import { Button } from "@qa-mastery/ui";
+import { useReducedMotion } from "@/components/motion";
 import { markRead, sendMessage, type Message } from "@/app/(app)/talent/actions";
 
 function Bubble({ m, mine }: { m: Message; mine: boolean }) {
@@ -36,6 +37,7 @@ export function ConversationThread({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const bottomRef = useRef<HTMLDivElement>(null);
+  const reduce = useReducedMotion();
 
   // Live delivery via RLS-authorized Postgres Changes on talent_messages.
   useEffect(() => {
@@ -63,9 +65,9 @@ export function ConversationThread({
 
   // Scroll to newest + mark the other party's messages read.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    bottomRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth" });
     void markRead(conversationId);
-  }, [messages, conversationId]);
+  }, [messages, conversationId, reduce]);
 
   function send() {
     const body = draft.trim();
