@@ -34,8 +34,16 @@ export async function publishTester(page: Page, handle: string): Promise<void> {
   await page.goto(`${BASE}/talent/profile`);
   await page.getByLabel("Handle").fill(handle);
   await page.getByRole("button", { name: /^functional$/i }).click(); // pick a specialty chip
-  await page.getByRole("button", { name: /save profile/i }).click();
-  await expect(page.getByText(/^saved\.?$/i)).toBeVisible({ timeout: 10_000 });
+
+  // Save runs a server action against the live DB; under WebKit + cold
+  // serverless this can outlast a tight window. Wait for the transition to
+  // settle (the button leaves its "Saving…" state and re-enables) before
+  // asserting the confirmation, and give the assertions cold-start headroom.
+  const saveBtn = page.getByRole("button", { name: /^save profile$/i });
+  await saveBtn.click();
+  await expect(saveBtn).toBeEnabled({ timeout: 30_000 });
+  await expect(page.getByText(/^saved\.?$/i)).toBeVisible({ timeout: 30_000 });
+
   await page.getByRole("button", { name: /^publish$/i }).click();
-  await expect(page.getByText(/your profile is live/i)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText(/your profile is live/i)).toBeVisible({ timeout: 30_000 });
 }
