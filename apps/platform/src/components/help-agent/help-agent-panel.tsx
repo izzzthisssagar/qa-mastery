@@ -31,8 +31,8 @@ export function HelpAgentPanel({ onClose }: { onClose: () => void }) {
   const reduce = useReducedMotion();
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
+    bottomRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth" });
+  }, [messages, loading, reduce]);
 
   useEffect(() => {
     void fetch("/api/help-agent/brain")

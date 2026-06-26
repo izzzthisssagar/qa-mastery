@@ -71,26 +71,31 @@ export async function upsertTesterProfile(input: ProfileInput): Promise<ActionRe
   if (!user) return { ok: false, error: "Please sign in" };
 
   const p = parsed.data;
-  const { error } = await supabase.from("talent_profiles").upsert({
-    id: user.id,
-    handle: p.handle,
-    headline: p.headline ?? null,
-    bio: p.bio ?? null,
-    location: p.location ?? null,
-    timezone: p.timezone ?? null,
-    langs: p.langs,
-    discipline: p.discipline,
-    specialties: p.specialties,
-    stack: p.stack,
-    rate_cents: p.rateCents ?? null,
-    linkedin_url: p.linkedinUrl || null,
-    github_url: p.githubUrl || null,
-    years_experience: p.yearsExperience ?? null,
-    updated_at: new Date().toISOString(),
-  });
-
-  // Ensure profiles.talent_role reflects tester intent (idempotent).
-  await supabase.from("profiles").update({ talent_role: "tester" }).eq("id", user.id);
+  // Two independent writes: the tester profile, and the profiles.talent_role
+  // flag. They touch different tables keyed on the same user, so run them
+  // concurrently — one DB round-trip instead of two. The sequential version
+  // tipped the save past WebKit's e2e latency budget under a live cloud DB.
+  const [{ error }] = await Promise.all([
+    supabase.from("talent_profiles").upsert({
+      id: user.id,
+      handle: p.handle,
+      headline: p.headline ?? null,
+      bio: p.bio ?? null,
+      location: p.location ?? null,
+      timezone: p.timezone ?? null,
+      langs: p.langs,
+      discipline: p.discipline,
+      specialties: p.specialties,
+      stack: p.stack,
+      rate_cents: p.rateCents ?? null,
+      linkedin_url: p.linkedinUrl || null,
+      github_url: p.githubUrl || null,
+      years_experience: p.yearsExperience ?? null,
+      updated_at: new Date().toISOString(),
+    }),
+    // Ensure profiles.talent_role reflects tester intent (idempotent).
+    supabase.from("profiles").update({ talent_role: "tester" }).eq("id", user.id),
+  ]);
 
   if (error) {
     if (error.code === "23505") return { ok: false, error: "That handle is taken" };
