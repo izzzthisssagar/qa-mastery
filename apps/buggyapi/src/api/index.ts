@@ -599,8 +599,11 @@ app.openapi(
       .maybeSingle();
     if (!data) return c.json(errorJson("not_found", `Ticket ${id} does not exist.`), 404);
     // BA-004 (bug-hunt): 200 + a body where the contract says 204 No Content.
+    // The route only declares a 204 response, so the deliberate 200 return is
+    // cast past that union (`as never`) — the spec keeps showing the correct
+    // 204 for learners to spot the deviation against.
     if (apiBugFlag("BA-004", await sandboxMode(c.get("sandboxId")))) {
-      return c.json({ deleted: true } as unknown as null, 200 as unknown as 204);
+      return c.json({ deleted: true }, 200) as never;
     }
     return c.body(null, 204);
   },
