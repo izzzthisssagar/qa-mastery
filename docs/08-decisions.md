@@ -219,6 +219,32 @@ the avatar menu first. New nav UI uses semantic tokens (`border-border`,
 
 ---
 
+## ADR-15 — Notes wiki: taxonomy-first pure MDX, no registry (2026-07-03)
+
+**Context.** The Notes wiki is a reference encyclopedia spanning every QA domain,
+separate from the lesson curriculum. Unlike lessons it has no progress, no
+grading, and no relational integrity to protect — so the lesson machinery
+(DB registry mirror, sync, immutable slugs) would be pure overhead.
+
+**Decision.** Notes are **pure MDX** under
+`content/notes/<module>/<chapter>/<topic>.mdx`, read at request time (already
+covered by the platform's `outputFileTracingIncludes`). A typed
+`notes/taxonomy.ts` is the single source of truth for the tree; a topic with
+`planned: true` is a stub the tree shows but no file backs yet. A vitest
+(`notes.test.ts`) asserts the contract that lets content fill in incrementally
+without breaking CI: every MDX maps to a leaf, every **non-planned** leaf has a
+valid file, every **planned** leaf has none. Search scans the corpus in-process
+in a server action (tens of topics — no client index, no build step, always in
+sync). Rendering reuses the lessons' `mdxComponents`.
+
+**Consequences.** Adding a topic = write the MDX + flip `planned: false`; the
+test enforces both halves. Zero new infra or dependencies, $0. The dashboard hub
+card flips from "Soon" to a live link. `generateStaticParams` pre-enumerates only
+backed leaves, so planned stubs never 404. (Gotcha: YAML parses an unquoted
+`updated: 2026-07-02` as a `Date`; the frontmatter schema normalizes Date→string.)
+
+---
+
 ## ADR-10 — BuggyAPI: Hono + zod-openapi inside a Next.js shell
 
 **Context.** The API-testing practice app needs live endpoints AND perfect
