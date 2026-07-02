@@ -17,10 +17,13 @@ plan (June 2026).
 
 ## Invariants (do not break)
 
-1. **Manifest secrecy.** BuggyShop's seeded-bug manifest never reaches a client
-   bundle. Grading reads `buggyshop.bs_bug_manifest` server-side only. The
-   client sees only the stripped taxonomy. CI greps `.next/static` for
-   `title_internal` / `repro_steps_internal` and fails on a hit.
+1. **Manifest secrecy.** The seeded-bug manifests never reach a client bundle.
+   Grading reads `buggyshop.bs_bug_manifest` and `buggyapi.ba_bug_manifest`
+   server-side only (BuggyAPI reports grade in `dashboard/actions.ts`
+   `submitApiBugReport`). The client sees only the stripped taxonomy
+   (`bug-taxonomy.ts`, `api-bug-taxonomy.ts`). CI greps `.next/static` across
+   platform + buggyshop + buggyapi for `title_internal` / `repro_steps_internal`
+   and fails on a hit.
 2. **Learners never write scores (or forge notifications).** `quiz_attempts`,
    `lab_submissions`, `bug_reports` score/feedback and all `notifications` rows
    are written by the service role in server actions. RLS gives learners
@@ -37,8 +40,10 @@ plan (June 2026).
    slug; removed lessons get archived, never deleted.
 6. **Widgets are registry-validated.** Lesson frontmatter `widgets:` must name
    entries in `packages/widgets/src/names.ts`; the sync script enforces it.
-7. **Seeded bugs go behind `bugFlag(id, release)`** — never inline bug logic
-   without the flag wrapper.
+7. **Seeded bugs go behind a flag** — BuggyShop uses `bugFlag(id, release)`,
+   BuggyAPI uses `apiBugFlag(id, mode)` (`apps/buggyapi/src/api/bugs.ts`; mode
+   read from `ba_sandbox_state`, set from the handoff token's `mode` claim).
+   Clean mode = perfect reference API. Never inline bug logic without the flag.
 
 ## Stack notes
 

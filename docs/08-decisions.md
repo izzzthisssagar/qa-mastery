@@ -220,6 +220,31 @@ setting in cloud). RPC functions are named `reset_buggyapi_sandbox`/
 `provision_buggyapi_sandbox` — NOT `reset_sandbox` — so the platform's existing
 unqualified `rpc("reset_sandbox")` can never resolve ambiguously.
 
+## ADR-11 — BuggyAPI bug-hunt: mode claim + shared bug_reports (2026-07-02)
+
+**Context.** BuggyAPI needs the same "find seeded bugs, get graded" loop as
+BuggyShop, but its bugs are contract violations (wrong status code, dropped
+filter, schema-shape mismatch) rather than UI defects, and it has no lesson to
+anchor a report to.
+
+**Decision.** A per-sandbox `mode` (`clean`|`bughunt`) lives in
+`buggyapi.ba_sandbox_state`, set from an optional `mode` claim on the handoff
+token (default `clean`). `apiBugFlag(id, mode)` (`apps/buggyapi/src/api/bugs.ts`)
+gates each seeded bug; clean mode serves a perfect reference API. Reports grade
+through the platform (`dashboard/actions.ts` `submitApiBugReport`) against
+`buggyapi.ba_bug_manifest` and land in the **shared** `public.bug_reports`
+table, gaining a `target text ('buggyshop'|'buggyapi')` column; `lesson_id`
+becomes nullable (API reports aren't lesson-tied). Match is exact on
+surface+endpoint; category+severity shape the score — same rubric as
+`matchBugReport`.
+
+**Consequences.** One graded-artifact table, one RLS story — invariant 2 holds
+(service-role writes only, learners read-own). Manifest secrecy (invariant 1)
+extends to `ba_bug_manifest` via the CI `.next/static` grep over buggyapi. The
+five v1 bugs (BA-001 pagination floor, BA-002 create 200-not-201, BA-003 dropped
+status filter, BA-004 delete 200+body, BA-005 labels comma-string) are all
+verified to fire only in bughunt mode and stay correct in clean mode.
+
 ---
 
 Back to the [index](./README.md).
