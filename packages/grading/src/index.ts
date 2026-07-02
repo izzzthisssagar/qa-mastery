@@ -26,6 +26,22 @@ export {
 } from "./bug-taxonomy";
 
 export {
+  matchApiBugReport,
+  type ApiBugReportInput,
+  type ApiManifestBug,
+  type ApiMatchOutcome,
+} from "./api-bug-report";
+
+export {
+  API_BUG_SURFACES,
+  API_BUG_ENDPOINTS,
+  API_BUG_CATEGORIES,
+  type ApiBugSurface,
+  type ApiBugEndpoint,
+  type ApiBugCategory,
+} from "./api-bug-taxonomy";
+
+export {
   NullRunner,
   MAX_CODE_LENGTH,
   validateCodeSubmission,

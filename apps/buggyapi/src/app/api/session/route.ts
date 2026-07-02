@@ -47,6 +47,15 @@ export async function POST(request: Request) {
       }
     }
 
+    // The handoff's mode claim decides whether seeded bugs fire (clean is the
+    // default; the platform's bug-hunt launch mints mode=bughunt).
+    await service
+      .from("ba_sandbox_state")
+      .upsert(
+        { sandbox_id: claims.sandboxId, mode: claims.mode ?? "clean" },
+        { onConflict: "sandbox_id" },
+      );
+
     const [{ data: users }, { data: keys }, { data: oauthClients }] = await Promise.all([
       service
         .from("ba_users")

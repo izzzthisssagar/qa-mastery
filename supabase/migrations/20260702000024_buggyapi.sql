@@ -156,6 +156,9 @@ create table buggyapi.ba_rate_counters (
 -- Deterministic per-sandbox counters/flags (mirrors bs_sandbox_state).
 create table buggyapi.ba_sandbox_state (
   sandbox_id uuid primary key references public.sandboxes (id) on delete cascade,
+  -- gates the seeded bugs: clean = perfect reference API, bughunt = deliberate
+  -- contract violations; set from the handoff token's mode claim on exchange
+  mode text not null default 'clean' check (mode in ('clean', 'bughunt')),
   counters jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default now()
 );
@@ -308,6 +311,45 @@ $$;
 -- revoke it; only service_role may call these
 revoke execute on function buggyapi.reset_buggyapi_sandbox(uuid) from public, anon, authenticated;
 revoke execute on function buggyapi.provision_buggyapi_sandbox(uuid) from public, anon, authenticated;
+
+-- ── seeded-bug manifest rows (bug-hunt mode) ─────────────────────────────
+-- The answer key. Server-side only forever (deny-all RLS above); clients see
+-- only the stripped taxonomy in packages/grading/src/api-bug-taxonomy.ts.
+
+insert into buggyapi.ba_bug_manifest
+  (bug_id, endpoint, surface, category, severity, title_internal, trigger_internal, repro_steps, expected, points, teaches)
+values
+  ('BA-001', 'GET /v1/tickets', 'rest', 'pagination', 'major',
+   'total_pages computed with floor instead of ceil',
+   'List tickets with per_page that does not divide total evenly',
+   '["GET /v1/tickets?per_page=5 with 12 tickets", "compare total_pages to ceil(total/per_page)"]'::jsonb,
+   'total_pages = ceil(total / per_page); the last partial page must be reachable',
+   15, '{pagination,boundary-analysis}'),
+  ('BA-002', 'POST /v1/tickets', 'rest', 'wrong-status-code', 'minor',
+   'Create returns 200 OK instead of 201 Created',
+   'Any successful ticket creation',
+   '["POST /v1/tickets with a valid body", "observe the status code"]'::jsonb,
+   '201 Created per the OpenAPI contract',
+   10, '{status-codes,contract-testing}'),
+  ('BA-003', 'GET /v1/tickets', 'rest', 'filtering', 'major',
+   'status filter silently dropped when combined with priority',
+   'GET /v1/tickets?status=…&priority=… — only priority applies',
+   '["GET /v1/tickets?status=done&priority=urgent", "responses include non-done tickets"]'::jsonb,
+   'Both filters AND together',
+   15, '{filter-combinations,pairwise-testing}'),
+  ('BA-004', 'DELETE /v1/tickets/{id}', 'rest', 'wrong-status-code', 'trivial',
+   'Delete returns 200 with a body instead of 204 No Content',
+   'Any successful ticket deletion',
+   '["DELETE /v1/tickets/{id}", "observe 200 + {\"deleted\":true} body"]'::jsonb,
+   '204 No Content with an empty body',
+   8, '{status-codes,rest-semantics}'),
+  ('BA-005', 'GET /v1/tickets/{id}', 'rest', 'schema-violation', 'major',
+   'labels returned as a comma-joined string instead of an array',
+   'Fetch any single ticket that has labels',
+   '["GET /v1/tickets/{id} for a labelled ticket", "labels is \"backend,bug\" not an array"]'::jsonb,
+   'labels: string[] per the published Ticket schema',
+   15, '{schema-validation,contract-testing}')
+on conflict (bug_id) do nothing;
 
 -- ── uploads bucket ───────────────────────────────────────────────────────
 -- PRIVATE bucket: no storage.objects policies at all — every read/write goes

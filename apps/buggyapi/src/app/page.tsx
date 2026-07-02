@@ -76,6 +76,21 @@ export default function HomePage() {
         </a>
       </div>
 
+      <section className="mt-10 rounded-lg border border-border bg-surface p-4">
+        <p className="text-xs text-muted-foreground">
+          WebSocket practice (separate host — free machines sleep, first connect may take a few seconds)
+        </p>
+        <ul className="mt-2 space-y-1 break-all font-mono text-xs leading-relaxed">
+          <li>{(process.env.NEXT_PUBLIC_BUGGYAPI_WS_URL ?? "wss://qa-mastery-buggyapi-ws.fly.dev") + "/ws/echo?token=<ba-session>"}</li>
+          <li>{(process.env.NEXT_PUBLIC_BUGGYAPI_WS_URL ?? "wss://qa-mastery-buggyapi-ws.fly.dev") + "/ws/tickets-stream?token=<ba-session>"}</li>
+        </ul>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Token = the <code>ba-session</code> value in localStorage after the handoff. Try{" "}
+          <code>wscat -c &quot;…/ws/echo?token=…&quot;</code>, send <code>ping</code>, get{" "}
+          <code>pong</code>; change a ticket via REST and watch <code>tickets-stream</code>.
+        </p>
+      </section>
+
       <section className="mt-12">
         <h2 className="text-lg font-medium">Your sandbox credentials</h2>
         {creds ? (
