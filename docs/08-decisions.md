@@ -195,6 +195,30 @@ where Tasks + talent alerts converge later.
 
 ---
 
+## ADR-14 — Hub dashboard + minimal nav (2026-07-02)
+
+**Context.** The navbar had grown to seven destinations (Dashboard, Portfolio,
+Test cases, Talent, Settings, email, Sign out) and new surfaces (Community,
+Simulator, Notes, Tasks) would only make it worse.
+
+**Decision.** The header is now just logo + Dashboard + notification bell +
+avatar menu. Everything else moves onto the dashboard as a **hub grid** of
+cards (Community, Simulator, Notes, Portfolio, Test cases, Tasks, Talent) —
+Notes/Tasks render disabled "Soon" until their phases land. The dashboard is
+**role-adaptive**: it reads `profiles.talent_role` server-side and appends a
+tester and/or client panel for marketplace members (`none` = plain learner).
+The avatar menu (Profile, Settings, theme toggle, Sign out) and bell are built
+on a new headless `DropdownMenu` primitive in `packages/ui` (no Radix —
+click/Escape/outside-close, `prefers-reduced-motion`-aware entrance).
+
+**Consequences.** One obvious home for every feature; the nav stays flat as the
+product grows. Old routes are untouched — only nav entries moved, so deep links
+still resolve. e2e that clicked header links (the auth sign-out flow) now open
+the avatar menu first. New nav UI uses semantic tokens (`border-border`,
+`bg-surface`, `text-muted-foreground`), continuing the Phase-0 migration.
+
+---
+
 ## ADR-10 — BuggyAPI: Hono + zod-openapi inside a Next.js shell
 
 **Context.** The API-testing practice app needs live endpoints AND perfect

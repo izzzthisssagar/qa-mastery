@@ -8,6 +8,8 @@ import { LessonRow } from "@/components/lesson-row";
 import { UpgradeButton } from "@/components/upgrade-button";
 import { talentEnabled } from "@/lib/talent/flag";
 import { BuggyApiCard } from "./buggyapi-card";
+import { HubGrid } from "./components/hub-grid";
+import { RolePanels } from "./components/role-panels";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -106,6 +108,14 @@ export default async function DashboardPage() {
 
   const overallPct = lessonCount ? Math.round((completed.size / lessonCount) * 100) : 0;
 
+  // Marketplace role drives the role-adaptive panels (read-own RLS on profiles).
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("talent_role")
+    .maybeSingle<{ talent_role: "none" | "tester" | "client" | "both" }>();
+  const talentRole = profile?.talent_role ?? "none";
+  const showTalent = talentEnabled();
+
   return (
     <div className="relative isolate">
       {/* Atmosphere — sits behind everything, never intercepts clicks. */}
@@ -167,6 +177,16 @@ export default async function DashboardPage() {
             delay={0.19}
           />
         </div>
+
+        <Reveal delay={0.22}>
+          <div className="mt-8">
+            <p className="mb-3 text-xs font-medium uppercase tracking-widest text-muted-foreground">
+              Your hub
+            </p>
+            <HubGrid showTalent={showTalent} />
+            <RolePanels role={talentRole} talentEnabled={showTalent} />
+          </div>
+        </Reveal>
 
         {talentEnabled() && (
           <Reveal delay={0.24}>

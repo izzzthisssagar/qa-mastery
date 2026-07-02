@@ -25,8 +25,9 @@ test.describe("auth", () => {
       page.getByRole("heading", { name: /your learning/i }),
     ).toBeVisible();
 
-    // sign out lands back on the marketing homepage
-    await page.getByRole("button", { name: /sign out/i }).click();
+    // sign out (now inside the avatar menu) lands back on the marketing homepage
+    await page.getByRole("button", { name: /account menu/i }).click();
+    await page.getByRole("menuitem", { name: /sign out/i }).click();
     await expect(page).toHaveURL("http://localhost:3000/");
 
     // log back in with the same credentials
