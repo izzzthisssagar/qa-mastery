@@ -54,8 +54,8 @@ export const MeSchema = z
     name: z.string().openapi({ example: "Asha Tester" }),
     email: z.email().openapi({ example: "asha@taskflight.test" }),
     role: z.enum(["admin", "member"]),
-    authenticated_via: z.enum(["api_key", "bearer", "basic"]).openapi({
-      description: "Which of the three auth schemes this request used.",
+    authenticated_via: z.enum(["api_key", "bearer", "basic", "oauth"]).openapi({
+      description: "Which of the four auth schemes this request used.",
     }),
     sandbox_id: z.uuid().openapi({
       description: "Your practice sandbox — all data you see/change lives in it.",

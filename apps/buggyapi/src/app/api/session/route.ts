@@ -47,7 +47,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const [{ data: users }, { data: keys }] = await Promise.all([
+    const [{ data: users }, { data: keys }, { data: oauthClients }] = await Promise.all([
       service
         .from("ba_users")
         .select("name, email, password, role")
@@ -60,6 +60,12 @@ export async function POST(request: Request) {
         .eq("is_seed", true)
         .eq("revoked", false)
         .limit(1),
+      service
+        .from("ba_oauth_clients")
+        .select("client_id, client_secret, redirect_uri")
+        .eq("sandbox_id", claims.sandboxId)
+        .eq("is_seed", true)
+        .limit(1),
     ]);
 
     return NextResponse.json({
@@ -67,6 +73,7 @@ export async function POST(request: Request) {
       sandboxId: claims.sandboxId,
       apiKey: keys?.[0]?.key ?? null,
       users: users ?? [],
+      oauthClient: oauthClients?.[0] ?? null,
     });
   } catch {
     return NextResponse.json(

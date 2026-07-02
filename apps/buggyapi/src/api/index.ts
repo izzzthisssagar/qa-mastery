@@ -2,6 +2,9 @@ import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import { swaggerUI } from "@hono/swagger-ui";
 import { authMiddleware, unauthorized, type AuthEnv } from "./auth";
 import { buggyapiDb } from "./db";
+import { registerOAuthRoutes } from "./oauth";
+import { registerAttachmentRoutes } from "./attachments";
+import { checkRateLimit, WRITE_RULE } from "./rate-limit";
 import {
   ErrorSchema,
   IdParam,
@@ -75,13 +78,31 @@ app.openAPIRegistry.registerComponent("securitySchemes", "BasicAuth", {
     "Seeded user email:password. Requires the X-Sandbox-Id header (multi-tenant pattern).",
 });
 
-// Auth guard for everything under /v1 except login + the spec itself.
+// Auth guard for everything under /v1 except login, OAuth endpoints (they
+// authenticate the CLIENT themselves), and the spec.
 app.use("/v1/*", async (c, next) => {
   const path = c.req.path;
-  if (path.endsWith("/v1/auth/login") || path.endsWith("/v1/openapi.json")) {
+  if (
+    path.endsWith("/v1/auth/login") ||
+    path.includes("/v1/oauth/") ||
+    path.endsWith("/v1/openapi.json")
+  ) {
     return next();
   }
   return authMiddleware(c, next);
+});
+
+// Write budget: 30 mutations/min per sandbox → real 429s with Retry-After.
+// Runs after auth (needs sandboxId); reads/auth/oauth are never limited.
+app.use("/v1/*", async (c, next) => {
+  if (["POST", "PATCH", "PUT", "DELETE"].includes(c.req.method)) {
+    const path = c.req.path;
+    if (!path.includes("/v1/oauth/") && !path.endsWith("/v1/auth/login")) {
+      const limited = await checkRateLimit(c, c.get("sandboxId"), WRITE_RULE);
+      if (limited) return limited;
+    }
+  }
+  return next();
 });
 
 // ── auth ──────────────────────────────────────────────────────────────────
@@ -564,24 +585,36 @@ app.openapi(
   },
 );
 
+// ── OAuth2 + attachments ──────────────────────────────────────────────────
+
+registerOAuthRoutes(app);
+registerAttachmentRoutes(app);
+
 // ── spec + docs ───────────────────────────────────────────────────────────
 
 app.doc31("/v1/openapi.json", {
   openapi: "3.1.0",
   info: {
     title: "TaskFlight (BuggyAPI)",
-    version: "1.0.0",
+    version: "1.1.0",
     description:
       "A live practice API for learning API testing in depth. Real persistence " +
-      "(scoped to your sandbox), three auth schemes, honest status codes, and a " +
+      "(scoped to your sandbox), four auth schemes, honest status codes, and a " +
       "spec generated from the same schemas the server validates with.\n\n" +
       "**Get credentials:** open BuggyAPI from a QA Mastery lesson — the handoff " +
-      "provisions your sandbox and shows your API key, seeded users, and sandbox id.",
+      "provisions your sandbox and shows your API key, seeded users, OAuth client, " +
+      "and sandbox id.\n\n" +
+      "**Rate limits:** mutations share a budget of 30/min per sandbox — watch the " +
+      "`X-RateLimit-*` headers and earn a real `429` with `Retry-After`.\n\n" +
+      "**Other paradigms on this host:** GraphQL (with GraphiQL) at `/api/graphql`, " +
+      "SOAP 1.1 at `/api/soap` (WSDL: `/api/soap?wsdl`).",
   },
   tags: [
-    { name: "auth", description: "Login + identity. Three schemes: API key, Bearer, Basic." },
+    { name: "auth", description: "Login + identity. Schemes: API key, Bearer, Basic (+ OAuth below)." },
+    { name: "oauth", description: "OAuth2: client_credentials & authorization_code (RFC 6749-shaped)." },
     { name: "projects", description: "TaskFlight projects — simple CRUD." },
     { name: "tickets", description: "Tickets — CRUD plus pagination, filtering, and sorting." },
+    { name: "attachments", description: "Multipart uploads to a private bucket → signed URLs." },
   ],
 });
 

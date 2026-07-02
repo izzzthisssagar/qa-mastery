@@ -77,4 +77,51 @@ test.describe("BuggyAPI contract", () => {
     await page.goto(`${BUGGYAPI}/enter`);
     await expect(page.getByTestId("enter-status")).toContainText("No lab pass found");
   });
+
+  test("spec documents the 1b surfaces (oauth + attachments)", async ({ request }) => {
+    const spec = await (await request.get(`${BUGGYAPI}/api/v1/openapi.json`)).json();
+    const paths = Object.keys(spec.paths);
+    expect(paths).toContain("/api/v1/oauth/token");
+    expect(paths).toContain("/api/v1/oauth/authorize");
+    expect(paths).toContain("/api/v1/tickets/{id}/attachments");
+  });
+
+  test("oauth token endpoint speaks RFC 6749 errors", async ({ request }) => {
+    const res = await request.post(`${BUGGYAPI}/api/v1/oauth/token`, {
+      form: { grant_type: "client_credentials", client_id: "tfc_nope", client_secret: "tfs_nope" },
+    });
+    expect(res.status()).toBe(401);
+    const body = await res.json();
+    // RFC shape — {error, error_description}, NOT the API envelope.
+    expect(body.error).toBe("invalid_client");
+    expect(typeof body.error_description).toBe("string");
+  });
+
+  test("graphql introspection is open, data requires auth", async ({ request }) => {
+    const introspection = await request.post(`${BUGGYAPI}/api/graphql`, {
+      data: { query: "{ __schema { queryType { name } } }" },
+    });
+    expect(introspection.status()).toBe(200);
+    expect((await introspection.json()).data.__schema.queryType.name).toBe("Query");
+
+    const data = await request.post(`${BUGGYAPI}/api/graphql`, {
+      data: { query: "{ me { name } }" },
+    });
+    const body = await data.json();
+    expect(body.errors[0].extensions.code).toBe("UNAUTHENTICATED");
+  });
+
+  test("soap serves a WSDL and faults without auth", async ({ request }) => {
+    const wsdl = await request.get(`${BUGGYAPI}/api/soap?wsdl`);
+    expect(wsdl.status()).toBe(200);
+    expect(wsdl.headers()["content-type"]).toContain("text/xml");
+    expect(await wsdl.text()).toContain("TaskFlightService");
+
+    const fault = await request.post(`${BUGGYAPI}/api/soap`, {
+      headers: { "Content-Type": "text/xml" },
+      data: "<x/>",
+    });
+    expect(fault.status()).toBe(401);
+    expect(await fault.text()).toContain("soap:Fault");
+  });
 });

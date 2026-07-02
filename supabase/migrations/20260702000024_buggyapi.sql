@@ -73,6 +73,29 @@ create table buggyapi.ba_oauth_clients (
   created_at timestamptz not null default now()
 );
 
+-- OAuth2 access tokens (client_credentials + authorization_code — Phase 1b).
+create table buggyapi.ba_oauth_tokens (
+  id uuid primary key default gen_random_uuid(),
+  sandbox_id uuid not null references public.sandboxes (id) on delete cascade,
+  client_id text not null,
+  token text not null unique,
+  scope text not null default 'taskflight.read taskflight.write',
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null
+);
+
+-- Short-lived authorization codes for the auth-code flow (Phase 1b).
+create table buggyapi.ba_auth_codes (
+  id uuid primary key default gen_random_uuid(),
+  sandbox_id uuid not null references public.sandboxes (id) on delete cascade,
+  client_id text not null,
+  code text not null unique,
+  redirect_uri text not null,
+  used boolean not null default false,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null
+);
+
 -- TaskFlight domain: projects contain tickets — natural CRUD + nesting +
 -- pagination/filtering/sorting substrate.
 create table buggyapi.ba_projects (
@@ -161,6 +184,8 @@ alter table buggyapi.ba_users enable row level security;
 alter table buggyapi.ba_api_keys enable row level security;
 alter table buggyapi.ba_sessions enable row level security;
 alter table buggyapi.ba_oauth_clients enable row level security;
+alter table buggyapi.ba_oauth_tokens enable row level security;
+alter table buggyapi.ba_auth_codes enable row level security;
 alter table buggyapi.ba_projects enable row level security;
 alter table buggyapi.ba_tickets enable row level security;
 alter table buggyapi.ba_uploads enable row level security;
@@ -174,6 +199,8 @@ create index ba_users_sandbox on buggyapi.ba_users (sandbox_id);
 create index ba_api_keys_sandbox on buggyapi.ba_api_keys (sandbox_id);
 create index ba_sessions_sandbox on buggyapi.ba_sessions (sandbox_id);
 create index ba_oauth_clients_sandbox on buggyapi.ba_oauth_clients (sandbox_id);
+create index ba_oauth_tokens_sandbox on buggyapi.ba_oauth_tokens (sandbox_id);
+create index ba_auth_codes_sandbox on buggyapi.ba_auth_codes (sandbox_id);
 create index ba_projects_sandbox on buggyapi.ba_projects (sandbox_id);
 create index ba_tickets_sandbox on buggyapi.ba_tickets (sandbox_id);
 create index ba_tickets_project on buggyapi.ba_tickets (project_id);
@@ -206,6 +233,8 @@ begin
 
   -- wipe everything sandbox-scoped
   delete from buggyapi.ba_uploads        where sandbox_id = p_sandbox_id;
+  delete from buggyapi.ba_oauth_tokens   where sandbox_id = p_sandbox_id;
+  delete from buggyapi.ba_auth_codes     where sandbox_id = p_sandbox_id;
   delete from buggyapi.ba_tickets        where sandbox_id = p_sandbox_id;
   delete from buggyapi.ba_projects       where sandbox_id = p_sandbox_id;
   delete from buggyapi.ba_sessions       where sandbox_id = p_sandbox_id;
@@ -279,3 +308,19 @@ $$;
 -- revoke it; only service_role may call these
 revoke execute on function buggyapi.reset_buggyapi_sandbox(uuid) from public, anon, authenticated;
 revoke execute on function buggyapi.provision_buggyapi_sandbox(uuid) from public, anon, authenticated;
+
+-- ── uploads bucket ───────────────────────────────────────────────────────
+-- PRIVATE bucket: no storage.objects policies at all — every read/write goes
+-- through the BuggyAPI service role (learners get short-lived signed URLs).
+-- Guarded like 0020 so it runs on cloud and skips where storage is absent.
+
+do $$
+begin
+  if exists (select from pg_tables where schemaname = 'storage' and tablename = 'buckets') then
+    insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    values ('buggyapi-uploads', 'buggyapi-uploads', false, 1048576,
+            ARRAY['image/png', 'image/jpeg', 'text/plain', 'application/pdf', 'application/json'])
+    on conflict (id) do update set file_size_limit = EXCLUDED.file_size_limit;
+  end if;
+end
+$$;
