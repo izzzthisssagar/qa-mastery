@@ -72,7 +72,11 @@ mind when deploying:
   `packages/curriculum/content` at request time, so `apps/platform/next.config.ts`
   sets `outputFileTracingRoot` + `outputFileTracingIncludes`. Don't remove it —
   it's the difference between lessons rendering and a 500.
-- **Design tokens** (`apps/platform/src/app/globals.css`): `--accent` emerald,
-  `--bug` amber; fonts Bricolage Grotesque (display), Geist (body/mono),
-  Instrument Serif italic (`.font-serif-accent`). Atmosphere via `.bg-grid` /
-  `.bg-glow` / `.grain`. Respect `prefers-reduced-motion`.
+- **Design tokens** (`apps/platform/src/app/globals.css`): dual-theme semantic
+  tokens — `:root` = light palette, `.dark` = brand dark (`--accent` emerald,
+  `--bug` amber); toggled by `next-themes` (class strategy, dark default; see
+  ADR-9). **New UI must use semantic classes** (`bg-surface`, `border-border`,
+  `text-muted-foreground`) — never raw `zinc-*`. Fonts Bricolage Grotesque
+  (display), Geist (body/mono), Instrument Serif italic (`.font-serif-accent`).
+  Atmosphere via `.bg-grid` / `.bg-glow` / `.grain`. Respect
+  `prefers-reduced-motion`. BuggyShop stays dark-only on purpose.
