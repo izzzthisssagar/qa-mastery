@@ -160,9 +160,37 @@ dark, so nothing changed visually.
 **Consequences.** New UI must use semantic classes (`bg-surface`,
 `border-border`, `text-muted-foreground`) — never raw `zinc-*`. The existing
 `zinc-*` sweep + light-mode polish (per-theme accent contrast, atmosphere
-variants, toggle UI) lands in Phase 7. BuggyShop deliberately stays dark-only —
-it's a practice target with seeded visual bugs; two themes would double its
+variants, toggle UI) lands in Phase 7. The practice apps keep their own single
+themes (BuggyShop's light storefront, BuggyAPI's dark console) — they're
+separate targets under test; theming them twice would double their seeded-bug
 test surface.
+
+---
+
+## ADR-10 — BuggyAPI: Hono + zod-openapi inside a Next.js shell
+
+**Context.** The API-testing practice app needs live endpoints AND perfect
+documentation — teaching material where spec drift is fatal. A standalone
+Express/Hono server would add a new deploy shape; raw Next route handlers
+can't generate an OpenAPI spec from their validation code.
+
+**Decision.** `apps/buggyapi` is a Next 16 app (copies the BuggyShop shell,
+port 3002, same Vercel matrix deploy) hosting an `OpenAPIHono` app in a
+catch-all route (`/api/[[...route]]`). Every endpoint is defined with Zod
+schemas via `@hono/zod-openapi`, so the OpenAPI 3.1 spec (`/api/v1/openapi.json`,
+Swagger UI at `/api/docs`) is generated from the same schemas the runtime
+validates with. Sandbox model mirrors BuggyShop exactly: deny-all `buggyapi`
+schema, `sandbox_id` scoping, fake auth (three schemes: X-API-Key, Bearer via
+`/v1/auth/login`, Basic + X-Sandbox-Id as the multi-tenant pattern), shared
+`public.sandboxes`, handoff via parameterized token audiences
+(`buggyapi-handoff`/`-session`; BuggyShop's literals unchanged).
+
+**Consequences.** Docs can't drift from behavior — the spec IS the validator.
+One new Vercel project + `VERCEL_BUGGYAPI_PROJECT_ID` var; `buggyapi` schema
+must be in the PostgREST exposed-schemas list (config.toml locally, dashboard
+setting in cloud). RPC functions are named `reset_buggyapi_sandbox`/
+`provision_buggyapi_sandbox` — NOT `reset_sandbox` — so the platform's existing
+unqualified `rpc("reset_sandbox")` can never resolve ambiguously.
 
 ---
 
