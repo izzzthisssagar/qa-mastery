@@ -24,6 +24,10 @@ export const lessonFrontmatterSchema = z.object({
   status: z.enum(["draft", "published"]).default("draft"),
   /** Minimum BuggyShop release the lesson's lab needs, e.g. "1.0". */
   requires_release: z.string().optional(),
+  /** Which language a code_run lab executes on Piston (default java). */
+  lab_language: z
+    .enum(["java", "python", "javascript", "typescript", "csharp"])
+    .optional(),
   flashcards: z
     .array(z.object({ front: z.string().min(1), back: z.string().min(1) }))
     .default([]),

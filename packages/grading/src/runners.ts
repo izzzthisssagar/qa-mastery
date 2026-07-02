@@ -7,5 +7,6 @@
  * only. The pure `NullRunner` and the `Run*` types stay in the barrel.
  */
 export { Judge0Runner } from "./judge0-runner";
+export { WandboxRunner } from "./wandbox-runner";
 export { PlaywrightRunner } from "./playwright-runner";
 export { DockerPlaywrightRunner } from "./docker-runner";

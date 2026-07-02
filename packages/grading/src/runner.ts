@@ -44,6 +44,13 @@ export interface RunnerProvider {
   readonly name: string;
   submit(request: RunRequest): Promise<{ runId: string }>;
   getResult(runId: string): Promise<RunResult>;
+  /**
+   * Optional synchronous execution. Providers backed by a fast, request/response
+   * API (Piston) implement this: the caller runs it inline, persists the final
+   * RunResult, and skips the submit→poll dance. Providers without it (async
+   * queues, container jobs) stay submit/getResult only.
+   */
+  executeSync?(request: RunRequest): Promise<RunResult>;
 }
 
 /** Placeholder provider: labs render a "coming soon" state instead of a runner. */

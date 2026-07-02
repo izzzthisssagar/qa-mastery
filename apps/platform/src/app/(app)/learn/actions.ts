@@ -14,8 +14,9 @@ import {
   type CapstoneInput,
   type CapstoneResult,
   type RunResult,
+  type RunnerProvider,
 } from "@qa-mastery/grading";
-import { Judge0Runner, DockerPlaywrightRunner } from "@qa-mastery/grading/runners";
+import { Judge0Runner, DockerPlaywrightRunner, WandboxRunner } from "@qa-mastery/grading/runners";
 import { DEFAULT_RELEASE, isRelease, mintHandoffToken } from "@qa-mastery/shared";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAuthedUserId } from "@/lib/auth";
@@ -495,16 +496,19 @@ export async function submitCapstone(
 
 const judge0 = new Judge0Runner();
 const playwright = new DockerPlaywrightRunner();
+const wandbox = new WandboxRunner();
 
-function getRunnerForLesson(slug: string) {
+function getRunnerForLesson(slug: string): RunnerProvider {
   const lesson = findLessonBySlug(slug);
   if (!lesson) throw new Error("Lesson not found");
-  
-  // Track B (automation) uses Playwright; Track B0 (java) uses Judge0
+
+  // Track B (automation) uses Playwright; plain-code lessons run on Wandbox
+  // (synchronous, free) with Judge0 as the fallback when the operator sets
+  // USE_JUDGE0 (e.g. a private Wandbox is down).
   if (lesson.frontmatter.module !== "B0" && lesson.frontmatter.track === "track-b") {
     return playwright;
   }
-  return judge0;
+  return process.env.USE_JUDGE0 ? judge0 : wandbox;
 }
 
 /** Code execution is compute-heavy and paid; cap a learner's runs per UTC day. */
@@ -533,11 +537,41 @@ export async function submitCodeLab(slug: string, code: string): Promise<{ runId
   await assertCodeRunQuota(service, userId);
 
   const runner = getRunnerForLesson(slug);
-  const { runId } = await runner.submit({
-    lessonSlug: slug,
-    userId,
-    payload: { code: validated },
-  });
+  const language = findLessonBySlug(slug)?.frontmatter.lab_language ?? "java";
+  const payload = { code: validated, language };
+
+  // Synchronous runners (Piston) execute inline: persist the final RunResult so
+  // pollCodeRun replays it instead of re-running. Async runners keep the
+  // submit→poll dance with a queued row.
+  if (runner.executeSync) {
+    const result = await runner.executeSync({ lessonSlug: slug, userId, payload });
+    const { data: row, error } = await service
+      .from("code_runs")
+      .insert({
+        user_id: userId,
+        lesson_id: lesson.id,
+        runner: runner.name,
+        run_id: crypto.randomUUID(),
+        language,
+        status: result.status,
+        passed: result.passed,
+        result,
+      })
+      .select("run_id")
+      .single<{ run_id: string }>();
+    if (error || !row) throw new Error(error?.message ?? "Could not record run");
+
+    if (result.passed) await saveProgress(slug, "do");
+    await recordAuditEvent(service, {
+      actorId: userId,
+      action: "code_run.submitted",
+      target: slug,
+      metadata: { runner: runner.name, runId: row.run_id, sync: true },
+    });
+    return { runId: row.run_id };
+  }
+
+  const { runId } = await runner.submit({ lessonSlug: slug, userId, payload });
 
   // Record the run for quota accounting + ownership on poll.
   const { error } = await service.from("code_runs").insert({
@@ -545,6 +579,7 @@ export async function submitCodeLab(slug: string, code: string): Promise<{ runId
     lesson_id: lesson.id,
     runner: runner.name,
     run_id: runId,
+    language,
     status: "queued",
   });
   if (error) throw new Error(error.message);
@@ -567,11 +602,14 @@ export async function pollCodeRun(slug: string, runId: string): Promise<RunResul
   // Ownership: a run_id is only pollable by the learner who started it.
   const { data: run } = await service
     .from("code_runs")
-    .select("id")
+    .select("id, result")
     .eq("run_id", runId)
     .eq("user_id", userId)
-    .maybeSingle<{ id: string }>();
+    .maybeSingle<{ id: string; result: RunResult | null }>();
   if (!run) throw new Error("Run not found.");
+
+  // A synchronous run already stored its final RunResult — replay it.
+  if (run.result) return run.result;
 
   const result = await getRunnerForLesson(slug).getResult(runId);
 

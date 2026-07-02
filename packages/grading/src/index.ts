@@ -51,6 +51,16 @@ export {
   type RunnerProvider,
 } from "./runner";
 
+export {
+  SIMULATOR_LANGUAGES,
+  SIMULATOR_LANGUAGE_IDS,
+  findSimulatorLanguage,
+  isSimulatorLanguage,
+  normalizeSource,
+  type SimulatorLanguage,
+  type NormalizeKind,
+} from "./simulator-languages";
+
 // Runner *implementations* (Judge0/Docker/Playwright) pull node:child_process,
 // so they live behind the server-only "@qa-mastery/grading/runners" entry —
 // importing them here would taint every client that touches this barrel.
