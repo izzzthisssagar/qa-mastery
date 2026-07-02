@@ -142,4 +142,28 @@ deploy. ([09](./09-deployment.md).)
 
 ---
 
+## ADR-9 — Dual-theme semantic tokens (dark default, light behind Phase 7)
+
+**Context.** The 2026-07 upgrade plan calls for a light+dark theme system, but
+the codebase was dark-only: four raw vars in `globals.css` and ~500 hardcoded
+`zinc-*` classes. New surfaces (BuggyAPI docs, communities, notes, hub
+dashboard) shouldn't inherit that debt.
+
+**Decision.** `globals.css` now defines semantic tokens twice — `:root` (light
+palette) and `.dark` (the original brand palette) — mapped through
+`@theme inline` (`--color-surface`, `--color-border`, `--color-muted`, …), with
+`@custom-variant dark` keying `dark:` off the class, not the OS. `next-themes`
+(class strategy, `defaultTheme="dark"`, no system preference) toggles the class;
+provider in `app/layout.tsx` with `suppressHydrationWarning`. Default stays
+dark, so nothing changed visually.
+
+**Consequences.** New UI must use semantic classes (`bg-surface`,
+`border-border`, `text-muted-foreground`) — never raw `zinc-*`. The existing
+`zinc-*` sweep + light-mode polish (per-theme accent contrast, atmosphere
+variants, toggle UI) lands in Phase 7. BuggyShop deliberately stays dark-only —
+it's a practice target with seeded visual bugs; two themes would double its
+test surface.
+
+---
+
 Back to the [index](./README.md).
