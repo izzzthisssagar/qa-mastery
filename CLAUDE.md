@@ -56,6 +56,12 @@ plan (June 2026).
 - Tailwind v4: workspace package sources need `@source` lines in each app's
   `globals.css`.
 - Internal packages ship TS source; apps list them in `transpilePackages`.
+- Code execution goes through `RunnerProvider` (`packages/grading`). Synchronous
+  runners implement `executeSync` (run inline, persist `code_runs.result`);
+  async ones use `submit`/`getResult`. The simulator + code labs run on
+  **Wandbox** (`WandboxRunner` — free, keyless; public Piston died Feb 2026);
+  `USE_JUDGE0` / `WANDBOX_URL` override. Monaco is `@monaco-editor/react`
+  (dynamic `ssr:false`). See ADR-12.
 
 ## Testing bar
 

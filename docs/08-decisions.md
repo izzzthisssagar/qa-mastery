@@ -247,4 +247,34 @@ verified to fire only in bughunt mode and stay correct in clean mode.
 
 ---
 
+## ADR-12 — Coding simulator: synchronous runner + Wandbox (not Piston) (2026-07-02)
+
+**Context.** The plan's coding simulator (Java/Python/JS/TS/C#) was to run on
+the free public Piston API. Two problems surfaced during the build: (1) the
+existing runner seam (`RunnerProvider.submit`/`getResult`) models an async queue
+with client polling, but Piston/Wandbox are synchronous request/response; (2)
+the public Piston API went **whitelist-only in Feb 2026**, and no $0 host grants
+the privileged container Piston needs to self-host.
+
+**Decision.** Add an optional `executeSync(request)` to `RunnerProvider`. When a
+runner implements it, `submitCodeLab` runs it inline and persists the full
+`RunResult` into a new `code_runs.result jsonb` column; `pollCodeRun` replays
+that instead of re-executing. `code_runs.lesson_id` becomes nullable and gains a
+`language` column so standalone simulator runs (no lesson) fit the same table.
+The executor is **Wandbox** (wandbox.org — free, keyless, no quota); Wandbox
+compiles the main file as `prog.EXT`, so a `normalize` step strips `public` from
+top-level Java classes and C# uses the mono single-file compiler, keeping the
+code learners write idiomatic. `USE_JUDGE0` swaps in the existing Judge0 runner;
+`WANDBOX_URL` points at a self-hosted instance.
+
+**Consequences.** Monaco (`@monaco-editor/react`, dynamic `ssr:false`) drives
+both the standalone `(app)/simulator` scratchpad and lesson code labs. A per-user
+1-run/10s cooldown (on `code_runs.created_at`) plus the existing daily quota keep
+us a good neighbour on the shared Wandbox service. CI never hits the network —
+the runner is unit-tested with a mocked fetch and the e2e is a render-only smoke.
+Invariant 2 is untouched: `code_runs` is not a score table; a pass still flows to
+progress via the service-role server action.
+
+---
+
 Back to the [index](./README.md).
