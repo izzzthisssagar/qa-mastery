@@ -21,9 +21,10 @@ plan (June 2026).
    bundle. Grading reads `buggyshop.bs_bug_manifest` server-side only. The
    client sees only the stripped taxonomy. CI greps `.next/static` for
    `title_internal` / `repro_steps_internal` and fails on a hit.
-2. **Learners never write scores.** `quiz_attempts`, `lab_submissions`,
-   `bug_reports` score/feedback writes go through the service role in server
-   actions. RLS gives learners read-own only.
+2. **Learners never write scores (or forge notifications).** `quiz_attempts`,
+   `lab_submissions`, `bug_reports` score/feedback and all `notifications` rows
+   are written by the service role in server actions. RLS gives learners
+   read-own only — `notifications` has no insert policy at all (see ADR-13).
 3. **Practice-app auth is fake.** BuggyShop signup/login and BuggyAPI's
    users/API keys/OAuth clients are curriculum subjects writing sandbox rows
    (`bs_users`/`bs_sessions`, `ba_users`/`ba_api_keys`/…). Real identity

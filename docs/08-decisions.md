@@ -167,6 +167,34 @@ test surface.
 
 ---
 
+## ADR-13 — Communities: RLS-first feed with service-role-only notifications (2026-07-02)
+
+**Context.** The community feed (posts, questions, comments, likes, follows,
+accepted answers, moderation) is the first fully social surface. Every row is
+learner-writable, so the access rules have to live in the database, not the app.
+
+**Decision.** All eight tables (`community_posts`/`_comments`/`_likes`/
+`_follows`/`_tags`/`_post_tags`/`_reports`, plus a generic `notifications`) are
+RLS-first (migration 0027): insert-own (`author_id = auth.uid()`), read-unless-
+hidden (author + admins still see their hidden rows), author-or-admin update,
+admin-only hide via a `security definer public.is_admin()` helper.
+**`notifications` has no insert policy** — only the service role writes them from
+server actions, so a learner can't forge a notice (same structural guarantee as
+scores, invariant 2). Denormalized `like_count`/`comment_count` are kept honest
+by `after insert/delete` triggers, and a generated `fts` tsvector + GIN index
+backs `websearch_to_tsquery` search. Images go to the public `community-media`
+Storage bucket (folder-scoped RLS); ≤60s video uses Cloudinary signed direct
+upload with server-side duration verification (no bytes touch Supabase); the
+bell reads `notifications` via Realtime `postgres_changes`.
+
+**Consequences.** The feed is safe by construction — 7 RLS regression tests
+(`community-rls.test.ts`) prove insert-own, hidden-invisible, non-author-can't-
+moderate, and no-forged-notifications hold at the DB. Video is a $0 opt-in
+(image-only until `CLOUDINARY_*` is set). The generic `notifications` table is
+where Tasks + talent alerts converge later.
+
+---
+
 ## ADR-10 — BuggyAPI: Hono + zod-openapi inside a Next.js shell
 
 **Context.** The API-testing practice app needs live endpoints AND perfect
