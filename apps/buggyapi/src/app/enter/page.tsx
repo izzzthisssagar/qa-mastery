@@ -12,6 +12,7 @@ interface ExchangeResponse {
   sandboxId?: string;
   apiKey?: string | null;
   users?: Array<{ name: string; email: string; password: string; role: string }>;
+  oauthClient?: { client_id: string; client_secret: string; redirect_uri: string | null } | null;
   error?: string;
 }
 
@@ -66,6 +67,7 @@ export default function EnterPage() {
             sandboxId: result.sandboxId,
             apiKey: result.apiKey,
             users: result.users,
+            oauthClient: result.oauthClient,
           }),
         );
         if (!cancelled) {

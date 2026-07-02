@@ -6,6 +6,7 @@ interface Credentials {
   sandboxId?: string;
   apiKey?: string | null;
   users?: Array<{ name: string; email: string; password: string; role: string }>;
+  oauthClient?: { client_id: string; client_secret: string; redirect_uri: string | null } | null;
 }
 
 /**
@@ -59,6 +60,20 @@ export default function HomePage() {
         >
           Raw OpenAPI 3.1 spec
         </a>
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- yoga-served route */}
+        <a
+          href="/api/graphql"
+          className="rounded-md border border-border px-4 py-2 text-sm text-foreground hover:bg-surface"
+        >
+          GraphQL (GraphiQL)
+        </a>
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- XML route, not a Next page */}
+        <a
+          href="/api/soap?wsdl"
+          className="rounded-md border border-border px-4 py-2 text-sm text-foreground hover:bg-surface"
+        >
+          SOAP WSDL
+        </a>
       </div>
 
       <section className="mt-12">
@@ -86,6 +101,18 @@ export default function HomePage() {
                 ))}
               </ul>
             </div>
+            {creds.oauthClient && (
+              <div className="rounded-lg border border-border bg-surface p-4">
+                <p className="text-xs text-muted-foreground">
+                  OAuth2 client (POST /v1/oauth/token — client_credentials or authorization_code)
+                </p>
+                <ul className="mt-2 space-y-1 break-all font-mono text-sm">
+                  <li>client_id: {creds.oauthClient.client_id}</li>
+                  <li>client_secret: {creds.oauthClient.client_secret}</li>
+                  <li>redirect_uri: {creds.oauthClient.redirect_uri ?? "—"}</li>
+                </ul>
+              </div>
+            )}
             <div className="rounded-lg border border-border bg-surface p-4">
               <p className="text-xs text-muted-foreground">Try it</p>
               <code className="mt-1 block break-all font-mono text-xs leading-relaxed">
