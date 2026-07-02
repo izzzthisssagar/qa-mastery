@@ -142,6 +142,31 @@ deploy. ([09](./09-deployment.md).)
 
 ---
 
+## ADR-9 — Dual-theme semantic tokens (dark default, light behind Phase 7)
+
+**Context.** The 2026-07 upgrade plan calls for a light+dark theme system, but
+the codebase was dark-only: four raw vars in `globals.css` and ~500 hardcoded
+`zinc-*` classes. New surfaces (BuggyAPI docs, communities, notes, hub
+dashboard) shouldn't inherit that debt.
+
+**Decision.** `globals.css` now defines semantic tokens twice — `:root` (light
+palette) and `.dark` (the original brand palette) — mapped through
+`@theme inline` (`--color-surface`, `--color-border`, `--color-muted`, …), with
+`@custom-variant dark` keying `dark:` off the class, not the OS. `next-themes`
+(class strategy, `defaultTheme="dark"`, no system preference) toggles the class;
+provider in `app/layout.tsx` with `suppressHydrationWarning`. Default stays
+dark, so nothing changed visually.
+
+**Consequences.** New UI must use semantic classes (`bg-surface`,
+`border-border`, `text-muted-foreground`) — never raw `zinc-*`. The existing
+`zinc-*` sweep + light-mode polish (per-theme accent contrast, atmosphere
+variants, toggle UI) lands in Phase 7. The practice apps keep their own single
+themes (BuggyShop's light storefront, BuggyAPI's dark console) — they're
+separate targets under test; theming them twice would double their seeded-bug
+test surface.
+
+---
+
 ## ADR-10 — BuggyAPI: Hono + zod-openapi inside a Next.js shell
 
 **Context.** The API-testing practice app needs live endpoints AND perfect
