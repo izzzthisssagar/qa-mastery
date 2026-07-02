@@ -142,4 +142,31 @@ deploy. ([09](./09-deployment.md).)
 
 ---
 
+## ADR-10 — BuggyAPI: Hono + zod-openapi inside a Next.js shell
+
+**Context.** The API-testing practice app needs live endpoints AND perfect
+documentation — teaching material where spec drift is fatal. A standalone
+Express/Hono server would add a new deploy shape; raw Next route handlers
+can't generate an OpenAPI spec from their validation code.
+
+**Decision.** `apps/buggyapi` is a Next 16 app (copies the BuggyShop shell,
+port 3002, same Vercel matrix deploy) hosting an `OpenAPIHono` app in a
+catch-all route (`/api/[[...route]]`). Every endpoint is defined with Zod
+schemas via `@hono/zod-openapi`, so the OpenAPI 3.1 spec (`/api/v1/openapi.json`,
+Swagger UI at `/api/docs`) is generated from the same schemas the runtime
+validates with. Sandbox model mirrors BuggyShop exactly: deny-all `buggyapi`
+schema, `sandbox_id` scoping, fake auth (three schemes: X-API-Key, Bearer via
+`/v1/auth/login`, Basic + X-Sandbox-Id as the multi-tenant pattern), shared
+`public.sandboxes`, handoff via parameterized token audiences
+(`buggyapi-handoff`/`-session`; BuggyShop's literals unchanged).
+
+**Consequences.** Docs can't drift from behavior — the spec IS the validator.
+One new Vercel project + `VERCEL_BUGGYAPI_PROJECT_ID` var; `buggyapi` schema
+must be in the PostgREST exposed-schemas list (config.toml locally, dashboard
+setting in cloud). RPC functions are named `reset_buggyapi_sandbox`/
+`provision_buggyapi_sandbox` — NOT `reset_sandbox` — so the platform's existing
+unqualified `rpc("reset_sandbox")` can never resolve ambiguously.
+
+---
+
 Back to the [index](./README.md).

@@ -1,15 +1,16 @@
 # QA Mastery — engineering conventions
 
 Monorepo for the QA Mastery learning platform (apps/platform) and its practice
-app BuggyShop (apps/buggyshop). The product plan, curriculum outlines and
-BuggyShop bug spec live in the sibling notes repo:
+apps BuggyShop (apps/buggyshop) and BuggyAPI (apps/buggyapi — a live practice
+REST API, "TaskFlight", with generated OpenAPI docs). The product plan,
+curriculum outlines and BuggyShop bug spec live in the sibling notes repo:
 `../My Qa Projecct/QA-Learning-Platform-Plan.md` and `../My Qa Projecct/Product/`.
 The architecture decisions referenced below come from the approved engineering
 plan (June 2026).
 
 ## Commands
 
-- `pnpm dev` — both apps (platform :3000, buggyshop :3001)
+- `pnpm dev` — all apps (platform :3000, buggyshop :3001, buggyapi :3002)
 - `pnpm lint` / `pnpm typecheck` / `pnpm test` / `pnpm build` / `pnpm e2e`
 - `pnpm db:start|db:reset|db:status` — local Supabase stack (needs Docker)
 - `pnpm --filter @qa-mastery/curriculum sync` — validate lesson MDX (CI gate)
@@ -23,12 +24,14 @@ plan (June 2026).
 2. **Learners never write scores.** `quiz_attempts`, `lab_submissions`,
    `bug_reports` score/feedback writes go through the service role in server
    actions. RLS gives learners read-own only.
-3. **BuggyShop auth is fake.** Its signup/login are curriculum subjects
-   (seeded bugs live there) writing `bs_users`/`bs_sessions` sandbox rows.
-   Real identity arrives only via the handoff token (`packages/shared`,
-   `/enter#t=…` fragment → localStorage session). No cookies in that path.
-4. **Every `bs_*` row is scoped by `sandbox_id`.** All BuggyShop data access is
-   service-role via route handlers; deny-all RLS on the `buggyshop` schema.
+3. **Practice-app auth is fake.** BuggyShop signup/login and BuggyAPI's
+   users/API keys/OAuth clients are curriculum subjects writing sandbox rows
+   (`bs_users`/`bs_sessions`, `ba_users`/`ba_api_keys`/…). Real identity
+   arrives only via the handoff token (`packages/shared`, `/enter#t=…`
+   fragment → localStorage session). No cookies in that path.
+4. **Every `bs_*`/`ba_*` row is scoped by `sandbox_id`.** All practice-app data
+   access is service-role via route handlers; deny-all RLS on the `buggyshop`
+   and `buggyapi` schemas. Both share `public.sandboxes` (one per learner).
 5. **Lesson slugs are immutable once published.** The registry sync upserts on
    slug; removed lessons get archived, never deleted.
 6. **Widgets are registry-validated.** Lesson frontmatter `widgets:` must name

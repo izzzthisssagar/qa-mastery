@@ -44,4 +44,31 @@ describe("sandbox tokens", () => {
       /SANDBOX_JWT_SECRET/,
     );
   });
+
+  it("buggyapi tokens round-trip, including the mode claim", async () => {
+    const claims: SandboxClaims = { ...CLAIMS, mode: "bughunt" };
+    const token = await mintHandoffToken(claims, SECRET, "buggyapi");
+    const verified = await verifyHandoffToken(token, SECRET, "buggyapi");
+    expect(verified).toEqual(claims);
+  });
+
+  it("rejects a buggyshop token presented to buggyapi (audience isolation)", async () => {
+    const token = await mintHandoffToken(CLAIMS, SECRET);
+    await expect(verifyHandoffToken(token, SECRET, "buggyapi")).rejects.toThrow();
+  });
+
+  it("default app stays buggyshop — pre-existing tokens keep verifying", async () => {
+    const token = await mintHandoffToken(CLAIMS, SECRET, "buggyshop");
+    const verified = await verifyHandoffToken(token, SECRET);
+    expect(verified).toEqual(CLAIMS);
+    expect(verified.mode).toBeUndefined();
+  });
+
+  it("rejects a token with a malformed mode claim", async () => {
+    const bad = { ...CLAIMS, mode: "cheat" as unknown as SandboxClaims["mode"] };
+    const token = await mintHandoffToken(bad, SECRET, "buggyapi");
+    await expect(verifyHandoffToken(token, SECRET, "buggyapi")).rejects.toThrow(
+      /Malformed/,
+    );
+  });
 });

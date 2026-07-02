@@ -7,6 +7,7 @@ import { TrackProgressBar } from "@/components/track-progress-bar";
 import { LessonRow } from "@/components/lesson-row";
 import { UpgradeButton } from "@/components/upgrade-button";
 import { talentEnabled } from "@/lib/talent/flag";
+import { BuggyApiCard } from "./buggyapi-card";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -190,6 +191,10 @@ export default async function DashboardPage() {
             </Link>
           </Reveal>
         )}
+
+        <Reveal delay={0.28}>
+          <BuggyApiCard />
+        </Reveal>
 
         <div className="mt-12 space-y-12">
           {tracks.map((track, trackIndex) => {

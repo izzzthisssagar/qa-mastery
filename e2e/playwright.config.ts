@@ -40,5 +40,11 @@ export default defineConfig({
       reuseExistingServer: false,
       timeout: 120_000,
     },
+    {
+      command: "pnpm --filter @qa-mastery/buggyapi start",
+      url: "http://localhost:3002/api/health",
+      reuseExistingServer: false,
+      timeout: 120_000,
+    },
   ],
 });
