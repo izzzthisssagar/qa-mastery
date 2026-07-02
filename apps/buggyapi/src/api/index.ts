@@ -5,6 +5,7 @@ import { buggyapiDb } from "./db";
 import { registerOAuthRoutes } from "./oauth";
 import { registerAttachmentRoutes } from "./attachments";
 import { checkRateLimit, WRITE_RULE } from "./rate-limit";
+import { apiBugFlag, sandboxMode } from "./bugs";
 import {
   ErrorSchema,
   IdParam,
@@ -400,12 +401,15 @@ app.openapi(
   }),
   async (c) => {
     const q = c.req.valid("query");
+    const mode = await sandboxMode(c.get("sandboxId"));
     let query = buggyapiDb()
       .from("ba_tickets")
       .select(ticketRow, { count: "exact" })
       .eq("sandbox_id", c.get("sandboxId"));
 
-    if (q.status) query = query.eq("status", q.status);
+    // BA-003 (bug-hunt): status silently dropped when combined with priority.
+    const dropStatus = apiBugFlag("BA-003", mode) && !!q.status && !!q.priority;
+    if (q.status && !dropStatus) query = query.eq("status", q.status);
     if (q.priority) query = query.eq("priority", q.priority);
     if (q.project_id) query = query.eq("project_id", q.project_id);
     if (q.label) query = query.contains("labels", [q.label]);
@@ -418,6 +422,10 @@ app.openapi(
     if (error) return c.json(errorJson("internal", error.message), 500);
 
     const total = count ?? 0;
+    // BA-001 (bug-hunt): floor instead of ceil — the last partial page vanishes.
+    const totalPages = apiBugFlag("BA-001", mode)
+      ? Math.max(1, Math.floor(total / q.per_page))
+      : Math.max(1, Math.ceil(total / q.per_page));
     c.header("X-Total-Count", String(total));
     return c.json(
       {
@@ -425,7 +433,7 @@ app.openapi(
         page: q.page,
         per_page: q.per_page,
         total,
-        total_pages: Math.max(1, Math.ceil(total / q.per_page)),
+        total_pages: totalPages,
       },
       200,
     );
@@ -493,7 +501,10 @@ app.openapi(
       .select(ticketRow)
       .single();
     if (error) return c.json(errorJson("internal", error.message), 500);
-    return c.json(toTicket(data), 201);
+    // BA-002 (bug-hunt): 200 instead of 201 — a deliberate contract violation,
+    // so the runtime status is cast past the 201 the spec declares.
+    const createdStatus = (apiBugFlag("BA-002", await sandboxMode(sandboxId)) ? 200 : 201) as 201;
+    return c.json(toTicket(data), createdStatus);
   },
 );
 
@@ -520,7 +531,13 @@ app.openapi(
       .eq("id", id)
       .maybeSingle();
     if (!data) return c.json(errorJson("not_found", `Ticket ${id} does not exist.`), 404);
-    return c.json(toTicket(data), 200);
+    const ticket = toTicket(data);
+    // BA-005 (bug-hunt): labels degrade to a comma-joined string — a schema
+    // violation learners catch by validating against the published contract.
+    if (apiBugFlag("BA-005", await sandboxMode(c.get("sandboxId")))) {
+      ticket.labels = (ticket.labels as string[]).join(",");
+    }
+    return c.json(ticket, 200);
   },
 );
 
@@ -581,6 +598,13 @@ app.openapi(
       .select("id")
       .maybeSingle();
     if (!data) return c.json(errorJson("not_found", `Ticket ${id} does not exist.`), 404);
+    // BA-004 (bug-hunt): 200 + a body where the contract says 204 No Content.
+    // The route only declares a 204 response, so the deliberate 200 return is
+    // cast past that union (`as never`) — the spec keeps showing the correct
+    // 204 for learners to spot the deviation against.
+    if (apiBugFlag("BA-004", await sandboxMode(c.get("sandboxId")))) {
+      return c.json({ deleted: true }, 200) as never;
+    }
     return c.body(null, 204);
   },
 );

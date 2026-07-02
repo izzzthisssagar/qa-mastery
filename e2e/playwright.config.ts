@@ -44,11 +44,9 @@ export default defineConfig({
       reuseExistingServer: false,
       timeout: 120_000,
     },
-    {
-      command: "pnpm --filter @qa-mastery/buggyapi start",
-      url: "http://localhost:3002/api/health",
-      reuseExistingServer: false,
-      timeout: 120_000,
-    },
+    // BuggyAPI is deliberately NOT booted here — this run ignores
+    // buggyapi.spec.ts (see testIgnore above), so a third Next server on the
+    // 2-core CI runner only adds contention that flakes the learner/talent
+    // suites. BuggyAPI e2e boots its own server via playwright.buggyapi.config.ts.
   ],
 });
