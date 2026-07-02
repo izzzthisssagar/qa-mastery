@@ -196,6 +196,29 @@ export default async function DashboardPage() {
           <BuggyApiCard />
         </Reveal>
 
+        <Reveal delay={0.32}>
+          <Link
+            href="/simulator"
+            data-testid="simulator-card"
+            className="group mt-4 flex w-full items-center justify-between gap-4 rounded-2xl border border-violet-500/25 bg-violet-500/[0.05] px-5 py-4 text-left transition-colors hover:border-violet-500/50"
+          >
+            <div>
+              <p className="text-xs font-medium uppercase tracking-widest text-violet-400">
+                Coding simulator
+              </p>
+              <p className="mt-1 font-medium text-zinc-100">
+                Run Java, Python, JS, TS &amp; C# in the browser →
+              </p>
+              <p className="mt-0.5 text-sm text-zinc-400">
+                A free scratchpad for practising automation logic — no setup.
+              </p>
+            </div>
+            <span className="hidden shrink-0 rounded-lg bg-violet-400 px-4 py-2 text-sm font-semibold text-zinc-950 transition group-hover:opacity-90 sm:inline">
+              Open
+            </span>
+          </Link>
+        </Reveal>
+
         <div className="mt-12 space-y-12">
           {tracks.map((track, trackIndex) => {
             const trackLessons = track.modules.flatMap((m) => m.lessons);
