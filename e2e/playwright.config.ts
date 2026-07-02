@@ -12,6 +12,10 @@ const CI = !!process.env.CI;
  */
 export default defineConfig({
   testDir: "./tests",
+  // BuggyAPI has its own config (playwright.buggyapi.config.ts) booting only
+  // its own server — a third Next server in THIS run starved the CI runner
+  // and made timing-sensitive talent/widget tests flake.
+  testIgnore: "**/buggyapi.spec.ts",
   fullyParallel: true,
   forbidOnly: CI,
   retries: CI ? 2 : 0,
@@ -37,12 +41,6 @@ export default defineConfig({
     {
       command: "pnpm --filter @qa-mastery/buggyshop start",
       url: "http://localhost:3001",
-      reuseExistingServer: false,
-      timeout: 120_000,
-    },
-    {
-      command: "pnpm --filter @qa-mastery/buggyapi start",
-      url: "http://localhost:3002/api/health",
       reuseExistingServer: false,
       timeout: 120_000,
     },
