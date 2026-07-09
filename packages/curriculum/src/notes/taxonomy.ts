@@ -53,10 +53,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "cpu-memory-and-storage",
         title: "CPU, memory & storage",
         topics: [
-          { slug: "what-the-cpu-does", title: "What the CPU does", planned: true },
-          { slug: "ram-vs-storage", title: "RAM vs storage", planned: true },
-          { slug: "ghz-gb-tb", title: "GHz, GB, TB", planned: true },
-          { slug: "why-computers-slow-down", title: "Why computers slow down", planned: true },
+          { slug: "what-the-cpu-does", title: "What the CPU does" },
+          { slug: "ram-vs-storage", title: "RAM vs storage" },
+          { slug: "ghz-gb-tb", title: "GHz, GB, TB" },
+          { slug: "why-computers-slow-down", title: "Why computers slow down" },
         ],
       },
       {
