@@ -8,7 +8,8 @@
  * <Term>, <Takeaways>, <Complete>. Self-contained and reduced-motion aware.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
+import { runSimulatorCode } from "@/app/(app)/simulator/actions";
 
 /* ── Hook: the curiosity opener ─────────────────────────────────────────────*/
 export function Hook({ children }: { children: ReactNode }) {
@@ -394,6 +395,173 @@ export function WorkedExample({ title, children }: { title: string; children: Re
       </h3>
       <div className="note-steps text-[15px] text-foreground/90">{children}</div>
     </section>
+  );
+}
+
+/* ── FlowAnimation: a diagram you can PLAY — staged flow with pulse + controls */
+export function FlowAnimation({
+  title,
+  nodes,
+  intervalMs = 1600,
+}: {
+  title: string;
+  nodes: { label: string; desc: string }[];
+  intervalMs?: number;
+}) {
+  const [active, setActive] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const reduced = useRef(false);
+
+  useEffect(() => {
+    reduced.current =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }, []);
+
+  useEffect(() => {
+    if (!playing) return;
+    const t = setInterval(
+      () => setActive((a) => (a + 1) % nodes.length),
+      reduced.current ? intervalMs * 2 : intervalMs,
+    );
+    return () => clearInterval(t);
+  }, [playing, nodes.length, intervalMs]);
+
+  return (
+    <div className="my-7 rounded-2xl border border-border bg-surface p-5">
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-[15px] font-semibold text-foreground">
+          <span aria-hidden>📊</span> {title}
+        </h3>
+        <div className="flex shrink-0 gap-1.5">
+          <button
+            type="button"
+            onClick={() => setPlaying((p) => !p)}
+            className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold text-accent-foreground"
+          >
+            {playing ? "⏸ Pause" : "▶ Play"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPlaying(false);
+              setActive((a) => (a + 1) % nodes.length);
+            }}
+            className="rounded-lg border border-border px-3 py-1 text-xs font-semibold text-foreground"
+          >
+            Step →
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-col items-stretch gap-1 sm:flex-row sm:items-center">
+        {nodes.map((n, i) => (
+          <div key={i} className="flex flex-1 flex-col items-center gap-1 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => {
+                setPlaying(false);
+                setActive(i);
+              }}
+              className={`w-full rounded-xl border px-3 py-2.5 text-center text-sm font-medium transition-all duration-300 ${
+                i === active
+                  ? "scale-[1.04] border-accent bg-accent/15 text-foreground shadow-[0_0_16px_-4px_var(--accent)]"
+                  : "border-border bg-background text-muted-foreground hover:border-accent/40"
+              }`}
+            >
+              {n.label}
+            </button>
+            {i < nodes.length - 1 && (
+              <span
+                aria-hidden
+                className={`shrink-0 rotate-90 text-lg transition-colors duration-300 sm:rotate-0 ${
+                  i === active ? "text-accent" : "text-muted-foreground/40"
+                }`}
+              >
+                ➜
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 min-h-14 rounded-xl border border-accent/25 bg-background px-4 py-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-accent">
+          Stage {active + 1} of {nodes.length}
+        </p>
+        <p className="mt-1 text-sm text-foreground/90">{nodes[active].desc}</p>
+      </div>
+    </div>
+  );
+}
+
+/* ── CodePlayground: runnable code via the platform's Wandbox runner ────────*/
+export function CodePlayground({
+  language = "python",
+  title = "Try it — edit and run",
+  code: initialCode,
+}: {
+  language?: string;
+  title?: string;
+  code: string;
+}) {
+  const [code, setCode] = useState(initialCode.trim());
+  const [output, setOutput] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+
+  return (
+    <div className="my-7 rounded-2xl border border-accent/30 bg-surface p-5">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-[15px] font-semibold text-foreground">
+          <span aria-hidden>🎛</span> {title}
+        </h3>
+        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          {language}
+        </span>
+      </div>
+      <textarea
+        value={code}
+        onChange={(e) => setCode(e.target.value)}
+        spellCheck={false}
+        rows={Math.min(14, Math.max(5, code.split("\n").length + 1))}
+        className="w-full resize-y rounded-xl border border-border bg-background p-3 font-mono text-[13px] leading-relaxed text-foreground outline-none focus:border-accent"
+        aria-label="Editable code"
+      />
+      <div className="mt-3 flex items-center gap-3">
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => {
+            setError(null);
+            start(async () => {
+              try {
+                const r = await runSimulatorCode(language, code);
+                setOutput(r.console || "(no output)");
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "Run failed — try again.");
+              }
+            });
+          }}
+          className="rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
+        >
+          {pending ? "Running…" : "▶ Run code"}
+        </button>
+        <span className="text-xs text-muted-foreground">
+          Runs on the real code runner — edit anything and rerun.
+        </span>
+      </div>
+      {error && (
+        <p className="mt-3 rounded-xl border border-bug/40 bg-bug/10 px-3 py-2 text-sm text-foreground">
+          {error}
+        </p>
+      )}
+      {output !== null && !error && (
+        <pre className="mt-3 overflow-x-auto rounded-xl border border-border bg-background p-3 font-mono text-[13px] text-foreground/90">
+          {output}
+        </pre>
+      )}
+    </div>
   );
 }
 
