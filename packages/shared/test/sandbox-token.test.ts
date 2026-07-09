@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  HANDOFF_TTL_SECONDS,
+  SESSION_TTL_SECONDS,
   mintHandoffToken,
   mintSessionToken,
   verifyHandoffToken,
@@ -70,5 +72,29 @@ describe("sandbox tokens", () => {
     await expect(verifyHandoffToken(token, SECRET, "buggyapi")).rejects.toThrow(
       /Malformed/,
     );
+  });
+});
+
+describe("sandbox token expiry", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("a handoff token dies after its 10-minute TTL", async () => {
+    vi.useFakeTimers({ now: new Date("2026-07-10T12:00:00Z") });
+    const token = await mintHandoffToken(CLAIMS, SECRET);
+    // Still valid one minute before the deadline…
+    vi.setSystemTime(new Date(Date.now() + (HANDOFF_TTL_SECONDS - 60) * 1000));
+    await expect(verifyHandoffToken(token, SECRET)).resolves.toEqual(CLAIMS);
+    // …dead one minute after it.
+    vi.setSystemTime(new Date(Date.now() + 2 * 60 * 1000));
+    await expect(verifyHandoffToken(token, SECRET)).rejects.toThrow(/exp/);
+  });
+
+  it("a session token dies after its 24-hour TTL", async () => {
+    vi.useFakeTimers({ now: new Date("2026-07-10T12:00:00Z") });
+    const token = await mintSessionToken(CLAIMS, SECRET);
+    vi.setSystemTime(new Date(Date.now() + (SESSION_TTL_SECONDS + 60) * 1000));
+    await expect(verifySessionToken(token, SECRET)).rejects.toThrow(/exp/);
   });
 });
