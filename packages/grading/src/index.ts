@@ -75,3 +75,11 @@ export {
   type CapstoneCheck,
   type CapstoneResult,
 } from "./capstone";
+
+export {
+  gradeTask,
+  type TaskCriteria,
+  type TaskEvidence,
+  type TaskRequirement,
+  type TaskGradeResult,
+} from "./tasks";
