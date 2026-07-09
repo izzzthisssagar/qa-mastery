@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import {
   createPersonalTask,
   deleteUserTask,
@@ -61,6 +61,9 @@ function AssignedCard({
 }) {
   const [pending, start] = useTransition();
   const [result, setResult] = useState<string | null>(null);
+  // Optimistic accept: flip to the accepted view immediately, revert on error.
+  const [acceptedNow, setAcceptedNow] = useState(false);
+  const showAccepted = accepted || acceptedNow;
 
   return (
     <div className="rounded-2xl border border-border bg-surface p-4" data-testid={`task-${task.slug}`}>
@@ -75,10 +78,16 @@ function AssignedCard({
       </div>
 
       <div className="mt-3 flex items-center gap-2">
-        {!accepted ? (
+        {!showAccepted ? (
           <button
             disabled={pending}
-            onClick={() => start(async () => void (await startAssignedTask(task.id)))}
+            onClick={() => {
+              setAcceptedNow(true);
+              start(async () => {
+                const r = await startAssignedTask(task.id);
+                if (!r?.ok) setAcceptedNow(false);
+              });
+            }}
             className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-foreground disabled:opacity-50"
           >
             {pending ? "Accepting…" : "Accept task"}
@@ -120,6 +129,20 @@ function AssignedCard({
 function Planner({ planner }: { planner: UserTask[] }) {
   const [title, setTitle] = useState("");
   const [pending, start] = useTransition();
+  // Optimistic add: show the new row immediately; the revalidated server list
+  // replaces it (real id) when the action settles.
+  const [rows, addRow] = useOptimistic(planner, (cur: UserTask[], t: string) => [
+    {
+      id: `optimistic-${t}`,
+      taskId: null,
+      title: t,
+      notes: null,
+      dueDate: null,
+      status: "todo" as const,
+      grade: null,
+    },
+    ...cur,
+  ]);
 
   return (
     <div className="mt-3">
@@ -128,9 +151,10 @@ function Planner({ planner }: { planner: UserTask[] }) {
           e.preventDefault();
           const t = title.trim();
           if (!t) return;
+          setTitle("");
           start(async () => {
+            addRow(t);
             await createPersonalTask({ title: t });
-            setTitle("");
           });
         }}
         className="flex gap-2"
@@ -151,10 +175,10 @@ function Planner({ planner }: { planner: UserTask[] }) {
       </form>
 
       <ul className="mt-3 space-y-2">
-        {planner.length === 0 ? (
+        {rows.length === 0 ? (
           <li className="text-sm text-muted-foreground">Nothing planned. Add a to-do above.</li>
         ) : (
-          planner.map((p) => <PlannerRow key={p.id} task={p} />)
+          rows.map((p) => <PlannerRow key={p.id} task={p} />)
         )}
       </ul>
     </div>
@@ -164,6 +188,8 @@ function Planner({ planner }: { planner: UserTask[] }) {
 function PlannerRow({ task }: { task: UserTask }) {
   const [pending, start] = useTransition();
   const [done, setDone] = useState(task.status === "done");
+  // An optimistic row has no server id yet — mutations wait for the real row.
+  const settling = task.id.startsWith("optimistic-");
   return (
     <li
       data-testid="planner-row"
@@ -172,7 +198,7 @@ function PlannerRow({ task }: { task: UserTask }) {
       <input
         type="checkbox"
         checked={done}
-        disabled={pending}
+        disabled={pending || settling}
         onChange={() => {
           const next = !done;
           setDone(next);
@@ -188,7 +214,7 @@ function PlannerRow({ task }: { task: UserTask }) {
         {task.title}
       </span>
       <button
-        disabled={pending}
+        disabled={pending || settling}
         onClick={() => start(async () => void (await deleteUserTask(task.id)))}
         aria-label="Delete"
         className="text-muted-foreground hover:text-foreground"
