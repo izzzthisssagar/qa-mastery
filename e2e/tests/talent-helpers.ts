@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, type Page } from "@playwright/test";
+import { signUpFreshLearner } from "./signup-helper";
 
 /**
  * Shared helpers for the Talent (marketplace) e2e specs. NOT a *.spec file, so
@@ -18,15 +19,7 @@ export function uniqueHandle(): string {
 /** Sign up a fresh learner via the UI (local Supabase has confirmations off, so
  *  signup yields a live session and lands on /dashboard). */
 export async function signUp(page: Page): Promise<string> {
-  const email = `talent-${randomUUID()}@e2e.local`;
-  await page.goto(`${BASE}/signup`);
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(PASSWORD);
-  await expect(async () => {
-    await page.getByRole("button", { name: /start learning free/i }).click();
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 4000 });
-  }).toPass({ timeout: 20_000 });
-  return email;
+  return signUpFreshLearner(page, "talent");
 }
 
 /** Create + publish a tester profile with the given handle and one specialty. */

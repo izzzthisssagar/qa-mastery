@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
+import { signUpFreshLearner as sharedSignUp } from "./signup-helper";
 
 /**
  * Learner-facing "learn" flow for the boundary-value-analysis lesson.
@@ -17,18 +17,7 @@ const SLUG = "boundary-value-analysis";
  * Signs up a fresh, unique learner and lands them on the dashboard.
  */
 async function signUpFreshLearner(page: Page): Promise<void> {
-  const email = `learner-${randomUUID()}@e2e.local`;
-  const password = "a-strong-password-1";
-
-  await page.goto("http://localhost:3000/signup");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
-  // The click is wrapped in toPass(): on a cold dev compile the first click can
-  // land before hydration and get swallowed; a retry is a no-op in prod builds.
-  await expect(async () => {
-    await page.getByRole("button", { name: /start learning free/i }).click();
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 4000 });
-  }).toPass({ timeout: 20_000 });
+  await sharedSignUp(page, "learner");
 }
 
 // bva-q1..bva-q6 correct single-choice option indices (server-only key).

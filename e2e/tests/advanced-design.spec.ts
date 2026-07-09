@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
+import { signUpFreshLearner as sharedSignUp } from "./signup-helper";
 
 /**
  * Track A6 — Advanced Test Design (pairwise + use-case testing). Both lessons
@@ -11,16 +11,7 @@ import { expect, test, type Page } from "@playwright/test";
  */
 
 async function signUpFreshLearner(page: Page): Promise<void> {
-  const email = `learner-${randomUUID()}@e2e.local`;
-  const password = "a-strong-password-1";
-
-  await page.goto("http://localhost:3000/signup");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
-  await expect(async () => {
-    await page.getByRole("button", { name: /start learning free/i }).click();
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 4000 });
-  }).toPass({ timeout: 20_000 });
+  await sharedSignUp(page, "learner");
 }
 
 async function upgradeToPro(page: Page): Promise<void> {

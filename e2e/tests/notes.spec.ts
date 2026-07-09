@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
+import { signUpFreshLearner as sharedSignUp } from "./signup-helper";
 
 /**
  * Notes wiki smoke: the reference library is auth-gated, the module tree routes
@@ -7,14 +7,7 @@ import { expect, test, type Page } from "@playwright/test";
  */
 
 async function signUpFreshLearner(page: Page): Promise<void> {
-  const email = `notes-${randomUUID()}@e2e.local`;
-  await page.goto("http://localhost:3000/signup");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill("a-strong-password-1");
-  await expect(async () => {
-    await page.getByRole("button", { name: /start learning free/i }).click();
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 4000 });
-  }).toPass({ timeout: 20_000 });
+  await sharedSignUp(page, "notes");
 }
 
 test.describe("notes wiki", () => {

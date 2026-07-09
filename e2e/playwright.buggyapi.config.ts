@@ -16,7 +16,11 @@ export default defineConfig({
   retries: CI ? 2 : 0,
   reporter: CI ? [["list"], ["html", { open: "never" }]] : "list",
   use: {
-    trace: "on-first-retry",
+    // retain-on-failure, not on-first-retry: the latter records only the
+    // retry, so a first attempt that fails and then retry-passes leaves no
+    // trace — which is exactly how the "WebKit save stall" stayed
+    // undiagnosable for weeks (docs/known-issues/webkit-save-stall.md).
+    trace: "retain-on-failure",
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },

@@ -11,14 +11,18 @@ test.describe("auth", () => {
     const email = `learner-${randomUUID()}@e2e.local`;
     const password = "a-strong-password-1";
 
-    // signup — the click is wrapped in toPass(): on a cold dev compile the
-    // first click can land before hydration and get swallowed; retrying is
-    // a no-op in prod builds where hydration beats any human (or robot).
+    // signup — the whole form interaction is wrapped in toPass(): anything
+    // that lands before hydration is silently lost (fills included — state
+    // stays empty even in prod builds on a starved runner, see
+    // docs/known-issues/webkit-save-stall.md), so the retry redoes the fills,
+    // not just the click.
     await page.goto("http://localhost:3000/signup");
-    await page.getByLabel("Email").fill(email);
-    await page.getByLabel("Password").fill(password);
     await expect(async () => {
-      await page.getByRole("button", { name: /start learning free/i }).click();
+      if (!/\/dashboard/.test(page.url())) {
+        await page.getByLabel("Email").fill(email);
+        await page.getByLabel("Password").fill(password);
+        await page.getByRole("button", { name: /start learning free/i }).click();
+      }
       await expect(page).toHaveURL(/\/dashboard/, { timeout: 4000 });
     }).toPass({ timeout: 20_000 });
     await expect(
