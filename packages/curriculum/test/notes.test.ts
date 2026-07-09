@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { allNoteLeaves, findNoteLeaf } from "../src/notes/taxonomy";
 import { listNoteFiles, getNote, noteFrontmatterSchema } from "../src/notes/load";
+import { listLessonFiles } from "../src/load";
 
 /**
  * Notes taxonomy consistency — the contract that lets content fill in
@@ -51,6 +52,15 @@ describe("notes taxonomy", () => {
       const note = getNote(f.moduleSlug, f.chapterSlug, f.topicSlug);
       expect(note).not.toBeNull();
       expect(() => noteFrontmatterSchema.parse(note!.frontmatter)).not.toThrow();
+    }
+  });
+
+  it("notes are invisible to the lesson registry sync", () => {
+    // notes frontmatter would fail the lesson schema — the sync must not see it
+    for (const file of listLessonFiles()) {
+      expect(file, `lesson walker picked up a note: ${file}`).not.toContain(
+        "/notes/",
+      );
     }
   });
 });
