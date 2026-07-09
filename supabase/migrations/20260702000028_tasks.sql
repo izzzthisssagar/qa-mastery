@@ -60,8 +60,11 @@ create table public.user_tasks (
 );
 
 create index user_tasks_owner on public.user_tasks (user_id, status);
+-- Non-partial on purpose: NULL task_id rows (personal todos) stay unlimited
+-- because NULLs are distinct, and the accept upsert's ON CONFLICT
+-- (user_id, task_id) needs a non-partial arbiter index to match.
 create unique index user_tasks_one_per_task
-  on public.user_tasks (user_id, task_id) where task_id is not null;
+  on public.user_tasks (user_id, task_id);
 
 create trigger user_tasks_updated_at
   before update on public.user_tasks

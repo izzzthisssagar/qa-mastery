@@ -163,7 +163,7 @@ function Planner({ planner }: { planner: UserTask[] }) {
 
 function PlannerRow({ task }: { task: UserTask }) {
   const [pending, start] = useTransition();
-  const done = task.status === "done";
+  const [done, setDone] = useState(task.status === "done");
   return (
     <li
       data-testid="planner-row"
@@ -173,9 +173,14 @@ function PlannerRow({ task }: { task: UserTask }) {
         type="checkbox"
         checked={done}
         disabled={pending}
-        onChange={() =>
-          start(async () => void (await setUserTaskStatus(task.id, done ? "todo" : "done")))
-        }
+        onChange={() => {
+          const next = !done;
+          setDone(next);
+          start(async () => {
+            const res = await setUserTaskStatus(task.id, next ? "done" : "todo");
+            if (!res?.ok) setDone(!next);
+          });
+        }}
         className="size-4 accent-[var(--accent)]"
         aria-label="Toggle done"
       />
