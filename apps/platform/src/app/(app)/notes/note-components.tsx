@@ -261,18 +261,48 @@ export function FirstTime({ title = "First time? Do this", children }: { title?:
   );
 }
 
-/** ⚠️ When it breaks — one row per symptom, with the fix a senior would give. */
+/** ⚠️ When it breaks — accordion: tap the symptom, reveal the senior-QA fix. */
 export function WhenItBreaks({ items }: { items: { symptom: string; fix: string }[] }) {
+  const [open, setOpen] = useState<Set<number>>(new Set());
+  const toggle = (i: number) =>
+    setOpen((s) => {
+      const n = new Set(s);
+      if (n.has(i)) n.delete(i);
+      else n.add(i);
+      return n;
+    });
+
   return (
     <section className="my-7 rounded-2xl border border-bug/30 bg-surface p-5">
-      <h3 className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-foreground">
+      <h3 className="mb-1 flex items-center gap-2 text-[15px] font-semibold text-foreground">
         <span aria-hidden>⚠️</span> When it breaks
       </h3>
-      <ul className="flex flex-col gap-3">
+      <p className="mb-3 text-sm text-muted-foreground">
+        Tap a problem — first guess the fix yourself, then reveal what a senior would check.
+      </p>
+      <ul className="flex flex-col gap-2">
         {items.map((it, i) => (
-          <li key={i} className="rounded-xl border border-border bg-background px-4 py-3 text-[15px]">
-            <p className="font-medium text-foreground">“{it.symptom}”</p>
-            <p className="mt-1 text-muted-foreground">{it.fix}</p>
+          <li key={i} className="overflow-hidden rounded-xl border border-border bg-background">
+            <button
+              type="button"
+              onClick={() => toggle(i)}
+              aria-expanded={open.has(i)}
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-[15px] font-medium text-foreground transition-colors hover:bg-surface"
+            >
+              <span>“{it.symptom}”</span>
+              <span
+                aria-hidden
+                className={`shrink-0 text-muted-foreground transition-transform ${open.has(i) ? "rotate-180" : ""}`}
+              >
+                ▾
+              </span>
+            </button>
+            {open.has(i) && (
+              <p className="border-t border-border px-4 py-3 text-[15px] text-muted-foreground">
+                <b className="text-accent">Fix: </b>
+                {it.fix}
+              </p>
+            )}
           </li>
         ))}
       </ul>
@@ -352,6 +382,200 @@ export function Resources({ links }: { links: { href: string; title: string; kin
         ))}
       </ul>
     </section>
+  );
+}
+
+/* ── Image credit line (CC attribution) ─────────────────────────────────────*/
+function Credit({ credit, creditHref }: { credit?: string; creditHref?: string }) {
+  if (!credit) return null;
+  return (
+    <p className="mt-2 text-right text-[11px] text-muted-foreground/70">
+      {creditHref ? (
+        <a href={creditHref} target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground">
+          {credit}
+        </a>
+      ) : (
+        credit
+      )}
+    </p>
+  );
+}
+
+/* ── HotspotImage: a photo with tappable pins — the walk-around explorer ────*/
+export function HotspotImage({
+  src,
+  alt,
+  credit,
+  creditHref,
+  pins,
+}: {
+  src: string;
+  alt: string;
+  credit?: string;
+  creditHref?: string;
+  pins: { x: number; y: number; label: string; desc: string }[];
+}) {
+  const [active, setActive] = useState<number | null>(null);
+  const [seen, setSeen] = useState<Set<number>>(new Set());
+  const open = (i: number) => {
+    setActive((a) => (a === i ? null : i));
+    setSeen((s) => new Set(s).add(i));
+  };
+  const done = seen.size === pins.length;
+
+  return (
+    <div className="my-7 rounded-2xl border border-border bg-surface p-4">
+      <div className="relative overflow-hidden rounded-xl">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt={alt} loading="lazy" className="w-full" />
+        {pins.map((p, i) => (
+          <button
+            key={i}
+            type="button"
+            onClick={() => open(i)}
+            aria-label={`Explore: ${p.label}`}
+            className={`absolute grid size-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 text-xs font-bold shadow-md transition-transform hover:scale-110 ${
+              seen.has(i)
+                ? "border-accent bg-accent text-accent-foreground"
+                : "hotspot-pulse border-white/90 bg-bug text-black"
+            }`}
+            style={{ left: `${p.x}%`, top: `${p.y}%` }}
+          >
+            {seen.has(i) ? "✓" : i + 1}
+          </button>
+        ))}
+      </div>
+      {active !== null ? (
+        <div className="mt-3 rounded-xl border border-accent/30 bg-background px-4 py-3">
+          <p className="text-sm font-semibold text-foreground">{pins[active].label}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{pins[active].desc}</p>
+        </div>
+      ) : (
+        <p className="mt-3 text-center text-sm text-muted-foreground">
+          👆 Tap each numbered dot to explore the parts
+        </p>
+      )}
+      <p className={`mt-2 text-center text-xs font-medium ${done ? "text-accent" : "text-muted-foreground"}`}>
+        {done ? "✓ All parts explored!" : `Explored ${seen.size} / ${pins.length}`}
+      </p>
+      <Credit credit={credit} creditHref={creditHref} />
+    </div>
+  );
+}
+
+/* ── PartsQuest: numbered diagram + click-the-legend part hunt ──────────────*/
+export function PartsQuest({
+  src,
+  alt,
+  credit,
+  creditHref,
+  parts,
+}: {
+  src: string;
+  alt: string;
+  credit?: string;
+  creditHref?: string;
+  parts: { name: string; desc: string }[];
+}) {
+  const [active, setActive] = useState<number | null>(null);
+  const [seen, setSeen] = useState<Set<number>>(new Set());
+  const done = seen.size === parts.length;
+
+  return (
+    <div className="my-7 rounded-2xl border border-border bg-surface p-4">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={alt} loading="lazy" className="w-full rounded-xl bg-white p-2" />
+      <p className="mt-3 text-center text-sm text-muted-foreground">
+        {done ? "🏅 You met every part — nicely done!" : "👇 Tap a number to meet that part — can you collect all of them?"}
+      </p>
+      <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+        {parts.map((p, i) => (
+          <button
+            key={i}
+            type="button"
+            onClick={() => {
+              setActive((a) => (a === i ? null : i));
+              setSeen((s) => new Set(s).add(i));
+            }}
+            className={`grid size-8 place-items-center rounded-full border text-xs font-bold transition-colors ${
+              active === i
+                ? "border-accent bg-accent text-accent-foreground"
+                : seen.has(i)
+                  ? "border-accent/50 bg-accent/15 text-accent"
+                  : "border-border bg-background text-foreground hover:border-accent/50"
+            }`}
+          >
+            {i + 1}
+          </button>
+        ))}
+      </div>
+      {active !== null && (
+        <div className="mt-3 rounded-xl border border-accent/30 bg-background px-4 py-3">
+          <p className="text-sm font-semibold text-foreground">
+            {active + 1}. {parts[active].name}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{parts[active].desc}</p>
+        </div>
+      )}
+      <p className={`mt-2 text-center text-xs font-medium ${done ? "text-accent" : "text-muted-foreground"}`}>
+        {seen.size} / {parts.length} parts met
+      </p>
+      <Credit credit={credit} creditHref={creditHref} />
+    </div>
+  );
+}
+
+/* ── StepChecklist: interactive check-off steps with progress ───────────────*/
+export function StepChecklist({ steps }: { steps: { text: string; detail?: string }[] }) {
+  const [checked, setChecked] = useState<Set<number>>(new Set());
+  const toggle = (i: number) =>
+    setChecked((s) => {
+      const n = new Set(s);
+      if (n.has(i)) n.delete(i);
+      else n.add(i);
+      return n;
+    });
+  const pct = Math.round((checked.size / steps.length) * 100);
+
+  return (
+    <div>
+      <div className="mb-3 h-2 overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full rounded-full bg-accent transition-all duration-300"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <ol className="flex flex-col gap-2">
+        {steps.map((s, i) => (
+          <li key={i}>
+            <button
+              type="button"
+              onClick={() => toggle(i)}
+              className={`flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
+                checked.has(i) ? "border-accent/40 bg-accent/10" : "border-border bg-background hover:border-accent/40"
+              }`}
+            >
+              <span
+                className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border text-xs font-bold ${
+                  checked.has(i) ? "border-accent bg-accent text-accent-foreground" : "border-border text-muted-foreground"
+                }`}
+              >
+                {checked.has(i) ? "✓" : i + 1}
+              </span>
+              <span>
+                <span className={`block text-[15px] ${checked.has(i) ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                  {s.text}
+                </span>
+                {s.detail && <span className="mt-0.5 block text-sm text-muted-foreground">{s.detail}</span>}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ol>
+      <p className={`mt-2 text-center text-xs font-medium ${pct === 100 ? "text-accent" : "text-muted-foreground"}`}>
+        {pct === 100 ? "✓ Mission complete — you know your machine!" : `${checked.size} / ${steps.length} done`}
+      </p>
+    </div>
   );
 }
 
