@@ -44,9 +44,9 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         title: "The parts of a computer",
         topics: [
           { slug: "tower-and-laptop-anatomy", title: "Tower & laptop anatomy" },
-          { slug: "monitor-keyboard-mouse", title: "Monitor, keyboard, mouse", planned: true },
-          { slug: "ports-and-cables", title: "Ports & cables", planned: true },
-          { slug: "turning-it-on-safely", title: "Turning it on safely", planned: true },
+          { slug: "monitor-keyboard-mouse", title: "Monitor, keyboard, mouse" },
+          { slug: "ports-and-cables", title: "Ports & cables" },
+          { slug: "turning-it-on-safely", title: "Turning it on safely" },
         ],
       },
       {
