@@ -355,21 +355,6 @@ export function Resources({ links }: { links: { href: string; title: string; kin
   );
 }
 
-/** The map handed to MDXRemote so notes can use these as tags. */
-export const noteInteractiveComponents = {
-  Hook,
-  Callout,
-  Figure,
-  Video,
-  Term,
-  Quiz,
-  Flashcards,
-  Takeaways,
-  Complete,
-  FirstTime,
-  WhenItBreaks,
-  WhereToCheck,
-  AskCommunity,
-  Challenge,
-  Resources,
-};
+/* NOTE: no aggregate map export — the notes topic page imports each component
+ * by name and builds the map server-side; an object exported from this client
+ * module loses members when spread across the RSC boundary. */

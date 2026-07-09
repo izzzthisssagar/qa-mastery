@@ -4,7 +4,44 @@ import { notFound } from "next/navigation";
 import { MDXRemote } from "next-mdx-remote/rsc";
 import { listNoteFiles, getNote, findNoteModule } from "@qa-mastery/curriculum";
 import { mdxComponents } from "@/app/(app)/learn/[slug]/mdx-components";
-import { noteInteractiveComponents } from "../../../note-components";
+import {
+  AskCommunity,
+  Callout,
+  Challenge,
+  Complete,
+  Figure,
+  FirstTime,
+  Flashcards,
+  Hook,
+  Quiz,
+  Resources,
+  Takeaways,
+  Term,
+  Video,
+  WhenItBreaks,
+  WhereToCheck,
+} from "../../../note-components";
+
+/** Client components must be named imports here (server module) so each gets a
+ *  proper client reference — spreading a map exported from the "use client"
+ *  module loses members at the RSC boundary. */
+const noteInteractiveComponents = {
+  AskCommunity,
+  Callout,
+  Challenge,
+  Complete,
+  Figure,
+  FirstTime,
+  Flashcards,
+  Hook,
+  Quiz,
+  Resources,
+  Takeaways,
+  Term,
+  Video,
+  WhenItBreaks,
+  WhereToCheck,
+};
 
 /** Only pre-render leaves that actually have MDX; planned stubs never route. */
 export function generateStaticParams() {
@@ -58,7 +95,15 @@ export default async function NoteTopicPage({
       )}
 
       <article className="prose-notes mt-8 space-y-4 text-[15px] leading-relaxed text-foreground/90">
-        <MDXRemote source={note.body} components={{ ...mdxComponents, ...noteInteractiveComponents }} />
+        <MDXRemote
+          source={note.body}
+          components={{ ...mdxComponents, ...noteInteractiveComponents }}
+          // Notes MDX is repo-authored (trusted): allow JSX attribute
+          // expressions — next-mdx-remote v6 strips them by default, which
+          // silently emptied array props like WhenItBreaks items. The
+          // dangerous-calls guard (blockDangerousJS) stays on.
+          options={{ blockJS: false }}
+        />
       </article>
     </main>
   );
