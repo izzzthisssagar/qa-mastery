@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { MDXRemote } from "next-mdx-remote/rsc";
 import { listNoteFiles, getNote, findNoteModule } from "@qa-mastery/curriculum";
 import { mdxComponents } from "@/app/(app)/learn/[slug]/mdx-components";
+import { noteInteractiveComponents } from "../../../note-components";
 
 /** Only pre-render leaves that actually have MDX; planned stubs never route. */
 export function generateStaticParams() {
@@ -57,7 +58,7 @@ export default async function NoteTopicPage({
       )}
 
       <article className="prose-notes mt-8 space-y-4 text-[15px] leading-relaxed text-foreground/90">
-        <MDXRemote source={note.body} components={mdxComponents} />
+        <MDXRemote source={note.body} components={{ ...mdxComponents, ...noteInteractiveComponents }} />
       </article>
     </main>
   );

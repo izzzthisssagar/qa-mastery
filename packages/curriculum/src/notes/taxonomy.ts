@@ -30,6 +30,67 @@ export interface NoteModule {
 }
 
 export const NOTES_TAXONOMY: readonly NoteModule[] = [
+  // ── Track A · Computer & Digital Foundations — Module 1 (curriculum v4.1).
+  // First module of the from-zero learning path; the full 48-module taxonomy
+  // lands module by module as content is written (topic 1 is the approved
+  // mentor-format reference note).
+  {
+    slug: "how-a-computer-works",
+    title: "How a computer works",
+    summary: "Absolute zero — the physical parts of a computer, what each one does, and how software comes alive on them.",
+    chapters: [
+      {
+        slug: "the-parts-of-a-computer",
+        title: "The parts of a computer",
+        topics: [
+          { slug: "tower-and-laptop-anatomy", title: "Tower & laptop anatomy" },
+          { slug: "monitor-keyboard-mouse", title: "Monitor, keyboard, mouse", planned: true },
+          { slug: "ports-and-cables", title: "Ports & cables", planned: true },
+          { slug: "turning-it-on-safely", title: "Turning it on safely", planned: true },
+        ],
+      },
+      {
+        slug: "cpu-memory-and-storage",
+        title: "CPU, memory & storage",
+        topics: [
+          { slug: "what-the-cpu-does", title: "What the CPU does", planned: true },
+          { slug: "ram-vs-storage", title: "RAM vs storage", planned: true },
+          { slug: "ghz-gb-tb", title: "GHz, GB, TB", planned: true },
+          { slug: "why-computers-slow-down", title: "Why computers slow down", planned: true },
+        ],
+      },
+      {
+        slug: "input-and-output-devices",
+        title: "Input & output devices",
+        topics: [
+          { slug: "input-devices", title: "Input devices", planned: true },
+          { slug: "output-devices", title: "Output devices", planned: true },
+          { slug: "peripherals", title: "Peripherals", planned: true },
+          { slug: "connecting-a-device", title: "Connecting a device", planned: true },
+        ],
+      },
+      {
+        slug: "how-software-runs",
+        title: "How software runs",
+        topics: [
+          { slug: "hardware-vs-software", title: "Hardware vs software", planned: true },
+          { slug: "programs-and-processes", title: "Programs & processes", planned: true },
+          { slug: "booting-up", title: "Booting up", planned: true },
+          { slug: "apps-vs-the-os", title: "Apps vs the OS", planned: true },
+        ],
+      },
+      {
+        slug: "types-of-computers",
+        title: "Types of computers",
+        topics: [
+          { slug: "desktops-and-laptops", title: "Desktops & laptops", planned: true },
+          { slug: "phones-and-tablets", title: "Phones & tablets", planned: true },
+          { slug: "servers", title: "Servers", planned: true },
+          { slug: "smart-devices", title: "Smart devices", planned: true },
+        ],
+      },
+    ],
+  },
   {
     slug: "foundations",
     title: "QA Foundations",
