@@ -385,6 +385,18 @@ export function Resources({ links }: { links: { href: string; title: string; kin
   );
 }
 
+/* ── WorkedExample: a real case, walked through start to verdict ────────────*/
+export function WorkedExample({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="my-7 rounded-2xl border border-sky-400/30 bg-surface p-5">
+      <h3 className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-foreground">
+        <span aria-hidden>📋</span> Worked example: {title}
+      </h3>
+      <div className="note-steps text-[15px] text-foreground/90">{children}</div>
+    </section>
+  );
+}
+
 /* ── Image credit line (CC attribution) ─────────────────────────────────────*/
 function Credit({ credit, creditHref }: { credit?: string; creditHref?: string }) {
   if (!credit) return null;

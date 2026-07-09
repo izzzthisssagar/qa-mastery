@@ -22,6 +22,7 @@ import {
   Term,
   Video,
   WhenItBreaks,
+  WorkedExample,
   WhereToCheck,
 } from "../../../note-components";
 
@@ -46,6 +47,7 @@ const noteInteractiveComponents = {
   Term,
   Video,
   WhenItBreaks,
+  WorkedExample,
   WhereToCheck,
 };
 
