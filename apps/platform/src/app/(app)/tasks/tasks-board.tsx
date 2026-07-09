@@ -59,7 +59,11 @@ function AssignedCard({
   accepted: boolean;
   userTask: UserTask | null;
 }) {
-  const [pending, start] = useTransition();
+  // Accept and grade need SEPARATE transitions: while the accept roundtrip is
+  // still settling, the optimistically-flipped card must already read
+  // "Grade my work" — a shared pending flag showed a bogus "Grading…" there.
+  const [acceptPending, startAccept] = useTransition();
+  const [gradePending, startGrade] = useTransition();
   const [result, setResult] = useState<string | null>(null);
   // Optimistic accept: flip to the accepted view immediately, revert on error.
   const [acceptedNow, setAcceptedNow] = useState(false);
@@ -80,24 +84,24 @@ function AssignedCard({
       <div className="mt-3 flex items-center gap-2">
         {!showAccepted ? (
           <button
-            disabled={pending}
+            disabled={acceptPending}
             onClick={() => {
               setAcceptedNow(true);
-              start(async () => {
+              startAccept(async () => {
                 const r = await startAssignedTask(task.id);
                 if (!r?.ok) setAcceptedNow(false);
               });
             }}
             className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-foreground disabled:opacity-50"
           >
-            {pending ? "Accepting…" : "Accept task"}
+            Accept task
           </button>
         ) : (
           <>
             <button
-              disabled={pending || userTask?.grade?.passed}
+              disabled={acceptPending || gradePending || userTask?.grade?.passed}
               onClick={() =>
-                start(async () => {
+                startGrade(async () => {
                   if (!userTask) return;
                   const r = await submitTaskForGrading(userTask.id);
                   setResult(
@@ -111,7 +115,7 @@ function AssignedCard({
               }
               className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground disabled:opacity-50"
             >
-              {userTask?.grade?.passed ? "Completed ✓" : pending ? "Grading…" : "Grade my work"}
+              {userTask?.grade?.passed ? "Completed ✓" : gradePending ? "Grading…" : "Grade my work"}
             </button>
             {result && <span className="text-xs text-muted-foreground">{result}</span>}
             {!result && userTask?.grade && (
