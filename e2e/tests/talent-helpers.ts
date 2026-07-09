@@ -32,17 +32,30 @@ export async function signUp(page: Page): Promise<string> {
 /** Create + publish a tester profile with the given handle and one specialty. */
 export async function publishTester(page: Page, handle: string): Promise<void> {
   await page.goto(`${BASE}/talent/profile`);
-  await page.getByLabel("Handle").fill(handle);
-  await page.getByRole("button", { name: /^functional$/i }).click(); // pick a specialty chip
 
-  // Save runs a server action against the live DB; under WebKit + cold
-  // serverless this can outlast a tight window. Wait for the transition to
-  // settle (the button leaves its "Saving…" state and re-enables) before
-  // asserting the confirmation, and give the assertions cold-start headroom.
+  // Hydration gate. Interactions that land before React hydrates are silently
+  // lost: the input shows the text but component state stays empty, so the
+  // save fails handle validation and "Saved." never appears — the intermittent
+  // "WebKit save stall" (docs/known-issues/webkit-save-stall.md). The chip's
+  // aria-pressed is rendered from React state, so once a click sticks the page
+  // is interactive and the fill below reliably reaches state.
+  const chip = page.getByRole("button", { name: /^functional$/i }); // pick a specialty chip
+  await expect(async () => {
+    await chip.click();
+    await expect(chip).toHaveAttribute("aria-pressed", "true", { timeout: 1_000 });
+  }).toPass({ timeout: 20_000 });
+  await page.getByLabel("Handle").fill(handle);
+
+  // Save runs a server action against the live DB; give the confirmation
+  // cold-start headroom, and fail fast with the real message if the action
+  // returns an error instead of silently timing out waiting for "Saved.".
   const saveBtn = page.getByRole("button", { name: /^save profile$/i });
   await saveBtn.click();
-  await expect(saveBtn).toBeEnabled({ timeout: 30_000 });
-  await expect(page.getByText(/^saved\.?$/i)).toBeVisible({ timeout: 30_000 });
+  const errorText = page.locator("p.text-red-300");
+  await expect(page.getByText(/^saved\.?$/i).or(errorText)).toBeVisible({ timeout: 30_000 });
+  if (await errorText.isVisible()) {
+    throw new Error(`profile save failed: ${await errorText.textContent()}`);
+  }
 
   await page.getByRole("button", { name: /^publish$/i }).click();
   await expect(page.getByText(/your profile is live/i)).toBeVisible({ timeout: 30_000 });

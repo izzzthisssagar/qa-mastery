@@ -1,34 +1,63 @@
-# Known issue — WebKit: tester-profile save intermittently stalls >30s in e2e
+# Resolved — "WebKit save stall": e2e raced hydration, save failed validation, helper waited for a "Saved." that could never come
 
-**Status:** open · **Severity:** low (test-infra flake, masked by CI retry) · **Filed:** 2026-06-26
+**Status:** root-caused & fixed 2026-07-10 · **Severity:** test-infra only (product behaved correctly) · **Filed:** 2026-06-26
 
-## Symptom
+## What it actually was
 
-`publishTester` (the `upsertTesterProfile` save in `apps/platform/src/app/(app)/talent/_components/profile-editor.tsx`) intermittently stalls past the e2e timeout on **WebKit only**, then passes on retry in ~5s.
+`publishTester` filled the Handle field and clicked the specialty chip
+**before React hydrated** the profile editor. Pre-hydration interactions are
+silently lost: the DOM input displays the text, but the component's `useState`
+stays empty. The save then ran with `handle: ""`, the server action correctly
+returned `{ ok: false, error: "Handle: 3–32 chars, …" }`, the UI correctly
+showed that error — and the helper, which only ever waited for "Saved.",
+timed out after 30 s. On retry the page's chunks were cached, hydration won
+the race, and everything passed in ~5 s.
 
-Observed in CI run `28218928114` (`e2e/tests/talent-directory.spec.ts`):
+Why it looked like a WebKit/latency bug: hydration is CPU-bound, so the race
+only loses on a starved runner (2-core CI, two Next servers, parallel
+Chromium + WebKit workers), and WebKit was the slowest to hydrate. Local
+sequential runs never reproduce it.
 
-- WebKit attempt #1 → timed out at **30.0s** (at `publishTester`, spec line 15)
-- WebKit retry #1 → passed in **5.2s**
-- Chromium → consistently ~3–6s, never stalls
+## How it was proven (local repro, isolated worktree at `f4d4e27`)
 
-Because the failure is in the shared `publishTester` helper, any talent spec that publishes a tester (`talent-consent`, `talent-profile`, `talent-realtime`, `talent-directory`) can hit it.
+Production build on :3100 against local Supabase; standalone Playwright
+harness repeating signup → profile → save → publish in fresh WebKit contexts,
+6 concurrent, tracing forced on:
 
-## What's already been done
+| Build | Stalls |
+|---|---|
+| react 19.2.4 (shipped) + original flow | 3 / 30 |
+| react 19.2.7 + original flow | 3 / 60 |
+| react 19.3.0-canary-20260708 + original flow | 2 / 60 |
+| react 19.2.4 + hydration-gated flow (the fix) | 0 / 60 |
 
-- `e2e/tests/talent-helpers.ts` — `publishTester` waits for the save to settle (button re-enables) and gives the assertions 30s headroom (PR #74).
-- `upsertTesterProfile` now runs its two independent writes (`talent_profiles` upsert + `profiles.talent_role` update) concurrently instead of sequentially (PR #75, `42b59d4`). This fixed the **common-case** latency (~5s) but did **not** eliminate the rare stall.
+The decisive traces: the save POST completed in <300 ms (server fine), a
+probe after `await upsertTesterProfile(...)` logged `resolved false`
+(promise fine, action *failed*), and the captured response body read
+`{"ok":false,"error":"Handle: 3–32 chars, lowercase letters/numbers/dashes"}`
+— an empty handle. Hypotheses ruled out along the way: Supabase/connection
+warmup (CI uses a *local* Supabase; DB round-trip <300 ms), WebKit itself
+(browser-agnostic race, WebKit just hydrates slowest under load), and the
+React 19.2.x fast-server-action reconciler race
+([vercel/next.js#88767](https://github.com/vercel/next.js/discussions/88767))
+— upgrading React through canary did not change the stall rate.
 
-## Hypothesis
+## The fix (e2e/tests/talent-helpers.ts)
 
-Not linear DB latency — that would be a consistent ~2x slowdown, not an occasional 30s hard stall. The 30s figure looks like *something hitting a timeout*. Most likely a first-request connection/setup cost on a fresh WebKit browser context talking to the cloud Supabase: Supabase client init, TLS/connection warmup, or a cookie/session propagation timing quirk on the very first authenticated server-action POST of a context.
+1. **Hydration gate** — click the specialty chip in an `expect(...).toPass`
+   loop until its `aria-pressed` (rendered from React state) sticks; only
+   then fill the handle. A lost pre-hydration interaction now retries instead
+   of poisoning the save.
+2. **Fail fast with the real reason** — after clicking save, wait for
+   "Saved." *or* the error paragraph, and throw the actual error message
+   instead of blind-timing-out.
 
-## Next steps to investigate
+## Lessons / follow-ups
 
-1. Capture the Playwright trace of a stalled run — `trace.zip` is uploaded as the `playwright-report` artifact on failure (see `.github/workflows/ci.yml`). Inspect the network waterfall for the hung request and its duration.
-2. Test whether a warmup request / Supabase connection reuse **before** the first save removes the stall.
-3. Check whether `requireUser()`'s `auth.getUser()` cookie round-trip contributes on the first hit of a fresh context.
-
-## Impact
-
-Low for real users — a 30s save is rare and they aren't retry-gated. Currently absorbed by Playwright's CI auto-retry, so the suite stays green. Tracked here so the retry isn't silently relied upon and the root cause gets a proper trace-driven fix.
+- `trace: "on-first-retry"` records only the (passing) retry — the stalled
+  first attempt was never traced, which is why CI artifacts were a dead end.
+  Consider `retain-on-failure` if this class of flake returns.
+- Other helpers that interact immediately after `goto` (e.g. `signUp`) are
+  exposed to the same race; `signUp` survives because its `toPass` loop
+  re-clicks, but it re-clicks without re-filling — worth hardening if it ever
+  flakes.
