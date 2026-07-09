@@ -19,7 +19,7 @@ export function HubGrid({ showTalent }: { showTalent: boolean }) {
   const cards: HubCard[] = [
     { href: "/community", label: "Community", desc: "Posts, questions & answers", icon: "💬", accent: "text-sky-400" },
     { href: "/simulator", label: "Coding simulator", desc: "Run code in 5 languages", icon: "⌨️", accent: "text-violet-400" },
-    { href: "/notes", label: "Notes wiki", desc: "The QA reference library", icon: "📚", accent: "text-amber-400", soon: true },
+    { href: "/notes", label: "Notes wiki", desc: "The QA reference library", icon: "📚", accent: "text-amber-400" },
     { href: "/portfolio/me", label: "Portfolio", desc: "Your public proof of work", icon: "🎯", accent: "text-emerald-400" },
     { href: "/test-cases", label: "Test cases", desc: "Author & manage test cases", icon: "✅", accent: "text-teal-400" },
     { href: "/tasks", label: "Tasks", desc: "Assigned practice & planner", icon: "🗂️", accent: "text-rose-400", soon: true },

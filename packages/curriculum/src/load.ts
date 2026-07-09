@@ -56,8 +56,12 @@ export function findContentRoot(startDir: string = process.cwd()): string {
 
 export function listLessonFiles(contentRoot: string = findContentRoot()): string[] {
   if (!fs.existsSync(contentRoot)) return [];
+  // content/notes holds the Notes wiki (own frontmatter, own loader in
+  // notes/load.ts) — never lesson MDX, so the registry sync must skip it.
+  const notesDir = path.join(contentRoot, "notes");
   const found: string[] = [];
   const walk = (dir: string) => {
+    if (dir === notesDir) return;
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) walk(full);

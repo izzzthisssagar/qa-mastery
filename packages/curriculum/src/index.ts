@@ -23,3 +23,23 @@ export {
   type TrackMeta,
   type ModuleMeta,
 } from "./taxonomy";
+
+export {
+  NOTES_TAXONOMY,
+  allNoteLeaves,
+  findNoteModule,
+  findNoteLeaf,
+  type NoteModule,
+  type NoteChapter,
+  type NoteTopic,
+  type NoteLeaf,
+} from "./notes/taxonomy";
+
+export {
+  noteFrontmatterSchema,
+  noteFilePath,
+  listNoteFiles,
+  getNote,
+  type NoteFrontmatter,
+  type NoteSource,
+} from "./notes/load";
