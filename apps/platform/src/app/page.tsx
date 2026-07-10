@@ -84,7 +84,9 @@ export default function HomePage() {
               </p>
             </Reveal>
 
-            <Reveal delay={0.08}>
+            {/* fade={false} on the two LCP candidates: keep them visible from
+                the first paint (see Reveal's doc comment). */}
+            <Reveal delay={0.08} fade={false}>
               <h1 className="font-display mt-5 text-5xl font-extrabold leading-[1.02] tracking-tight sm:text-6xl lg:text-7xl">
                 Don&apos;t{" "}
                 <span className="font-serif-accent font-normal text-zinc-500">
@@ -99,7 +101,7 @@ export default function HomePage() {
               </h1>
             </Reveal>
 
-            <Reveal delay={0.16}>
+            <Reveal delay={0.16} fade={false}>
               <p className="mt-6 max-w-xl text-lg leading-8 text-zinc-400">
                 Learn every QA concept on interactive visuals, hunt real seeded
                 bugs in a live practice app, and get your work graded like
