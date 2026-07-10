@@ -91,6 +91,64 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
       },
     ],
   },
+  // ── Track A · Module 2 (curriculum v4.1).
+  {
+    slug: "operating-systems-and-files",
+    title: "Operating systems & files",
+    summary: "The software that runs the machine — desktops, files, installing things, and your first taste of the command line.",
+    chapters: [
+      {
+        slug: "what-an-os-does",
+        title: "What an OS does",
+        topics: [
+          { slug: "role-of-the-os", title: "Role of the OS" },
+          { slug: "the-desktop-and-ui", title: "The desktop & UI" },
+          { slug: "managing-hardware", title: "Managing hardware" },
+          { slug: "common-os-tasks", title: "Common OS tasks" },
+        ],
+      },
+      {
+        slug: "windows-macos-and-linux",
+        title: "Windows, macOS & Linux",
+        topics: [
+          { slug: "windows-tour", title: "Windows tour", planned: true },
+          { slug: "macos-tour", title: "macOS tour", planned: true },
+          { slug: "linux-and-open-source", title: "Linux & open source", planned: true },
+          { slug: "choosing-one", title: "Choosing one", planned: true },
+        ],
+      },
+      {
+        slug: "files-folders-and-paths",
+        title: "Files, folders & paths",
+        topics: [
+          { slug: "files-and-file-types", title: "Files & file types", planned: true },
+          { slug: "folders-and-organizing", title: "Folders & organizing", planned: true },
+          { slug: "file-paths", title: "File paths", planned: true },
+          { slug: "search-and-shortcuts", title: "Search & shortcuts", planned: true },
+        ],
+      },
+      {
+        slug: "installing-and-managing-software",
+        title: "Installing & managing software",
+        topics: [
+          { slug: "installing-apps", title: "Installing apps", planned: true },
+          { slug: "updates", title: "Updates", planned: true },
+          { slug: "uninstalling", title: "Uninstalling", planned: true },
+          { slug: "app-stores-vs-downloads", title: "App stores vs downloads", planned: true },
+        ],
+      },
+      {
+        slug: "first-look-at-the-command-line",
+        title: "First look at the command line",
+        topics: [
+          { slug: "what-a-terminal-is", title: "What a terminal is", planned: true },
+          { slug: "basic-commands", title: "Basic commands", planned: true },
+          { slug: "navigating-folders", title: "Navigating folders", planned: true },
+          { slug: "why-testers-use-it", title: "Why testers use it", planned: true },
+        ],
+      },
+    ],
+  },
   {
     slug: "foundations",
     title: "QA Foundations",
