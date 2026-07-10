@@ -111,10 +111,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "windows-macos-and-linux",
         title: "Windows, macOS & Linux",
         topics: [
-          { slug: "windows-tour", title: "Windows tour", planned: true },
-          { slug: "macos-tour", title: "macOS tour", planned: true },
-          { slug: "linux-and-open-source", title: "Linux & open source", planned: true },
-          { slug: "choosing-one", title: "Choosing one", planned: true },
+          { slug: "windows-tour", title: "Windows tour" },
+          { slug: "macos-tour", title: "macOS tour" },
+          { slug: "linux-and-open-source", title: "Linux & open source" },
+          { slug: "choosing-one", title: "Choosing one" },
         ],
       },
       {

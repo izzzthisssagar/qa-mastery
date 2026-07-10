@@ -110,7 +110,8 @@ export function Quiz({
   return (
     <div className="my-7 rounded-2xl border border-border bg-gradient-to-b from-surface-raised to-surface p-5">
       <div className="flex items-center gap-2 text-[17px] font-semibold text-foreground">
-        <span className="text-bug" aria-hidden>🧠</span> Quick check
+        <span className="text-bug" aria-hidden>🧠</span>
+        <span>Quick check</span>
       </div>
       <p className="mb-3 mt-3 text-[15px] font-medium text-foreground">{question}</p>
       <div className="flex flex-col gap-2">
@@ -164,7 +165,8 @@ export function Flashcards({ cards }: { cards: { front: string; back: string }[]
     <div className="my-6 rounded-2xl border border-border bg-surface p-5">
       <div className="mb-3 flex items-center justify-between">
         <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-          <span aria-hidden>🃏</span> Flashcards
+          <span aria-hidden>🃏</span>
+          <span>Flashcards</span>
         </span>
         <span className="text-xs text-muted-foreground">{i + 1} / {cards.length}</span>
       </div>
@@ -255,7 +257,8 @@ export function FirstTime({ title = "First time? Do this", children }: { title?:
   return (
     <section className="my-7 rounded-2xl border border-accent/30 bg-surface p-5">
       <h3 className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-foreground">
-        <span aria-hidden>🔧</span> {title}
+        <span aria-hidden>🔧</span>
+        <span>{title}</span>
       </h3>
       <div className="note-steps text-[15px] text-foreground/90">{children}</div>
     </section>
@@ -276,7 +279,8 @@ export function WhenItBreaks({ items }: { items: { symptom: string; fix: string 
   return (
     <section className="my-7 rounded-2xl border border-bug/30 bg-surface p-5">
       <h3 className="mb-1 flex items-center gap-2 text-[15px] font-semibold text-foreground">
-        <span aria-hidden>⚠️</span> When it breaks
+        <span aria-hidden>⚠️</span>
+        <span>When it breaks</span>
       </h3>
       <p className="mb-3 text-sm text-muted-foreground">
         Tap a problem — first guess the fix yourself, then reveal what a senior would check.
@@ -316,7 +320,8 @@ export function WhereToCheck({ children }: { children: ReactNode }) {
   return (
     <section className="my-7 rounded-2xl border border-border bg-surface p-5">
       <h3 className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-foreground">
-        <span aria-hidden>🔎</span> Where &amp; how to check
+        <span aria-hidden>🔎</span>
+        <span>Where &amp; how to check</span>
       </h3>
       <div className="text-[15px] text-foreground/90">{children}</div>
     </section>
@@ -328,7 +333,8 @@ export function AskCommunity({ prompt, children }: { prompt?: string; children?:
   return (
     <section className="my-7 rounded-2xl border border-violet-400/30 bg-surface p-5">
       <h3 className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-foreground">
-        <span aria-hidden>🙋</span> Stuck? How &amp; whom to ask
+        <span aria-hidden>🙋</span>
+        <span>Stuck? How &amp; whom to ask</span>
       </h3>
       {children && <div className="text-[15px] text-foreground/90">{children}</div>}
       <a
@@ -351,7 +357,8 @@ export function Challenge({ children }: { children: ReactNode }) {
   return (
     <section className="my-7 rounded-2xl border border-border bg-gradient-to-b from-surface-raised to-surface p-5">
       <h3 className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-foreground">
-        <span aria-hidden>🏆</span> Your challenge
+        <span aria-hidden>🏆</span>
+        <span>Your challenge</span>
       </h3>
       <div className="text-[15px] text-foreground/90">{children}</div>
     </section>
@@ -363,7 +370,8 @@ export function Resources({ links }: { links: { href: string; title: string; kin
   return (
     <section className="my-7">
       <h3 className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-foreground">
-        <span aria-hidden>🔗</span> Best free resources
+        <span aria-hidden>🔗</span>
+        <span>Best free resources</span>
       </h3>
       <ul className="flex flex-col gap-2">
         {links.map((l, i) => (
@@ -391,7 +399,8 @@ export function WorkedExample({ title, children }: { title: string; children: Re
   return (
     <section className="my-7 rounded-2xl border border-sky-400/30 bg-surface p-5">
       <h3 className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-foreground">
-        <span aria-hidden>📋</span> Worked example: {title}
+        <span aria-hidden>📋</span>
+        <span>Worked example: {title}</span>
       </h3>
       <div className="note-steps text-[15px] text-foreground/90">{children}</div>
     </section>
@@ -419,11 +428,9 @@ export function FlowAnimation({
   }, []);
 
   useEffect(() => {
-    if (!playing) return;
-    const t = setInterval(
-      () => setActive((a) => (a + 1) % nodes.length),
-      reduced.current ? intervalMs * 2 : intervalMs,
-    );
+    // Reduced motion: never auto-advance — Play degrades to a manual step.
+    if (!playing || reduced.current) return;
+    const t = setInterval(() => setActive((a) => (a + 1) % nodes.length), intervalMs);
     return () => clearInterval(t);
   }, [playing, nodes.length, intervalMs]);
 
@@ -431,12 +438,19 @@ export function FlowAnimation({
     <div className="my-7 rounded-2xl border border-border bg-surface p-5">
       <div className="mb-4 flex items-center justify-between gap-2">
         <h3 className="flex items-center gap-2 text-[15px] font-semibold text-foreground">
-          <span aria-hidden>📊</span> {title}
+          <span aria-hidden>📊</span>
+          <span>{title}</span>
         </h3>
         <div className="flex shrink-0 gap-1.5">
           <button
             type="button"
-            onClick={() => setPlaying((p) => !p)}
+            onClick={() => {
+              if (reduced.current) {
+                setActive((a) => (a + 1) % nodes.length);
+                return;
+              }
+              setPlaying((p) => !p);
+            }}
             className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold text-accent-foreground"
           >
             {playing ? "⏸ Pause" : "▶ Play"}
@@ -514,7 +528,8 @@ export function CodePlayground({
     <div className="my-7 rounded-2xl border border-accent/30 bg-surface p-5">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="flex items-center gap-2 text-[15px] font-semibold text-foreground">
-          <span aria-hidden>🎛</span> {title}
+          <span aria-hidden>🎛</span>
+          <span>{title}</span>
         </h3>
         <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
           {language}
@@ -569,9 +584,9 @@ export function CodePlayground({
 function Credit({ credit, creditHref }: { credit?: string; creditHref?: string }) {
   if (!credit) return null;
   return (
-    <p className="mt-2 text-right text-[11px] text-muted-foreground/70">
+    <p className="mt-2 text-right text-xs text-muted-foreground">
       {creditHref ? (
-        <a href={creditHref} target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground">
+        <a href={creditHref} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-foreground">
           {credit}
         </a>
       ) : (
@@ -614,7 +629,7 @@ export function HotspotImage({
             type="button"
             onClick={() => open(i)}
             aria-label={`Explore: ${p.label}`}
-            className={`absolute grid size-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 text-xs font-bold shadow-md transition-transform hover:scale-110 ${
+            className={`absolute grid size-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 text-xs font-bold shadow-md transition-transform hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
               seen.has(i)
                 ? "border-accent bg-accent text-accent-foreground"
                 : "hotspot-pulse border-white/90 bg-bug text-black"
@@ -677,7 +692,7 @@ export function PartsQuest({
               setActive((a) => (a === i ? null : i));
               setSeen((s) => new Set(s).add(i));
             }}
-            className={`grid size-8 place-items-center rounded-full border text-xs font-bold transition-colors ${
+            className={`grid size-8 place-items-center rounded-full border text-xs font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
               active === i
                 ? "border-accent bg-accent text-accent-foreground"
                 : seen.has(i)
