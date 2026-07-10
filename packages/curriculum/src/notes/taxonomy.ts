@@ -331,8 +331,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         topics: [
           { slug: "arithmetic", title: "Arithmetic" },
           { slug: "comparison", title: "Comparison" },
-          { slug: "logical-operators", title: "Logical operators", planned: true },
-          { slug: "expressions", title: "Expressions", planned: true },
+          { slug: "logical-operators", title: "Logical operators" },
+          { slug: "expressions", title: "Expressions" },
         ],
       },
       {
