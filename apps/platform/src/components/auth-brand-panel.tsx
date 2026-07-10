@@ -74,19 +74,22 @@ export function AuthBrandPanel() {
               {...rise(0.24 + i * 0.08)}
               className="flex gap-4"
             >
-              <span className="mt-0.5 font-mono text-xs text-zinc-600">
+              {/* zinc-400, not the muted token: the panel is dark-only
+                  (bg-zinc-950 in both themes) and zinc-500/600 fall below
+                  WCAG AA 4.5:1 on it. */}
+              <span className="mt-0.5 font-mono text-xs text-zinc-400">
                 {item.k}
               </span>
               <div>
                 <p className="text-sm font-semibold text-zinc-100">{item.t}</p>
-                <p className="text-sm text-zinc-500">{item.d}</p>
+                <p className="text-sm text-zinc-400">{item.d}</p>
               </div>
             </motion.li>
           ))}
         </ul>
       </div>
 
-      <motion.p {...rise(0.5)} className="font-mono text-xs text-zinc-600">
+      <motion.p {...rise(0.5)} className="font-mono text-xs text-zinc-400">
         Trusted by self-taught testers landing their first QA role.
       </motion.p>
     </aside>
