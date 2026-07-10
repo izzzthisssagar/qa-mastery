@@ -31,6 +31,20 @@ describe("Button", () => {
   it("passes through disabled and other native props", () => {
     expect(renderToStaticMarkup(<Button disabled>Wait</Button>)).toContain("disabled");
   });
+
+  it("loading shows the spinner, disables and marks aria-busy", () => {
+    const html = renderToStaticMarkup(<Button loading>Saving…</Button>);
+    expect(html).toContain('role="status"'); // the Spinner
+    expect(html).toContain('disabled=""'); // the attribute, not the Tailwind class
+    expect(html).toContain('aria-busy="true"');
+    expect(html).toContain("Saving…");
+  });
+
+  it("not loading renders no spinner and stays enabled", () => {
+    const html = renderToStaticMarkup(<Button>Save</Button>);
+    expect(html).not.toContain('role="status"');
+    expect(html).not.toContain('disabled=""');
+  });
 });
 
 describe("Badge", () => {

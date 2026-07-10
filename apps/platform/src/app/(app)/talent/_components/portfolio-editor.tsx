@@ -186,7 +186,7 @@ export function PortfolioEditor({
           Under NDA — hide details from public view
         </label>
         {error && <p className="text-sm text-red-300">{error}</p>}
-        <Button onClick={add} disabled={pending || !title.trim()}>
+        <Button onClick={add} loading={pending} disabled={!title.trim()}>
           {pending ? "Adding…" : "Add to portfolio"}
         </Button>
       </div>

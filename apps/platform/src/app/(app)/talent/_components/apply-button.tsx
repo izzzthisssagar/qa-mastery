@@ -40,7 +40,7 @@ export function ApplyButton({ projectId, applied }: { projectId: string; applied
         />
       )}
       <div className="flex items-center gap-3">
-        <Button onClick={open ? apply : () => setOpen(true)} disabled={pending}>
+        <Button onClick={open ? apply : () => setOpen(true)} loading={pending}>
           {pending ? "Applying…" : open ? "Submit application" : "Apply"}
         </Button>
         {error && <span className="text-sm text-red-300">{error}</span>}
