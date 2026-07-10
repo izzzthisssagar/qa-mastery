@@ -1,0 +1,267 @@
+---
+title: "Forms & inputs"
+summary: "Forms are where users hand you data and where your app hands them bugs. Every rule you can see in the browser is a suggestion — the server is the only thing that can actually say no."
+tags: ["web-platform", "html", "forms", "security", "track-a"]
+updated: "2026-07-10"
+---
+
+<Hook>
+`<input type="number" min="1">`. Try typing `-5`. The browser stops you. Feels solid.
+Now open DevTools, delete `min="1"`, type `-5`, submit. If the order goes through, you
+have just bought negative five items and been refunded. **Every validation rule that
+lives in the browser lives on the user's computer, and the user owns their computer.**
+The form is a suggestion box. The server is the bouncer.
+</Hook>
+
+<Callout type="analogy">
+A form is a **restaurant order pad**, not the kitchen. The waiter can politely say "we're
+out of the salmon" before you finish ordering — that's client-side validation, and it's
+purely a kindness. But nothing stops you scribbling "salmon" on your own pad and walking
+it into the kitchen yourself. Only the kitchen can look in the fridge and refuse. A
+kitchen that cooks whatever arrives on a pad has no idea who wrote it.
+</Callout>
+
+## The anatomy of a form
+
+```html
+<form action="/signup" method="post">
+  <label for="email">Email</label>
+  <input id="email" name="email" type="email" required />
+
+  <label for="age">Age</label>
+  <input id="age" name="age" type="number" min="18" />
+
+  <button type="submit">Sign up</button>
+</form>
+```
+
+Four things worth naming:
+
+- **`name`** is what gets sent to the server. No `name`, no data — the field is decorative. This is a real and frequently shipped bug.
+- **`id`** is what a `<label for>` points at. That link is what makes clicking the label focus the input, and what gives the input an accessible name.
+- **`type`** picks the keyboard on mobile, the validation, and the widget. `type="email"` on a phone summons the @ key.
+- **`action` + `method`** say where the data goes and how (Module 3's GET vs POST).
+
+<Callout type="tip">
+A `<label>` that isn't connected to its input — no `for`/`id` pair and not wrapping it —
+is invisible glue. The text still *looks* like a label to your eyes. To a screen reader
+the input announces as "edit text, blank": the user is asked to type something and never
+told what. Check it in one line: `document.querySelectorAll('input:not([id])').length`,
+then compare against your labels. It is the single most common form accessibility bug on
+the web.
+</Callout>
+
+<HotspotImage
+  src="/notes/the-web-platform-for-testers/html-form.png"
+  alt="A rendered HTML form with labelled text inputs, a checkbox and a submit button"
+  credit="HTML form example — Wikimedia Commons, CC BY-SA 3.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:HTML_form.png"
+  pins={[
+    { x: 22, y: 22, label: "The label — and whether it's actually attached", desc: "`<label for=\"email\">` binds to `<input id=\"email\">`. Attached: clicking the word focuses the box, and a screen reader announces 'Email, edit text'. Unattached: it announces 'edit text, blank'. Same pixels either way, which is exactly why nobody notices." },
+    { x: 55, y: 32, label: "The input, and its `name`", desc: "The `name` attribute is the key the server receives. An input with no `name` submits nothing at all — the user types, presses submit, and their data evaporates silently. No error anywhere. Check the Network tab's request payload, not the screen." },
+    { x: 60, y: 52, label: "`type` changes everything", desc: "type=email, tel, number, date, password. It selects the mobile keyboard, the built-in validation, and the widget. It is never security: type=number blocks typing letters, and blocks nothing at all about what the server receives." },
+    { x: 30, y: 68, label: "Checkboxes: checked is not a value", desc: "An unchecked checkbox sends NOTHING — the key is simply absent from the payload, not `false`. Back-end code that reads `payload['newsletter']` without a default crashes or silently defaults. Classic bug, invisible on screen, obvious in the Network payload." },
+    { x: 48, y: 84, label: "Submit — and the double-fire", desc: "A `<button>` inside a form defaults to `type=\"submit\"`. Add a click handler that also POSTs and you get two requests from one click. Always write `type=\"button\"` on buttons that aren't meant to submit. This is the charged-twice bug from Module 1." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One submit, four places it can die — press Play"
+  intervalMs={1700}
+  nodes={[
+    { label: "1. User types and clicks Submit", desc: "The browser first runs its own constraint validation: required, type=email, min, max, pattern. If anything fails it shows a native bubble and never sends the request. Nothing appears in the Network tab — which is why 'nothing happens' is such a confusing bug report." },
+    { label: "2. Browser gathers name/value pairs", desc: "It walks the form and collects every control that has a `name` and is not disabled. No name? Skipped. Disabled? Skipped. Unchecked checkbox? Skipped. The user filled it in and the browser quietly left it behind." },
+    { label: "3. The request goes out", desc: "GET puts the pairs in the URL query string — visible, logged, bookmarkable, cached. POST puts them in the body. This is why login forms are POST: a GET login writes the password into browser history and every server access log on the path." },
+    { label: "4. The server validates — for real, this time", desc: "Everything up to here happened on the user's machine and can be edited, skipped, or bypassed entirely with curl. This step is the first one the user cannot touch. If the server accepts age = -5, the app accepts age = -5, whatever the input said." },
+    { label: "5. The response comes back", desc: "200 and a redirect: success. 400 with field errors: the server did its job. 200 with the bad data saved: you have found a real bug, and you found it by editing one attribute in the Elements panel." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="Try it — what the browser actually sends"
+  code={`# The form as the user sees it
+fields = [
+    # name,        type,     value,        disabled, checked
+    ("email",     "email",  "a@b.com",     False, None),
+    ("age",       "number", "-5",          False, None),   # user deleted min="1" in DevTools
+    ("newsletter","checkbox","yes",        False, False),  # left unchecked
+    ("terms",     "checkbox","yes",        False, True),
+    ("coupon",    "text",   "SAVE10",      True,  None),   # greyed out in the UI
+    ("",          "text",   "typed this!", False, None),   # DEV FORGOT name=
+]
+
+payload = {}
+for name, kind, value, disabled, checked in fields:
+    if not name:  continue          # no name -> never submitted
+    if disabled:  continue          # disabled -> never submitted
+    if kind == "checkbox" and not checked: continue   # unchecked -> key absent entirely
+    payload[name] = value
+
+print("What the user filled in:", len(fields), "controls")
+print("What the server receives:", payload)
+print()
+for label, present in [("newsletter", "newsletter" in payload),
+                       ("coupon (disabled)", "coupon" in payload),
+                       ("the unnamed field", any(v == "typed this!" for v in payload.values()))]:
+    print(f"  {label:22} -> {'sent' if present else 'SILENTLY DROPPED'}")
+print()
+print("age =", payload["age"], "-- the min=1 rule was deleted client-side.")
+print("If the server stores this, the bug is the SERVER's, not the input's.")`}
+/>
+
+## Client-side validation is a UX feature, not a security control
+
+Say it once more, because entire test plans are built on the opposite belief:
+
+- `required` — deleted in DevTools in two seconds.
+- `min` / `max` / `maxlength` — same.
+- `type="email"` — same, and it's a weak check anyway (`a@b` passes).
+- `pattern="[0-9]{4}"` — same.
+- `disabled` on the submit button — remove the attribute, click, done.
+- The form itself — `curl -X POST` never loads your page at all, so none of it ever ran.
+
+All of it is there to help an honest user fix a typo before a round trip. Not one line of
+it constrains a dishonest one. **Every rule must exist twice: once in the browser for
+kindness, once on the server for truth.**
+
+<FirstTime title="Your mission: break a form on purpose">
+<StepChecklist
+  steps={[
+    { text: "Find a form with a client-side rule", detail: "A quantity field with `min=\"1\"`, a required email, a maxlength. Any real site. Confirm the browser blocks you normally." },
+    { text: "Delete the rule in Elements", detail: "Right-click the input → Inspect. Double-click the `min=\"1\"` attribute and delete it. The page does not reload. The rule is gone." },
+    { text: "Submit the forbidden value", detail: "Type -5. Submit. Watch the Network tab: does a request go out this time? It should — you removed the thing that was blocking it." },
+    { text: "Read the status code, not the screen", detail: "400 or 422 with a field error means the server validated. 200 with the value saved means you just found a real bug in under a minute." },
+    { text: "Check the payload for ghosts", detail: "Network → the request → Payload. Is every field you filled in actually there? Missing ones are `name`-less or disabled. That's a second class of bug in the same panel." },
+  ]}
+/>
+Deleted a rule, submitted the impossible, and read the verdict from the status code. That's server-side validation testing, and it took a minute.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "I click Submit and absolutely nothing happens — no error, no request in the Network tab.",
+      fix: "No request means the browser stopped it before it left. Almost always native constraint validation: a `required` field is empty, or a `pattern` doesn't match — often on a field scrolled off screen, so the native bubble points at nothing you can see. Run `document.querySelector('form').checkValidity()` in the console; then `[...document.querySelectorAll(':invalid')]` to see exactly which control is blocking. This is the single most common 'the button is broken' report that isn't a button bug.",
+    },
+    {
+      symptom: "The user filled the field in, and the server says it's missing.",
+      fix: "Look at the Network request Payload, not the form. The field is almost certainly missing its `name` attribute (submits nothing), or it's `disabled` (submits nothing). Both look completely normal on screen — the user types, sees their text, and the browser never collects it. Elements panel confirms in five seconds.",
+    },
+    {
+      symptom: "An unchecked checkbox breaks the back end.",
+      fix: "Unchecked checkboxes send no key at all — not `false`, not empty string, *absent*. Server code that does `payload['newsletter']` without a default gets a KeyError, or a framework silently coerces it. Test it explicitly: submit once checked, once unchecked, and diff the two payloads. The difference is a missing key, not a changed value.",
+    },
+    {
+      symptom: "One click, two POST requests, two records created.",
+      fix: "A `<button>` inside a `<form>` defaults to `type=\"submit\"`. If it also has a JavaScript click handler that calls the API, both fire: your handler, then the form's native submit. Fix is `type=\"button\"` (or `preventDefault()`). This is the double-charge bug — and since POST isn't idempotent, two requests mean two rows.",
+    },
+    {
+      symptom: "The password appears in the URL bar.",
+      fix: "The form is `method=\"get\"` (or has no method — GET is the default). GET puts every field in the query string, so the password is now in browser history, the server access log, the proxy log, and the Referer header sent to the next site. That's a security bug of real severity, and it's visible in the URL bar without any tools.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Forms are tested in two panels, and the screen is not one of them:
+
+- **Network → the request → Payload** — the ground truth of what was actually sent. Missing keys here are bugs the screen cannot show you.
+- **Network → Status code** — the server's verdict. 400/422 = it validated. 200 with bad data = it didn't.
+- **Elements** — where you delete `required`, `min`, `disabled` to prove the browser rules were only ever advisory.
+- **Console → `document.querySelectorAll(':invalid')`** — exactly which control is blocking a submit that never fires.
+- **The URL bar** — if you can read the form data in it, the method is GET.
+
+Tester's habit: **fill the form, then read the payload before you read the page.** Half
+of all form bugs are visible in the payload and invisible on screen, because the screen
+shows what the user typed and the payload shows what the browser kept.
+</WhereToCheck>
+
+<WorkedExample title="the coupon that made money">
+1. **Report:** "Discount codes sometimes give more off than they should." Vague, unreproducible, sat in the backlog for a month.
+2. **Look at the form.** A quantity input: `<input type="number" name="qty" min="1" max="10">`. A coupon field. Nothing suspicious.
+3. **Delete `min="1"`** in the Elements panel. Type `-2`. Submit.
+4. **Network tab.** `POST /cart` → `{"qty": "-2", "coupon": "SAVE10"}` → **200 OK**. The server took it.
+5. **The cart now reads:** subtotal −$40.00, discount −$4.00, **total −$44.00**. The checkout offers to refund the customer forty-four dollars for the privilege of taking two items away from them.
+6. **Prove it's the server, not the browser.** `curl -X POST /cart -d 'qty=-2&coupon=SAVE10'` — no browser involved, same 200. Now nobody can argue the fix belongs in the front end.
+7. **Report:** '`POST /cart` accepts negative `qty`, producing a negative total. `min="1"` exists on the input but is client-side only; removing it in DevTools, or bypassing the page entirely with curl, submits successfully. Server must reject `qty < 1` with 400. Repro: curl one-liner attached. Severity: high — arbitrary refunds.'
+8. **Why the original report was unreproducible:** nobody types `-2`. It only happened when someone's browser extension, autofill, or a stale cached page submitted something the form would have blocked. The bug was never in the form. It was in the belief that the form was a guard.
+</WorkedExample>
+
+<Callout type="mistake">
+Writing a test plan that reads "verify the quantity field rejects negative numbers" —
+and then testing it by *typing into the field*. You have tested Chrome. Chrome works.
+The question was never whether the input blocks the keystroke; it's whether the **server**
+rejects the request. Those are different systems, written by different people, and only
+one of them the attacker has to get past. Any validation you can defeat with the Elements
+panel was never validation. Test the endpoint, not the widget.
+</Callout>
+
+<Term term="constraint validation">
+The browser's built-in form checking, driven by attributes like `required`, `min`, `max`,
+`pattern` and `type`. It runs before submit, blocks the request entirely when a rule
+fails, and is queryable from the console via `form.checkValidity()` and the `:invalid`
+CSS pseudo-class. It runs on the user's machine, which is why it is a usability feature
+and never a security boundary.
+</Term>
+
+<Quiz
+  question="You delete the `min` attribute from a quantity input in DevTools, submit -5, and the server responds 200 OK with the order created. What have you found?"
+  options={[
+    "Nothing — real users can't type -5 because the browser blocks it",
+    "A front-end bug: the input should prevent the attribute from being removed",
+    "A real server-side validation bug. The `min` attribute is a browser-side hint that any user can delete, and curl skips the page entirely. The server accepted an invalid order, so the server is missing its own check.",
+    "A DevTools bug — the browser shouldn't allow attribute editing"
+  ]}
+  answer={2}
+  explain="Everything the browser enforces runs on a machine the user controls. `min`, `required`, `pattern`, `disabled` — all editable in two seconds, and all skipped completely by curl, which never loads your HTML. The one check the user cannot reach is the server's. A 200 here means the server has no such check, and the order is now in the database. Option 2 is impossible (you can't stop attribute editing, and it wouldn't help against curl). Option 1 is the belief that ships this bug."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What makes a field's data reach the server?", back: "A `name` attribute, not being `disabled`, and (for checkboxes) being checked. Fail any one and it submits nothing, silently." },
+    { front: "What does an unchecked checkbox send?", back: "Nothing. The key is absent from the payload — not `false`, not empty. Back-end defaults matter." },
+    { front: "Client-side validation is…", back: "A kindness to honest users. `required`, `min`, `pattern`, `disabled` are all deletable in DevTools and skipped entirely by curl." },
+    { front: "Submit does nothing, no request in Network", back: "The browser blocked it. Constraint validation. Run `form.checkValidity()` and inspect `document.querySelectorAll(':invalid')`." },
+    { front: "One click, two POSTs", back: "A `<button>` in a `<form>` defaults to type=submit. A click handler that also POSTs makes both fire. Use `type=\"button\"`." },
+    { front: "Password in the URL bar", back: "The form is `method=\"get\"`. Data lands in history, access logs, proxies and the Referer header. Real security bug." },
+    { front: "Where you test a form", back: "Network → Payload (what was sent) and the status code (the server's verdict). Not the screen." },
+  ]}
+/>
+
+<Challenge>
+Find any site with a numeric input that has a `min` or `max`. Delete the attribute in the
+Elements panel, submit an out-of-range value, and read the status code. Then check the
+labels: `document.querySelectorAll('input:not([id])').length` versus the number of
+`<label for>` elements. Then check for ghosts: fill everything in, submit, and diff the
+Network payload against what you typed. Three attacks, one form, under five minutes —
+and one of them almost always lands.
+</Challenge>
+
+<AskCommunity prompt="Form bug: submitting [value] to [field]. Network request payload: [paste]. Status code: [code]. Response body: [paste]. Client-side rule present: [min=1 / required / none]. Reproduced without a browser (curl): [yes/no]">
+That last line is what turns a shrug into a fix. If you can reproduce it with curl, the
+front end is not involved, and nobody can suggest 'just add validation to the input'.
+Bring the curl command and the argument is over before it starts.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.mozilla.org/en-US/docs/Learn/Forms/Form_validation", title: "MDN — client-side form validation (and why it isn't enough)", kind: "read" },
+    { href: "https://developer.mozilla.org/en-US/docs/Learn/Forms/Sending_and_retrieving_form_data", title: "MDN — how form data is actually sent", kind: "read" },
+    { href: "https://owasp.org/www-community/vulnerabilities/Improper_Data_Validation", title: "OWASP — improper data validation", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=In0nB0ABaUk" title="HTML forms, name attributes, and what actually gets submitted" minutes={12} />
+
+<Takeaways
+  points={[
+    "A field reaches the server only if it has a `name`, isn't `disabled`, and (checkbox) is checked. Otherwise the user types and the browser silently drops it.",
+    "Every browser-side rule — `required`, `min`, `pattern`, `disabled` — is deletable in DevTools and skipped entirely by curl. It's UX, never security.",
+    "Every rule must exist twice: in the browser for kindness, on the server for truth. Test the second one.",
+    "Submit does nothing and Network is empty? Constraint validation blocked it. `form.checkValidity()` and `:invalid` name the culprit.",
+    "Read the payload before you read the page. Half of all form bugs are visible in one and invisible in the other.",
+  ]}
+/>
+
+<Complete xp={10} />

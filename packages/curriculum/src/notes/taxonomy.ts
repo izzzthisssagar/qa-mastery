@@ -215,20 +215,20 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "html-essentials",
         title: "HTML essentials",
         topics: [
-          { slug: "structure-and-semantic-tags", title: "Structure & semantic tags", planned: true },
-          { slug: "forms-and-inputs", title: "Forms & inputs", planned: true },
-          { slug: "ids-classes-and-attributes", title: "Ids, classes & attributes", planned: true },
-          { slug: "why-semantics-matter", title: "Why semantics matter", planned: true },
+          { slug: "structure-and-semantic-tags", title: "Structure & semantic tags" },
+          { slug: "forms-and-inputs", title: "Forms & inputs" },
+          { slug: "ids-classes-and-attributes", title: "Ids, classes & attributes" },
+          { slug: "why-semantics-matter", title: "Why semantics matter" },
         ],
       },
       {
         slug: "css-essentials",
         title: "CSS essentials",
         topics: [
-          { slug: "selectors-the-locator-superpower", title: "Selectors — the locator superpower", planned: true },
-          { slug: "the-box-model", title: "The box model", planned: true },
-          { slug: "flexbox-and-grid", title: "Flexbox & grid, gently", planned: true },
-          { slug: "why-layouts-break", title: "Why layouts break", planned: true },
+          { slug: "selectors-the-locator-superpower", title: "Selectors — the locator superpower" },
+          { slug: "the-box-model", title: "The box model" },
+          { slug: "flexbox-and-grid", title: "Flexbox & grid, gently" },
+          { slug: "why-layouts-break", title: "Why layouts break" },
         ],
       },
       {
@@ -249,6 +249,53 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
           { slug: "reflow-and-repaint", title: "Reflow & repaint, gently"  },
           { slug: "network-plus-render", title: "Network + render = page load"  },
           { slug: "core-web-vitals-awareness", title: "Core Web Vitals awareness"  },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "digital-literacy-and-safety",
+    title: "Digital literacy & safety",
+    summary: "Accounts, passwords, phishing, the keyboard and the everyday tools. The unglamorous skills that decide whether you can be trusted with production access.",
+    chapters: [
+      {
+        slug: "accounts-passwords-and-2fa",
+        title: "Accounts, passwords & 2FA",
+        topics: [
+          { slug: "accounts-and-sign-in", title: "Accounts & sign-in", planned: true },
+          { slug: "strong-passwords", title: "Strong passwords", planned: true },
+          { slug: "password-managers", title: "Password managers", planned: true },
+          { slug: "two-factor-auth", title: "Two-factor auth", planned: true },
+        ],
+      },
+      {
+        slug: "staying-safe-online",
+        title: "Staying safe online",
+        topics: [
+          { slug: "phishing-and-scams", title: "Phishing & scams", planned: true },
+          { slug: "safe-downloads", title: "Safe downloads", planned: true },
+          { slug: "privacy-basics", title: "Privacy basics", planned: true },
+          { slug: "updates-and-antivirus", title: "Updates & antivirus", planned: true },
+        ],
+      },
+      {
+        slug: "keyboard-and-typing",
+        title: "Keyboard & typing",
+        topics: [
+          { slug: "keyboard-layout", title: "Keyboard layout", planned: true },
+          { slug: "shortcuts", title: "Shortcuts", planned: true },
+          { slug: "touch-typing", title: "Touch typing", planned: true },
+          { slug: "efficiency-tips", title: "Efficiency tips", planned: true },
+        ],
+      },
+      {
+        slug: "everyday-tools",
+        title: "Everyday tools",
+        topics: [
+          { slug: "documents", title: "Documents", planned: true },
+          { slug: "spreadsheets", title: "Spreadsheets", planned: true },
+          { slug: "email", title: "Email", planned: true },
+          { slug: "collaboration-tools", title: "Collaboration tools", planned: true },
         ],
       },
     ],

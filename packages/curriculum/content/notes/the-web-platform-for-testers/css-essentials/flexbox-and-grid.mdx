@@ -1,0 +1,286 @@
+---
+title: "Flexbox & grid"
+summary: "Two layout systems that ended fifteen years of hacks. Flexbox arranges things along one line; grid arranges them in two dimensions. Knowing which one a page uses tells you which bugs to expect."
+tags: ["web-platform", "css", "layout", "responsive", "track-a"]
+updated: "2026-07-10"
+---
+
+<Hook>
+Before 2017, centring a box vertically on a web page was a genuinely hard problem with a
+dozen competing hacks, each with its own failure mode, each the subject of a thousand
+Stack Overflow answers. Today it is three lines. **An entire generation of front-end
+folklore — clearfix, negative margins, `display: table-cell`, faux columns — exists because
+the web had no layout system for its first twenty years.** Flexbox and grid are that
+system, arriving late. Every layout bug you meet is now either "wrong system chosen" or
+"the container is smaller than the developer imagined."
+</Hook>
+
+<Callout type="analogy">
+**Flexbox is seating people at a bar.** One long row (or one column). You decide how they
+spread out along it, and how they line up top to bottom. Add a person and everyone shuffles.
+
+**Grid is seating people in a theatre.** You draw the rows and columns first, then place
+people in seats — sometimes one person across two seats. The seats exist whether or not
+anybody sits in them.
+
+Bar for a row of things. Theatre for a page. Using a bar to lay out a theatre is how you
+get fifteen nested divs.
+</Callout>
+
+## Flexbox: one dimension
+
+You make a container flex, and its **direct children** become flex items.
+
+```css
+.toolbar {
+  display: flex;
+  justify-content: space-between;  /* along the main axis (default: horizontal) */
+  align-items: center;             /* across the cross axis */
+  gap: 1rem;                       /* space between items — no margin hacks */
+}
+```
+
+Three properties do almost everything: `justify-content` (spread along the line),
+`align-items` (line up across it), `gap` (space between). Flip the axis with
+`flex-direction: column` and `justify-content` now works vertically — that axis swap is
+the single most common source of "why is `align-items` doing nothing."
+
+## Grid: two dimensions
+
+```css
+.page {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1.5rem;
+}
+```
+
+That one line is a responsive card grid with no media queries: *as many columns as fit, each
+at least 240px, sharing the leftover space equally.* Grid places children into a structure the
+container defines. Flexbox lets children negotiate along a line.
+
+<HotspotImage
+  src="/notes/the-web-platform-for-testers/box-model.png"
+  alt="A box with content, padding, border and margin — the unit flex and grid arrange"
+  credit="CSS box model diagram — Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Boxmodell-detail.svg"
+  pins={[
+    { x: 50, y: 50, label: "Flex and grid arrange THESE boxes", desc: "Layout systems don't replace the box model — they position boxes made by it. An item's padding and border still count toward the space it takes in the row. This is why 'three 33% cards' overflow: the box model is still running underneath." },
+    { x: 50, y: 30, label: "Padding still applies to a flex item", desc: "Flexbox distributes space between items, but each item is still a box. `flex: 1` divides the LEFTOVER space after content, padding and border are accounted for — which is why two `flex: 1` items with different padding are not the same width." },
+    { x: 50, y: 7, label: "Margins do NOT collapse in flex or grid", desc: "This is one of the quiet reasons modern layouts feel sane. Inside a flex or grid container, `margin-bottom: 20px` and `margin-top: 30px` produce 50px, not 30px. And `gap` is better than either — it spaces between items without spacing the edges." },
+    { x: 20, y: 68, label: "DevTools draws the container for you", desc: "Elements shows a small `flex` or `grid` badge next to a container. Click it and the browser overlays the lines, the gaps, the numbered tracks. In the Layout sidebar you can toggle the overlay permanently. Guessing at layout is now a choice." },
+    { x: 78, y: 22, label: "The content box is what gets squeezed", desc: "When a flex row runs out of room, items shrink — by default they may shrink below their content width, which is how text ends up overflowing a card. `min-width: 0` or `flex-shrink: 0` decide who gives way. Most overflow bugs live in that one sentence." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One row, one card too many — press Play"
+  intervalMs={1700}
+  nodes={[
+    { label: "Three cards in a flex row, 1200px wide", desc: "`display: flex; gap: 24px`. Each card takes its natural width. Everything fits with room to spare. This is the state the developer designed in, tested in, and screenshotted for the ticket." },
+    { label: "A fourth card arrives from the API", desc: "Nobody wrote code for four. Flexbox does what flexbox does: it shrinks every item to make room, because `flex-shrink: 1` is the default. Nothing wraps and nothing errors. The cards just get narrower." },
+    { label: "The text inside starts to overflow", desc: "A flex item's default `min-width: auto` says 'never shrink below my content' — except for text, which has no minimum, so it wraps, then clips. A long unbroken word (an email address, an order id) refuses to wrap and punches out of the card entirely." },
+    { label: "On a 375px phone, it's carnage", desc: "Four cards in a row on a phone. Each ~70px wide. Buttons overlap, text truncates mid-word, and something spills past the viewport — which is what creates a horizontal scrollbar on a page nobody meant to scroll sideways." },
+    { label: "One property would have prevented it", desc: "`flex-wrap: wrap` lets the row become several rows. Or grid's `repeat(auto-fill, minmax(240px, 1fr))` — as many columns as fit, never narrower than 240px, no media query, no count assumed. The bug was never the fourth card. It was assuming three." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="Try it — what a flex row does when it runs out of room"
+  code={`CONTAINER = 1200
+GAP = 24
+MIN_READABLE = 180   # below this, the card's text starts clipping
+
+def flex_row(n_cards, natural=340, wrap=False):
+    rows, row = [], []
+    for i in range(n_cards):
+        row.append(i)
+        used = len(row)*natural + (len(row)-1)*GAP
+        if wrap and used > CONTAINER and len(row) > 1:
+            row.pop(); rows.append(row); row = [i]
+    rows.append(row)
+    out = []
+    for r in rows:
+        space = CONTAINER - (len(r)-1)*GAP
+        each = min(natural, space // len(r))   # flex-shrink: 1 -- items give way
+        out.append((len(r), each))
+    return out
+
+for wrap in (False, True):
+    print(f"--- flex-wrap: {'wrap' if wrap else 'nowrap (the default)'} ---")
+    for n in (3, 4, 6):
+        for count, each in flex_row(n, wrap=wrap):
+            status = "ok" if each >= MIN_READABLE else "TEXT CLIPS / OVERFLOWS"
+            print(f"  {n} cards -> row of {count} @ {each}px each   {status}")
+    print()
+
+print("nowrap is the DEFAULT. Add one card and every card silently shrinks.")
+print("Nothing throws. Nothing logs. The layout just quietly stops working,")
+print("and it does it worst on the narrowest screen -- the one nobody tested.")`}
+/>
+
+## Which one is this page using, and why do you care?
+
+Because it tells you what to test.
+
+- **Flex row, `nowrap`** (the default): adding an item shrinks all of them. Test with *more items than the designer drew*.
+- **Flex row, `wrap`**: adding items creates new rows. Test that the last row doesn't look broken with 1 orphan item.
+- **Grid with fixed columns** (`repeat(3, 1fr)`): the count is hard-coded. Test at narrow widths — 3 columns on a phone is 3 columns on a phone.
+- **Grid with `auto-fill`/`minmax`**: genuinely responsive. Test the *minimum* — what happens below the min track size.
+
+<Callout type="tip">
+In DevTools' Elements panel, containers get a little **`flex`** or **`grid`** badge next to
+them. Click it and the browser overlays the tracks, the gaps and the item boundaries directly
+on the page. The Layout sidebar (next to Styles) lets you pin the overlay and label the grid
+lines. Before you file any layout bug, turn the overlay on and screenshot it — a picture of
+the actual grid ends the "works on my machine" conversation in one message.
+</Callout>
+
+<Term term="flex-shrink">
+The flex property that decides how much an item gives up when the container is too small.
+It defaults to **1**, meaning every flex item is willing to shrink — which is why adding one
+card silently narrows all of them rather than overflowing. `flex-shrink: 0` refuses to
+shrink (the item keeps its width and something else overflows instead). Its partner
+`flex-grow` (default **0**) decides who absorbs *leftover* space. The shorthand `flex: 1`
+means `flex-grow: 1; flex-shrink: 1; flex-basis: 0%` — grow and shrink freely, ignoring
+content width — which is not at all the same as `flex: auto`, and the difference is
+responsible for a great deal of confusion.
+</Term>
+
+<FirstTime title="Your mission: break a layout with the item count">
+<StepChecklist
+  steps={[
+    { text: "Find a row of cards", detail: "Any product grid, any dashboard. Inspect the parent. Does it show a `flex` or `grid` badge in Elements? Click it and turn on the overlay." },
+    { text: "Read the container's rules", detail: "Computed → `display`, `flex-wrap`, `grid-template-columns`. Now you know whether this layout assumed a number of items — and which number." },
+    { text: "Add an item that doesn't exist", detail: "Right-click a card in Elements → Duplicate element. Do it twice. Watch what the row does. Shrink? Wrap? Overflow? You just tested a data condition without touching the API." },
+    { text: "Now make the viewport a phone", detail: "Toggle device toolbar, 375px. Same test. This is where 'flex row, nowrap' goes from ugly to unusable, and where fixed grid columns stop being a layout at all." },
+    { text: "Look for the horizontal scrollbar", detail: "Console: `document.documentElement.scrollWidth > document.documentElement.clientWidth`. `true` means something overflows the viewport — a real, filable, extremely common bug." },
+  ]}
+/>
+You just found layout bugs by duplicating a DOM node and dragging a viewport. No data setup, no API, no test framework.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "`align-items: center` does nothing.",
+      fix: "You're on the wrong axis. `align-items` works across the CROSS axis. In a default `flex-direction: row` the cross axis is vertical, so it centres vertically — but the moment someone sets `flex-direction: column`, the axes swap and you now want `justify-content: center` for vertical. Read `flex-direction` in Computed before you touch anything else.",
+    },
+    {
+      symptom: "Text overflows its flex item instead of wrapping.",
+      fix: "A flex item defaults to `min-width: auto`, meaning it refuses to shrink below its content's intrinsic minimum. A long unbroken string — an email address, an order id, a URL — has a large minimum, so the item stays wide and punches out of the container. `min-width: 0` on the item lets it shrink and the text wrap. This is the single most-searched flexbox bug in existence and the fix is two words.",
+    },
+    {
+      symptom: "The page scrolls sideways on mobile and nothing looks wide enough to cause it.",
+      fix: "Something overflows the viewport. Find it: `[...document.querySelectorAll('*')].filter(e => e.getBoundingClientRect().right > document.documentElement.clientWidth)`. Usually a `nowrap` flex row, a fixed-width grid, or an image with no `max-width: 100%`. The culprit is often invisible — a zero-opacity element or one clipped by an ancestor.",
+    },
+    {
+      symptom: "The grid has three columns on a phone.",
+      fix: "`grid-template-columns: repeat(3, 1fr)` hard-codes the count. It is not responsive and never was. Replace with `repeat(auto-fill, minmax(240px, 1fr))`: as many columns as fit, never narrower than 240px, no media query needed. If you must keep the fixed count, it needs a media query, and now you own a breakpoint forever.",
+    },
+    {
+      symptom: "Two `flex: 1` items are different widths.",
+      fix: "`flex: 1` divides the leftover space equally, not the total width. Each item's own content, padding and border are taken first, then the remainder is split. If one has more padding, it ends up wider. Set `flex-basis: 0` (which `flex: 1` already does) AND equal padding, or use grid, where `1fr` columns really are equal.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Layout debugging is visual, and the browser will draw it for you:
+
+- **Elements → the `flex` / `grid` badge** — click it. The overlay draws tracks, gaps and item edges on the page.
+- **The Layout sidebar** — pin grid overlays, number the lines, show track sizes.
+- **Computed → `display`, `flex-direction`, `flex-wrap`, `grid-template-columns`** — the four values that predict every bug in this note.
+- **Device toolbar at 375px** — where `nowrap` rows and fixed column counts go to die.
+- **Console → `scrollWidth > clientWidth`** — a one-line test for the horizontal-scrollbar bug.
+- **Right-click → Duplicate element** — add the fourth card the developer never imagined, with no backend involved.
+
+Tester's habit: **every layout is a guess about how many items there will be and how wide
+the screen is.** Your job is to falsify both guesses. Duplicate a node; drag the viewport
+to 320px. Two gestures, and most responsive bugs surrender.
+</WhereToCheck>
+
+<WorkedExample title="the customer with a long email address">
+1. **Report:** "The account page looks broken." One screenshot, one customer, no repro. It gets closed as "cannot reproduce" twice over four months.
+2. **Look at the screenshot properly.** The email address runs out of its card and over the button beside it. Every other customer's card is fine.
+3. **The variable is the data, not the browser.** Their email is 41 characters. The test accounts are all `test@qa.com` — eleven.
+4. **Reproduce with a DOM edit, not a database.** Inspect the card, double-click the email text, paste in a 41-character address. It breaks instantly. Elapsed: fifteen seconds. Four months of "cannot reproduce" ends here.
+5. **Why?** The card is a flex item. Its default `min-width: auto` means it will not shrink below its content's intrinsic minimum width — and an unbroken string has no wrap opportunity, so its minimum is the full length of the address. The card refuses to shrink; the text spills.
+6. **Confirm with the overlay.** Turn on the flex badge. The item's box visibly extends past the container's track. The browser is showing you the bug in colour.
+7. **Two fixes, and they are not equivalent.** `min-width: 0` on the item lets it shrink so the text can wrap — correct. `overflow: hidden` hides the spill — which means the customer can no longer read their own email address, and you've converted a visible bug into a silent one.
+8. **The test that should exist:** every layout test should use fixture data that is *hostile* — the longest plausible name, the longest email, an order id with no spaces, a product title in German. `test@qa.com` tests nothing except that a short string is short.
+9. **The lesson:** "cannot reproduce" usually means "our fixture data is politer than our users." The bug was reproducible in fifteen seconds by anyone willing to type a long email into the Elements panel.
+</WorkedExample>
+
+<Callout type="mistake">
+Testing a responsive layout only at the breakpoints. 375, 768, 1024, 1440 — the four widths
+in the design file, which are the four widths the developer already checked. The bugs live
+*between* them, and especially at the extremes nobody drew: 320px (an iPhone SE, still in
+use), and the moment a flex row has one item more than the mock. Drag the viewport
+handle slowly instead of jumping between presets. Watch for the instant something stops
+fitting. That drag takes ten seconds and finds what four screenshots cannot.
+</Callout>
+
+<Quiz
+  question="A card in a flex row contains a 41-character email address. The card overflows its container instead of the text wrapping. What is the cause?"
+  options={[
+    "The card needs `overflow: hidden`",
+    "Flexbox is broken with long strings",
+    "A flex item defaults to `min-width: auto` — it won't shrink below its content's intrinsic minimum width, and an unbroken string has no wrap opportunity, so its minimum is the whole address. Setting `min-width: 0` lets the item shrink so the text can wrap.",
+    "The container needs `flex-wrap: wrap`"
+  ]}
+  answer={2}
+  explain="`min-width: auto` on flex items is the most-searched flexbox behaviour on the web, and it's deliberate: an item shouldn't shrink so far that its content becomes unreadable. But an unbroken string's intrinsic minimum is its entire length, so the item stays wide and overflows. `min-width: 0` overrides that. Option 1 is the dangerous one — `overflow: hidden` hides the text, meaning the customer can no longer read their own email address. It turns a visible bug into an invisible one, which is strictly worse. Option 4 wraps the row, not the text inside a card."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Flexbox vs grid, in one line", back: "Flexbox arranges along ONE axis (a bar). Grid defines a two-dimensional structure and places items into it (a theatre)." },
+    { front: "The three flex properties that do most of the work", back: "`justify-content` (along the main axis), `align-items` (across the cross axis), `gap` (space between). Change `flex-direction` and the first two swap meaning." },
+    { front: "A responsive card grid with no media query", back: "`grid-template-columns: repeat(auto-fill, minmax(240px, 1fr))` — as many columns as fit, never narrower than 240px." },
+    { front: "Why one extra card silently ruins a row", back: "`flex-shrink: 1` is the default and `flex-wrap: nowrap` is the default. Items shrink instead of wrapping. Nothing errors." },
+    { front: "Text overflows its flex item", back: "`min-width: auto` refuses to shrink below the content's intrinsic minimum; an unbroken string's minimum is its full length. Fix: `min-width: 0`. Never `overflow: hidden`." },
+    { front: "`align-items` does nothing", back: "You're on the wrong axis. It works across the cross axis; `flex-direction: column` swaps which axis that is." },
+    { front: "Margins in flex/grid", back: "Never collapse. 20px + 30px = 50px. Prefer `gap`, which spaces between items without spacing the edges." },
+    { front: "The one-line horizontal scrollbar test", back: "`document.documentElement.scrollWidth > document.documentElement.clientWidth` — true means something overflows the viewport." },
+  ]}
+/>
+
+<Challenge>
+Find a card grid on any site. Turn on the flex or grid overlay in Elements. Now duplicate a
+card twice (right-click → Duplicate element) and drag the viewport from 1440px down to
+320px slowly, watching the overlay. Note the exact width at which something first breaks —
+text clipping, an overlapping button, a horizontal scrollbar. Then run the `scrollWidth`
+check to confirm. You've just produced a bug report with a precise repro width, which is
+the difference between "looks broken on mobile" and a ticket someone can fix.
+</Challenge>
+
+<AskCommunity prompt="Layout question: [element] overflows/misaligns at [width]px. Container Computed: display=[flex/grid], flex-direction=[d], flex-wrap=[w], grid-template-columns=[g]. Item Computed: flex=[f], min-width=[m], padding=[p]. Screenshot with the DevTools flex/grid overlay ON attached.">
+The overlay screenshot is what makes this answerable. Without it, people guess at your DOM;
+with it, they can see the tracks, the gaps and exactly which item is refusing to shrink.
+And `min-width` on the item answers the most common flexbox question before it's asked.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://css-tricks.com/snippets/css/a-guide-to-flexbox/", title: "CSS-Tricks — the complete guide to flexbox (the canonical reference)", kind: "read" },
+    { href: "https://css-tricks.com/snippets/css/complete-guide-grid/", title: "CSS-Tricks — the complete guide to grid", kind: "read" },
+    { href: "https://flexboxfroggy.com/", title: "Flexbox Froggy — 24 levels, twenty minutes, and you'll never look flexbox up again", kind: "practice" },
+    { href: "https://cssgridgarden.com/", title: "Grid Garden — the same idea for grid", kind: "practice" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=phWxA89Dy94" title="Flexbox vs grid — which one, and when" minutes={12} />
+
+<Takeaways
+  points={[
+    "Flexbox lays out along one axis; grid defines a two-dimensional structure. Choose by the shape of the problem, not by habit.",
+    "`flex-wrap: nowrap` and `flex-shrink: 1` are the defaults, so one extra item silently shrinks every item rather than wrapping or erroring.",
+    "A flex item's `min-width: auto` refuses to shrink below its content's minimum — which is why a long email address overflows a card. `min-width: 0`, never `overflow: hidden`.",
+    "`repeat(auto-fill, minmax(240px, 1fr))` is a responsive grid with no media query and no assumed item count.",
+    "Every layout is a guess about item count and screen width. Duplicate a DOM node and drag the viewport to 320px — two gestures that falsify both guesses.",
+  ]}
+/>
+
+<Complete xp={10} />
