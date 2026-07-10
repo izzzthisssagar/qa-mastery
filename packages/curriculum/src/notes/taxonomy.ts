@@ -319,7 +319,7 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "variables-and-data-types",
         title: "Variables & data types",
         topics: [
-          { slug: "variables", title: "Variables", planned: true },
+          { slug: "variables", title: "Variables" },
           { slug: "numbers-text-booleans", title: "Numbers, text, booleans", planned: true },
           { slug: "types-in-java-and-python", title: "Types in Java & Python", planned: true },
           { slug: "naming", title: "Naming", planned: true },
@@ -329,8 +329,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "operators-and-expressions",
         title: "Operators & expressions",
         topics: [
-          { slug: "arithmetic", title: "Arithmetic", planned: true },
-          { slug: "comparison", title: "Comparison", planned: true },
+          { slug: "arithmetic", title: "Arithmetic" },
+          { slug: "comparison", title: "Comparison" },
           { slug: "logical-operators", title: "Logical operators", planned: true },
           { slug: "expressions", title: "Expressions", planned: true },
         ],
