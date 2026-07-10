@@ -1,0 +1,251 @@
+---
+title: "Reflow & repaint, gently"
+summary: "Change a colour and the browser repaints. Change a width and it recomputes the geometry of the entire page. Knowing which is which explains janky scrolling, dropped frames, and the layout that jumps as you reach for a button."
+tags: ["web-platform", "rendering", "performance", "track-a"]
+updated: "2026-07-10"
+---
+
+<Hook>
+You have, at some point, gone to click a button and had the page shove it sideways at
+the exact moment your finger arrived, so you clicked an advert instead. That was a
+**reflow**, and it wasn't bad luck — it was an image loading without declared dimensions.
+The browser had to recompute where everything on the page belonged, mid-reach. This note
+is about the difference between "recolour a thing" and "recompute the world," because
+one is nearly free and the other is why your phone gets warm.
+</Hook>
+
+<Callout type="analogy">
+**Repaint is repainting a wall. Reflow is moving a wall.** Repainting is annoying but
+local: the room's shape is unchanged, nothing else in the house cares. Moving a wall
+means measuring every room again, checking the doors still open, and possibly discovering
+the staircase no longer fits. The browser does the second thing far more often than
+anyone intends, and it does it while you are trying to click something.
+</Callout>
+
+## Three levels of cost
+
+| Change | What the browser must redo | Cost |
+|---|---|---|
+| `color`, `background`, `visibility` | **Repaint** — redraw pixels | cheap |
+| `width`, `height`, `margin`, `font-size`, adding a node | **<Term define="Reflow (or layout): the browser recomputes the position and size of elements. Because boxes affect their neighbours and ancestors, changing one element's geometry can force the entire page to be re-measured. It is the single most expensive routine operation in a browser.">Reflow</Term>** — recompute geometry, then repaint | expensive |
+| `transform`, `opacity` | **Composite** — the GPU shifts an existing layer | nearly free |
+
+That third row is why smooth animations use `transform: translateX()` instead of
+`left:` — one moves a finished picture, the other re-measures the page sixty times a
+second.
+
+<HotspotImage
+  src="/notes/the-web-platform-for-testers/browser-render.png"
+  alt="A rendered browser page whose layout is computed from boxes"
+  credit="Screenshot: Firefox browser — Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Firefox_Browser_Creative_Commons_screenshot.png"
+  pins={[
+    { x: 50, y: 40, label: "Every visible thing is a box with geometry", desc: "Position, width, height — computed during layout for every node in the render tree. Change one box's size and its siblings shift, its parent resizes, and the shift climbs the tree. Nothing about a page is truly local." },
+    { x: 50, y: 12, label: "An image with no width/height = a future reflow", desc: "The browser reserves no space for it, lays the page out without it, then the image arrives and everything below jumps down. That's Cumulative Layout Shift, and it is entirely preventable by typing two numbers into the HTML." },
+    { x: 50, y: 70, label: "Content below the fold pays for shifts above it", desc: "A banner that loads late pushes down every element beneath it. The user was reading a paragraph; now they're reading a different one. The bug is felt lower on the page than where it was caused." },
+    { x: 20, y: 55, label: "Fonts arrive late and re-measure the text", desc: "A web font loads after the fallback font has already been laid out. Different letter widths, so every line rewraps, so the text block changes height, so everything below moves. Two seconds after you started reading." },
+    { x: 80, y: 30, label: "Where DevTools proves it", desc: "Performance panel → record → look for purple 'Layout' bars. Each one is a reflow. A stack of them during a scroll is why the page feels like it's stuttering, and it names the script that caused each." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One image loads. Watch the page rearrange itself. — press Play"
+  intervalMs={1700}
+  nodes={[
+    { label: "📐 Layout runs — no image yet", desc: "The HTML has an `img` tag with no width or height attributes. The browser can't know how big it'll be, so it reserves ZERO space. Everything below is laid out as though the image doesn't exist." },
+    { label: "👀 The user starts reading", desc: "Text is painted, the page looks settled, and a human begins moving their finger toward a button. Nothing on screen suggests anything is still in flight. This is the calm before the shove." },
+    { label: "🖼 The image arrives — 400px tall", desc: "Now the browser knows. It must give the image a box, which means the box below it moves down 400px, which means its parent grows, which means everything after it moves. A reflow ripples through the tree." },
+    { label: "🤬 Everything jumps", desc: "The button the user was reaching for is now 400px lower, and an advert occupies where it used to be. The click lands on the advert. Every human on earth has done this, and every one of them blamed themselves." },
+    { label: "✅ The one-line fix", desc: "Put `width` and `height` on the `img` tag. The browser reserves the correct box before the bytes arrive, lays out once, and nothing ever jumps. Two attributes. This is measured as Cumulative Layout Shift, and it is a real, reportable, trivially fixable bug." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="Try it — count how many elements one change forces the browser to re-measure"
+  code={`# A simplified page: a stack of blocks, each with a height.
+page = [
+    {"name": "header",  "h": 80},
+    {"name": "hero-img","h": 0},     # no dimensions declared — reserves nothing!
+    {"name": "intro",   "h": 120},
+    {"name": "button",  "h": 44},
+    {"name": "footer",  "h": 200},
+]
+
+def layout(blocks):
+    y, positions = 0, {}
+    for b in blocks:
+        positions[b["name"]] = y
+        y += b["h"]
+    return positions
+
+before = layout(page)
+print("Layout pass 1 — image has no reserved space:")
+for name, y in before.items(): print(f"   {name:10} y={y}")
+
+# The image finally loads. It is 400px tall.
+page[1]["h"] = 400
+after = layout(page)
+print("\\nLayout pass 2 — image arrived (400px):")
+moved = 0
+for name, y in after.items():
+    delta = y - before[name]
+    if delta: moved += 1
+    print(f"   {name:10} y={y:4}  {'moved down ' + str(delta) + 'px' if delta else 'unchanged'}")
+
+print(f"\\n{moved} of {len(page)} elements moved because ONE element got a size.")
+print("The user was reaching for 'button'. It is now 400px lower.")
+print()
+print("Now declare the size up front:")
+page2 = [dict(b) for b in page]; page2[1]["h"] = 400
+print("   layout runs once, nothing ever moves:", layout(page2))
+print()
+print("Two HTML attributes (width, height) removed an entire class of bug.")`}
+/>
+
+## What testers actually do with this
+
+- **Watch for jumps.** Load a page slowly (throttle to Slow 3G) and *watch it settle*. Anything that moves after first paint is layout shift, and it's a bug with a metric attached.
+- **Scroll and feel.** Janky scrolling means work is happening per frame. Performance panel → record → look for long purple Layout bars.
+- **Resize the window.** Reflow on purpose. Layouts that break at odd widths are found in seconds, and almost nobody looks.
+
+<Callout type="tip">
+Reflow is not a thing you eliminate — it's how the page gets built in the first place.
+It's a thing you avoid doing *repeatedly and unnecessarily.* The tester's version of this
+is simple and physical: **throttle to Slow 3G and watch the page load without touching
+anything.** Every jump you see is a shift a real user experiences on every visit. Then
+narrow the window and watch it break. Two minutes, no code, and you'll have found more
+layout bugs than a week of clicking through happy paths.
+</Callout>
+
+<FirstTime title="Your mission: cause a reflow and watch it cost">
+<StepChecklist
+  steps={[
+    { text: "See the paint", detail: "DevTools → three-dot menu → More tools → Rendering → tick 'Paint flashing'. Now scroll and hover around. Green flashes are repaints. Some sites flash constantly — that's real work, happening for nothing." },
+    { text: "Watch layout jump", detail: "Throttle to Slow 3G and reload a news site. Watch text move as images and ads arrive. Time how long until it stops moving. That interval is what a real user lives with, every visit." },
+    { text: "Cause a reflow yourself", detail: "Console: `document.body.style.fontSize = '20px'`. Everything re-measures and rewraps at once — every line, every block. One property, one full-page reflow." },
+    { text: "Cause a composite instead", detail: "Console: `document.querySelector('h1').style.transform = 'translateX(100px)'`. It moves and nothing else does. The GPU shifted a finished layer. No layout, no repaint." },
+    { text: "Record the difference", detail: "Performance panel → record → do both of the above → stop. Purple 'Layout' bars appear for the font-size change and not for the transform. There's your proof, drawn." },
+  ]}
+/>
+Repaint seen, reflow caused, composite compared, and the whole thing recorded.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "The page jumps while loading and I click the wrong thing.",
+      fix: "Layout shift, and it's a measured, reportable bug (Cumulative Layout Shift — next-but-one note). Causes, in order of frequency: images without width/height attributes, ads and embeds inserted late, web fonts swapping in with different metrics, and content injected above the fold after paint. Report it with a throttled screen recording and the element that moved. The fix is usually two attributes.",
+    },
+    {
+      symptom: "Scrolling is janky on my phone but smooth on my laptop.",
+      fix: "Work is happening per frame, and the phone's CPU can't finish in the 16ms a 60fps frame allows. Performance panel with 4× CPU throttling will show long tasks and Layout bars during scroll. Usually a scroll handler that reads element geometry (forcing a reflow) on every single scroll event. Very common, very fixable, almost never reported because testers test on laptops.",
+    },
+    {
+      symptom: "An animation stutters.",
+      fix: "Check what's being animated. `left`, `top`, `width`, `height` trigger reflow every frame — 60 full-page re-measures per second. `transform` and `opacity` are composited on the GPU and cost almost nothing. This is worth reporting precisely: 'the menu animates `left`, causing layout on every frame; `transform: translateX` would be composited.' That sentence names the fix.",
+    },
+    {
+      symptom: "Everything is fine until I resize the window, then the layout breaks.",
+      fix: "Resizing forces a full reflow — you've just run the layout algorithm at a width nobody tested. That's not the bug; the bug is whatever fell apart. Resizing is one of the cheapest bug-finding techniques in existence, and the device toolbar (Ctrl+Shift+M) does it systematically at real device widths.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Rendering work, made visible:
+
+- **Rendering panel → Paint flashing** — green flashes mark repaints. Constant flashing on a static page is wasted work.
+- **Rendering panel → Layout Shift Regions** — highlights exactly what moved, as it moves. The most damning thing you can put in a bug report.
+- **Performance panel → record** — purple bars are Layout (reflow), green is Paint. Look for them during scroll or animation, where they have no business being.
+- **CPU throttling (4×) + Slow 3G** — the conditions your users actually have. Jank appears; on your laptop it never does.
+- **Device toolbar (Ctrl+Shift+M)** — resize systematically at real widths and watch what breaks.
+
+Tester's habit: **load every page throttled, hands off the keyboard, and just watch it
+settle.** Anything that moves after the first paint is a layout shift; every one is a
+real user clicking the wrong thing. It requires no code knowledge and finds bugs that
+happy-path clicking never will.
+</WhereToCheck>
+
+<WorkedExample title="the donate button that moved 400 pixels">
+A layout-shift bug with real consequences, found in ninety seconds.
+
+1. **Report:** "Users say they're accidentally clicking the newsletter signup instead of Donate." Product assumes it's a design problem and schedules a redesign.
+2. **Reproduce the way a user experiences it:** throttle to Slow 3G, reload, and watch — hands off. At about 1.4 seconds, a hero image lands and the entire page below it slams down 400 pixels.
+3. **Turn on Rendering → Layout Shift Regions.** The shifted area lights up. It's not subtle: the Donate button and the newsletter form swap positions on screen at the exact moment a user's finger would be arriving.
+4. **Inspect the culprit.** `<img src="hero.jpg">` — no `width`, no `height`. The browser reserved zero space, laid out the page without it, then re-laid-out everything when the bytes arrived.
+5. **Measure it honestly.** Lighthouse reports a Cumulative Layout Shift of 0.31. Anything above 0.1 is a failing score. This is not an aesthetic complaint; it is a number.
+6. **Confirm the fix cheaply.** In DevTools, add `width="1200" height="600"` to the img. Reload throttled. **Nothing moves.** CLS drops to near zero. You proved the fix before anyone wrote code.
+7. **The report:** 'Hero image lacks width/height attributes; the browser reserves no space and reflows the page when it loads, moving the Donate button 400px at ~1.4s on Slow 3G. CLS 0.31 (fails). Users click the newsletter form instead. Fix: declare the image's intrinsic dimensions. Verified locally by adding them — CLS ≈ 0.'
+8. **The redesign was cancelled.** The design was never the problem. Two missing HTML attributes were, and a tester found them by watching a page load slowly and refusing to touch anything.
+</WorkedExample>
+
+<Callout type="mistake">
+Testing layout only on a fast connection with everything cached. On your machine every
+image is already in the cache, so it has its dimensions instantly, so nothing shifts, so
+you conclude the page is stable — and you have accidentally tested the one scenario your
+users never experience. Layout shift is a **first-visit, cold-cache, slow-network**
+phenomenon by construction. If you don't hard-reload with throttling on, you will not see
+the bug that is, right now, making people click the wrong button. Speed and cache don't
+prevent layout shift; they hide it from *you*, specifically.
+</Callout>
+
+<Quiz
+  question="A menu animation stutters on phones. Inspecting shows it animates the `left` property. Why does changing it to `transform: translateX()` fix the stutter?"
+  options={[
+    "transform is a newer property, so it's faster",
+    "Animating `left` changes the element's geometry, forcing a reflow (re-measuring the page) and a repaint on every single frame — 60 times a second. `transform` is composited: the GPU shifts an already-painted layer without recomputing layout at all.",
+    "transform uses less memory",
+    "The stutter is caused by the network, not the animation"
+  ]}
+  answer={1}
+  explain="Layout is the expensive stage: changing a box's position or size can force the browser to re-measure that element, its siblings, and its ancestors. Doing that at 60fps is asking for a full geometry recalculation sixteen milliseconds apart, which a phone CPU cannot always finish in time — so frames drop and the eye reads it as stutter. `transform` and `opacity` skip layout and paint entirely; the compositor moves an existing texture. This is why 'animate transform, not left' is one of the few pieces of performance advice that is nearly always correct."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Repaint vs reflow vs composite", back: "Repaint = redraw pixels (cheap). Reflow = recompute geometry, then repaint (expensive, can cascade across the page). Composite = GPU shifts an existing layer (nearly free)." },
+    { front: "What triggers reflow", back: "width, height, margin, padding, font-size, adding/removing nodes, reading geometry (offsetHeight) — anything that changes or queries a box." },
+    { front: "Animate these two", back: "`transform` and `opacity`. They're composited and skip layout entirely. Animating `left`/`top`/`width` reflows every frame." },
+    { front: "Layout shift's #1 cause", back: "Images without width/height attributes. The browser reserves no space, lays out, then re-lays-out when the image arrives. Two attributes fix it." },
+    { front: "Why you never see layout shift", back: "It's a first-visit, cold-cache, slow-network phenomenon. Your warm cache and fast laptop hide it from you specifically." },
+    { front: "The two-minute layout audit", back: "Throttle to Slow 3G, hard reload, hands off, and watch what moves. Then narrow the window. More bugs than a week of happy-path clicking." },
+  ]}
+/>
+
+<Challenge>
+Pick a news site — they're the worst offenders. Throttle to Slow 3G, turn on Rendering →
+Layout Shift Regions, hard reload, and don't touch anything. Count how many times the
+content jumps and time how long until it stops. Then find one image in the Elements panel
+without `width` and `height` attributes. You have just done a Core Web Vitals audit with
+no tools beyond the browser, and you can name the exact element responsible.
+</Challenge>
+
+<AskCommunity prompt="Rendering question: [what jumps / stutters], visible when [throttled to X / on device Y]. Performance recording shows [purple Layout bars / long tasks] during [scroll / load / animation]. The animated or shifting element is [selector], and it changes [property]. Images involved have width/height: [yes/no].">
+The 'which property changes' line answers it outright — `left` and `width` reflow,
+`transform` and `opacity` don't. And 'images have width/height: no' is a complete
+diagnosis of a layout shift on its own. You're not asking what's wrong so much as
+confirming what you already found.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://web.dev/articles/avoid-large-complex-layouts-and-layout-thrashing", title: "web.dev — layout thrashing and how to avoid it", kind: "read" },
+    { href: "https://csstriggers.com/", title: "CSS Triggers — which property causes layout, paint, or composite", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=ZTnIxIA5KGw", title: "Reflow, repaint and the compositor", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=ZTnIxIA5KGw" title="Reflow and repaint, visually" minutes={9} />
+
+<Takeaways
+  points={[
+    "Repaint redraws pixels (cheap). Reflow recomputes geometry and can cascade through the page (expensive). Composite shifts a finished layer on the GPU (nearly free).",
+    "Animate `transform` and `opacity`; animating `left`, `top` or `width` forces a reflow on every frame and drops frames on real phones.",
+    "The commonest layout shift is an image with no width/height: the browser reserves no space, then shoves the page down when it loads — often as a user reaches for a button.",
+    "Layout shift only appears on a first visit, cold cache, slow network. Your fast, warm-cached laptop hides it from you specifically.",
+    "Throttle, hard reload, hands off, and watch what moves. Then resize the window. Two minutes, no code, more bugs than a week of happy-path testing.",
+  ]}
+/>
+
+<Complete xp={10} />

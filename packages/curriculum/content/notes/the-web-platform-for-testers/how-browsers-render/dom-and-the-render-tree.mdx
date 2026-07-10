@@ -1,0 +1,259 @@
+---
+title: "DOM & the render tree"
+summary: "The browser builds two trees, not one. Knowing why they differ explains invisible elements that still take up space, visible elements your test can't find, and screen readers that see a different page than you do."
+tags: ["web-platform", "rendering", "track-a"]
+updated: "2026-07-10"
+---
+
+<Hook>
+The browser does not draw the DOM. It builds a *second* tree — the render tree — and
+draws that one. Elements can exist in the first and be absent from the second. Some
+occupy space while being invisible; others are invisible and occupy nothing. A screen
+reader reads a *third* view entirely. Three trees, one page, and every "why can't I
+click that" bug lives in the gaps between them.
+</Hook>
+
+<Callout type="analogy">
+The DOM is **the guest list**; the render tree is **who actually walked into the room.**
+Some names on the list never show up (`display: none`). Some show up wearing an
+invisibility cloak — present, taking a chair, blocking the aisle, but nobody can see them
+(`opacity: 0`, `visibility: hidden`). Ask "who is on the list?" and you get one answer.
+Ask "who is in the room?" and you get another. Screenshots photograph the room. Your
+tests query the list. That mismatch is a bug factory.
+</Callout>
+
+## Two trees, built in sequence
+
+1. **The DOM** — every node from the HTML, plus everything JavaScript added. The full guest list. `document.querySelectorAll('*')` counts it.
+2. **The CSSOM** — every style rule, parsed and matched to nodes.
+3. **The <Term define="The tree the browser actually draws: the DOM minus everything that is never rendered (head, script, meta) and minus every node with display:none. Nodes with visibility:hidden or opacity:0 stay in it — they still get a box, still take space, and opacity:0 still catches clicks.">render tree</Term>** — DOM ∩ "actually rendered". Nodes with `display: none` are **excluded entirely**. `<head>`, `<script>`, `<meta>` never appear.
+4. **Layout** — for each node in the render tree, compute a box: position and size.
+5. **Paint** — fill in pixels.
+
+The critical distinction, and it costs testers hours:
+
+| CSS | In the DOM? | In the render tree? | Takes space? | Clickable? |
+|---|---|---|---|---|
+| `display: none` | yes | **no** | no | no |
+| `visibility: hidden` | yes | yes | **yes** | no |
+| `opacity: 0` | yes | yes | **yes** | **YES** |
+
+That last row is the invisible overlay from Module 3, formally explained.
+
+<HotspotImage
+  src="/notes/the-web-platform-for-testers/dom-tree.png"
+  alt="A diagram of the DOM as a tree of nodes"
+  credit="Diagram: DOM model — Wikimedia Commons, CC BY-SA 3.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:DOM-model.svg"
+  pins={[
+    { x: 50, y: 8, label: "document — the root of the DOM", desc: "Everything hangs off this. `document.querySelectorAll('*').length` counts the whole guest list, including nodes that will never be drawn: script tags, meta tags, and anything with display:none." },
+    { x: 50, y: 38, label: "Branches the render tree drops", desc: "`head`, `script`, `style`, `meta` — present in the DOM, absent from the render tree, because they were never meant to be seen. Same for any node CSS marks `display: none`. The render tree is a strict subset." },
+    { x: 30, y: 72, label: "A node with visibility: hidden", desc: "Stays in the render tree. Gets a box. Occupies space, pushes its siblings around, and cannot be clicked. This is why removing a hidden element sometimes makes the layout jump — it was holding the door open all along." },
+    { x: 70, y: 72, label: "A node with opacity: 0", desc: "Fully rendered, fully laid out, fully clickable, and completely invisible. Your eyes say the button is exposed; the browser says this transparent thing is on top. `document.elementFromPoint()` sides with the browser." },
+    { x: 50, y: 55, label: "The accessibility tree — the third view", desc: "Built alongside, this is what a screen reader consumes: roles, names, states. An element can be visible and yet absent here (aria-hidden), which means sighted users see it and blind users don't. That gap is an accessibility bug, and it's invisible to screenshots." },
+  ]}
+/>
+
+<FlowAnimation
+  title="From HTML to pixels: the five stages — press Play"
+  intervalMs={1700}
+  nodes={[
+    { label: "🌳 Parse HTML → the DOM", desc: "Tags become nodes; nodes become a tree. Every element the server sent, plus everything JavaScript adds later. This is the tree the Elements panel shows and the tree your test locators query." },
+    { label: "🎨 Parse CSS → the CSSOM", desc: "Every rule from every stylesheet, resolved and matched against nodes. Both trees must exist before anything can be drawn — which is exactly why CSS is render-blocking (Module 3's critical path)." },
+    { label: "✂️ Combine → the render tree", desc: "DOM plus styles, minus everything that isn't drawn: head, script, meta, and every node with `display: none`. A node dropped here is invisible to layout, to paint, and to a click. It might as well not exist — except that querySelector still finds it." },
+    { label: "📐 Layout — every box gets a size and place", desc: "The browser computes geometry for each render-tree node: x, y, width, height. `visibility: hidden` nodes DO get a box — they hold their space and shove their neighbours around while being unseeable." },
+    { label: "🖌 Paint — pixels at last", desc: "Colours, borders, text, shadows, layered front to back. What you photograph. Note that a fully transparent node was painted too — painted as nothing, on top of the button you're trying to click." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="Try it — build a render tree from a DOM, and see what disappears"
+  code={`dom = [
+    {"tag": "head",   "css": {}},
+    {"tag": "script", "css": {}},
+    {"tag": "h1",     "css": {}},
+    {"tag": "nav",    "css": {"display": "none"}},        # hidden menu
+    {"tag": "spacer", "css": {"visibility": "hidden"}},   # invisible, still there
+    {"tag": "overlay","css": {"opacity": "0"}},           # invisible AND clickable
+    {"tag": "button", "css": {}},
+]
+
+NEVER_RENDERED = {"head", "script", "style", "meta", "title", "link"}
+
+def classify(node):
+    if node["tag"] in NEVER_RENDERED:            return ("dropped", "not a visual element", False, False)
+    if node["css"].get("display") == "none":     return ("dropped", "display:none", False, False)
+    if node["css"].get("visibility") == "hidden":return ("kept",    "visibility:hidden", True, False)
+    if node["css"].get("opacity") == "0":        return ("kept",    "opacity:0", True, True)
+    return ("kept", "visible", True, True)
+
+print(f"{'node':10} {'render tree':12} {'why':20} {'takes space':12} {'clickable'}")
+print("-"*74)
+for n in dom:
+    tree, why, space, click = classify(n)
+    print(f"{n['tag']:10} {tree:12} {why:20} {str(space):12} {click}")
+
+kept = [n['tag'] for n in dom if classify(n)[0] == "kept"]
+print()
+print(f"DOM nodes:          {len(dom)}   <- what querySelectorAll('*') counts")
+print(f"Render tree nodes:  {len(kept)}   {kept}")
+print()
+print("Read the last two rows. 'overlay' is invisible, occupies space, AND eats")
+print("clicks meant for 'button'. Your screenshot shows a button. The browser")
+print("delivers the click to a ghost. That is not a metaphor; it is the table.")`}
+/>
+
+## Why testers need the third tree
+
+The **accessibility tree** is what screen readers consume: each element's *role*
+(button, link, heading), its *accessible name*, and its *state* (pressed, expanded,
+disabled). Modern test frameworks query this tree too — `getByRole('button', { name:
+'Pay' })` is asking the accessibility tree, not the DOM.
+
+That's not a coincidence. A locator that finds an element by its role and name is testing
+the same thing a blind user relies on. If your test can't find the button by its role and
+accessible name, **a screen reader can't either.** Your locator strategy and your
+accessibility are the same problem wearing two hats.
+
+<Callout type="tip">
+Open DevTools → Elements → **Accessibility** pane (next to Styles). Select any element
+and read its computed role and accessible name. A `<div onclick=...>` that looks like a
+button will show role `generic` and no name — meaning a screen-reader user cannot find
+it, and neither can `getByRole('button')`. That single pane turns "is this accessible?"
+from a vague worry into a two-second check with a printed answer, and it produces
+genuinely valuable bug reports that almost nobody files.
+</Callout>
+
+<FirstTime title="Your mission: see all three trees">
+<StepChecklist
+  steps={[
+    { text: "Count the DOM", detail: "Console: `document.querySelectorAll('*').length`. That's the guest list — including script tags and everything display:none." },
+    { text: "Hide something two different ways", detail: "Pick an element in Elements. Set `display: none` — it vanishes and the layout closes the gap. Undo, set `visibility: hidden` — it vanishes and the gap REMAINS. Two 'invisibles', two behaviours." },
+    { text: "Make a clickable ghost", detail: "Set an element's `opacity: 0`. It's invisible, still there, and still catches clicks. Now run `document.elementFromPoint(x, y)` over it. The DOM tells the truth your eyes can't." },
+    { text: "Read the accessibility tree", detail: "Elements → Accessibility pane. Select a button: role `button`, name from its text. Select a `<div>` that acts like a button: role `generic`, no name. You just found a real a11y bug in whatever site you're on." },
+    { text: "Query the way a framework does", detail: "Console: `document.querySelector('[role=button]')` vs `document.querySelector('button')`. Different questions. Playwright's getByRole asks the first kind — the accessible kind." },
+  ]}
+/>
+Three trees, seen: the guest list, the room, and what a screen reader hears.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "My test finds the element, but clicking it does nothing.",
+      fix: "It's in the DOM (so the locator succeeds) but something is on top, or it isn't in the render tree the way you think. Check: is an `opacity: 0` element covering it (`document.elementFromPoint`)? Is the element itself `visibility: hidden`? Playwright refuses to click non-visible elements and will say so — read its error, it's describing the render tree.",
+    },
+    {
+      symptom: "Removing a hidden element made the whole layout jump.",
+      fix: "It was `visibility: hidden`, not `display: none` — present in the render tree, holding its box, pushing siblings. Deleting it freed that space and everything moved. Not a bug, but knowing the difference stops you from filing one — and it explains layout shift, which IS a bug (last note of this chapter).",
+    },
+    {
+      symptom: "`getByRole('button', { name: 'Submit' })` can't find a button I can plainly see.",
+      fix: "That button probably isn't one. Check the Accessibility pane: a `<div>` or `<span>` with a click handler has role `generic` and no accessible name. Your locator is querying the accessibility tree and correctly reporting that no such button exists — which means screen-reader users cannot find it either. File it as an accessibility bug, not a test problem. You've found something real.",
+    },
+    {
+      symptom: "An element is visible on screen but `aria-hidden=\"true\"`.",
+      fix: "It's in the render tree (sighted users see it) and excluded from the accessibility tree (screen readers don't). Sometimes deliberate — decorative icons should be hidden from assistive tech. Sometimes catastrophic — an entire modal marked aria-hidden is invisible to a blind user while dominating everyone else's screen. Check which one you're looking at, then report accordingly.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Three trees, three panels:
+
+- **Elements panel** — the DOM. What `querySelector` sees. Includes nodes that will never be drawn.
+- **Elements → Computed** — the resolved styles for the selected node: is it `display: none`, `visibility: hidden`, `opacity: 0`? The render-tree membership card.
+- **Elements → Accessibility pane** — role, accessible name, state. What a screen reader hears and what `getByRole` queries.
+- **`document.elementFromPoint(x, y)`** — who is actually on top at those coordinates. The ghost detector.
+- **`getComputedStyle(el).display`** in the console — settles arguments instantly.
+
+Tester's habit: when appearance and behaviour disagree, ask **which tree am I actually
+talking about?** The DOM says the element exists. The render tree says whether it's
+drawn and where. The accessibility tree says whether a human using a screen reader can
+reach it. Three answers, and only the first one is what most people check.
+</WhereToCheck>
+
+<WorkedExample title="the button that wasn't a button">
+An automation failure that turned into a genuine accessibility finding.
+
+1. **Symptom:** `page.getByRole('button', { name: 'Add to cart' })` times out. The button is *right there* on screen. The tester's first instinct: "Playwright is broken" or "I need a different locator."
+2. **The cheap check.** In the console: `document.querySelectorAll('button').length` → 3. But none of them says "Add to cart". So the thing on screen is not a `<button>` element.
+3. **Inspect it.** Elements panel shows `<div class="btn-primary" onclick="addToCart()">Add to cart</div>`. A div, styled to look like a button, with a click handler.
+4. **Accessibility pane.** Role: `generic`. Accessible name: *(empty)*. That's the whole story, printed by the browser.
+5. **Draw the conclusion carefully.** The locator was correct. Playwright asked the accessibility tree for a button named "Add to cart" and was truthfully told there isn't one. **The test didn't fail; it reported a fact.**
+6. **What it means for real users:** a screen-reader user tabbing through the page never lands on it (a div isn't focusable), and if they do reach it, it announces as nothing. They cannot add items to a cart. The site does not work for them.
+7. **The report:** '"Add to cart" is a `<div>` with an onclick handler: role `generic`, no accessible name, not keyboard-focusable. Screen-reader and keyboard users cannot add items to the cart. Fix: use a `<button>` element. Evidence: Accessibility pane screenshot; `getByRole('button', {name: "Add to cart"})` finds nothing.'
+8. **The lesson worth carrying:** a locator that "doesn't work" is often a locator that is working perfectly and telling you something you didn't want to hear. Role-based locators are an accessibility audit that runs on every test, for free.
+</WorkedExample>
+
+<Callout type="mistake">
+Treating `display: none`, `visibility: hidden` and `opacity: 0` as three ways of saying
+the same thing. They produce three completely different worlds. `display: none` removes
+the node from the render tree — no box, no space, no clicks, and layout closes over it
+like water. `visibility: hidden` keeps the box: it still shoves its neighbours around,
+still can't be clicked. `opacity: 0` keeps *everything* — box, space, and full
+clickability — and merely paints nothing. That third one is why an "empty" region of a
+page can swallow every click you aim at the button beneath it, and why screenshots are
+such confident liars about interactive pages.
+</Callout>
+
+<Quiz
+  question="`getByRole('button', { name: 'Add to cart' })` times out, but you can clearly see the button. Inspecting shows a `div` with a `btn` class and an `onclick` handler, containing the text 'Add to cart'. What have you found?"
+  options={[
+    "A flaky locator — switch to a CSS selector and move on",
+    "A real accessibility bug. The element has role `generic` and no accessible name, so it isn't a button to the accessibility tree — meaning screen-reader users can't find it and keyboard users can't focus it. The locator reported the truth; the markup is the defect.",
+    "Playwright doesn't support div elements",
+    "The page hasn't finished loading"
+  ]}
+  answer={1}
+  explain="Role-based locators query the accessibility tree — the same view a screen reader consumes. When `getByRole('button')` finds nothing, it is stating that no button exists there, which is precisely what a blind user experiences. Switching to a CSS selector would make the test pass and leave real users unable to buy anything. This is the single best argument for role-based locators: they fail exactly when your accessibility fails, and that failure is information you'd never get otherwise."
+/>
+
+<Flashcards
+  cards={[
+    { front: "DOM vs render tree", back: "DOM = every node, including head/script and display:none. Render tree = only what gets drawn. The render tree is a strict subset." },
+    { front: "The three hiding methods", back: "display:none — out of the render tree, no space, no clicks. visibility:hidden — in the tree, takes space, no clicks. opacity:0 — takes space AND still clickable." },
+    { front: "The accessibility tree", back: "Roles, names and states — what screen readers consume and what getByRole queries. An element can be visible and absent here (aria-hidden), or present and unnamed (a div acting as a button)." },
+    { front: "Why role locators matter", back: "If getByRole can't find your button, a screen reader can't either. Your locator strategy and your accessibility are the same problem." },
+    { front: "The five stages", back: "Parse HTML → DOM. Parse CSS → CSSOM. Combine → render tree. Layout (boxes). Paint (pixels)." },
+    { front: "The ghost detector", back: "`document.elementFromPoint(x, y)` names whatever is actually topmost — usually the transparent overlay eating your clicks." },
+  ]}
+/>
+
+<Challenge>
+On any site, open the Accessibility pane and inspect five things that look clickable.
+How many are real `<button>` or `<a>` elements with proper accessible names, and how many
+are `<div>`s pretending? Every pretender you find is a genuine bug that keyboard and
+screen-reader users hit daily, and it's a bug you found in seconds using a panel most
+testers never open.
+</Challenge>
+
+<AskCommunity prompt="Element question: locator `[paste]` can't find `[element]`. Elements panel shows the markup: [paste]. Computed style: display=[x], visibility=[y], opacity=[z]. Accessibility pane: role=[r], name=[n]. `document.elementFromPoint(x,y)` returns: [element].">
+Those five facts distinguish all the cases at once: not in the render tree, hidden but
+present, a transparent ghost on top, or an element that simply isn't the role you think.
+Collecting them takes a minute and often converts 'my test is flaky' into 'this markup
+is inaccessible', which is a far more valuable sentence.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://web.dev/articles/howbrowserswork", title: "How browsers work — DOM, CSSOM, render tree, layout, paint", kind: "read" },
+    { href: "https://developer.mozilla.org/en-US/docs/Glossary/Accessibility_tree", title: "MDN — the accessibility tree", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=ZTnIxIA5KGw", title: "The render tree, visually", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=ZTnIxIA5KGw" title="How the browser builds and renders the DOM" minutes={10} />
+
+<Takeaways
+  points={[
+    "The browser builds the DOM, then a render tree that excludes head/script and anything with display:none. It draws the second one, not the first.",
+    "display:none removes the box entirely; visibility:hidden keeps the box (still takes space, can't be clicked); opacity:0 keeps everything, including clickability.",
+    "A third tree — the accessibility tree — carries roles, names and states. Screen readers and getByRole both query it.",
+    "If getByRole can't find your button, a screen reader can't either. A 'failing' role locator is often a real accessibility bug reporting itself.",
+    "When appearance and behaviour disagree, ask which tree you're talking about. Elements, Computed styles, and the Accessibility pane give three different truths.",
+  ]}
+/>
+
+<Complete xp={10} />
