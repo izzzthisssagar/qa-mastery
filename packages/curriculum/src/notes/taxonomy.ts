@@ -311,8 +311,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         topics: [
           { slug: "what-code-is", title: "What code is" },
           { slug: "languages-overview", title: "Languages overview" },
-          { slug: "java-vs-python-for-beginners", title: "Java vs Python for beginners", planned: true },
-          { slug: "your-first-program", title: "Your first program", planned: true },
+          { slug: "java-vs-python-for-beginners", title: "Java vs Python for beginners" },
+          { slug: "your-first-program", title: "Your first program" },
         ],
       },
       {
