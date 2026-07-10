@@ -1,0 +1,292 @@
+---
+title: "Reading input"
+summary: "The moment a program reads input from the outside world is the moment it becomes untrustworthy. Input always arrives as text — even when you asked for a number — and it arrives in whatever shape a human or another machine felt like sending. For a tester, the input boundary is where the most bugs live, because it's where your assumptions meet reality."
+tags: ["programming-basics", "java", "python", "input-output", "track-b"]
+updated: "2026-07-11"
+---
+
+<Hook>
+A program that only ever prints is a monologue. The instant it *reads* something — a typed
+line, a file, a form field, a network request — it starts a conversation, and conversations
+are where things go wrong. Here is the single most important fact about input, true in every
+language: **what comes in is text, and it is whatever the sender chose to send.** You asked
+for an age; they typed "twenty". You asked for a price; they pasted "£19.99 ". You asked for
+a name; they sent 5,000 characters and a semicolon. The input boundary is the border crossing
+of your program, and a tester is the customs officer.
+</Hook>
+
+<Callout type="analogy">
+Reading input is like answering the door to someone you cannot see. You *hope* it's the
+delivery you ordered, but you don't actually know until you open it — and by then they're
+already inside. A careful program does what a careful person does: it opens the door a crack,
+checks who's there, and validates before letting anything through. The naïve program flings
+the door wide, assumes the visitor is exactly who it expected, and is astonished when a number
+field arrives holding the word "cat". Every input your program reads is a stranger at the
+door until you've checked its papers.
+</Callout>
+
+## The three truths of input
+
+**1. Input is always text — even numbers.** `input()` in Python and a line from Java's
+`Scanner` hand you a **string**, always. `"42"` is not `42`. If you want the number, you must
+*convert* it yourself — and conversion can fail, because the visitor might have typed "cat".
+
+**2. Input carries invisible passengers.** A trailing newline, leading spaces, a Windows
+`\r`, a zero-width character pasted from a website. `"42"` and `"42 "` look identical on
+screen and are different strings. Half of all "but it looks the same!" bugs are whitespace
+you can't see. Trim before you trust.
+
+**3. Input can end, or never come.** A file runs out of lines. A user presses Ctrl-D. A
+network socket hangs forever. Reading past the end, or blocking on input that never arrives,
+are two of the most common ways a program freezes or crashes at the boundary.
+
+<HotspotImage
+  src="/notes/programming-basics/terminal-output.png"
+  alt="A Linux terminal where a user types commands at prompts and the shell responds with output"
+  credit="Linux terminal session — Wikimedia Commons, CC BY-SA"
+  creditHref="https://commons.wikimedia.org/wiki/File:Linux_command-line._Bash._GNOME_Terminal._screenshot.png"
+  pins={[
+    { x: 30, y: 5, label: "`ping -q fa.wikipedia.org` — a line of input", desc: "Everything the user types at a prompt is INPUT the shell reads, parses, and acts on. The shell is a program in a read-eval-print loop: read one line, do what it says, print the result, wait for the next. Your own input-reading programs work exactly this way — the loop is the same, only the vocabulary differs." },
+    { x: 25, y: 24, label: "The output that comes back", desc: "Below each typed command is the program's OUTPUT — the response to the input above it. Learn to read a terminal as a dialogue: odd lines are what the human said (input), even blocks are what the machine said back (output). Confusing the two is the first thing to get straight when a session 'looks broken'." },
+    { x: 18, y: 15, label: "`[root@localhost ~]#` — the prompt is a question", desc: "The prompt means 'I have read everything so far and I'm waiting for your next input.' When a program hangs with no prompt and no output, it is usually BLOCKED waiting for input that will never come — the single most common freeze at the input boundary." },
+    { x: 40, y: 78, label: "`yum search wiki` — input drives the next action", desc: "Each command is input that changes what the program does next. This is why input is dangerous: it doesn't just supply data, it steers behaviour. An input field that can change what code runs is exactly where injection bugs are born — the visitor's words become the program's instructions." },
+    { x: 55, y: 92, label: "`73% [===...]` — output that reacts to earlier input", desc: "The download progress bar exists because an earlier input (`yum search`) asked for work. Input and output are a loop, not a one-shot: what you read shapes what you print, which prompts the next thing you read. Testing the boundary means testing that whole loop, not just one line." },
+  ]}
+/>
+
+<FlowAnimation
+  title="The journey of one typed line — press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "The program asks and waits", desc: "It calls `input()` / `Scanner.nextLine()` and BLOCKS — execution stops dead until a full line arrives. Nothing else happens. This is why a program 'freezes': it's not broken, it's politely waiting for input that hasn't come yet." },
+    { label: "The human types and presses Enter", desc: "Every character is buffered until Enter. Then the whole line — including the invisible newline Enter produced — is handed to your program. That newline is passenger number one, and it rides along whether you want it or not." },
+    { label: "You receive a STRING, always", desc: "Not a number, not a date, not a 'yes' — a string of characters. `\"42\"`, `\"  42 \\n\"`, `\"cat\"`. The type system can't help you here: the door only ever delivers text, and it's your job to figure out what that text is supposed to be." },
+    { label: "You must clean it", desc: "Trim the whitespace (`.strip()` / `.trim()`), because `\"42 \"` isn't `\"42\"`. Strip stray `\\r` from Windows line endings. Only now is the string in a shape you can reason about — and skipping this step is the source of a huge share of boundary bugs." },
+    { label: "You must convert and validate", desc: "If you need a number, convert (`int(...)` / `Integer.parseInt(...)`) — and that can THROW, because the visitor typed 'cat'. Wrap it, check it, decide what to do on bad input. The program that assumes conversion always succeeds is one hostile input away from a crash." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="Run it — reading and validating input in Python"
+  code={`# We can't type interactively here, so we simulate the strings input() would return.
+def clean(raw):
+    return raw.strip()   # remove leading/trailing whitespace, including the newline
+
+# 1. input() ALWAYS returns a string -- even digits
+raw_age = "42\\n"                      # what input() really hands you: text + newline
+print("raw repr:", repr(raw_age))     # note the trailing \\n and that it's a str
+
+# 2. Clean it first
+age_text = clean(raw_age)
+print("cleaned repr:", repr(age_text))
+
+# 3. Convert -- and be ready for it to FAIL
+def to_age(text):
+    text = text.strip()
+    try:
+        n = int(text)
+    except ValueError:
+        return None, f"not a whole number: {text!r}"
+    if n < 0 or n > 150:
+        return None, f"out of range: {n}"
+    return n, None
+
+for sample in ["42", "  42 ", "cat", "-3", "twenty", "999", ""]:
+    value, error = to_age(sample)
+    if error:
+        print(f"  reject {sample!r:>8}  -> {error}")
+    else:
+        print(f"  accept {sample!r:>8}  -> age is {value}, and {value + 1} next year")
+
+# 4. The classic bug: forgetting it's a string
+a = "10"          # imagine this came from input()
+b = "5"
+print("string '+':", a + b, "  <- concatenation, NOT 15")
+print("as numbers:", int(a) + int(b))`}
+/>
+
+Now Java. Java makes the string-ness of input unavoidable — you reach for `Scanner`, and its
+`nextInt` versus `nextLine` distinction is a famous beginner trap in its own right:
+
+<CodePlayground
+  language="java"
+  title="Run it — reading and validating input in Java"
+  code={`public class Main {
+    public static void main(String[] args) {
+        // Simulated input lines (no interactive stdin here).
+        String[] samples = {"42", "  42 ", "cat", "-3", "twenty", "999", ""};
+
+        for (String raw : samples) {
+            String text = raw.trim();          // 1. always clean first
+            String result = toAge(text);        // 2. convert + validate, catch failure
+            System.out.printf("  %-8s -> %s%n", "'" + raw + "'", result);
+        }
+
+        // 3. The classic bug: '+' on strings concatenates, it does not add
+        String a = "10";                        // imagine this came from a Scanner line
+        String b = "5";
+        System.out.println("string '+': " + (a + b) + "   <- '105', NOT 15");
+        System.out.println("as numbers: " + (Integer.parseInt(a) + Integer.parseInt(b)));
+    }
+
+    static String toAge(String text) {
+        int n;
+        try {
+            n = Integer.parseInt(text.trim());  // throws if not a whole number
+        } catch (NumberFormatException e) {
+            return "reject: not a whole number";
+        }
+        if (n < 0 || n > 150) return "reject: out of range (" + n + ")";
+        return "accept: age " + n + ", " + (n + 1) + " next year";
+    }
+}`}
+/>
+
+<Term define={`Turning input text into the typed value your program actually needs — a string like "42" into the integer 42, "2026-07-11" into a date, "true" into a boolean. Parsing is the step where input becomes usable, and it is also where input most often FAILS, because the incoming text may not represent what you expected ("cat" is not a number, "2026-13-40" is not a date). The rule that follows from this: every parse can fail, so every parse needs a plan for failure — a try/except, a validation check, a default. A program that parses without guarding is trusting a stranger to always fill the form in correctly, and strangers don't.`}>parsing</Term>
+
+<Term define={`Cleaning up input before you use it — most commonly \`.strip()\` in Python or \`.trim()\` in Java to remove leading and trailing whitespace, including the newline that Enter produces and any \`\\r\` from Windows line endings. It sounds trivial and it prevents an enormous share of real bugs, because \`"42"\` and \`"42 "\` are different strings that look identical on screen: a lookup fails, a comparison returns false, a login rejects a correct password — all because of an invisible trailing space nobody can see. Trim at the boundary, the moment input arrives, so the rest of your program never has to think about it.`}>sanitising</Term>
+
+<Callout type="tip">
+The professional shape for reading input is always the same three steps, in this order:
+**read → clean → validate.** Read the raw text. Clean it (trim whitespace, normalise case if
+needed). Validate it (right type? in range? not empty? not hostile?) and decide what happens
+when it's bad — *before* the value flows into the rest of your program. Do this at the boundary,
+once, and everything downstream can trust the data. Skip it, and you've let a stranger walk
+straight into the building.
+</Callout>
+
+<FirstTime title="Your mission: break the input, on purpose">
+<StepChecklist
+  steps={[
+    { text: "See that input is text", detail: "In the Python playground, look at the sample `\"42\"`. It's in quotes because that's what `input()` returns — a string, never a number. Internalise this and you've avoided the number-one input bug." },
+    { text: "Feed it garbage", detail: "The samples already include `\"cat\"`, `\"twenty\"`, `\"-3\"` and `\"\"` (empty). Run it and watch each get rejected with a specific reason. This is what validation looks like: not a crash, a decision." },
+    { text: "Find the whitespace trap", detail: "Notice `\"  42 \"` (with spaces) is accepted — because we trim first. Remove the `.strip()` from `clean()` and watch it fail to parse. That invisible space is a bug generator." },
+    { text: "Trigger the concatenation bug", detail: "See `\"10\" + \"5\"` produce `\"105\"`, not `15`. This is what happens when you forget input is a string and 'add' two of them. It's one of the most common beginner defects alive." },
+    { text: "Break the parse", detail: "In the Java playground, the `\"cat\"` sample hits `NumberFormatException` and is caught. Delete the try/catch and imagine that exception reaching a user. Unhandled parse failures are how boundaries crash." },
+  ]}
+/>
+You've now met every major input hazard — text-not-number, invisible whitespace, failed parse, empty input — and handled each deliberately.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "I read a number from input and 'adding' two of them concatenates instead.",
+      fix: "Input is a string. `\"10\" + \"5\"` is `\"105\"`, not `15`. Convert first: `int(x)` in Python, `Integer.parseInt(x)` in Java. This is the single most common input bug, and it's invisible in the output — `\"105\"` looks like a plausible number until you check.",
+    },
+    {
+      symptom: "A value that should match doesn't — a login fails with the right password, a lookup misses.",
+      fix: "Almost always trailing whitespace or a stray newline. `\"secret\"` and `\"secret \"` (or `\"secret\\n\"`) are different strings. Trim input the moment you read it: `.strip()` / `.trim()`. Print `repr()` to make the invisible passenger visible.",
+    },
+    {
+      symptom: "The program crashes when the user types letters into a number field.",
+      fix: "An unguarded parse. `int(\"cat\")` raises `ValueError`; `Integer.parseInt(\"cat\")` throws `NumberFormatException`. Wrap the conversion (try/except, try/catch) and decide what to do on failure — re-prompt, use a default, or show a clear error. Never assume conversion succeeds.",
+    },
+    {
+      symptom: "The program freezes with no output and no error.",
+      fix: "It's blocked waiting for input that isn't coming. `input()` / `Scanner.nextLine()` stops the program until a full line arrives. If stdin was redirected from an empty source, or the other end of a pipe never sends, it waits forever. Check what's feeding stdin, and handle end-of-input (EOF) explicitly.",
+    },
+    {
+      symptom: "In Java, my first text input after reading a number comes back empty.",
+      fix: "The classic `Scanner` trap: `nextInt()` reads the number but leaves the newline in the buffer, so the next `nextLine()` reads that leftover empty line. Add a `scanner.nextLine()` to consume the leftover, or read everything with `nextLine()` and parse manually. This one has confused every Java beginner ever.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+The input boundary is the richest bug-hunting ground a tester has. Attack it deliberately:
+
+- **`repr()` / print the raw string** — reveal the trailing newline, the leading space, the `\r` you can't see on screen.
+- **Feed it the wrong type** — letters into a number field, a number into a date. Does it reject cleanly or crash?
+- **Feed it the edges** — empty input, one character, a 100,000-character line, a negative, a zero, the maximum.
+- **Feed it hostile strings** — quotes, semicolons, `<script>`, SQL fragments, unicode. The input that changes what code runs is where injection lives.
+- **Feed it nothing** — press Enter with no text, or send EOF (Ctrl-D). Empty and end-of-input are separate cases and both get forgotten.
+
+Tester's mantra at the boundary: **never trust input, always trim it, and assume every
+conversion can fail.** The developer writes the happy path — the user types a valid age. The
+tester's entire job is the unhappy paths — every other thing a stranger might send.
+</WhereToCheck>
+
+<WorkedExample title="the password that was correct but wrong">
+1. **The report:** "A user swears their password is right, but login keeps failing. Reset it — same password — and now it works. We can't reproduce it on our machines."
+2. **The developer checks the hashing, the database, the comparison logic.** All correct. The stored hash matches when they test with the same password. Baffling.
+3. **A tester asks how the password *arrives*.** It comes from a form field, read as a string, hashed, and compared. Standard. So the tester prints the raw incoming value with `repr()` before hashing.
+4. **The screen shows `'hunter2 '`.** A trailing space. The user's password manager, or a copy-paste from a document, appended one invisible space. `'hunter2'` and `'hunter2 '` hash to completely different values, so the comparison fails — correctly, because they *are* different strings.
+5. **Why did reset 'fix' it?** On reset, the user typed the password fresh, by hand, with no trailing space — so the stored hash now matched the clean input. The bug didn't go away; the data changed to hide it.
+6. **Why couldn't the team reproduce it?** They typed the password by hand too, cleanly. The bug only appeared with the *specific* input the user actually sent — whitespace and all. Manual testing with tidy input hides boundary bugs by definition.
+7. **The fix is one line, at the boundary.** Trim the input the instant it's read: `password = raw.strip()`. Now `'hunter2 '` and `'hunter2'` collapse to the same string before hashing. Add a test that submits a password with a trailing space and asserts login succeeds.
+8. **The lesson for a tester.** "The password is correct" and "the string received is correct" are different claims, and the gap between them is invisible whitespace. A tester never trusts that what the user meant is what the program got — the boundary is exactly where meaning and bytes diverge, and `repr()` is the flashlight that shows the difference.
+</WorkedExample>
+
+<Callout type="mistake">
+Trusting input because it "looks fine." The most dangerous input is the input that looks
+exactly right and isn't: `"42 "` with a trailing space, `"admin\r"` from a Windows file,
+`"true "` that your boolean check misses. Looking fine is not a property of the data — it's a
+property of your screen, which hides newlines, trailing spaces, and control characters by
+design. The professional never eyeballs input and declares it clean; they trim it, validate
+it, and print `repr()` when anything is off. Assume every input is subtly malformed until you've
+proven otherwise, because at the boundary, you usually can't see the malformation.
+</Callout>
+
+<Quiz
+  question="A Python program does age = input('Your age: ') and then next = age + 1. The user types 42 and the program crashes. Why?"
+  options={[
+    "input() is broken and returns nothing",
+    "input() returns the STRING '42', not the number 42. Adding a string and an integer (`'42' + 1`) raises a TypeError. You must convert first: `age = int(input(...))` — and wrap that in a try/except, because the user might type something that isn't a number at all.",
+    "You cannot do arithmetic in Python without importing a math library",
+    "42 is too large a number for input() to handle"
+  ]}
+  answer={1}
+  explain="This is THE canonical input bug, and every programmer hits it once. input() always returns a string — the type system offers no protection at the boundary, because text is genuinely all that arrived. The fix has two parts, and beginners usually do only the first: convert (`int(...)`), AND guard the conversion (try/except), because converting hostile input is exactly where the next crash comes from. A tester's instinct is to immediately try the input that breaks the conversion — letters, symbols, an empty line — because that's the case the developer forgot while thinking about the happy path."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What type does input() / Scanner return?", back: "A string, always — even when the user types digits. `'42'` is not `42`. Convert it yourself, and be ready for the conversion to fail." },
+    { front: "The read → clean → validate rule", back: "Read the raw text, clean it (trim whitespace, normalise), validate it (right type, in range, not empty, not hostile) — at the boundary, before it flows downstream." },
+    { front: "Why does '10' + '5' give '105'?", back: "Both are strings, so `+` concatenates. Forgetting input is a string and 'adding' two of them is the most common input bug. Convert with int()/parseInt first." },
+    { front: "Why does a correct password sometimes fail?", back: "Trailing whitespace or a stray newline. `'secret'` != `'secret '`. Trim input the moment you read it; print repr() to see the invisible passenger." },
+    { front: "Why can a parse crash the program?", back: "`int('cat')` raises ValueError; `Integer.parseInt('cat')` throws NumberFormatException. Every conversion can fail — wrap it and decide what to do on bad input." },
+    { front: "The Java Scanner nextInt/nextLine trap", back: "nextInt() leaves the newline in the buffer, so the next nextLine() reads an empty leftover. Consume it with an extra nextLine(), or read all lines as strings and parse." },
+    { front: "The tester's input mantra", back: "Never trust input, always trim it, assume every conversion can fail. The developer writes the happy path; the tester owns every unhappy path." },
+  ]}
+/>
+
+<Challenge>
+In the Python playground, add two more samples to the list: a string that's all spaces (`"   "`)
+and a very long number (`"99999999999999999999"`). Predict what each does before you run it —
+does the all-spaces string parse, or get rejected as empty after trimming? Does Python choke on
+the huge number, or handle it (recall integers grow without limit)? Then, in the Java playground,
+add `"99999999999999999999"` and watch `Integer.parseInt` throw where Python didn't — the same
+input, two different failures, exactly the kind of cross-language boundary bug you'll test for.
+</Challenge>
+
+<AskCommunity prompt="Input problem: I read `[what]` and expected `[X]` but got `[Y]`. Language: `[Java/Python]`. Raw value via repr(): `[paste — show the whitespace/newlines]`. Type after reading: `[string, presumably]`. Did I convert? `[int()/parseInt — yes/no]`. Did I trim first? `[yes/no]`.">
+The repr() of the raw input and whether you trimmed it answer almost every input question
+before anyone replies. The bug is nearly always an invisible character or a missing conversion —
+both of which repr() and 'did you trim?' expose immediately.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://docs.python.org/3/library/functions.html#input", title: "Python docs — input(): it returns a string, always", kind: "read" },
+    { href: "https://docs.oracle.com/javase/8/docs/api/java/util/Scanner.html", title: "Java docs — Scanner (and the nextInt/nextLine gotcha)", kind: "read" },
+    { href: "https://owasp.org/www-community/Injection_Flaws", title: "OWASP — Injection flaws: why untrusted input is a security boundary", kind: "read" },
+    { href: "https://realpython.com/python-input-function/", title: "Real Python — reading and validating input the right way", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=DPD4U1Ak0Vg" title="Reading and validating user input, done properly" minutes={11} />
+
+<Takeaways
+  points={[
+    "Input is always text — even digits. `input()` and `Scanner` hand you a string; convert it yourself (int()/parseInt) and be ready for the conversion to fail on hostile input.",
+    "Follow read → clean → validate at the boundary: read the raw text, trim the invisible whitespace, check type/range/emptiness, and decide what happens on bad input before it flows downstream.",
+    "Invisible passengers cause a huge share of bugs: trailing spaces, newlines, `\\r`. `'secret'` != `'secret '`. Trim on arrival and print repr() to see what's really there.",
+    "Every parse can fail and every read can block or end. Guard conversions (try/except), and handle empty input and end-of-input (EOF) as separate, deliberate cases.",
+    "The input boundary is where testers earn their keep: feed it the wrong type, the edges, hostile strings, and nothing at all. The developer writes the happy path; you own every other one.",
+  ]}
+/>
+
+<Complete xp={10} />

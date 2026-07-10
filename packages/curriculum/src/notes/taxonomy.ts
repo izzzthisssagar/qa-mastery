@@ -320,9 +320,9 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         title: "Variables & data types",
         topics: [
           { slug: "variables", title: "Variables" },
-          { slug: "numbers-text-booleans", title: "Numbers, text, booleans", planned: true },
-          { slug: "types-in-java-and-python", title: "Types in Java & Python", planned: true },
-          { slug: "naming", title: "Naming", planned: true },
+          { slug: "numbers-text-booleans", title: "Numbers, text, booleans" },
+          { slug: "types-in-java-and-python", title: "Types in Java & Python" },
+          { slug: "naming", title: "Naming" },
         ],
       },
       {
@@ -339,10 +339,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "input-and-output",
         title: "Input & output",
         topics: [
-          { slug: "printing-output", title: "Printing output", planned: true },
-          { slug: "reading-input", title: "Reading input", planned: true },
-          { slug: "comments", title: "Comments", planned: true },
-          { slug: "formatting", title: "Formatting", planned: true },
+          { slug: "printing-output", title: "Printing output" },
+          { slug: "reading-input", title: "Reading input" },
+          { slug: "comments", title: "Comments" },
+          { slug: "formatting", title: "Formatting" },
         ],
       },
     ],
