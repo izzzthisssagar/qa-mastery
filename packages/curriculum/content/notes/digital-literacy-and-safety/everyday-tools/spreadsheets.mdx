@@ -1,0 +1,265 @@
+---
+title: "Spreadsheets"
+summary: "The most widely deployed programming language on earth, used by people who would deny being programmers — and it silently mangles gene names, phone numbers and every id you paste into it."
+tags: ["digital-literacy", "spreadsheets", "data", "track-a"]
+updated: "2026-07-10"
+---
+
+<Hook>
+In 2020, human geneticists renamed twenty-seven genes. Not because of new science — because
+Excel kept converting `SEPT2` into a date. The gene symbols were correct; the spreadsheet
+was wrong; and it was easier to rename the human genome than to fix the spreadsheet.
+**That is the correct measure of how much software silently reformats your data, and of how
+completely people trust it anyway.** You are about to paste order ids into a spreadsheet.
+Some of them will not survive.
+</Hook>
+
+<Callout type="analogy">
+A spreadsheet is a **helpful assistant who cannot stop tidying.** You hand them a box of
+things and turn your back. They alphabetise it, they throw out the leading zeros because
+"numbers don't start with zero," they decide `03-04` is a date, and they iron the receipts.
+Nothing they did was malicious and every single thing they did was a guess. The tragedy is
+that they never tell you which guesses they made — and they're right often enough that you
+stopped checking.
+</Callout>
+
+## The four ways a spreadsheet destroys data on paste
+
+Every one of these is a real bug you will meet in QA, because test data lives in
+spreadsheets and gets pasted into forms:
+
+1. **Leading zeros vanish.** `00123` becomes `123`. Postcodes, order ids, phone numbers, country codes — all silently mutilated because the column "looked numeric."
+2. **Things become dates.** `SEPT2` → `2-Sep`. `1/2` → `1 Feb`. `3-4` → `3 April`. Once converted, the original text is *gone*; it's now a date serial number and undo is your only friend.
+3. **Long numbers lose precision.** A 20-digit id becomes `1.23457E+19`. Spreadsheets store numbers as floating point, so beyond about 15 significant digits the trailing digits are simply not there any more.
+4. **Encoding mangles names.** Open a UTF-8 CSV in the wrong locale and `Zoë` becomes `ZoÃ«`. Save it, and you have permanently corrupted a customer's name.
+
+None of these produces an error. All of them produce a plausible-looking cell.
+
+<HotspotImage
+  src="/notes/digital-literacy-and-safety/spreadsheet-formula.png"
+  alt="A spreadsheet showing cells, a SUM formula in the formula bar, and column headers"
+  credit="SUM formula in LibreOffice Calc — Wikimedia Commons, CC0"
+  creditHref="https://commons.wikimedia.org/wiki/File:SUM_formula_in_LibreOffice_Calc.png"
+  pins={[
+    { x: 22, y: 20, label: "The formula bar shows truth; the cell shows a performance", desc: "The cell displays a formatted rendering. The formula bar shows what is actually stored. When `00123` displays as `123`, or a date displays as `2-Sep`, the formula bar is where you discover what the file really contains. Always look there before you believe a cell." },
+    { x: 55, y: 32, label: "A formula is a program, written by someone who denies programming", desc: "`=SUM(B2:B14)` is code. It has no tests, no review, no version control, and it decides budgets and release readiness. Spreadsheets are the most widely deployed programming environment on earth and the only one with no engineering practice around it at all." },
+    { x: 30, y: 48, label: "Cell references are relative — and that's the bug", desc: "Copy `=B2*C2` down a column and it becomes `=B3*C3`, `=B4*C4`. Usually what you wanted. Insert a row in the middle and every reference silently shifts. `$B$2` pins it. Most spreadsheet errors in the wild are a reference that moved when nobody was looking." },
+    { x: 72, y: 60, label: "The range that stopped growing", desc: "`=SUM(B2:B14)` sums fourteen rows. Add a fifteenth and it is silently excluded — no error, no warning, just a total that is quietly wrong. This single behaviour has caused financial reporting failures at national scale." },
+    { x: 46, y: 78, label: "Autocorrect is applied on PASTE, not on save", desc: "The moment your data enters a cell, the conversion has already happened. Undo works; 'save as text' afterwards does not, because there is nothing left to save. To paste safely: format the column as Text FIRST, or use the import wizard and set the column type by hand." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Your test data, on its way to being wrong — press Play"
+  intervalMs={1750}
+  nodes={[
+    { label: "You export 500 order ids from the database", desc: "A clean CSV. `00847`, `SEPT2-A`, `12345678901234567890`, `Zoë Müller`. Every value correct. The file on disk is, at this moment, perfect. Everything that follows is the spreadsheet trying to help." },
+    { label: "You double-click the CSV to open it", desc: "This is the mistake, and it happens before you have done anything. Double-clicking applies default type detection to every column, immediately. Nothing asks. Nothing warns. The conversion is already done by the time the window appears." },
+    { label: "Four columns are quietly destroyed", desc: "`00847` → `847`. `SEPT2-A` → still text, but `SEPT2` alone would be a date. The 20-digit id → `1.23457E+19`, trailing digits gone forever. `Zoë` → `ZoÃ«` if the encoding guess was wrong. Every cell looks plausible." },
+    { label: "You paste the ids into the app and test", desc: "Order `847` doesn't exist; order `00847` does. You file 'order lookup broken for valid ids.' A developer spends a morning on it. The application was correct the entire time — your evidence was corrupted before you ever ran a test." },
+    { label: "The fix costs one click, made earlier", desc: "Don't double-click. File → Import → set every column to **Text**. Or don't use a spreadsheet at all: `less`, `head`, `csvlook` — tools that show you bytes rather than guesses. The data was never the problem. The tidying assistant was." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="Try it — watch a spreadsheet 'help'"
+  code={`def spreadsheet_autoconvert(value):
+    """A rough model of default type detection. Every rule here is real."""
+    v = value
+    # 1. Leading zeros: 'looks numeric' -> stored as a number
+    if v.isdigit() and v.startswith("0"):
+        return str(int(v)), "leading zeros DROPPED"
+    # 2. Date-like patterns
+    if v.upper().startswith("SEPT") and v[4:].isdigit():
+        return f"{v[4:]}-Sep", "converted to a DATE (original text gone)"
+    if "/" in v and all(p.isdigit() for p in v.split("/")):
+        a, b = v.split("/")[:2]
+        return f"{a} {'Feb' if b=='2' else 'Mon'}", "converted to a DATE"
+    # 3. Long numbers -> float precision loss
+    if v.isdigit() and len(v) > 15:
+        return f"{float(v):.5E}", f"PRECISION LOST (was {len(v)} digits)"
+    # 4. Encoding guess
+    if any(ord(c) > 127 for c in v):
+        return v.encode("utf-8").decode("latin-1"), "MOJIBAKE (wrong encoding)"
+    return v, "ok"
+
+data = ["00847", "SEPT2", "1/2", "12345678901234567890", "Zoe\\u0308", "Zo\\u00eb", "ORD-99"]
+
+print(f"{'you exported':24} {'spreadsheet shows':24} what happened")
+print("-" * 78)
+for original in data:
+    shown, why = spreadsheet_autoconvert(original)
+    flag = "  " if why == "ok" else " !"
+    print(f"{flag}{original:23} {shown:24} {why}")
+
+print()
+print("Every conversion above is SILENT. No error, no warning, no red cell.")
+print("Then you paste '847' into the app, it 404s, and you file a bug against")
+print("code that was correct. Your evidence was corrupted before the test ran.")`}
+/>
+
+## Why testers must care more than most
+
+Because spreadsheets are where test data lives, and corrupted test data produces **false
+bugs** — the most expensive kind, because a developer investigates them.
+
+But there's a second reason, and it's larger. Spreadsheets run companies. They price
+products, they schedule releases, they decide headcount. They are programs with no tests,
+no review, no version control, and no type safety, edited by people under time pressure. If
+you ever want to see what software would look like without any of the practices this
+curriculum teaches, open the workbook that runs your finance department.
+
+<Callout type="tip">
+**Never double-click a CSV.** That single reflex is the whole lesson. Instead: open the
+spreadsheet first, then File → Import (or Data → From Text), and explicitly set every column
+you care about to **Text**. Or skip the spreadsheet entirely — `head -5 file.csv` in a
+terminal shows you exactly what the bytes are, with no software guessing on your behalf. The
+data on disk is always right. It's the opening that breaks it.
+</Callout>
+
+<Term term="type coercion">
+Automatically converting a value from one type to another without being asked. Spreadsheets
+coerce aggressively on input — text that resembles a number becomes a number, text that
+resembles a date becomes a date serial — because it is right most of the time and being right
+most of the time is a very good way to hide the times it isn't. The same phenomenon is why
+`"1" + 1` is `"11"` in JavaScript and why an API that accepts `"0123"` may store `123`. The
+defence is identical everywhere: declare the type explicitly instead of letting software
+infer it, and never let inference happen at the boundary where data enters your system.
+</Term>
+
+<FirstTime title="Your mission: watch it happen to you">
+<StepChecklist
+  steps={[
+    { text: "Make a hostile CSV", detail: "In a text editor: a line with `00123`, one with `SEPT2`, one with `12345678901234567890`, one with `Zoë`. Save as `hostile.csv`. Confirm with `cat hostile.csv` that it's correct on disk." },
+    { text: "Double-click it", detail: "Just open it the way everyone opens a CSV. Look at each cell. Then click each one and read the FORMULA BAR, which shows what's stored rather than what's displayed." },
+    { text: "Count the survivors", detail: "Usually one or two of the four. Note that nothing warned you, nothing is red, and every cell looks like a reasonable value." },
+    { text: "Now do it properly", detail: "Close without saving. Open the spreadsheet app first, then File → Import, and set every column to Text. All four values survive intact." },
+    { text: "Compare against the terminal", detail: "`head -5 hostile.csv`. The bytes were always correct. Now you know exactly which tool was lying to you, and it was never the file." },
+  ]}
+/>
+You just reproduced the bug that renamed twenty-seven human genes, in about ninety seconds, on your own machine.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "The app says my order id doesn't exist, but I can see it in the database.",
+      fix: "Compare the id in the database against the one in your spreadsheet, character by character. `00847` versus `847`. Leading zeros were dropped when the CSV was opened, and every id you have pasted since is wrong. The application is fine. Your evidence was corrupted before the first test ran — which is why you must never file a bug from data a spreadsheet has touched without checking the formula bar.",
+    },
+    {
+      symptom: "Customer names come out as `ZoÃ«` or `Ã©`.",
+      fix: "Mojibake: UTF-8 bytes interpreted as Latin-1. The file is fine; the *opening* guessed the wrong encoding. Re-open specifying UTF-8 in the import dialog. If it was saved after being opened wrongly, the corruption is now on disk and permanent — restore from the export. This is why you never save a CSV you opened by double-clicking.",
+    },
+    {
+      symptom: "The totals in this report are subtly wrong and I can't see why.",
+      fix: "Check the ranges. `=SUM(B2:B14)` when there are fifteen rows of data silently omits the last one — no error, just a plausible wrong number. Then check for references that shifted when someone inserted a row. Then check for a cell that's text (left-aligned) where you expected a number (right-aligned) — text is skipped by SUM entirely, without complaint.",
+    },
+    {
+      symptom: "Two people edited the same workbook and half the changes are gone.",
+      fix: "Same failure as documents: you were editing *files*, not a shared document, so the last save overwrote the other. A spreadsheet emailed around is a distributed system with no conflict resolution and no audit trail. If it matters, it belongs in a database or a real collaborative tool, and if it *really* matters it belongs in version control.",
+    },
+    {
+      symptom: "A formula returns a number that's off by a rounding error.",
+      fix: "Spreadsheets store numbers as IEEE 754 floating point, so `0.1 + 0.2` is not exactly `0.3` — the same binary-fraction problem you meet in every programming language. It's invisible until you compare for equality or sum thousands of rows. Never use a spreadsheet as the source of truth for money.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+The cell is a rendering. Look at what's underneath:
+
+- **The formula bar** — the stored value, not the displayed one. Your first stop, always.
+- **Alignment** — numbers align right, text aligns left by default. A right-aligned "id" is a number, and its leading zeros are gone.
+- **`head -5 file.csv` in a terminal** — the bytes on disk, with nothing guessing. The definitive answer.
+- **The import dialog** — where you set column types explicitly, instead of letting detection run.
+- **`=ISTEXT(A2)`** — asks the spreadsheet directly what it thinks a cell is.
+
+Tester's habit: **never file a bug from data that a spreadsheet has touched** without first
+checking the formula bar. Corrupted test data produces false bugs, and a false bug costs a
+developer a morning and costs you the credibility you'll need the next time you're right.
+</WhereToCheck>
+
+<WorkedExample title="the false bug that cost three days">
+1. **The report:** "Bulk order import rejects 40% of valid orders. Blocker." Filed with a spreadsheet attached as evidence. The release is held.
+2. **A developer spends a day** in the import parser. It looks correct. Every unit test passes. He adds more tests. They pass too. He begins to doubt the tests.
+3. **Day two:** he asks for the original export, not the spreadsheet. It arrives as a `.csv` straight from the database.
+4. **He diffs them.** In the original: `00847`, `00123`, `SEPT2-BATCH`. In the tester's spreadsheet: `847`, `123`, `2-Sep`.
+5. **The import parser was rejecting them correctly.** Order `847` genuinely does not exist. `2-Sep` is genuinely not a batch code. The application was right about every single row it refused, and it refused them for exactly the reason it said.
+6. **What happened:** the tester double-clicked the CSV to "have a look at it," and the file was corrupted the instant it opened. She never saved it — she didn't need to. She copied the values *out of the corrupted view* and into the app.
+7. **Nobody did anything careless.** She looked at the data, which is diligent. The corruption was invisible, silent, plausible, and applied before the window had finished drawing.
+8. **The costs:** three days, a held release, a developer's confidence in his own test suite, and — the part that lingers — the next real blocker she files will be met with "did you check the spreadsheet?"
+9. **The prevention, entire:** `head -5 orders.csv`. Or File → Import → Text. One reflex, learned once, and this class of bug never happens to you again.
+10. **The general principle, which outlives spreadsheets:** your evidence is a system too, and it can be broken. Before you trust a measurement, ask what the instrument did to it.
+</WorkedExample>
+
+<Callout type="mistake">
+Trusting what a cell displays. The cell is a *rendering*, formatted for your eyes; the
+formula bar holds what is actually stored. `00847` and `847` look different, but `847`
+displayed in a column formatted with leading zeros looks *identical* to `00847` and is a
+completely different value. Testers are unusually vulnerable to this because our whole job is
+comparing expected against actual — and here the software has quietly changed the actual
+before showing it to us, then rendered it to look like what we expected. Click the cell. Read
+the formula bar. Every time it matters.
+</Callout>
+
+<Quiz
+  question="You open a CSV of order ids by double-clicking it, copy the ids into a form, and the app rejects them. What's the most likely explanation?"
+  options={[
+    "The app's validation is broken",
+    "The spreadsheet silently coerced the ids on open — `00847` became `847`, long ids lost precision, date-like codes became dates. The app is correctly rejecting ids that genuinely don't exist. Your evidence was corrupted before the first test ran.",
+    "The CSV file is corrupt",
+    "The database has the wrong ids"
+  ]}
+  answer={1}
+  explain="The file on disk is fine — verify with `head -5 file.csv`. Double-clicking runs default type detection over every column, immediately and silently, before you see the window. Leading zeros go, long numbers become floats, `SEPT2` becomes a date. Nothing is highlighted; every cell looks plausible. This is how a tester files a blocker against correct code, and why the reflex is: never double-click a CSV. Open the app first, then Import, then set columns to Text — or just read the bytes in a terminal."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The four silent destructions", back: "Leading zeros dropped, date-like strings coerced to dates, >15-digit numbers lose precision to floats, wrong encoding produces mojibake. None raises an error." },
+    { front: "Never double-click a CSV", back: "Type detection runs before the window appears. Open the app first → File → Import → set columns to Text. Or `head -5 file.csv`." },
+    { front: "The cell vs the formula bar", back: "The cell is a formatted rendering. The formula bar is the stored value. Always read the formula bar before you believe a cell." },
+    { front: "Alignment as a tell", back: "Numbers align right, text aligns left. A right-aligned 'id' has been coerced to a number and its leading zeros are gone." },
+    { front: "Why 27 human genes were renamed", back: "Excel kept converting `SEPT2` to a date. It was easier to rename the genes than to fix the tool. (2020, HGNC.)" },
+    { front: "`=SUM(B2:B14)` with 15 rows", back: "Silently sums fourteen. No error, no warning — just a plausible, wrong total. Ranges do not grow with your data." },
+    { front: "Type coercion", back: "Converting a value's type without being asked. Right often enough to hide the times it's wrong. The fix everywhere: declare types at the boundary, never infer them." },
+    { front: "Why testers must care most", back: "Test data lives in spreadsheets. Corrupted data produces FALSE bugs — the expensive kind, because a developer investigates them and you lose credibility." },
+  ]}
+/>
+
+<Challenge>
+Build a hostile CSV in a text editor: `00123`, `SEPT2`, `12345678901234567890`, `Zoë`, `1/2`.
+Verify it with `cat`. Double-click it. Count how many of the five survive — then click each
+cell and read the formula bar to see how badly. Now close without saving, reopen via File →
+Import with every column set to Text, and watch all five come through intact. Ninety seconds,
+and you will never file a false bug from a spreadsheet again.
+</Challenge>
+
+<AskCommunity prompt="Data question: value is `[X]` in the source (verified with `head -5 file.csv`) and `[Y]` in the spreadsheet. Formula bar shows: `[Z]`. Cell alignment: [left/right]. How I opened the file: [double-clicked / File→Import with column type Text].">
+That last line answers the question before anyone reads the rest. 'Double-clicked' means the
+file was coerced before you saw it, and everything downstream — including the bug you were
+about to file — is built on corrupted evidence. Include how you opened it, always.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.nature.com/articles/d41586-021-02211-4", title: "Nature — scientists rename human genes because Excel kept reading them as dates", kind: "read" },
+    { href: "https://eusprig.org/research-info/horror-stories/", title: "EuSpRIG — a catalogue of real, expensive spreadsheet errors", kind: "read" },
+    { href: "https://www.bbc.co.uk/news/technology-54423988", title: "BBC — how a spreadsheet row limit lost 16,000 COVID test results", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=yb2zkxHDfUE" title="Why spreadsheets keep destroying data (and gene names)" minutes={11} />
+
+<Takeaways
+  points={[
+    "Spreadsheets coerce silently on open: leading zeros vanish, date-like text becomes dates, long ids lose precision, and encodings mangle names. No errors, all plausible.",
+    "Never double-click a CSV. Open the app, File → Import, set columns to Text — or read the bytes with `head -5 file.csv`.",
+    "The cell is a rendering; the formula bar is the value. Read the formula bar before you trust anything.",
+    "Corrupted test data produces FALSE bugs, which cost a developer's morning and your credibility. Check your evidence before you file.",
+    "A spreadsheet is a program with no tests, no review and no version control. Never make one the source of truth for money.",
+  ]}
+/>
+
+<Complete xp={10} />
