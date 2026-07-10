@@ -131,10 +131,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "installing-and-managing-software",
         title: "Installing & managing software",
         topics: [
-          { slug: "installing-apps", title: "Installing apps", planned: true },
-          { slug: "updates", title: "Updates", planned: true },
-          { slug: "uninstalling", title: "Uninstalling", planned: true },
-          { slug: "app-stores-vs-downloads", title: "App stores vs downloads", planned: true },
+          { slug: "installing-apps", title: "Installing apps" },
+          { slug: "updates", title: "Updates" },
+          { slug: "uninstalling", title: "Uninstalling" },
+          { slug: "app-stores-vs-downloads", title: "App stores vs downloads" },
         ],
       },
       {
