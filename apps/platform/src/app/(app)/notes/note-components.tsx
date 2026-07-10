@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
+import Link from "next/link";
 import { Spinner } from "@qa-mastery/ui";
 import { runSimulatorCode } from "@/app/(app)/simulator/actions";
 
@@ -338,12 +339,12 @@ export function AskCommunity({ prompt, children }: { prompt?: string; children?:
         <span>Stuck? How &amp; whom to ask</span>
       </h3>
       {children && <div className="text-[15px] text-foreground/90">{children}</div>}
-      <a
+      <Link
         href="/community/new"
         className="mt-4 inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground hover:brightness-105"
       >
         Ask the community →
-      </a>
+      </Link>
       {prompt && (
         <p className="mt-3 rounded-xl border border-dashed border-border bg-background px-4 py-3 text-sm text-muted-foreground">
           <b className="text-foreground">Copy-paste starter:</b> “{prompt}”
