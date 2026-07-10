@@ -1,0 +1,266 @@
+---
+title: "Domains & DNS"
+summary: "How a name like google.com becomes a numeric address your computer can actually reach. What DNS is, why it's the internet's phone book, and the failures every tester should recognize on sight."
+tags: ["internet-basics", "web", "track-a"]
+updated: "2026-07-10"
+---
+
+<Hook>
+You type `google.com` and a page appears. But no computer on Earth knows how to reach
+"google.com" — machines only talk in numbers like `142.250.196.14`. Something translated
+the name to the number in the fraction of a second before the page loaded, and it did it
+by asking a chain of servers you've never heard of. That translation system is DNS, it
+runs quietly under every single thing you do online, and when it breaks it produces the
+most misdiagnosed errors on the internet. Let's make it visible.
+</Hook>
+
+<Callout type="analogy">
+DNS is the internet's **phone book.** You know your friend's name; you don't know their
+phone number. So you look the name up and the book gives you the number to actually dial.
+`google.com` is the name (easy for humans), `142.250.196.14` is the number (what
+machines dial), and DNS is the lookup that turns one into the other. Nobody memorizes IP
+addresses for the same reason nobody memorizes phone numbers anymore — the phone book
+does it, instantly, billions of times a second, for the whole world.
+</Callout>
+
+## Name, meet number
+
+Every device on the internet has an **IP address** — a numeric label like
+`142.250.196.14` (IPv4) or a longer `2607:f8b0:4005:80a::200e` (IPv6). That's what
+packets are actually addressed to. But humans can't live in numbers, so we invented
+**domain names** — `google.com`, `wikipedia.org` — and <Term define="Domain Name System — the internet's phone book. It translates a human name into the IP address packets are actually sent to, via a chain of cached lookups. Stale DNS caches are why a site change 'has not reached you yet'.">DNS</Term> to translate between them.
+
+Read a domain right-to-left, big to small (the URL note's rule, expanded):
+
+```
+        shop . example . com
+          │       │       └── TLD: top-level domain (.com, .org, .io, .np)
+          │       └── the domain someone REGISTERED and owns
+          └── a subdomain the owner created (shop, www, mail, blog...)
+```
+
+The owner registers `example.com` (once, through a registrar, for a yearly fee) and then
+creates as many subdomains as they like for free — `shop.`, `mail.`, `www.`, `api.`
+Each can point to a different server. This is why `mail.google.com` and
+`maps.google.com` are the same company, different services.
+
+<HotspotImage
+  src="/notes/the-internet-and-the-web/server-rack-rear.jpg"
+  alt="The rear of a server rack showing many stacked servers with network cables and status lights"
+  credit="Photo: Derrick Coetzee — Wikimedia Commons, CC0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Rear_of_rack_at_NERSC_data_center_-_closeup.jpg"
+  pins={[
+    { x: 50, y: 12, label: "Each server has an IP address", desc: "Every machine in this rack has a numeric IP — that's what packets are actually delivered to. A domain name is just a friendly label that DNS points AT one of these numbers. Change the DNS record and 'example.com' can point at a different box in seconds, with no user noticing." },
+    { x: 78, y: 42, label: "The network cables — where names travel as numbers", desc: "By the time your request reaches these cables, the name is long gone — it's all IP numbers now. DNS did its translation job back at the very start, before the first packet moved. If DNS failed, none of these cables ever lit up for your request." },
+    { x: 22, y: 55, label: "Status lights — is this the box the name points to?", desc: "A domain points to a specific server. If that server is down (dark lights) but DNS still points at it, users get 'connection refused' — the name resolved fine, the machine just isn't answering. That's a DIFFERENT failure from 'name not found', and telling them apart is a tester's job." },
+    { x: 60, y: 78, label: "One rack, many domains", desc: "A single server here can host dozens of domains — it reads the requested name and serves the right site. So 'the server is up' and 'MY domain works' aren't the same claim; one machine, many names, each independently configurable and independently breakable." },
+    { x: 88, y: 20, label: "The DNS records live... elsewhere", desc: "Crucially, the name-to-number mapping isn't stored on THIS server — it's in DNS records held by name servers, often run by a totally different company. That separation is why 'my site is down' can mean 'my DNS is misconfigured' even though the server is perfectly healthy. Two systems, two failure modes." },
+  ]}
+/>
+
+## The lookup, actually
+
+When you type `shop.example.com`, your computer asks a chain of servers, each one
+pointing closer to the answer. It feels instant; it's a small relay race:
+
+1. **Your computer's cache** — "have I looked this up recently?" If yes, done in
+   microseconds. Most lookups never leave your machine.
+2. **The resolver** (usually your ISP's or one like `8.8.8.8`) — the librarian that
+   does the legwork on your behalf and caches answers for everyone it serves.
+3. **Root → TLD → authoritative** — if nobody has it cached, the resolver walks the
+   tree: the root servers point it to the `.com` servers, which point to
+   `example.com`'s own authoritative name server, which gives the final IP.
+4. **The answer comes back** — `142.250.196.14` — and gets cached at every step so the
+   next person is faster.
+
+That caching is a hero and a villain: it makes the internet fast, and it's why a DNS
+change "takes time to propagate" — old answers linger in caches until they expire.
+
+<FlowAnimation
+  title="Resolving shop.example.com — press Play for the relay race"
+  intervalMs={1700}
+  nodes={[
+    { label: "💻 Check local cache", desc: "Your computer first asks itself: 'do I already know this name's number?' Recently visited sites are cached right here, and the lookup ends in microseconds. The fastest DNS query is the one that never happens." },
+    { label: "📚 Ask the resolver", desc: "Cache miss, so your machine asks a resolver — your ISP's, or a public one like 8.8.8.8 (Google) or 1.1.1.1 (Cloudflare). This librarian does the hunting and remembers the answer for everyone it serves." },
+    { label: "🌳 Root points to .com", desc: "If the resolver doesn't know either, it asks a root server. The root doesn't know example.com's number, but it knows who runs .com and says 'ask them'. Thirteen root server systems anchor the entire naming system of the internet." },
+    { label: "🏢 .com points to example.com's own server", desc: "The .com servers don't know the final number either, but they know example.com's authoritative name server — the one the domain's owner configured. 'Ask them, they're in charge of this name.'" },
+    { label: "✅ Authoritative gives the number", desc: "example.com's own name server returns the real IP. The answer travels back, cached at every hop for next time. NOW your browser can finally open a connection — everything before this was just finding the address." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="Try it — a DNS resolver with a cache (and watch propagation happen)"
+  code={`# DNS is a cached lookup. Model it -- including the delay that trips everyone up.
+
+authoritative = {'shop.example.com': '142.250.196.14'}   # the real, current truth
+cache = {}                                                # the resolver's memory
+
+def resolve(name):
+    if name in cache:
+        print(name, '-> ' + cache[name] + '  (from CACHE, instant)')
+        return cache[name]
+    ip = authoritative.get(name)
+    if ip is None:
+        print(name, '-> NXDOMAIN  (no such name -- typo? unregistered?)')
+        return None
+    cache[name] = ip
+    print(name, '-> ' + ip + '  (asked authoritative, now cached)')
+    return ip
+
+print('First visit -- nobody has it cached:')
+resolve('shop.example.com')
+print()
+print('Second visit -- resolver remembers:')
+resolve('shop.example.com')
+print()
+print('A typo resolves to nothing:')
+resolve('shp.example.com')
+print()
+print('Now the owner MOVES the site to a new server:')
+authoritative['shop.example.com'] = '203.0.113.50'   # truth changed
+print('New truth:', authoritative['shop.example.com'])
+resolve('shop.example.com')   # but the cache still has the OLD number!
+print()
+print("^ THIS is DNS propagation. The record changed, but caches worldwide")
+print("still serve the old number until their copy expires (the TTL). For")
+print("hours, some users reach the new server and some the old one. Every")
+print("tester who has verified a deploy has met this ghost.")`}
+/>
+
+<Callout type="tip">
+See DNS with your own eyes: open a terminal and run `nslookup google.com` (works on
+Windows, Mac, Linux) or `dig google.com` (Mac/Linux, more detail). You'll see the actual
+IP address the name resolves to — the phone book entry, live. Run it for your favorite
+site, then for a typo'd version, and watch one resolve and the other fail. This is the
+first command a tester reaches for when a site 'won't load' — it splits 'name doesn't
+resolve' from 'name resolves but the server won't answer' in one line.
+</Callout>
+
+<FirstTime title="First time? Look up a name's number yourself">
+<StepChecklist
+  steps={[
+    { text: "Open a terminal", detail: "The command line from Module 2. Windows: search 'cmd' or 'PowerShell'. Mac: Terminal. You've been here before." },
+    { text: "Run nslookup on a site you use", detail: "Type nslookup wikipedia.org and press Enter. The 'Address' it prints is the real IP the name resolves to — the phone book entry for that name, fetched live through the whole relay race you just learned." },
+    { text: "Look up the same site twice", detail: "Run it again immediately. Faster the second time — something cached the answer. You just witnessed the caching that makes the internet quick and DNS changes slow." },
+    { text: "Look up a name that doesn't exist", detail: "nslookup thisisnotarealsite-zzzq.com — you'll get an error like 'NXDOMAIN' or 'can't find'. That's 'no such name in the phone book', a specific failure distinct from 'the site is down'." },
+    { text: "Compare www vs no-www", detail: "nslookup google.com then nslookup www.google.com. Same company, and you'll see how subdomains resolve. Some sites treat www. and bare differently — which is itself a classic source of 'works with www, breaks without' bugs." },
+  ]}
+/>
+Five commands and DNS went from an acronym to something you can see and query.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "“'Server not found' / 'DNS_PROBE_FINISHED_NXDOMAIN' — but the site was fine yesterday.”",
+      fix: "DNS-specific error: the name didn't resolve to a number at all. Check, in order: is the domain spelled right (typos are the #1 cause)? Try nslookup — does it resolve for you? Try a different network or a public resolver (set DNS to 1.1.1.1) — if that fixes it, your original resolver had a stale or broken entry. If nslookup fails everywhere, the domain's DNS is genuinely misconfigured or the domain expired. This error is about the NAME, never the server.",
+    },
+    {
+      symptom: "“I updated my domain to point at a new server but half my users still see the old site.”",
+      fix: "DNS propagation, exactly as the CodePlayground showed. Your change is correct; caches around the world still hold the old IP until their TTL (time-to-live) expires — could be minutes or up to 48 hours. Nothing is broken; it's converging. Check with a tool like whatsmydns.net which shows the record from many locations at once. Lower the TTL BEFORE a planned change next time so propagation is fast.",
+    },
+    {
+      symptom: "“The site loads for me but a colleague gets 'this site can't be reached'.”",
+      fix: "Split the two failure modes with nslookup on both machines. If it resolves for you and not them, it's a DNS difference (their resolver is stale/broken — try 1.1.1.1). If it resolves for both but only you can load the page, the NAME is fine and the problem is the server or the network path, not DNS. This one diagnostic ends most 'works for me' DNS arguments.",
+    },
+    {
+      symptom: "“nslookup returns an IP but the browser still won't open the site.”",
+      fix: "Good — you've PROVEN it's not DNS. The name resolves; the number is known. So the problem is downstream: the server at that IP is down (connection refused/timeout), a firewall is blocking you, or it's an https/certificate issue (next note). This is why testers run nslookup first — a successful lookup crosses 'DNS' off the suspect list and points the investigation at the server.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+'The site won't load' — is it DNS or something else?
+
+- **`nslookup <domain>` / `dig <domain>`** — does the name resolve to an IP at all? This single command splits 'name problem' (DNS) from 'server problem' (everything else). Run it first, always.
+- **A different resolver** — set your DNS to 1.1.1.1 or 8.8.8.8. If that fixes it, your original resolver had a stale/broken entry, not the domain.
+- **whatsmydns.net** — shows a domain's record from dozens of locations worldwide. The go-to for 'has my DNS change propagated everywhere yet?'
+- **The TTL** — how long caches hold a record before rechecking. Explains propagation delay; lower it before planned changes.
+- **www vs bare domain** — resolve both. 'Works with www, breaks without' (or the reverse) is a real, common misconfiguration worth checking explicitly.
+</WhereToCheck>
+
+<WorkedExample title="the deploy that only half-worked — a propagation ghost hunt">
+Your team points the domain at a new, faster server. Deploy done, celebration started —
+then: "some users see the new site, some see the old one." Panic. You, methodically:
+
+1. **Confirm the change is correct.** `dig shop.example.com` from your machine → the NEW server's IP. So the record itself is right. Good — the deploy wasn't wrong.
+2. **Reproduce the split.** Ask an affected user to run nslookup. Theirs returns the OLD IP. Same name, two different numbers, depending on who asks. That's the signature of propagation, not a broken deploy.
+3. **Confirm globally.** whatsmydns.net for the domain: a world map, half green (new IP), half still showing the old one. Textbook propagation-in-progress.
+4. **Find the TTL.** The record's TTL was set to 24 hours. So caches that grabbed the old IP will keep serving it for up to a day. Nothing is broken — the internet is just remembering, as designed.
+5. **The calm report:** "Deploy is correct; DNS is propagating. Old caches will serve the previous server until their TTL (24h) expires — expected, not a bug. Both servers are healthy, so no user is broken, just some are on the old one temporarily. For the NEXT migration: drop the TTL to 5 minutes a day before the change so propagation is near-instant."
+6. **The lesson:** the difference between a panicked all-hands rollback and a one-paragraph 'working as intended, here's the fix for next time' was knowing that DNS caches and propagates. That knowledge came from this note.
+</WorkedExample>
+
+<Callout type="mistake">
+Blaming your application for what is actually a DNS problem — or the reverse. They look
+identical from the browser ('the site won't load') but they're completely different bugs
+in completely different systems owned by possibly different people. The one command that
+tells them apart is nslookup/dig: if the name doesn't resolve, stop looking at your app
+entirely — it's DNS (typo, expired domain, misconfigured record, stale resolver). If the
+name DOES resolve but the page won't load, stop looking at DNS — it's the server, the
+network, or https. Running that command first has saved testers untold hours of debugging
+the wrong system. Resolve first, then decide where to look.
+</Callout>
+
+<Quiz
+  question="A user reports 'server not found' for your site. What's the fastest way to tell if it's a DNS problem?"
+  options={[
+    "Restart the application server and hope",
+    "Run nslookup (or dig) on the domain: if the name doesn't resolve to an IP, it's DNS; if it does resolve, the problem is downstream (server, network, or https)",
+    "Clear the browser cache and try again",
+    "Check whether other websites load"
+  ]}
+  answer={1}
+  explain="Restarting the server is debugging the wrong system if the name never resolved — a waste of an outage. Clearing the browser cache and checking other sites are worth doing but vague. nslookup/dig is the precise, one-line split: name-doesn't-resolve means DNS (typo, expired domain, bad record, stale resolver); name-resolves-but-page-won't-load means the problem is past DNS entirely (server down, firewall, certificate). Resolving first tells you which system to investigate, before you touch anything."
+/>
+
+<Flashcards
+  cards={[
+    { front: "DNS", back: "The internet's phone book: translates human domain names (google.com) into the numeric IP addresses (142.250.196.14) machines actually route to. Runs under every online action." },
+    { front: "IP address", back: "The numeric label a device is actually reachable at. IPv4 (142.250.196.14) or IPv6 (longer). Packets go to numbers; names are just friendly labels DNS points at them." },
+    { front: "Domain anatomy", back: "Read right-to-left: TLD (.com) ← registered domain (example) ← subdomain (shop). Owner registers the domain, creates unlimited subdomains for free, each pointable at a different server." },
+    { front: "The resolver chain", back: "Local cache → resolver (e.g. 8.8.8.8) → root → TLD servers → authoritative name server. Each hop caches the answer, which is why lookups are usually instant." },
+    { front: "Propagation & TTL", back: "DNS changes aren't instant: caches worldwide serve the old record until its TTL expires (minutes to 48h). Lower the TTL before a planned change." },
+    { front: "nslookup / dig", back: "The command that splits DNS problems from server problems: name doesn't resolve = DNS; name resolves but page won't load = downstream. A tester's first move on 'site won't load'." },
+  ]}
+/>
+
+<Challenge>
+Play internet detective. From a terminal: (1) nslookup three sites you use and record
+their IPs, (2) look up a site's www and bare versions — do they match? (3) find a public
+resolver (1.1.1.1 or 8.8.8.8) and look a site up through it explicitly, (4) invent a
+domain that surely doesn't exist and confirm you get an NXDOMAIN error. Then write two
+sentences: what does nslookup succeeding tell you, and what does it NOT tell you? (Hint:
+it proves the name resolves — it says nothing about whether the server behind it is
+actually up.) That distinction is the whole point.
+</Challenge>
+
+<AskCommunity prompt="DNS question: [domain] gives me [exact error] in the browser. nslookup [domain] returns [IP or error]. On a different network/resolver it [works/fails the same]. whatsmydns shows [consistent / mixed] results. What's the actual problem?">
+Always include your nslookup result — 'it resolves to X' vs 'it returns NXDOMAIN' is the
+single fact that tells everyone whether to look at DNS or at the server. Without it, the
+first reply will just ask you to run nslookup.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.cloudflare.com/learning/dns/what-is-dns/", title: "Cloudflare Learning — what is DNS (clear, canonical)", kind: "read" },
+    { href: "https://howdns.works/", title: "How DNS Works — an illustrated comic", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=UVR9lhUGAyU", title: "DNS explained in 100 seconds", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=UVR9lhUGAyU" title="DNS explained in 100 seconds" minutes={2} />
+
+<Takeaways
+  points={[
+    "DNS is the internet's phone book: it translates names (google.com) into the numeric IP addresses machines actually route to. It runs under everything you do online.",
+    "Read domains right-to-left: TLD ← registered domain ← subdomain. Owners register the domain and create unlimited subdomains, each pointable at a different server.",
+    "A lookup is a cached relay race: local cache → resolver → root → TLD → authoritative. Caching makes it instant and makes changes slow to propagate.",
+    "DNS changes obey TTL: caches serve the old record until it expires (minutes to 48h). 'Half my users see the old site' is propagation, not a broken deploy.",
+    "nslookup/dig is the first move on 'site won't load': name doesn't resolve = DNS problem; name resolves but page won't load = server/network/https problem.",
+  ]}
+/>
+
+<Complete xp={10} />

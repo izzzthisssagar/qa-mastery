@@ -1,0 +1,261 @@
+---
+title: "Anatomy of a URL"
+summary: "That string in the address bar is a precise machine instruction with named parts. Learn to read every piece — scheme, host, path, query, fragment — and you can debug half the web from the address bar alone."
+tags: ["internet-basics", "web", "track-a"]
+updated: "2026-07-10"
+---
+
+<Hook>
+Most people see the address bar as noise to ignore — a jumble that appears when you
+click a link. Testers see a sentence. Every `/`, `?`, `&`, and `#` is a word with a job,
+and once you can read them you'll diagnose bugs that make developers blink: "the bug is
+in the query string, you're sending `sort=` empty." Today the jumble becomes a sentence.
+</Hook>
+
+<Callout type="analogy">
+A URL is a **postal address for a specific thing on the internet.** A letter's address
+narrows from big to small: country, city, street, house, and finally the person. A URL
+does the same: which protocol to speak, which server (the building), which path on it
+(the room), which specific query (what you want from that room), and which fragment
+(where to stand once inside). Get one part wrong and the letter goes to the wrong house —
+or the right house, wrong room. Same failure modes, same precision.
+</Callout>
+
+## The full anatomy, one example, every part named
+
+A <Term define="Uniform Resource Locator — the full address of a resource: scheme, host, optional port, path, query string and fragment. Each part is parsed by a different actor, which is exactly why a URL can be valid and still go somewhere you did not intend.">URL</Term> has six parts, and testers exploit every one. Take this URL apart:
+
+```
+https://shop.example.com:443/products/shoes?color=red&size=9#reviews
+└─┬─┘   └───────┬───────┘└┬┘└─────┬──────┘└────────┬───────┘└──┬──┘
+scheme       host       port    path            query      fragment
+```
+
+- **Scheme** (`https`) — which language to speak. `https` = secure (next note),
+  `http` = the old insecure one, plus `mailto:`, `ftp:`, and friends.
+- **Host** (`shop.example.com`) — WHICH server. Reads right-to-left in importance:
+  `.com` (top-level domain), `example` (the domain someone registered), `shop` (a
+  subdomain that owner created). The domains note covers this in depth.
+- **Port** (`:443`) — which door on that server. Usually hidden because browsers assume
+  443 for https, 80 for http. You'll only see it spelled out in dev (`localhost:3000`).
+- **Path** (`/products/shoes`) — WHICH thing on that server, like folders. Often maps to
+  real structure, often just a route the app invents.
+- **Query** (`?color=red&size=9`) — parameters: `key=value`, joined by `&`, starting
+  with `?`. This is where filters, searches, and settings ride along. Bug central.
+- **Fragment** (`#reviews`) — a spot WITHIN the page to jump to. It never goes to the
+  server — it's a browser-only instruction. That fact matters more than it looks.
+
+<HotspotImage
+  src="/notes/the-internet-and-the-web/https-padlock.jpg"
+  alt="A browser address bar showing https:// with a green padlock icon"
+  credit="Photo: Santeri Viinamäki — Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:HTTPS_and_padlock_in_website_address_bar.jpg"
+  pins={[
+    { x: 20, y: 50, label: "The padlock — is the connection encrypted", desc: "Comes with the scheme. It means the pipe between you and the server is scrambled so nobody in between can read it. It does NOT mean the site is honest or safe — scammers use https too. Padlock = private, not trustworthy. Whole note on this next; the distinction has fooled millions." },
+    { x: 40, y: 50, label: "The scheme — which protocol", desc: "https here. The browser reads this first and decides how to talk to the server. Change it to http and (on a good site) you'll be redirected back to https — that redirect is itself a test case: does the insecure door actually forward to the secure one, every time?" },
+    { x: 62, y: 50, label: "The host — which server on Earth", desc: "The domain name. Gets translated to a numeric IP address by DNS (next note) before your request goes anywhere. Typo the host and you reach a different server entirely — or a lookalike scam domain, which is exactly how phishing works." },
+    { x: 78, y: 50, label: "Everything after the host — the specifics", desc: "Path, query, fragment: which page, with which parameters, scrolled to which spot. This is the part testers edit by hand to reproduce bugs, probe permissions, and force edge cases without clicking through ten screens. The address bar is a debugging tool." },
+    { x: 90, y: 20, label: "You can TYPE here — that's a superpower", desc: "The address bar is editable. Change ?size=9 to ?size=999, or a path segment to an ID that isn't yours, and see what the app does. Half of manual security testing starts exactly here: does the app trust the URL more than it should?" },
+  ]}
+/>
+
+## The query string is where testers live
+
+Everything after the `?` is a set of instructions the page reads and acts on. It's the
+most-edited part of a URL in a tester's day because it's plain text you can change:
+
+- `?q=shoes` — a search term
+- `?page=2&sort=price` — pagination and sorting
+- `?color=red&size=9` — filters
+- `?ref=newsletter` — tracking where you came from
+
+Change these by hand and watch the page obey — or misbehave. `?size=9` works; does
+`?size=0`? `?size=-1`? `?size=abc`? `?size=` (empty)? Each is a test, and each has
+found real bugs, because developers handle the value they expect and forget the four
+they don't.
+
+<FlowAnimation
+  title="How the browser reads a URL, left to right — press Play"
+  intervalMs={1600}
+  nodes={[
+    { label: "🔤 Read the scheme", desc: "https:// — 'speak the secure protocol'. The browser now knows HOW to talk. Wrong or missing scheme and it either guesses (adds https://) or refuses. This is decided before any network happens." },
+    { label: "🏠 Resolve the host", desc: "shop.example.com must become a numeric IP address — that's DNS, the next note's whole job. Until this succeeds, nothing can be sent. 'Server not found' errors die right here, at translation." },
+    { label: "🚪 Pick the port", desc: "443 for https by default. The browser knocks on that specific door of that specific server. In development you name the port yourself (localhost:3000); in production it's usually invisible." },
+    { label: "🛣️ Send the path + query", desc: "GET /products/shoes?color=red&size=9 goes to the server. The server reads the path (which resource) and the query (which variant) and does its work. THIS is the request testers inspect in the Network tab." },
+    { label: "📍 Apply the fragment — locally", desc: "#reviews never left your browser. After the page arrives, the browser scrolls to the element with that id. Server-side code never sees it. That's why '#' tricks work offline and why analytics can't see which fragment you visited." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="Try it — build a URL parser (and find the bug in the query string)"
+  code={`# Parse a URL into its parts, the way a browser does. No libraries -- just string work.
+
+def parse(url):
+    parts = {}
+    scheme, rest = url.split('://', 1)
+    parts['scheme'] = scheme
+    # fragment first: it's everything after the LAST #, and never hits the server
+    if '#' in rest:
+        rest, parts['fragment'] = rest.rsplit('#', 1)
+    # query next: everything after the first ?
+    if '?' in rest:
+        rest, query = rest.split('?', 1)
+        parts['query'] = {}
+        for pair in query.split('&'):
+            k, _, v = pair.partition('=')
+            parts['query'][k] = v
+    # what's left splits into host and path at the first /
+    host, slash, path = rest.partition('/')
+    parts['host'] = host
+    parts['path'] = slash + path
+    return parts
+
+url = 'https://shop.example.com/products/shoes?color=red&size=9&sort=#reviews'
+for k, v in parse(url).items():
+    print(k.ljust(9), '->', v)
+
+print()
+print("Spot it: sort='' -- an EMPTY value. The link was built with a trailing")
+print("sort= and no value. A careful server ignores it; a careless one tries")
+print("to sort by nothing and 500s. Reading the query string is how a tester")
+print("finds that before a user does. Empty, missing, and junk values are")
+print("three separate test cases hiding in every ?key=value on the web.")`}
+/>
+
+<Callout type="tip">
+The address bar is a testing tool, not just a display. Reproduce a filtered state
+instantly by editing the query (`?status=archived`) instead of clicking through the UI.
+Probe an app's trust by changing an ID in the path (`/orders/1042` → `/orders/1043`) —
+if you see someone else's order, you've found a serious access-control bug from the
+address bar alone. And bookmark a broken state by copying its full URL: the query string
+often carries everything needed to reproduce, which turns 'I can't repro' into a link
+you paste into the ticket.
+</Callout>
+
+<FirstTime title="First time? Read and edit URLs in the wild">
+<StepChecklist
+  steps={[
+    { text: "Find a URL with a query string", detail: "Search anything on a shopping site, then look at the address bar. You'll see ?q=... and often a dozen more parameters. Every one is the page's current state, written down." },
+    { text: "Name each part out loud", detail: "Point at the scheme, host, path, query, fragment. If there's a ?, everything after it is parameters joined by &. If there's a #, that part is browser-only. You can now read any URL on Earth." },
+    { text: "Edit a query value and hit Enter", detail: "Change ?page=1 to ?page=2, or a sort/filter value. Watch the page obey the URL. You just controlled an app by typing — no clicking. That's the address bar as a remote control." },
+    { text: "Try an obviously wrong value", detail: "Set a numeric parameter to a word (?size=banana) or empty it (?size=). Does the page handle it gracefully or throw an error? You just ran your first URL-fuzzing test." },
+    { text: "Change a path ID (carefully, your own account)", detail: "On a site where you have several of something (orders, posts), change the ID in the path to another of YOURS. Confirm it loads the right one. This is the safe version of the access-control test testers run for real." },
+  ]}
+/>
+Five minutes and the address bar changed from wallpaper into an instrument.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "“The link works for me but gives my colleague a 404.”",
+      fix: "Compare the FULL URLs character by character — the difference is almost always in the path or query. Common culprits: a trailing parameter one of you has and the other doesn't, a session/ID in the URL that's specific to your account, or a copy that truncated the query at an & (some chat apps do this). Paste the exact URL into the ticket, not a retyped one; the bug is usually a character retyping would 'fix' by accident.",
+    },
+    {
+      symptom: "“I changed a filter and the URL didn't change — now I can't share the filtered view.”",
+      fix: "The app is holding that state in memory instead of the URL, so the address bar doesn't reflect what you see and the link shares the wrong thing. That's a real usability bug (shareable state should live in the query string). Report it: 'filter state is not reflected in the URL, so a copied link doesn't reproduce the view.' Good apps put filters in the query for exactly this reason.",
+    },
+    {
+      symptom: "“The page loads but ignores my ?something=value in the URL.”",
+      fix: "Three possibilities, all testable: the parameter name is misspelled (the app expects ?sort not ?order), the value is one the app doesn't recognize (it silently falls back to a default), or the app reads that setting from somewhere else entirely and the URL param is decorative. Open the Network tab and check whether your parameter is even in the request the app sends onward. If it's dropped, that's the bug.",
+    },
+    {
+      symptom: "“There's a huge ugly ?fbclid=... / ?utm_source=... on every link and it looks broken.”",
+      fix: "Not broken — those are TRACKING parameters added by ads, emails, and social platforms to record where you came from. They're harmless to the page (the server usually ignores them) but they clutter shared links and can leak where you've been. Safe to delete everything from the ? onward when sharing a clean link. Recognizing tracking params vs functional ones is a genuinely useful literacy.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Debugging with the URL as your instrument:
+
+- **Read the whole thing, part by part** — scheme (secure?), host (right server / not a lookalike?), path (right resource?), query (right parameters, no empties?), fragment (browser-only). Most URL bugs are visible on a careful read.
+- **The Network tab** — is the URL the app actually REQUESTS the same as the one in the bar? Apps rewrite and add parameters; the request is the truth.
+- **Edit and re-run** — change a query value or path ID and hit Enter. The fastest way to reproduce states and probe trust boundaries without clicking through the UI.
+- **Diff two URLs** — 'works for me, not for them' is almost always one differing character in path or query. Compare the exact strings.
+- **Strip the query to test** — remove everything after ? and reload. If the bug vanishes, a parameter caused it, and you've narrowed it to the query string in one step.
+</WhereToCheck>
+
+<WorkedExample title="the empty parameter that 500'd checkout — from the address bar">
+Reports trickle in: some users hit a server error at checkout, most don't. No pattern
+the developers can see. You, reading URLs:
+
+1. **Collect the failing URLs.** Ask two affected users for the exact link (copy, don't retype). Both contain `?coupon=` — the coupon parameter, present but **empty**.
+2. **Form a hypothesis.** The coupon field is optional. When a user opens the coupon box and closes it without typing, the app builds the URL with `coupon=` (empty) instead of dropping it. The server, expecting either a real code or no parameter at all, chokes on empty.
+3. **Reproduce from the address bar.** Take a working checkout URL, append `?coupon=`, hit Enter. **500 error.** Reproduced in one line, no ten-step click-through. Then `?coupon=SAVE10` → works, `?coupon=` → breaks. The empty value is the trigger, confirmed.
+4. **The report:** "Checkout returns 500 when the URL contains an empty `coupon=` parameter (produced by opening and closing the coupon field without entering a code). Expected: empty coupon treated as no coupon. Repro: append `?coupon=` to any checkout URL. Evidence: [the two user URLs + Network trace]."
+5. **Why it was invisible before:** the developers only ever tested 'valid coupon' and 'no coupon field touched'. The third state — 'field touched, left empty' — produced an empty parameter nobody thought to test. Reading the query string is what surfaced it. The address bar found a bug a hundred clicks would have missed.
+</WorkedExample>
+
+<Callout type="mistake">
+Trusting the host by glancing at it. Scammers register lookalike domains —
+`paypa1.com` (digit one), `microsoft.support-login.com` (the real domain here is
+`support-login.com`, not microsoft!), `amazon.co` instead of `amazon.com`. The rule
+that never fails: the real domain is the LAST two labels before the first single slash
+— read right-to-left from the `/`. In `login.paypal.com.evil.ru/account`, the real
+host is `evil.ru`, and everything to its left is decoration meant to fool you. Read
+hosts right-to-left, always. This single habit blocks most phishing, and it's the
+domains note's whole foundation.
+</Callout>
+
+<Quiz
+  question="In the URL https://a.b.example.com/x?y=1#z, which part never gets sent to the server?"
+  options={[
+    "The path /x",
+    "The query ?y=1",
+    "The fragment #z",
+    "The host a.b.example.com"
+  ]}
+  answer={2}
+  explain="The fragment (#z) is a browser-only instruction: after the page loads, the browser scrolls to the element with id 'z'. The server never receives it — which is why analytics can't track fragments, why '#' navigation works without a new request, and why single-page apps historically used it for routing. The host is resolved and connected to, the path and query are sent in the request. Knowing the fragment stays local explains a surprising number of 'why didn't the server see that?' moments."
+/>
+
+<Flashcards
+  cards={[
+    { front: "URL parts, in order", back: "scheme://host:port/path?query#fragment. Which protocol, which server, which door, which resource, which parameters, which spot on the page." },
+    { front: "Query string", back: "Everything after ?, as key=value pairs joined by &. Filters, searches, settings, tracking. The most-edited part in a tester's day; empty/missing/junk values are three test cases each." },
+    { front: "Fragment (#)", back: "A browser-only instruction to scroll to an element id. Never sent to the server. Invisible to analytics and server code." },
+    { front: "Reading a host safely", back: "The real domain is the last two labels before the first single slash — read right-to-left. login.paypal.com.evil.ru means evil.ru. Blocks most phishing." },
+    { front: "Port", back: "Which door on the server. Hidden in production (443 for https, 80 for http assumed); spelled out in dev (localhost:3000)." },
+    { front: "The address bar as a tool", back: "Editable: reproduce states by editing the query, probe access control by changing path IDs, share exact repro by copying the full URL. Half of manual testing starts here." },
+  ]}
+/>
+
+<Challenge>
+Become a URL surgeon on a site you use. Find a page with a rich query string (a filtered
+product search works well). Then: (1) name every parameter's job, (2) change one numeric
+value to something absurd (999999, -1, a word, empty) and record how the page reacts to
+each, (3) find one parameter you can delete with no visible effect (probably a tracking
+one), (4) copy the full URL, open it in a private window, and confirm it reproduces the
+exact state. Write up any parameter that reacts badly to a weird value — that's a real
+bug report, found entirely from the address bar.
+</Challenge>
+
+<AskCommunity prompt="URL question: this link [paste the FULL url] does [X] but I expected [Y]. When I change [which part] to [what], it [does what]. The Network tab shows the app requests [the actual URL it sends]. What's happening?">
+Paste the complete URL (scrub anything private), not a description of it — the bug is
+almost always in a specific character of the path or query, and a paraphrase hides
+exactly the character that matters.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.mozilla.org/en-US/docs/Learn/Common_questions/Web_mechanics/What_is_a_URL", title: "MDN — what is a URL (every part, precisely)", kind: "read" },
+    { href: "https://edu.gcfglobal.org/en/internetbasics/understanding-urls/1/", title: "GCFGlobal — understanding URLs, gently", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=Oc-sqhyZDGA", title: "URLs and how the web finds things", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=UVR9lhUGAyU" title="How the web addresses things (DNS is next)" minutes={2} />
+
+<Takeaways
+  points={[
+    "A URL is scheme://host:port/path?query#fragment — which protocol, which server, which door, which resource, which parameters, which spot on the page.",
+    "The query string (after ?, key=value joined by &) is where testers live: empty, missing, and junk values are three separate test cases hiding in every parameter.",
+    "The fragment (#) is browser-only — it never reaches the server, which explains a lot of 'why didn't the server see it?' behavior.",
+    "Read hosts right-to-left: the real domain is the last two labels before the first single slash. This one habit blocks most phishing.",
+    "The address bar is an instrument: reproduce states by editing the query, probe access control by changing path IDs, share exact repro by copying the full URL.",
+  ]}
+/>
+
+<Complete xp={10} />

@@ -1,0 +1,247 @@
+---
+title: "Tabs, history & bookmarks"
+summary: "Your 47 open tabs are 47 running programs. History is a searchable log of everything you've done. And private mode protects you from your laptop, not from the internet."
+tags: ["internet", "browsers", "privacy", "track-a"]
+updated: "2026-07-10"
+---
+
+<Hook>
+You have too many tabs open. Everyone does. But here's the part nobody tells you:
+each of those tabs is a **separate running process** with its own memory, its own
+JavaScript still executing, its own timers still firing. Forty-seven tabs isn't
+untidiness — it's forty-seven programs your computer is running simultaneously, which
+is why the fan is on. Meanwhile your history is a complete confession, and incognito
+mode protects you from precisely one person: whoever else uses your laptop.
+</Hook>
+
+<Callout type="analogy">
+Tabs are **rooms in a hotel, not pages in a book.** A book's pages sit inert until you
+turn to them. A hotel's rooms are all occupied simultaneously, each with the lights on
+and the taps running, whether you're standing in them or not. When your browser
+"suspends" a background tab, it's the manager sneaking in to switch the lights off
+without evicting the guest. When you return, the guest has to get up, turn everything
+back on, and pretend they were awake the whole time.
+</Callout>
+
+## Tabs are processes
+
+Each tab typically gets its own OS process (Module 1's "run programs" job, and last
+note's sandbox). That's why:
+
+- **One tab crashing doesn't take the browser down.** Isolation, deliberately bought.
+- **Memory use is enormous.** Isolation isn't free; every process carries its own overhead.
+- **Background tabs keep running** — timers, animations, polling, that autoplaying video you can't find. Browsers <Term define="Slowing a hidden tab's timers and pausing its animations to save battery and CPU. The tab's process stays alive and its network requests still fire — throttled is not stopped, which is why background polling bugs are real and rarely tested.">throttle</Term> them, but "throttled" is not "stopped."
+
+<HotspotImage
+  src="/notes/the-internet-and-the-web/browser.png"
+  alt="A browser window showing multiple open tabs, the address bar and page content"
+  credit="Screenshot: Firefox browser — Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Firefox_Browser_Creative_Commons_screenshot.png"
+  pins={[
+    { x: 20, y: 6, label: "Each tab = a process = real RAM", desc: "Open your OS's task manager (Module 1 taught you to read it) and look: your browser appears many times, once per tab and extension. That's not a memory leak, it's the sandbox you're paying for. The price of one tab never reading another's cookies is measured in gigabytes." },
+    { x: 45, y: 16, label: "The address bar remembers everything", desc: "Start typing and it suggests from history, bookmarks and searches. Convenient, and a complete record. It's also where your browser autocompletes to the wrong site at 2am — the mechanism behind an entire genre of accidental visits." },
+    { x: 78, y: 16, label: "The star / bookmark — a URL, saved", desc: "A bookmark stores nothing but an address and a name. It doesn't save the page. When the page changes or dies, your bookmark points into the void. Testers: this is why 'save the URL' is not 'save the evidence'." },
+    { x: 88, y: 6, label: "The menu — history, downloads, private window", desc: "Three things people misunderstand in the same menu: history (a searchable log), downloads (a list of what your machine fetched, with the source URL), and private mode (which protects your laptop, not your privacy)." },
+    { x: 50, y: 55, label: "The page keeps running when you look away", desc: "Switch tabs and this page's JavaScript continues — throttled, but alive. Polling requests still fire. A test that assumes 'background = stopped' will fail in ways that look supernatural until you know this." },
+  ]}
+/>
+
+<FlowAnimation
+  title="What a background tab is actually doing — press Play"
+  intervalMs={1700}
+  nodes={[
+    { label: "👀 Tab is visible", desc: "Full speed. Timers fire on schedule, animations run at 60fps, network requests go out whenever the page asks. The page has no idea it's special; it just runs." },
+    { label: "🙈 You switch away", desc: "The page is now hidden. The browser fires a `visibilitychange` event — which a well-written app listens to, pausing video, stopping polling, saving battery. Most apps ignore it entirely." },
+    { label: "🐢 The browser throttles it", desc: "Timers that wanted to fire every second now fire every minute or less. Animations stop. But the process is ALIVE: its memory is held, its state intact, its network requests still permitted. Throttled is not stopped." },
+    { label: "😴 Eventually: discarded", desc: "Under memory pressure, the browser may kill the tab entirely, keeping only the URL. That's why a long-idle tab sometimes reloads from scratch when you return — losing your half-written form. Not a bug. A memory decision made on your behalf." },
+    { label: "🧪 Why testers care", desc: "An automated test that opens a tab, switches away, and expects a timer to fire on time will flake. A page that polls every 5 seconds may poll every 60 in the background. Real bugs — stale data, missed updates, doubled requests on return — live exactly here, and almost nobody tests them." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="Try it — what your browser actually stores, and what private mode drops"
+  code={`# A simplified model of what a browsing session leaves behind.
+normal_session  = {"history": [], "cookies": {}, "cache": {}, "downloads": [], "typed_urls": []}
+private_session = {"history": [], "cookies": {}, "cache": {}, "downloads": [], "typed_urls": []}
+
+def visit(session, url, sets_cookie=None):
+    session["history"].append(url)
+    session["typed_urls"].append(url)
+    session["cache"][url] = "page bytes"
+    if sets_cookie:
+        session["cookies"][url] = sets_cookie
+
+for s in (normal_session, private_session):
+    visit(s, "example.com/embarrassing-question", sets_cookie="session=abc123")
+    visit(s, "shop.example/checkout", sets_cookie="cart=xyz")
+
+# Closing a private window throws its whole jar away:
+for key in private_session:
+    private_session[key] = [] if isinstance(private_session[key], list) else {}
+
+print("AFTER closing the browser\\n")
+for name, s in [("normal", normal_session), ("private", private_session)]:
+    print(f"{name:8} history={len(s['history'])} cookies={len(s['cookies'])} cache={len(s['cache'])}")
+print()
+print("Private mode wiped the LOCAL record. Now: who still knows where you went?")
+for observer in ["your ISP", "your employer's network", "the websites themselves",
+                 "anyone who saw your public IP", "your DNS resolver"]:
+    print(f"  - {observer}: STILL KNOWS")
+print()
+print("Private mode protects you from the next person to use this laptop.")
+print("That's it. That's the feature. Everyone else on the list is unaffected.")`}
+/>
+
+## History and bookmarks, understood properly
+
+**History** is a searchable, timestamped log of every page you loaded. It syncs across
+devices if you're signed in. It is also the fastest way to answer "what was that thing
+I looked at on Tuesday" — `Ctrl+H`, then search. Almost nobody searches their history;
+everybody re-Googles.
+
+**Bookmarks** store a **URL and a title. Nothing else.** Not the page, not the content.
+When the page changes, your bookmark silently points at the new thing. When the site
+dies, it points at nothing. A bookmark is a promise about an address, not about a
+document.
+
+<Callout type="tip">
+For testers: **a URL is a bug report's most valuable line, and also its most fragile.**
+`app.com/orders/1042?filter=failed` reproduces the exact screen. But if the app hides
+its state in JavaScript rather than the URL — every screen has the same address — you
+have found a genuine, reportable defect: **the app is not linkable.** Users can't
+bookmark or share a view, the back button breaks, and every bug report becomes a
+paragraph of clicking instructions. That defect has a name (state not reflected in the
+URL) and reporting it well makes you look like you've done this for years.
+</Callout>
+
+<FirstTime title="Your mission: audit your own browser">
+<StepChecklist
+  steps={[
+    { text: "Count your tabs, then count your processes", detail: "Open the browser's own task manager (Chrome: Menu → More tools → Task Manager; Firefox: about:processes). See the memory each tab uses. That's the sandbox's bill, itemized." },
+    { text: "Search your history instead of re-Googling", detail: "Ctrl+H (Cmd+Y on Mac), search for something you looked at last week. It's right there. You've been re-finding pages you already found." },
+    { text: "Test what a bookmark really stores", detail: "Bookmark any page. Right-click → Edit. You'll see a URL and a name. That's the whole object. The page's content was never saved." },
+    { text: "Open a private window and check the truth", detail: "Visit a site, close the window, check history — gone. Now ask: did the SITE forget you? Did your ISP? Your employer's network? No, no, and no. Private mode is a local eraser." },
+    { text: "Find the state-in-URL bug", detail: "Open any app, click into a deep view, and copy the URL. Paste it in a new tab. Did you land on the same screen? If not, that's a real bug — one you can now name precisely." },
+  ]}
+/>
+Tabs counted, history searched, bookmark dissected, private mode demystified, one real bug identified.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "The browser is using 8 GB of RAM and my laptop's fan sounds like a jet.",
+      fix: "Working as designed, which is a deeply unsatisfying sentence and still true. Each tab is a process with its own memory, because isolation is the security model. Fixes: close tabs (revolutionary), use a browser's tab-sleeping feature, and audit extensions — each of those is a process too, running on every page you visit. Check the browser's task manager to see which tab is actually the pig; it's rarely the one you suspect.",
+    },
+    {
+      symptom: "I came back to a tab and it reloaded, losing my half-written form.",
+      fix: "The browser discarded the tab under memory pressure and restored it from just the URL. Not a bug — a memory decision. But an app that loses a half-finished form on reload IS a bug: well-built forms save drafts to local storage. Report it. This is a real defect that gets discovered exactly when a user is angriest, and testers almost never think to check it.",
+    },
+    {
+      symptom: "I'm logged in as one user in one tab and a different user in another — chaos.",
+      fix: "Cookies are shared across tabs in the same profile: they're per-site, not per-tab. Logging in as user B in tab 2 logs you out of A in tab 1. Testers hit this constantly. The fix is separate browser profiles, or a private window for the second user, or Playwright's isolated contexts — which exist for exactly this reason.",
+    },
+    {
+      symptom: "Private mode didn't hide my browsing from my school/employer.",
+      fix: "It was never going to. Private mode discards LOCAL data — history, cookies, cache — when you close the window. Your ISP, your employer's network, the DNS resolver and the websites themselves see exactly what they always saw. The name is genuinely misleading, and the browser's own opening screen says so in text nobody reads.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+The browser's own instruments:
+
+- **Browser task manager** (Chrome: Shift+Esc) — memory and CPU per tab and extension. Names the guilty tab instantly.
+- **History (Ctrl+H)** — searchable, timestamped. The answer to "what was that page".
+- **`chrome://process-internals` / `about:processes`** — proof that tabs really are processes, if you enjoy that sort of thing (you should).
+- **DevTools → Application → Storage** — cookies, local storage, session storage for this site. Where "logged in as the wrong user" bugs live and die.
+- **A private window** — the fastest A/B test in software: no extensions, no cookies, no cache. If a bug vanishes there, it's one of those three.
+
+Tester's reflex: **reproduce in a private window before you file.** Half of "bugs" are
+an extension, a stale cookie, or a cached asset. Ten seconds of checking saves a
+developer an hour of chasing something that only exists on your machine.
+</WhereToCheck>
+
+<WorkedExample title="the bug that only happened to one tester">
+A tester files: *"the dashboard shows another user's name."* Alarming. Nobody else can reproduce it.
+
+1. **The panic reading:** a data leak — the server is sending the wrong user's data. That would be a critical security bug, and the team is right to take it seriously.
+2. **The cheap check first:** reproduce in a private window. Log in as the intended user. **The bug vanishes.** That single step just changed the entire investigation, because private mode has no old cookies, no cache, no extensions.
+3. **So it's local state.** Which one? DevTools → Application → Storage. There it is: a `user_name` value in local storage, left over from a session earlier that day when they were logged in as a test admin.
+4. **The real bug, and it's still a real bug:** logging out clears the session cookie but does **not** clear local storage. The next user of that browser sees the previous user's name rendered from stale local state.
+5. **Severity, honestly reassessed:** not a server-side data leak — the API returned the correct user throughout. But on a shared machine (a library, a hot desk, a kiosk) it displays someone else's identity, and that is genuinely serious.
+6. **The report:** 'Logout does not clear local storage; `user_name` persists and is rendered for the next user in the same browser profile. Repro: log in as A, log out, log in as B — header shows A. Does not reproduce in a private window (no stale storage). API responses are correct throughout.' Precise, non-hysterical, and it names the exact fix. All of it came from opening one panel and one private window.
+</WorkedExample>
+
+<Callout type="mistake">
+Thinking private/incognito mode makes you anonymous. It discards local traces when you
+close the window — history, cookies, cache — and does absolutely nothing else. Your ISP
+still logs the connection. Your employer's network still inspects it. The website still
+sees your public IP and can still fingerprint your browser. The DNS resolver still
+recorded the name you asked for. Private mode's real purpose is narrow and legitimate:
+it keeps the *next person to use this device* from seeing what you did, and it gives
+testers a clean profile with no extensions or cookies. Using it as a privacy shield
+against anyone further away than your own hard drive is a misunderstanding that the
+name actively encourages.
+</Callout>
+
+<Quiz
+  question="A tester sees another user's name in the dashboard header. It doesn't reproduce in a private window, and the API responses contain the correct user. What's the most likely cause and severity?"
+  options={[
+    "A critical server-side data leak — escalate immediately",
+    "Stale local storage: logout clears the session cookie but not local storage, so the previous user's cached name is rendered. No server-side leak, but genuinely serious on shared machines — and it's a real, fixable bug.",
+    "Browser cache — tell the tester to hard reload",
+    "Nothing — private mode always behaves differently"
+  ]}
+  answer={1}
+  explain="Private mode's clean profile is the diagnostic: no old cookies, no local storage, no extensions. If the bug vanishes there while API responses are correct, the wrong data is coming from state the browser kept, not from the server. That's why 'reproduce in a private window' belongs before every bug report. It converts a suspected data leak into a precise, fixable logout defect in about ten seconds — and it also means you don't wake the security team at midnight for a front-end bug."
+/>
+
+<Flashcards
+  cards={[
+    { front: "A tab is a process", back: "Own memory, own sandbox. One tab crashing doesn't kill the browser; the cost is enormous RAM use. That's the price of tab 3 not reading tab 1's cookies." },
+    { front: "Background tabs are throttled, not stopped", back: "Timers slow down, animations pause, but the process lives and requests still fire. Under memory pressure the tab may be discarded and reloaded from the URL." },
+    { front: "What a bookmark stores", back: "A URL and a title. Nothing else. Not the page, not the content. When the page changes, the bookmark silently points at something new." },
+    { front: "Private mode protects you from…", back: "The next person to use this device. Not your ISP, employer, DNS resolver, or the site itself. It's a local eraser and a clean test profile." },
+    { front: "Cookies are per-site, not per-tab", back: "Logging in as user B in one tab logs you out of A in another. Use separate profiles, a private window, or isolated browser contexts." },
+    { front: "The linkability bug", back: "If a deep view's URL doesn't reproduce that view, the app hides state outside the URL: bookmarks break, back button breaks, bug reports get longer. A real, nameable defect." },
+  ]}
+/>
+
+<Challenge>
+Open your browser's task manager and find the tab using the most memory — it won't be
+the one you'd guess. Then open any web app, navigate three levels deep, copy the URL,
+and paste it into a private window. Did you land in the same place? If yes, that app
+respects the web. If no, you've found a real bug and you can now describe it in the
+language its developers use: **application state is not reflected in the URL.**
+</Challenge>
+
+<AskCommunity prompt="Browser-state question: [symptom]. Reproduces in a private window: [yes/no]. With extensions disabled: [yes/no]. After clearing cookies/local storage (DevTools → Application → Storage): [yes/no]. API response contains [correct/wrong] data.">
+Those four lines are a complete differential diagnosis: private window rules out local
+state, extensions rule out injected code, storage rules out staleness, and the API
+response separates front-end from back-end. Anyone reading it can tell you the answer
+immediately — and half the time, so can you.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API", title: "MDN — the visibility API, and what background tabs really do", kind: "read" },
+    { href: "https://www.eff.org/deeplinks/2020/03/what-private-browsing-mode-does-and-doesnt-do", title: "EFF — what private browsing does and doesn't do", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=WjDrMKZWCt0", title: "Tabs, processes and browser memory", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=WjDrMKZWCt0" title="Why browsers use so much memory" minutes={8} />
+
+<Takeaways
+  points={[
+    "Each tab is usually its own OS process — that isolation is why one crash doesn't kill the browser and why memory use is so high.",
+    "Background tabs are throttled, not stopped: timers slow, requests still fire, and under memory pressure the tab may be discarded and reloaded from just its URL.",
+    "A bookmark saves a URL and a title, never the page. History is a searchable log most people never search.",
+    "Private mode discards local data when the window closes. Your ISP, employer, DNS resolver and the website itself are entirely unaffected.",
+    "Reproduce in a private window before filing any bug: it rules out extensions, cookies and cache in ten seconds, and turns 'suspected data leak' into a precise defect.",
+  ]}
+/>
+
+<Complete xp={10} />

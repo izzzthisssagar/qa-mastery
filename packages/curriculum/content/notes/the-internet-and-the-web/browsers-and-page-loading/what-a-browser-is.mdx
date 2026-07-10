@@ -1,0 +1,237 @@
+---
+title: "What a browser is"
+summary: "The most complicated program on your computer, and you use it without thinking. A browser downloads untrusted code from strangers and runs it safely — which is either terrifying or magnificent, depending on how much you know."
+tags: ["internet", "browsers", "track-a"]
+updated: "2026-07-10"
+---
+
+<Hook>
+Every time you open a tab, your browser downloads code written by a stranger, on a
+machine you've never seen, and **runs it on your computer** — the same computer where
+your bank is logged in. It does this thousands of times a day, and almost never harms
+you. That is not a small thing. The browser is the most hostile-input-facing program
+you own, and understanding it is the difference between "the page looks broken" and a
+bug report a developer can act on.
+</Hook>
+
+<Callout type="analogy">
+A browser is **a theatre that stages a script mailed in by a stranger.** The script
+(HTML) says what's in the scene, the set designer's notes (CSS) say how it looks, and
+the stage directions (JavaScript) can change everything mid-performance. The theatre
+never lets the script leave the stage: it can't wander into the lobby, read the box
+office ledger, or walk into the theatre next door. That containment has a name — the
+sandbox — and it's the only reason the web is survivable.
+</Callout>
+
+## What's actually inside the box
+
+Four parts do almost everything, and testers touch all four:
+
+1. **The rendering engine** — turns HTML and CSS into pixels. Blink (Chrome, Edge), Gecko (Firefox), WebKit (Safari). Different engines, different bugs. This is why your Playwright suite runs Chromium *and* WebKit.
+2. **The JavaScript engine** — runs the code the page shipped. V8 (Chrome), SpiderMonkey (Firefox), JavaScriptCore (Safari).
+3. **The network layer** — makes the requests, handles HTTPS, caches responses.
+4. **The <Term define="A restricted environment where untrusted code runs with no access to your files, your other tabs, or your operating system. Each tab typically runs in its own sandboxed process, so a crash or a compromise in one tab cannot reach the others.">sandbox</Term>** — the walls. Each tab in its own process, unable to read your disk or the tab beside it.
+
+<HotspotImage
+  src="/notes/the-internet-and-the-web/browser.png"
+  alt="A web browser window showing tabs, the address bar, and a rendered web page"
+  credit="Screenshot: Firefox browser — Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Firefox_Browser_Creative_Commons_screenshot.png"
+  pins={[
+    { x: 20, y: 6, label: "Tabs — separate processes, separate sandboxes", desc: "Each tab usually gets its own OS process (Module 1's 'run programs' job). One tab crashing takes itself down and leaves the others standing. It also means a malicious page in tab 3 cannot read your bank session in tab 1. That isolation costs a lot of RAM, which is the honest answer to 'why does Chrome eat my memory'." },
+    { x: 45, y: 16, label: "The address bar — the trust boundary", desc: "The single most security-relevant pixel on your screen. It names WHO is running code on your machine right now. Everything below it can be faked by that stranger; the address bar itself cannot. This is why the padlock note (ch5) exists, and why phishing works by making you look anywhere else." },
+    { x: 78, y: 16, label: "Reload — the tester's blunt instrument", desc: "Plain reload uses the cache. Hard reload (Ctrl+Shift+R / Cmd+Shift+R) refetches everything. 'It works after a hard reload' is not a fix — it's a diagnosis: your bug lives in caching, and now you know which half of the world to look in." },
+    { x: 50, y: 55, label: "The page — untrusted code, running now", desc: "This rendered page is HTML, CSS and JavaScript that arrived from a server minutes ago. The browser parsed it, ran it, and drew it. Anything you see here — a padlock icon, a 'verified' badge, a URL printed in the page body — is drawn BY that stranger and proves nothing." },
+    { x: 88, y: 6, label: "The menu — where DevTools hides", desc: "F12, or right-click → Inspect. Behind it: the network panel, the console, the DOM. It's the difference between describing a bug and evidencing one. The last note of this chapter opens that door properly." },
+  ]}
+/>
+
+<FlowAnimation
+  title="What happens when you type a URL and hit Enter — press Play"
+  intervalMs={1700}
+  nodes={[
+    { label: "⌨️ You type a URL", desc: "The browser first decides: is this even a URL, or a search? Then it checks whether it already has this page cached, and whether it must upgrade the connection to HTTPS. Nothing has left your machine yet." },
+    { label: "🔎 It finds the server", desc: "The name (`example.com`) must become an IP address (chapter 1's numbers). That's DNS, and claude-2's chapter 5 covers it. The browser now knows the building's street address." },
+    { label: "🤝 It opens a secure connection", desc: "TCP handshake, then TLS: certificates are checked, keys agreed, and everything after this point is encrypted. This is where the padlock is earned — several round trips before a single byte of your page arrives." },
+    { label: "📥 It downloads HTML — and discovers more work", desc: "The HTML arrives and the browser parses it top to bottom. Every <img>, stylesheet and script it meets is ANOTHER request. One page is rarely one download; it's typically 30 to 100." },
+    { label: "🎨 It renders, then runs the code", desc: "Build the DOM, apply CSS, lay out boxes, paint pixels. Then JavaScript runs and may change all of it again. The page you 'see' is the result of a small program executing on your machine — which is precisely why it can be interactive, and precisely why it must be sandboxed." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="Try it — count the real cost of 'loading one page'"
+  code={`# A single page load, as the browser experiences it.
+page = {
+    "index.html":  {"kb": 18,  "blocking": True},
+    "styles.css":  {"kb": 82,  "blocking": True},    # blocks rendering!
+    "app.js":      {"kb": 340, "blocking": True},    # blocks parsing!
+    "logo.png":    {"kb": 24,  "blocking": False},
+    "hero.jpg":    {"kb": 890, "blocking": False},
+    "font.woff2":  {"kb": 60,  "blocking": False},
+    "analytics.js":{"kb": 45,  "blocking": False},
+}
+RTT = 180   # ms round trip — a real user, one ocean away (chapter 1)
+
+total_kb = sum(f["kb"] for f in page.values())
+blocking = [n for n, f in page.items() if f["blocking"]]
+
+print(f"requests: {len(page)}   total: {total_kb} KB")
+print(f"render-blocking: {blocking}")
+print()
+
+# Each resource costs at least one round trip to discover + fetch.
+serial   = len(page) * RTT
+parallel = 2 * RTT + RTT          # HTML, then everything else mostly in parallel
+print(f"if fetched one-by-one : {serial/1000:.1f}s of pure waiting")
+print(f"if fetched in parallel: {parallel/1000:.1f}s of pure waiting")
+print()
+print("Neither number includes the actual bytes, or running app.js (340 KB),")
+print("or the fact that styles.css and app.js BLOCK the page from appearing.")
+print()
+print("A tester's question is never 'is it fast?' but 'fast for whom, at what RTT,")
+print("and what is the user staring at while these 7 requests resolve?'")`}
+/>
+
+## Why testers live here
+
+- **Different engines, different bugs.** A layout that works in Chrome can break in Safari because WebKit implements a spec detail differently. This is not hypothetical — it's why every serious e2e suite runs at least two engines.
+- **The browser is a hostile environment on purpose.** It blocks pop-ups, isolates tabs, refuses mixed content, and rejects bad certificates. Half of the "bugs" a beginner files are the browser *correctly* defending the user.
+- **Everything is inspectable.** Unlike a native app, a web page hands you its entire source, every network request, and a live console. No other software is this transparent to the person testing it.
+
+<Callout type="tip">
+Test in the browser your users use, not the one you like. Check real analytics before
+assuming. And when a bug appears in exactly one browser, that's not an annoyance — it's
+a *clue*, and a genuinely valuable bug report, because it isolates the fault to one
+engine's behaviour. "Broken in Safari, fine in Chrome" is ten times more actionable
+than "broken."
+</Callout>
+
+<FirstTime title="Your mission: look at the theatre, not the play">
+<StepChecklist
+  steps={[
+    { text: "Open the same page in two different browsers", detail: "Chrome and Firefox (or Safari). Look hard for differences — font rendering, spacing, a button's shadow. They are almost never pixel-identical, and now you know why: different engines." },
+    { text: "View the source", detail: "Ctrl+U / Cmd+Option+U. That's the actual HTML the server sent you. Every website hands you this for free. Native apps never do." },
+    { text: "Watch a page load with DevTools open", detail: "F12 → Network tab → reload. Count the requests. Most people guess 'one'. Look at the real number, and at the biggest file." },
+    { text: "Do a hard reload and compare", detail: "Ctrl+Shift+R. Watch the request sizes change as the cache is bypassed. 'From cache' versus a real download is a distinction you'll use for the rest of your career." },
+    { text: "Try to break the sandbox (you can't)", detail: "In the console, type `window.open('file:///etc/passwd')`. The browser refuses. A stranger's code cannot read your disk. That refusal is the entire web security model, in one denied request." },
+  ]}
+/>
+Two engines, one source view, a real request count, and a sandbox that held. The theatre is doing its job.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "It works after a hard reload but not a normal one.",
+      fix: "That's a caching bug, and you just diagnosed it without meaning to. The browser held an old copy of a script or stylesheet. Root cause is usually server-side cache headers, or a deploy that didn't change filenames. Report it precisely — 'stale asset served from cache after deploy; hard reload fixes it' — rather than telling users to hard reload, which is a workaround wearing a fix's clothes.",
+    },
+    {
+      symptom: "The page works in Chrome, breaks in Safari.",
+      fix: "Different rendering/JS engine. Open the console in Safari FIRST — the error usually names an unsupported feature. Then check caniuse.com for that feature's support. This is a real, high-value bug report: you've isolated it to one engine, which tells the developer exactly where to look. Do not dismiss it because 'everyone uses Chrome'. They don't; every iPhone browser is WebKit underneath.",
+    },
+    {
+      symptom: "The console shows 'Blocked by CORS policy'.",
+      fix: "The browser is protecting the user, not malfunctioning. A page from site A tried to read data from site B, and B didn't say it was allowed. That's the same-origin policy — the reason a malicious page can't silently read your webmail. The fix belongs on the SERVER (send the right CORS headers), never in the browser. Beginners spend days trying to 'turn CORS off' and learn nothing.",
+    },
+    {
+      symptom: "The page is blank and nothing loads.",
+      fix: "Three checks, in order. (1) Console: is there a JavaScript error? One uncaught error early in a script can prevent the whole page rendering. (2) Network tab: did the HTML itself arrive (200), or something else (404/500)? (3) Is it blank in another browser too? Blank in one = engine or script; blank in all = the server. Ninety seconds, and you've halved the search space twice.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+The browser tells you everything, if you open the right panel:
+
+- **DevTools → Console** — JavaScript errors, in red, with the file and line. Open this before you type a single word of a bug report.
+- **DevTools → Network** — every request, its status, size, timing, and whether it came from cache. The truth about what actually loaded.
+- **View source (Ctrl+U)** — the raw HTML the server sent, before any JavaScript changed it. Different from what you see in the Elements panel, and that difference is often the bug.
+- **The address bar** — the only UI element a page cannot forge. Trust it and nothing else.
+- **Incognito / private window** — no extensions, no cache, no cookies. The fastest way to answer "is it my browser or the site?"
+
+Tester's reflex: **before reporting anything, open the console.** If there's a red
+error there, your bug report is already 80% written, and you've saved a developer the
+twenty minutes of reproduction they were about to spend.
+</WhereToCheck>
+
+<WorkedExample title="the bug that only existed in one browser">
+A report lands: *"the checkout button does nothing."* One user. Everyone else is fine.
+
+1. **First question, always:** which browser and version? Answer: Safari 17 on an iPhone. Nobody on the team owns one; the whole team develops on Chrome.
+2. **Reproduce on the right engine.** Not "on a Mac" — on WebKit. Playwright can drive it: `npx playwright test --project=webkit`. The button genuinely does nothing.
+3. **Open the console in Safari** (the step that ends most of these investigations): `TypeError: undefined is not an object`. A JavaScript error, thrown early, killing the click handler.
+4. **The offending line** uses a JavaScript feature Chrome shipped two years before Safari did. In Chrome the code runs; in WebKit it throws; the handler is never attached; the button is inert. The button was never the bug.
+5. **Confirm the theory cheaply:** caniuse.com shows the feature unsupported in that Safari version. That's your evidence, not your guess.
+6. **The report writes itself:** 'Checkout button inert on Safari 17 (WebKit). Console throws TypeError at checkout.js:42 — [feature] unsupported before Safari 18. Chrome unaffected because it shipped the feature in 2023.' A developer fixes that in an hour. Compare it to the ticket you started with — *"the checkout button does nothing"* — and notice that every extra sentence came from opening one panel.
+</WorkedExample>
+
+<Callout type="mistake">
+Trusting anything a page draws. A padlock icon in the page body, a URL printed in the
+content, a "Verified ✓" badge, a dialog that looks exactly like your operating system's
+— all of it is HTML that a stranger wrote and your browser dutifully rendered, because
+rendering strangers' HTML is its entire job. The **only** trustworthy pixels are the
+browser's own chrome: the address bar and the padlock *beside* it. Phishing does not
+work by defeating cryptography; it works by getting you to look at the pretty forgery
+below the address bar instead of the boring truth inside it.
+</Callout>
+
+<Quiz
+  question="A page renders perfectly in Chrome and is completely blank in Safari. What's the highest-value first action?"
+  options={[
+    "File the bug — Safari is broken",
+    "Open Safari's console. A JavaScript error thrown early (often an unsupported feature) can prevent the entire page from rendering, and the error names the file and line. That single panel turns 'blank in Safari' into an actionable, engine-specific report.",
+    "Tell users to switch to Chrome",
+    "Clear the cache and try again"
+  ]}
+  answer={1}
+  explain="Chrome and Safari use different rendering and JavaScript engines (Blink/V8 vs WebKit/JavaScriptCore), so a feature one supports may throw in the other — and one uncaught error early in a script can leave you staring at a blank page. The console names the file and line for free. 'Blank in Safari' is a symptom; 'TypeError at app.js:42, feature unsupported before Safari 18' is a fix. The distance between them is one keypress."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What a browser does", back: "Downloads untrusted code from strangers and runs it safely: rendering engine (pixels), JS engine (code), network layer (requests), sandbox (walls)." },
+    { front: "The three engines", back: "Blink/V8 (Chrome, Edge), Gecko/SpiderMonkey (Firefox), WebKit/JavaScriptCore (Safari — and every browser on iOS). Different engines, different bugs. Test at least two." },
+    { front: "The sandbox", back: "Each tab is an isolated process that cannot read your files or the tab beside it. It's why one tab crashing doesn't kill the others — and why Chrome uses so much RAM." },
+    { front: "The address bar is the only truth", back: "Everything a page draws — padlocks, badges, fake OS dialogs — is a stranger's HTML. Only the browser's own chrome cannot be forged." },
+    { front: "'Works after a hard reload'", back: "Not a fix, a diagnosis: your bug lives in caching. Root cause is usually server cache headers or a deploy that reused filenames." },
+    { front: "CORS blocked = working correctly", back: "The same-origin policy stops site A silently reading site B's data. The fix belongs on the server (send the right headers), never 'turn CORS off' in the browser." },
+  ]}
+/>
+
+<Challenge>
+Open the same website in two different browser engines (Chrome and Safari, or Chrome and
+Firefox). Open DevTools in each and compare: the number of network requests, the console
+output, and whether the page looks pixel-identical. Then open your bank in one tab and a
+random site in another, and sit for a second with the fact that the random site's code is
+executing on your machine right now and cannot touch the other tab. That containment is
+the single most underappreciated piece of engineering you use every day.
+</Challenge>
+
+<AskCommunity prompt="Browser question: [what breaks] in [browser + version], works in [other browser + version]. Console shows: [exact red error, with file:line]. Network tab: [failing request + status code]. Incognito: [same / different]. Hard reload: [same / different].">
+Those last two lines eliminate extensions and caching before anyone else has to ask,
+and the console error usually names the fault outright. A browser bug report without
+console output is a rumour; with it, it's evidence.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://web.dev/howbrowserswork/", title: "How browsers work — the full pipeline, from bytes to pixels", kind: "read" },
+    { href: "https://caniuse.com/", title: "caniuse.com — which browsers support which feature", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=WjDrMKZWCt0", title: "What a browser really is", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=WjDrMKZWCt0" title="Inside a web browser" minutes={9} />
+
+<Takeaways
+  points={[
+    "A browser downloads untrusted code from strangers and runs it in a sandbox — isolated per tab, unable to read your disk or your other tabs.",
+    "Four parts: rendering engine, JavaScript engine, network layer, sandbox. Different engines (Blink, Gecko, WebKit) produce genuinely different bugs, which is why suites run more than one.",
+    "The address bar is the only pixel a page cannot forge. Padlocks, badges and OS-looking dialogs drawn in the page prove nothing.",
+    "Open the console before writing a bug report. A red error with file and line turns 'the page is blank' into an actionable, engine-specific finding.",
+    "Many 'bugs' are the browser correctly defending the user: CORS blocks, mixed-content warnings, blocked pop-ups. Fix those on the server, not by disabling protection.",
+  ]}
+/>
+
+<Complete xp={10} />
