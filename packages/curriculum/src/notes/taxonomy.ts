@@ -121,10 +121,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "files-folders-and-paths",
         title: "Files, folders & paths",
         topics: [
-          { slug: "files-and-file-types", title: "Files & file types", planned: true },
-          { slug: "folders-and-organizing", title: "Folders & organizing", planned: true },
-          { slug: "file-paths", title: "File paths", planned: true },
-          { slug: "search-and-shortcuts", title: "Search & shortcuts", planned: true },
+          { slug: "files-and-file-types", title: "Files & file types" },
+          { slug: "folders-and-organizing", title: "Folders & organizing" },
+          { slug: "file-paths", title: "File paths" },
+          { slug: "search-and-shortcuts", title: "Search & shortcuts" },
         ],
       },
       {
