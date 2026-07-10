@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
+import { Spinner } from "@qa-mastery/ui";
 import { runSimulatorCode } from "@/app/(app)/simulator/actions";
 
 /* ── Hook: the curiosity opener ─────────────────────────────────────────────*/
@@ -558,9 +559,11 @@ export function CodePlayground({
               }
             });
           }}
-          className="rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
+          aria-busy={pending || undefined}
+          className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
         >
-          {pending ? "Running…" : "▶ Run code"}
+          {pending && <Spinner className="size-3.5" />}
+          <span>{pending ? "Running…" : "▶ Run code"}</span>
         </button>
         <span className="text-xs text-muted-foreground">
           Runs on the real code runner — edit anything and rerun.
