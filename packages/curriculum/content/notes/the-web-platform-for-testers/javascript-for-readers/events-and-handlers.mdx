@@ -1,0 +1,248 @@
+---
+title: "Events & handlers"
+summary: "Every click you make fires an event that travels down the DOM and back up again. Understanding that journey explains dead buttons, double submissions, and the invisible overlay eating your clicks."
+tags: ["web-platform", "javascript", "track-a"]
+updated: "2026-07-10"
+---
+
+<Hook>
+When you click a button, you are not clicking a button. You are dropping a pebble at
+the top of the DOM tree, watching it fall all the way down to the deepest element under
+your cursor, and then watching it climb back up through every ancestor — each of which
+gets a chance to react, or to swallow it entirely. Almost every "the click doesn't work"
+bug is something intercepting that pebble on the way. Today you learn its route.
+</Hook>
+
+<Callout type="analogy">
+An event is **a rumour spreading through a family tree.** It starts at the eldest
+ancestor (`document`), travels *down* to the person it's actually about (the button),
+and then travels back *up* through every parent, aunt and grandparent — each of whom may
+act on it, or hush it up so nobody above hears. The button is where the rumour is about.
+It is not where the rumour begins or ends, and that distinction is the whole note.
+</Callout>
+
+## The three phases
+
+1. **Capture** — the event travels *down* from `document` to the target. Rarely used; occasionally where a sneaky handler lurks.
+2. **Target** — it reaches the element you actually clicked. Its handlers run.
+3. **Bubble** — it travels back *up* through every ancestor. Their handlers run too.
+
+That third phase — <Term define="Bubbling: after firing on the element you clicked, an event travels back up through every ancestor, giving each a chance to react or to stop it. One physical click can therefore run handlers written by several people who never knew about each other.">bubbling</Term> — is why a click on a button inside a form inside a modal fires handlers
+on all three. It's a feature (one handler on a list can serve a thousand rows) and it's
+a bug factory (two handlers both react, and something happens twice).
+
+<HotspotImage
+  src="/notes/the-web-platform-for-testers/dom-tree.png"
+  alt="A diagram of the DOM as a tree of nodes descending from the document"
+  credit="Diagram: DOM model — Wikimedia Commons, CC BY-SA 3.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:DOM-model.svg"
+  pins={[
+    { x: 50, y: 8, label: "document — where every event starts and ends", desc: "The root. Capture begins here, travelling down. Bubbling ends here, coming back up. A handler attached at this level sees EVERY click on the page — which is how analytics scripts track you, and how one careless listener can break an entire app." },
+    { x: 50, y: 38, label: "The ancestors — each gets a turn", desc: "Every parent between the root and your button will see the event bubble past. Any one of them can call `stopPropagation()` and the event simply stops climbing. Handlers above never fire, no error appears, and the button looks broken." },
+    { x: 30, y: 72, label: "The target — the element you actually clicked", desc: "Its handlers run at the target phase. But if this node was replaced by JavaScript after its listener was attached, the new node has no listener. Identical appearance, zero behaviour. That's the 'handler lost after re-render' bug from the last note." },
+    { x: 70, y: 72, label: "Siblings — unaffected, and that matters", desc: "Events travel up and down, never sideways. A handler on a sibling never sees your click. When you're hunting for what intercepted an event, look at ANCESTORS and at whatever is layered on top — never at neighbours." },
+    { x: 50, y: 55, label: "Event delegation lives here", desc: "One listener on a parent, serving a thousand children via bubbling. Efficient, and it keeps working when rows are added later. Also the reason a click on row 500 can trigger code that never mentions row 500 anywhere." },
+  ]}
+/>
+
+<FlowAnimation
+  title="The journey of one click — press Play"
+  intervalMs={1700}
+  nodes={[
+    { label: "🖱 You click a button", desc: "The browser works out which element is topmost at those coordinates. Note: TOPMOST, not the one you meant. An invisible overlay with zero opacity is still topmost, and it is about to receive your click instead." },
+    { label: "⬇️ Capture: document → target", desc: "The event descends through every ancestor. Handlers registered for the capture phase fire now. This is rare in application code — and it's exactly where a global 'block all clicks while loading' handler would sit." },
+    { label: "🎯 Target: the element's own handlers run", desc: "Your button's click handler fires. It submits the form, calls fetch(), whatever it was written to do. If no listener was ever attached — or was lost when JavaScript re-rendered the node — nothing happens here, silently, with no error." },
+    { label: "⬆️ Bubble: target → document", desc: "The event climbs back up. Every ancestor with a click handler now fires: the form, the modal, the analytics listener on document. This is how ONE click can run five separate pieces of code, none of which know about each other." },
+    { label: "🛑 Unless someone stops it", desc: "Any handler can call `stopPropagation()` (stop climbing) or `preventDefault()` (do the handler, but skip the browser's built-in behaviour — no form submit, no link navigation). Both are legitimate. Both, misplaced, produce a button that swallows clicks in perfect silence." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="Try it — simulate bubbling, then break it two different ways"
+  code={`# The DOM path from document down to the clicked button:
+path = ["document", "body", "modal", "form", "button"]
+
+handlers = {          # who is listening, and what they do
+    "document": "analytics: log the click",
+    "modal":    "close modal if click was outside",
+    "form":     "validate and submit",
+    "button":   "start payment",
+}
+stop_at = None        # set to a node name to simulate stopPropagation()
+
+def dispatch(stop_at=None, missing_listener=None):
+    print("CAPTURE (document -> target):")
+    for node in path:
+        print(f"   ↓ {node}")
+    print("TARGET + BUBBLE (target -> document):")
+    for node in reversed(path):
+        if node == missing_listener:
+            print(f"   ⬆ {node:9} (no listener attached — nothing happens, no error)")
+            continue
+        if node in handlers:
+            print(f"   ⬆ {node:9} -> {handlers[node]}")
+        if node == stop_at:
+            print(f"   🛑 {node} called stopPropagation() — event stops climbing")
+            return
+    print("   reached document. Every handler ran.")
+
+print("=== A healthy click ===");            dispatch()
+print()
+print("=== The form calls stopPropagation() ===");  dispatch(stop_at="form")
+print("   ^ analytics never logged it. Modal never learned. Both look 'broken'.")
+print()
+print("=== The button's listener was lost on re-render ===");  dispatch(missing_listener="button")
+print("   ^ payment never starts. No console error. The button LOOKS perfect.")
+print()
+print("Two totally different bugs. Same symptom: 'the button does nothing'.")`}
+/>
+
+## The two functions that cause most confusion
+
+- **`preventDefault()`** — "run my handler, but skip the browser's built-in reaction." Stops a form from submitting, a link from navigating, a checkbox from ticking. The event still bubbles.
+- **`stopPropagation()`** — "nobody above me hears about this." The event stops climbing. The browser's default still happens.
+
+They are unrelated, they're constantly confused, and each produces a distinct bug. A
+form that won't submit? Suspect `preventDefault()`. A modal that won't close when you
+click outside it? Suspect `stopPropagation()` somewhere inside.
+
+<Callout type="tip">
+DevTools will show you every listener on an element: **Elements panel → select the node
+→ Event Listeners tab.** Expand `click` and you'll see each listener and the file it
+came from. If a button "does nothing" and this list is *empty*, you have your answer in
+four seconds and it isn't a mystery any more: nothing is listening. If the list is full,
+the click is being intercepted before it arrives — go look for the overlay.
+</Callout>
+
+<FirstTime title="Your mission: follow a pebble down a tree">
+<StepChecklist
+  steps={[
+    { text: "Watch an event bubble", detail: "Console: `document.addEventListener('click', e => console.log('bubbled to document from', e.target.tagName))`. Now click anything on the page. Every click reports. You are seeing phase 3." },
+    { text: "Inspect a real button's listeners", detail: "Elements → select a button → Event Listeners tab. Expand `click`. Each entry names the script that attached it. This panel answers 'is anything even listening?' definitively." },
+    { text: "Find the topmost element", detail: "Console: `document.elementFromPoint(300, 300)`. It returns whatever is actually at those coordinates — which may not be what you can see. This is the invisible-overlay detector, in one line." },
+    { text: "Cause a preventDefault", detail: "Find a link. Console: `document.querySelector('a').addEventListener('click', e => e.preventDefault())`. Click it. It no longer navigates. You have just created the most common 'link is broken' bug on purpose." },
+    { text: "Feel event delegation", detail: "On a page with a long list, inspect a row. Often there's no listener on the row at all — it's on the parent list, catching bubbled clicks from every child. One handler, a thousand rows." },
+  ]}
+/>
+You watched bubbling, listed real listeners, found the topmost element, and broke a link deliberately. Clicks are no longer magic.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "The button does nothing. No console error, no network request.",
+      fix: "Three suspects, in order of speed to check. (1) Elements → Event Listeners: is anything attached? Empty means nothing is listening — likely a lost handler after a re-render, or the page isn't interactive yet. (2) `document.elementFromPoint(x, y)`: is an invisible overlay on top? (3) Is the element `disabled`? Four seconds each, and one of them is always the answer.",
+    },
+    {
+      symptom: "Clicking Submit fires the request twice.",
+      fix: "Two handlers reacted to one event — commonly one on the button and one on the form, both bubbling. Or the handler was attached twice (a component that re-mounts and re-registers). Watch the Network panel: two identical POSTs is the proof. Remember POST isn't idempotent (Module 3), so two requests means two records.",
+    },
+    {
+      symptom: "The modal won't close when I click outside it.",
+      fix: "That behaviour is normally implemented as a handler on the backdrop or on `document`, listening for bubbled clicks. If something inside the modal calls `stopPropagation()`, the click never climbs that far. Nothing errors; the feature just silently stops existing. A very common, very findable bug.",
+    },
+    {
+      symptom: "A link navigates when it shouldn't, or doesn't when it should.",
+      fix: "That's `preventDefault()`, present or absent. A single-page app calls it to handle navigation in JavaScript instead of letting the browser do it. If it's missing, you get a full page reload where a smooth transition was intended; if it's called wrongly, the link is inert. Both are visible in the Event Listeners tab.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+The click's journey, inspectable end to end:
+
+- **Elements → Event Listeners tab** — every listener on the selected node, and the file that attached it. Empty list = nothing is listening = your answer.
+- **`document.elementFromPoint(x, y)`** in the Console — what is *actually* at those coordinates. The invisible-overlay detector.
+- **Console + a temporary document listener** — `document.addEventListener('click', e => console.log(e.target))` proves whether the event reaches the top at all.
+- **Network panel** — did the click cause a request? Two identical requests means two handlers fired.
+- **Elements panel hover** — hover a node and the browser highlights the region it covers. A full-viewport highlight on something you can't see is an overlay, caught.
+
+Tester's habit: when a click misbehaves, ask **where in the journey did it stop?**
+Before the target (something intercepted it), at the target (no listener), or after
+(propagation was stopped). Three questions, three panels, no guessing.
+</WhereToCheck>
+
+<WorkedExample title="the checkout that charged twice">
+Financial, real, and caused by a feature working exactly as designed.
+
+1. **Report:** "Some customers are charged twice. They swear they clicked once."
+2. **Reproduce with the Network panel open.** Click Pay once. **Two `POST /api/charge` requests**, milliseconds apart, both returning 201. The customer told the truth.
+3. **So one click produced two requests.** From this note, that means two handlers reacted to one event as it travelled.
+4. **Elements → the button → Event Listeners.** One `click` listener, from `checkout.js`. Now select its parent, the `<form>`. It has a `submit` listener, from `checkout.js` too.
+5. **The mechanism:** clicking the button runs its handler (which calls `fetch`) *and*, because the button is `type="submit"` inside a form, the browser's default behaviour fires the form's `submit` handler as the event bubbles. Both call the payment API. Neither developer knew about the other.
+6. **Confirm cheaply:** in the Console, `preventDefault` on the form's submit. Click Pay. **One request.** Theory proved by experiment, not by argument.
+7. **The report:** 'Single click on Pay fires two POST /api/charge requests: the button's click handler and the form's submit handler both call the payment API (checkout.js). Repro: click Pay once, observe two 201s in the Network panel. Note POST is not idempotent — two charges result.' Severity: critical.
+8. **Notice what carried the day:** not knowledge of the codebase, but knowledge of *the journey a click takes*. Two handlers, one pebble, one bubbling path, and a Network panel that counts honestly.
+</WorkedExample>
+
+<Callout type="mistake">
+Assuming a click lands on the thing you can see. The browser delivers the event to the
+**topmost element at those coordinates**, and CSS can place a fully transparent,
+full-viewport element above everything — a leftover modal backdrop, a loading overlay
+that was never removed, a zero-opacity div. Your eyes report a button. The DOM reports
+an overlay. Screenshots agree with your eyes, `document.elementFromPoint()` agrees with
+the DOM, and only one of them is going to help. When a click does nothing and no listener
+is missing, stop looking at the button and start looking at what's sitting on top of it.
+</Callout>
+
+<Quiz
+  question="One click on Pay produces two identical POST requests. Event Listeners shows a `click` handler on the button and a `submit` handler on its parent form. What's happening?"
+  options={[
+    "The user double-clicked",
+    "One event, two handlers. The button's click handler runs at the target phase; then the event bubbles and the browser's default submit behaviour triggers the form's submit handler. Both call the payment API — and since POST isn't idempotent, the customer is charged twice.",
+    "The network retried the request automatically",
+    "The server duplicated the record"
+  ]}
+  answer={1}
+  explain="A click doesn't stop at the element you clicked — it bubbles up through every ancestor, and a submit-type button inside a form also triggers the browser's built-in form submission. Two independent pieces of code can therefore react to a single physical click without either author being aware of the other. The Network panel showing two requests is the proof; `preventDefault()` on the form's submit is the confirming experiment. This is the difference between 'the user double-clicked' and a critical, reproducible defect."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The three phases", back: "Capture (document → target), target (the element's own handlers), bubble (target → document, every ancestor gets a turn)." },
+    { front: "preventDefault vs stopPropagation", back: "preventDefault: skip the browser's built-in reaction (no form submit, no navigation); the event still bubbles. stopPropagation: nobody above hears it; the default still happens. Unrelated, constantly confused." },
+    { front: "Event delegation", back: "One listener on a parent serves a thousand children via bubbling — efficient, survives new rows, and means a click on row 500 runs code that never mentions row 500." },
+    { front: "'Button does nothing' triage", back: "1. Event Listeners tab — is anything attached? 2. document.elementFromPoint(x,y) — is an invisible overlay on top? 3. Is it disabled? Four seconds each." },
+    { front: "Double submission", back: "Two handlers reacted to one event — often a button's click plus its form's submit, both bubbling. Two POSTs, two records, because POST isn't idempotent." },
+    { front: "Clicks land on the topmost element", back: "Not the one you can see. A transparent full-viewport overlay receives the click instead, silently. Screenshots agree with your eyes; elementFromPoint agrees with the truth." },
+  ]}
+/>
+
+<Challenge>
+In any app's console, run
+`document.addEventListener('click', e => console.log('reached document from', e.target))`
+then click ten different things. Anything that *doesn't* log has had its propagation
+stopped somewhere on the way up — find one, then use the Event Listeners tab to work out
+who stopped it. You have just traced an invisible event through a tree you didn't build,
+and that's most of what debugging interactive pages amounts to.
+</Challenge>
+
+<AskCommunity prompt="Event question: clicking [element] does [nothing / fires twice / wrong thing]. Event Listeners tab shows: [listeners, or empty]. `document.elementFromPoint(x, y)` returns: [element]. Network panel shows [N] requests. Console: [errors or none].">
+Those four facts split every click bug: no listeners means nothing's attached, a
+surprising elementFromPoint means an overlay, two requests means two handlers, and a
+console error means the handler ran and threw. You'll usually diagnose it while filling
+the template in — which is the point of having one.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.mozilla.org/en-US/docs/Learn/JavaScript/Building_blocks/Events", title: "MDN — events, capture, target and bubble", kind: "read" },
+    { href: "https://javascript.info/bubbling-and-capturing", title: "javascript.info — bubbling and capturing, with diagrams", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=W6NZfCO5SIk", title: "How events travel through the DOM", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=W6NZfCO5SIk" title="Events, handlers and bubbling" minutes={10} />
+
+<Takeaways
+  points={[
+    "An event travels down from document to the target (capture), fires there, then climbs back up through every ancestor (bubble). One click can run five handlers.",
+    "preventDefault() skips the browser's built-in reaction; stopPropagation() stops the event climbing. Unrelated functions, different bugs, constantly confused.",
+    "'The button does nothing' has three fast checks: is a listener attached, is an invisible overlay on top, is it disabled.",
+    "Two handlers reacting to one click (button's click + form's submit) produce two POSTs — and POST isn't idempotent, so the customer is charged twice.",
+    "Clicks land on the topmost element at those coordinates, not the one you can see. `document.elementFromPoint()` tells the truth that screenshots can't.",
+  ]}
+/>
+
+<Complete xp={10} />

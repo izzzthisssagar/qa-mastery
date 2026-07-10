@@ -207,6 +207,53 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
     ],
   },
   {
+    slug: "the-web-platform-for-testers",
+    title: "The web platform for testers",
+    summary: "Reading HTML, CSS and JavaScript is a tester superpower: the DOM is where locators live, the box model is why layouts break, and a stack trace is bug evidence.",
+    chapters: [
+      {
+        slug: "html-essentials",
+        title: "HTML essentials",
+        topics: [
+          { slug: "structure-and-semantic-tags", title: "Structure & semantic tags", planned: true },
+          { slug: "forms-and-inputs", title: "Forms & inputs", planned: true },
+          { slug: "ids-classes-and-attributes", title: "Ids, classes & attributes", planned: true },
+          { slug: "why-semantics-matter", title: "Why semantics matter", planned: true },
+        ],
+      },
+      {
+        slug: "css-essentials",
+        title: "CSS essentials",
+        topics: [
+          { slug: "selectors-the-locator-superpower", title: "Selectors — the locator superpower", planned: true },
+          { slug: "the-box-model", title: "The box model", planned: true },
+          { slug: "flexbox-and-grid", title: "Flexbox & grid, gently", planned: true },
+          { slug: "why-layouts-break", title: "Why layouts break", planned: true },
+        ],
+      },
+      {
+        slug: "javascript-for-readers",
+        title: "JavaScript for readers",
+        topics: [
+          { slug: "what-js-does-on-a-page", title: "What JS does on a page" },
+          { slug: "events-and-handlers", title: "Events & handlers" },
+          { slug: "async-and-loading", title: "Async & loading, gently" , planned: true },
+          { slug: "reading-errors-and-stack-traces", title: "Reading errors & stack traces" , planned: true },
+        ],
+      },
+      {
+        slug: "how-browsers-render",
+        title: "How browsers render",
+        topics: [
+          { slug: "dom-and-the-render-tree", title: "DOM & the render tree" , planned: true },
+          { slug: "reflow-and-repaint", title: "Reflow & repaint, gently" , planned: true },
+          { slug: "network-plus-render", title: "Network + render = page load" , planned: true },
+          { slug: "core-web-vitals-awareness", title: "Core Web Vitals awareness" , planned: true },
+        ],
+      },
+    ],
+  },
+  {
     slug: "foundations",
     title: "QA Foundations",
     summary: "The vocabulary and mental models every tester needs.",
