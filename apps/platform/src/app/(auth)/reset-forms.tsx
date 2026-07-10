@@ -82,7 +82,7 @@ function Alerts({ state }: { state: AuthFormState }) {
 
 function Submit({ pending, label }: { pending: boolean; label: string }) {
   return (
-    <Button type="submit" disabled={pending} className="w-full py-3">
+    <Button type="submit" loading={pending} className="w-full py-3">
       {pending ? "Please wait…" : label}
     </Button>
   );

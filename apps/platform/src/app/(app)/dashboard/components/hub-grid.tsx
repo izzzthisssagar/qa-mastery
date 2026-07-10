@@ -2,8 +2,8 @@ import Link from "next/link";
 
 /**
  * The master hub grid — every destination that used to clutter the navbar now
- * lives here as a card. `soon` cards (Notes, Tasks) render disabled until their
- * phase lands; Talent is gated by the feature flag from the server.
+ * lives here as a card. Any `soon` card renders disabled until its phase lands;
+ * Talent is gated by the feature flag from the server.
  */
 
 interface HubCard {
@@ -22,7 +22,7 @@ export function HubGrid({ showTalent }: { showTalent: boolean }) {
     { href: "/notes", label: "Notes wiki", desc: "The QA reference library", icon: "📚", accent: "text-amber-400" },
     { href: "/portfolio/me", label: "Portfolio", desc: "Your public proof of work", icon: "🎯", accent: "text-emerald-400" },
     { href: "/test-cases", label: "Test cases", desc: "Author & manage test cases", icon: "✅", accent: "text-teal-400" },
-    { href: "/tasks", label: "Tasks", desc: "Assigned practice & planner", icon: "🗂️", accent: "text-rose-400", soon: true },
+    { href: "/tasks", label: "Tasks", desc: "Assigned practice & planner", icon: "🗂️", accent: "text-rose-400" },
   ];
   if (showTalent) {
     cards.push({ href: "/talent", label: "Talent", desc: "The QA marketplace", icon: "🧑‍💻", accent: "text-accent" });

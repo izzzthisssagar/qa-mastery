@@ -2,6 +2,7 @@
 
 import type { ButtonHTMLAttributes } from "react";
 import { cn } from "./cn";
+import { Spinner } from "./spinner";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 
@@ -18,12 +19,25 @@ const VARIANT_CLASSES: Record<Variant, string> = {
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
+  /** Pending state: shows a spinner before the label, disables the button and
+   *  sets aria-busy. Pair with pending text ("Saving…") for clarity. */
+  loading?: boolean;
 }
 
-export function Button({ variant = "primary", className, type = "button", ...props }: ButtonProps) {
+export function Button({
+  variant = "primary",
+  className,
+  type = "button",
+  loading = false,
+  disabled,
+  children,
+  ...props
+}: ButtonProps) {
   return (
     <button
       type={type}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
       className={cn(
         "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition duration-200",
         "focus-visible:outline-2 focus-visible:outline-offset-2 disabled:pointer-events-none disabled:opacity-50",
@@ -31,6 +45,9 @@ export function Button({ variant = "primary", className, type = "button", ...pro
         className,
       )}
       {...props}
-    />
+    >
+      {loading && <Spinner />}
+      {children}
+    </button>
   );
 }

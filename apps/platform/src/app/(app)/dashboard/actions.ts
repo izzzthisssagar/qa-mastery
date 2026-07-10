@@ -16,7 +16,11 @@ import {
  * BuggyAPI seeds its own ba_* rows on first /api/session exchange, so this
  * only guarantees the public.sandboxes row + mints the token.
  */
-export async function launchBuggyApi(mode: "clean" | "bughunt" = "clean"): Promise<string> {
+export type LaunchBuggyApiResult = { ok: true; url: string } | { ok: false; error: string };
+
+export async function launchBuggyApi(
+  mode: "clean" | "bughunt" = "clean",
+): Promise<LaunchBuggyApiResult> {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -53,8 +57,16 @@ export async function launchBuggyApi(mode: "clean" | "bughunt" = "clean"): Promi
     "buggyapi",
   );
 
-  const baseUrl = process.env.NEXT_PUBLIC_BUGGYAPI_URL || "http://localhost:3002";
-  return `${baseUrl}/enter#t=${token}`;
+  // The localhost fallback is for local dev/e2e only. On Vercel it would hand
+  // the learner a dead link, so surface "not live yet" instead — returned, not
+  // thrown, because server-action error messages are masked in production.
+  // (deploy.yml skips BuggyAPI until VERCEL_BUGGYAPI_PROJECT_ID is provisioned.)
+  const baseUrl =
+    process.env.NEXT_PUBLIC_BUGGYAPI_URL || (process.env.VERCEL ? null : "http://localhost:3002");
+  if (!baseUrl) {
+    return { ok: false, error: "BuggyAPI isn't live yet — it's being provisioned. Check back soon!" };
+  }
+  return { ok: true, url: `${baseUrl}/enter#t=${token}` };
 }
 
 export interface ApiBugReportResult {

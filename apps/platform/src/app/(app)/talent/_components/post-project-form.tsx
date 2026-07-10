@@ -162,7 +162,7 @@ export function PostProjectForm() {
 
       {error && <p className="text-sm text-red-300">{error}</p>}
 
-      <Button onClick={submit} disabled={pending || title.trim().length < 3}>
+      <Button onClick={submit} loading={pending} disabled={title.trim().length < 3}>
         {pending ? "Posting…" : "Post project"}
       </Button>
     </div>

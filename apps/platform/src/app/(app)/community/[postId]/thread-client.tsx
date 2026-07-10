@@ -168,7 +168,7 @@ export function ThreadClient({ thread }: { thread: PostThread }) {
           className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-accent min-h-24"
         />
         {error && <p className="text-sm text-red-400">{error}</p>}
-        <Button onClick={submit} disabled={pending || !body.trim()} data-testid="comment-submit">
+        <Button onClick={submit} loading={pending} disabled={!body.trim()} data-testid="comment-submit">
           {pending ? "Posting…" : isQuestion ? "Post answer" : "Comment"}
         </Button>
       </div>

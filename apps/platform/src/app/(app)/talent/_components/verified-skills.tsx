@@ -42,7 +42,7 @@ export function VerifiedSkills({ initial }: { initial: VerifiedSkill[] }) {
         </p>
       )}
       <div className="flex items-center gap-3">
-        <Button variant="secondary" onClick={refresh} disabled={pending}>
+        <Button variant="secondary" onClick={refresh} loading={pending}>
           {pending ? "Checking your labs…" : "Refresh from my labs"}
         </Button>
         {error && <span className="text-sm text-red-300">{error}</span>}

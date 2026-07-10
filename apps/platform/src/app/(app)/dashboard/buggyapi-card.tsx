@@ -17,8 +17,12 @@ export function BuggyApiCard() {
     setError(null);
     startTransition(async () => {
       try {
-        const url = await launchBuggyApi(mode);
-        window.open(url, "_blank", "noopener");
+        const res = await launchBuggyApi(mode);
+        if (!res.ok) {
+          setError(res.error);
+          return;
+        }
+        window.open(res.url, "_blank", "noopener");
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not launch BuggyAPI");
       }

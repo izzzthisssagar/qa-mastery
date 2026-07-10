@@ -245,6 +245,34 @@ backed leaves, so planned stubs never 404. (Gotcha: YAML parses an unquoted
 
 ---
 
+## ADR-16 — Tasks: a three-table split that keeps grades unforgeable (2026-07-03)
+
+**Context.** Tasks are both system-assigned graded practice (earn XP) and a
+personal to-do planner. Grades must be earned, not self-asserted — the same
+constraint as quiz/bug scores (invariant 2) — while planner rows are the
+learner's own to freely edit.
+
+**Decision.** Three tables (`20260702000028_tasks.sql`):
+`tasks` (checked-in templates, service-role seeded, public read);
+`user_tasks` (the learner's rows — `task_id` null = a personal todo they author,
+set = an accepted system task; full own-row CRUD via RLS);
+`user_task_grades` (score + pass, **service-role WRITE only — no insert/update
+policy at all**, learner read-own). Grading is a pure `gradeTask(criteria,
+evidence)` in `packages/grading` (DB-free, unit-tested); the server action
+gathers evidence by counting *service-role-scored* rows (valid bug_reports =
+`matched && !duplicate`, plus authored test_cases), scores, and writes the
+verdict + `xp_events` through the service role.
+
+**Consequences.** A learner has zero write path to a grade — proven by
+`tasks-rls.test.ts` (the anon-key insert into `user_task_grades` errors). Because
+evidence is counted from already-scored rows, a learner can't inflate their own
+result by editing planner data. Adding tasks = check in a row (seeded via the
+migration now, `scripts/sync.ts` later). Personal todos and graded tasks share
+one table, distinguished by `task_id` null-ness with a `check` that a todo
+carries its own title.
+
+---
+
 ## ADR-10 — BuggyAPI: Hono + zod-openapi inside a Next.js shell
 
 **Context.** The API-testing practice app needs live endpoints AND perfect

@@ -65,7 +65,7 @@ export function CodeRunnerLab({ slug }: { slug: string }) {
       />
 
       <div className="mt-4 flex items-center justify-between">
-        <Button onClick={runCode} disabled={running || !code.trim()} data-testid="run-code">
+        <Button onClick={runCode} loading={running} disabled={!code.trim()} data-testid="run-code">
           {running ? "Running..." : "Run Code"}
         </Button>
         {result?.status === "passed" && <span className="text-xs font-semibold text-emerald-400">Execution completed</span>}

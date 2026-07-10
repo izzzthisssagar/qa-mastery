@@ -32,7 +32,7 @@ export function TestCaseForm() {
           <option value="medium">Medium</option>
           <option value="high">High</option>
         </select>
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" loading={pending}>
           {pending ? "Saving…" : "Add test case"}
         </Button>
         {state.error ? (

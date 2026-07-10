@@ -46,6 +46,29 @@ Repo secrets/variables it depends on (already configured via `gh`):
 | variable | `VERCEL_PLATFORM_PROJECT_ID` | platform project id |
 | variable | `VERCEL_BUGGYSHOP_PROJECT_ID` | buggyshop project id |
 
+## BuggyAPI + buggyapi-ws — NOT provisioned yet (learners see "isn't live yet")
+
+The code shipped (deploy.yml already carries the matrix entry and skips it
+cleanly), but the infrastructure was never created — as of 2026-07-10
+`qa-mastery-buggyapi.vercel.app` is `DEPLOYMENT_NOT_FOUND` and the Fly app
+doesn't resolve. The platform's dashboard card returns a friendly "isn't live
+yet" instead of the old dead `localhost:3002` handoff (`dashboard/actions.ts`).
+To go live:
+
+1. **Create the Vercel project** the same way the other two were made (REST
+   API, `rootDirectory: "apps/buggyapi"`, name `qa-mastery-buggyapi`).
+2. **Set its env vars**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+   `SUPABASE_SERVICE_ROLE_KEY`, `SANDBOX_JWT_SECRET` (must equal the platform's),
+   and `NEXT_PUBLIC_BUGGYAPI_WS_URL` once step 5 is done.
+3. **Wire CI**: `gh variable set VERCEL_BUGGYAPI_PROJECT_ID --body <prj_…>` —
+   the next push to main deploys it automatically.
+4. **Point the platform at it**: set `NEXT_PUBLIC_BUGGYAPI_URL=https://qa-mastery-buggyapi.vercel.app`
+   on the *platform* Vercel project and redeploy (build-time inline).
+5. **Launch the WS service** (once, manual — see `services/buggyapi-ws/fly.toml`):
+   `flyctl launch --no-deploy --copy-config --name qa-mastery-buggyapi-ws`, set
+   its secrets (`SANDBOX_JWT_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`),
+   then `gh secret set FLY_API_TOKEN` so deploy.yml keeps it fresh.
+
 ## Two deploy gotchas (both solved — keep in mind)
 
 1. **`TEAM_ACCESS_REQUIRED` block.** Vercel attaches the git commit author to a

@@ -68,7 +68,7 @@ export function SettingsForm({
       </div>
 
       <div className="flex items-center gap-3 pt-1">
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" loading={pending}>
           {pending ? "Saving…" : "Save changes"}
         </Button>
         {state.error ? (

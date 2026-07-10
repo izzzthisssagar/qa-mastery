@@ -83,6 +83,9 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [pending, startTransition] = useTransition();
+  // Which action is in flight — both buttons disable while pending, but only
+  // the active one should show its spinner.
+  const [active, setActive] = useState<"save" | "publish" | null>(null);
 
   // simple "profile strength" — fixes the UX Valley of Death (shows payoff).
   const strength = Math.min(
@@ -100,6 +103,7 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
   function save() {
     setError(null);
     setSaved(false);
+    setActive("save");
     startTransition(async () => {
       const input: ProfileInput = {
         handle,
@@ -125,6 +129,7 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
 
   function togglePublish() {
     setError(null);
+    setActive("publish");
     startTransition(async () => {
       const next = !isPublic;
       const res = await publishProfile(next);
@@ -258,10 +263,15 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
       {saved && !error && <p className="text-sm text-emerald-300">Saved.</p>}
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={save} disabled={pending}>
+        <Button onClick={save} loading={pending && active === "save"} disabled={pending}>
           {pending ? "Saving…" : "Save profile"}
         </Button>
-        <Button variant="secondary" onClick={togglePublish} disabled={pending || !handle}>
+        <Button
+          variant="secondary"
+          onClick={togglePublish}
+          loading={pending && active === "publish"}
+          disabled={pending || !handle}
+        >
           {isPublic ? "Unpublish" : "Publish"}
         </Button>
         <span className="text-xs text-zinc-500">

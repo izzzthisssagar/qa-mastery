@@ -72,7 +72,7 @@ export function SimulatorClient() {
           </select>
           <Button
             onClick={run}
-            disabled={running}
+            loading={running}
             data-testid="simulator-run"
             className="ml-auto"
           >
