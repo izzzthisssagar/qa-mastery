@@ -237,8 +237,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         topics: [
           { slug: "what-js-does-on-a-page", title: "What JS does on a page" },
           { slug: "events-and-handlers", title: "Events & handlers" },
-          { slug: "async-and-loading", title: "Async & loading, gently" , planned: true },
-          { slug: "reading-errors-and-stack-traces", title: "Reading errors & stack traces" , planned: true },
+          { slug: "async-and-loading", title: "Async & loading, gently"  },
+          { slug: "reading-errors-and-stack-traces", title: "Reading errors & stack traces"  },
         ],
       },
       {
