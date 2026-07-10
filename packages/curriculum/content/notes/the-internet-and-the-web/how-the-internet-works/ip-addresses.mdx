@@ -1,0 +1,250 @@
+---
+title: "IP addresses"
+summary: "Every machine on the internet has a number. Learn to read one, tell public from private, understand why your laptop and your neighbour's have the same address, and why 127.0.0.1 is where testers live."
+tags: ["internet", "networking", "track-a"]
+updated: "2026-07-10"
+---
+
+<Hook>
+`127.0.0.1` is going to become the most familiar number of your professional life. It
+means "this machine, right here," and you will type it, or its nickname `localhost`,
+several thousand times before you retire. But first: your laptop's address is probably
+`192.168.1.something`, and so is your neighbour's, and there's no conflict — which
+sounds impossible until you see the trick the router is pulling.
+</Hook>
+
+<Callout type="analogy">
+An <Term define="Internet Protocol address — the numeric address of a device on a network. IPv4 looks like 192.168.1.42 (four numbers 0–255). Public IPs are unique on the whole internet; private IPs are unique only inside one local network.">IP address</Term> is
+**a street address for a machine.** And your home network is an **office building with
+one street address and many internal room numbers.** The postman only knows the
+building: `203.0.113.7`. Inside, the receptionist (your router) knows that the reply to
+*this particular request* goes to room 42. That's why every home network on earth can
+reuse `192.168.1.42` — those are room numbers, meaningless outside the building, and
+the receptionist is doing the real work.
+</Callout>
+
+## Reading the number
+
+IPv4 addresses are four numbers, `0–255`, separated by dots: `192.168.1.42`. That's
+about 4.3 billion possible addresses, which sounded infinite in 1981 and ran out around
+2011. Its successor, **IPv6**, looks like `2001:0db8:85a3::8a2e:0370:7334` and has
+enough addresses to assign one to every atom on the surface of the earth, several times
+over. Both are in use right now, side by side.
+
+Three ranges you should recognize instantly:
+
+| Address | What it means |
+|---|---|
+| `127.0.0.1` | **This machine.** Loopback. Also called `localhost`. Never leaves your computer. |
+| `192.168.x.x`, `10.x.x.x`, `172.16–31.x.x` | **Private.** Inside a local network. Not routable on the internet. |
+| Anything else | **Public.** Unique on the entire internet. |
+
+<HotspotImage
+  src="/notes/the-internet-and-the-web/router.jpg"
+  alt="A home router, the device that translates between private and public IP addresses"
+  credit="Photo: ASUS Wi-Fi router — Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:ASUS_Wi-Fi_ROUTER_TUF_6500.jpg"
+  pins={[
+    { x: 22, y: 72, label: "The WAN port has the PUBLIC address", desc: "One address for your whole household — something like 203.0.113.7 — and it's the only one the outside world ever sees. Every device you own shares it. When a website 'sees your IP', it sees this, not your laptop." },
+    { x: 58, y: 72, label: "The LAN side hands out PRIVATE addresses", desc: "192.168.1.10, .11, .12 — one per device, assigned automatically by DHCP. Your neighbour's router hands out the exact same numbers. No conflict, because these numbers are meaningless outside each building." },
+    { x: 50, y: 55, label: "NAT — the receptionist's notebook", desc: "The router keeps a table: 'request from .42 on port 51000 went to google.com'. When the reply arrives at the public address, it looks up the table and forwards it to .42. That table is the entire trick that let 4.3 billion addresses serve 20 billion devices." },
+    { x: 80, y: 40, label: "Its own admin page lives at a private IP", desc: "192.168.1.1 in your browser — the router talking to you over your own LAN. That address is unreachable from the internet, which is the only reason it's safe to have a login page there at all." },
+    { x: 50, y: 30, label: "Every device gets its own room number", desc: "Phone, laptop, TV, a suspicious smart lightbulb. Check the admin page's device list: if you find something you don't recognize, that's a real security finding, and it's Track E's opening lecture." },
+  ]}
+/>
+
+<FlowAnimation
+  title="How a reply finds your laptop and not your flatmate's — press Play"
+  intervalMs={1700}
+  nodes={[
+    { label: "💻 Your laptop asks for a page", desc: "Its private address is 192.168.1.42. It sends a request to a public server. But 192.168.1.42 is meaningless on the internet — millions of laptops have it. A reply addressed there could never find its way back." },
+    { label: "📓 The router rewrites the sender", desc: "Before forwarding, the router swaps the sender address to its own PUBLIC one (203.0.113.7) and writes a line in its notebook: 'port 51000 → laptop .42'. This is NAT, and it happens to every packet you have ever sent." },
+    { label: "🌍 The server sees only the building", desc: "As far as the website is concerned, the request came from 203.0.113.7 — your household. It has no idea your laptop, phone and TV exist. It replies to the building's street address." },
+    { label: "📬 The reply arrives at the router", desc: "Addressed to 203.0.113.7, port 51000. The router checks its notebook: port 51000 belongs to .42. Without that table entry, the packet would be undeliverable — arriving at a building with no room number." },
+    { label: "✅ Delivered to your laptop", desc: "Rewritten and forwarded to 192.168.1.42. Your flatmate's laptop on .43, who asked for a different page on a different port, gets theirs. One public address, many devices, zero confusion — as long as the notebook survives." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="Try it — classify addresses, and be the router's notebook"
+  code={`import ipaddress
+
+for raw in ["127.0.0.1", "192.168.1.42", "10.0.0.5", "203.0.113.7", "8.8.8.8", "172.16.4.1"]:
+    ip = ipaddress.ip_address(raw)
+    kind = ("LOOPBACK — this machine, never leaves it" if ip.is_loopback
+            else "PRIVATE — inside a local network only" if ip.is_private
+            else "PUBLIC — unique on the whole internet")
+    print(f"{raw:16} {kind}")
+print()
+
+# Now be the router. One public IP, several devices, one notebook.
+PUBLIC = "203.0.113.7"
+nat_table = {}
+next_port = 51000
+
+def outbound(private_ip, dest):
+    global next_port
+    port = next_port; next_port += 1
+    nat_table[port] = private_ip
+    print(f"out: {private_ip:13} -> {dest:14} rewritten as {PUBLIC}:{port}")
+    return port
+
+def inbound(port):
+    who = nat_table.get(port)
+    print(f"in : reply to {PUBLIC}:{port} -> " + (f"forward to {who}" if who else "DROPPED (no notebook entry — nobody asked for this)"))
+
+p1 = outbound("192.168.1.42", "google.com")
+p2 = outbound("192.168.1.43", "wikipedia.org")
+print()
+inbound(p1)
+inbound(p2)
+inbound(59999)   # unsolicited packet from the internet
+print()
+print("That last DROP is a firewall for free: unsolicited traffic has no notebook")
+print("entry, so it cannot reach any device inside. NAT was invented to save")
+print("addresses and accidentally became most homes' first line of defence.")`}
+/>
+
+## Why testers care, immediately
+
+- **`localhost` / `127.0.0.1`** — where the app you're testing runs during development. `http://localhost:3000` is your daily commute.
+- **"It works on localhost but not from my phone"** — because `localhost` means *this machine*. On your phone, `localhost` is *the phone*. You need the laptop's private IP (`192.168.1.42:3000`) instead. This confusion costs every beginner exactly one afternoon.
+- **IP-based rules** — rate limits, geo-blocking, allow-lists. All of them see your building's public IP, not your device. Everyone in your office shares it, which is why the API rate-limited your colleague when *you* ran the load test.
+
+<Callout type="tip">
+`127.0.0.1` and `localhost` are the same destination. Your machine short-circuits the
+request before it reaches any network hardware — it never touches your router, your
+Wi-Fi, or a single cable. That's why a local test suite runs at absurd speed and then
+crawls the moment it hits a real server: you weren't testing the network at all, you
+were testing a loop inside one computer. Excellent for speed. Dangerous if you forget,
+because *every* latency lesson from the last two notes was invisible to you.
+</Callout>
+
+<FirstTime title="Your mission: find all three of your addresses">
+<StepChecklist
+  steps={[
+    { text: "Find your PRIVATE address", detail: "`ipconfig` (Windows) or `ifconfig` / `ip addr` (Mac/Linux). Look for something starting 192.168 or 10. That's your room number, assigned by your router." },
+    { text: "Find your PUBLIC address", detail: "Search 'what is my IP'. This is your building's street address — shared by every device in your home. Open it on your phone too: same number. That's NAT, proven." },
+    { text: "Meet 127.0.0.1", detail: "`ping 127.0.0.1`. Sub-millisecond, zero loss — the packet never left your CPU. You just pinged yourself, and it's the fastest network in the world because it isn't one." },
+    { text: "Look at your router's device list", detail: "192.168.1.1 in a browser. Every private address it has handed out, with device names. Count them. Recognize them all? If not, that's a genuine finding." },
+    { text: "Do the classic beginner mistake, on purpose", detail: "Start any local server, open it on your laptop at localhost:3000 — works. Now type localhost:3000 on your phone — fails. Then try your laptop's private IP (192.168.1.42:3000) on the phone — works. You just learned what 'localhost' means, permanently." },
+  ]}
+/>
+Private, public, and loopback: three addresses, three meanings, one afternoon saved forever.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "My app works on localhost but my phone can't reach it.",
+      fix: "`localhost` means 'the machine I am typing on'. On the phone, that's the phone — which isn't running your server. Use the laptop's private IP instead (`192.168.1.42:3000`), make sure both are on the same Wi-Fi, and check the server is bound to 0.0.0.0 (all interfaces) rather than 127.0.0.1 only. That last one is the sneaky half of this bug: many dev servers listen ONLY on loopback by default, deliberately, so the outside world can't reach them.",
+    },
+    {
+      symptom: "The API rate-limited me, but I only made three requests.",
+      fix: "Rate limits usually key on the PUBLIC IP — which your entire office or household shares. Your colleague's load test spent the budget; you got the bill. This is a real and common production issue too: users behind a corporate NAT get throttled as one user. Worth reporting when you see an app do it naively, because it's a genuine design flaw affecting real people.",
+    },
+    {
+      symptom: "Two devices can't see each other even on the same Wi-Fi.",
+      fix: "Check both private IPs are on the same subnet (both 192.168.1.x, not one on 192.168.0.x). Guest networks deliberately isolate devices from each other — that's their entire purpose, not a bug. And your laptop's firewall may block incoming connections to your dev server; that too is a feature you must knowingly override.",
+    },
+    {
+      symptom: "My public IP changed and now something's broken.",
+      fix: "Home connections usually get a DYNAMIC public IP — it changes when the router reconnects. Anything that hardcoded your old address (an allow-list, a firewall rule, a DNS record you set by hand) now points nowhere. Static IPs cost money for exactly this reason. If you added your IP to an allow-list last week and access broke today, you just found your cause.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where addresses show themselves:
+
+- **`ipconfig` / `ip addr`** — your private address, and which interface (Wi-Fi or Ethernet) it belongs to.
+- **"what is my IP"** — your public one. Also reveals roughly where the internet thinks you are, which is how geo-blocking works, and why a VPN changes what you can watch.
+- **`ping 127.0.0.1`** — proof that your network stack works even with the cable unplugged. Rule out the entire world in one command.
+- **Router admin page** — every device, every lease, every unfamiliar guest.
+- **`netstat -an | grep LISTEN`** (Mac/Linux) — what's listening on this machine, and on which address. `127.0.0.1:3000` means loopback-only; `0.0.0.0:3000` means reachable from your network. That single distinction is the phone-can't-connect bug, printed as text.
+
+Tester's habit: when something can't connect, ask **"which of the three addresses did
+this thing actually use?"** Loopback, private, or public. Nine times in ten, the answer
+is "loopback, and I expected it to be public."
+</WhereToCheck>
+
+<WorkedExample title="the demo that died in the meeting room">
+The classic, and it will happen to you within a year:
+
+1. **Friday:** a developer builds a feature. `http://localhost:3000` on their laptop. Everything is perfect. They tell everyone it's ready.
+2. **Monday, in a meeting room:** they want the product manager to try it on her phone. They send her `http://localhost:3000`. It fails, obviously — her phone loaded *its own* port 3000, which is nothing.
+3. **They try the laptop's private IP:** `http://192.168.1.42:3000`. Still nothing. The room begins to look at them.
+4. **The real cause, findable in one command:** `netstat -an | grep 3000` prints `127.0.0.1:3000`. The dev server is bound to **loopback only** — a sensible security default that means "accept connections from this machine and nowhere else." No phone, on any network, could ever reach it.
+5. **The fix:** start the server bound to `0.0.0.0` (all interfaces). Now `192.168.1.42:3000` works from the phone, provided both are on the same Wi-Fi and the laptop's firewall permits it.
+6. **Why this note exists:** three different addresses, three different meanings, and a demo that failed for a reason that looked like magic but was one line of `netstat`. Testers who know the difference between loopback, private and public are the ones who fix this in twenty seconds while a room watches.
+</WorkedExample>
+
+<Callout type="mistake">
+Believing your device has "an IP address," singular. It has at least three roles in play:
+`127.0.0.1` (itself), a private LAN address (its room number), and a public address it
+merely *shares* with everything else in the building. Every connection problem you will
+ever debug depends on knowing which of the three is in use, and beginners lose entire
+afternoons because they assumed the answer was obvious. It never is. `netstat` and
+`ipconfig` will tell you in one second what an hour of guessing will not.
+</Callout>
+
+<Quiz
+  question="Your dev server runs fine at localhost:3000 on your laptop, but your phone on the same Wi-Fi cannot reach it at the laptop's private IP. `netstat` shows the server listening on 127.0.0.1:3000. What's happening?"
+  options={[
+    "The phone is on a different network",
+    "The server is bound to loopback only — it accepts connections from that one machine and nowhere else, by design. Nothing on the network can reach it until it's bound to 0.0.0.0 (all interfaces).",
+    "Phones can't connect to development servers",
+    "The private IP is wrong — you need the public one"
+  ]}
+  answer={1}
+  explain="`127.0.0.1:3000` is a precise statement: this socket accepts traffic arriving on the loopback interface only. Packets from the phone arrive on the Wi-Fi interface and are refused before any application logic runs. It's a deliberate security default — a dev server shouldn't be exposed to the coffee shop by accident. Bind to 0.0.0.0 when you want network access, and understand you've just invited everyone on that network in."
+/>
+
+<Flashcards
+  cards={[
+    { front: "127.0.0.1 / localhost", back: "This machine. Loopback. The packet never touches network hardware. Where your dev server and local test suite live." },
+    { front: "Private vs public IP", back: "Private (192.168.x.x, 10.x.x.x, 172.16–31.x.x) is a room number inside one network — reused by every household. Public is unique on the whole internet and shared by your entire building." },
+    { front: "NAT", back: "The router rewrites your private sender address to its public one and keeps a notebook of which port belongs to which device, so replies find their way back. It saved IPv4 and accidentally became a firewall." },
+    { front: "Why your phone can't reach localhost", back: "'localhost' means the device typing it. Use the laptop's private IP — and make sure the server binds 0.0.0.0, not 127.0.0.1." },
+    { front: "IP rate limits hit whole buildings", back: "Limits key on the public IP, shared by everyone behind one router. One colleague's load test throttles the whole office — and one corporate NAT throttles thousands of real users." },
+    { front: "IPv4 vs IPv6", back: "IPv4: four numbers 0–255, ~4.3 billion addresses, exhausted in 2011. IPv6: 2001:0db8::7334, effectively unlimited. Both run side by side today." },
+  ]}
+/>
+
+<Challenge>
+Find all three of your addresses (`ipconfig`/`ip addr`, "what is my IP", and
+`ping 127.0.0.1`). Then start any local server and try to open it from your phone. When
+it fails, run `netstat -an | grep 3000` and read which address it's bound to. You will
+have reproduced, diagnosed, and fixed the single most common beginner networking bug —
+before anyone ever asked you to.
+</Challenge>
+
+<AskCommunity prompt="IP question: server bound to [netstat output]. Laptop private IP: [x]. Phone can/can't reach [url]. Both on same Wi-Fi: [yes/no]. Firewall: [on/off]. Error seen: [exact text].">
+The netstat line answers this question before anyone reads the rest — `127.0.0.1:3000`
+versus `0.0.0.0:3000` is the entire difference between 'nobody can reach this' and
+'anyone on this network can'. Learning to include the one line that settles it is,
+genuinely, most of what being good at asking questions means.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://en.wikipedia.org/wiki/IP_address", title: "Wikipedia — IP addresses, v4 and v6", kind: "read" },
+    { href: "https://en.wikipedia.org/wiki/Network_address_translation", title: "Wikipedia — NAT, the trick that saved the internet", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=7_LPdttKXPc", title: "IP addresses and NAT explained", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=7_LPdttKXPc" title="IP addresses, private networks and NAT" minutes={8} />
+
+<Takeaways
+  points={[
+    "Every device juggles three kinds of address: 127.0.0.1 (itself), a private LAN address (its room number), and a shared public address (the building).",
+    "NAT lets one public IP serve many devices by rewriting senders and keeping a notebook of ports — which is also why unsolicited inbound traffic gets dropped for free.",
+    "'localhost' means the machine typing it. Your phone can't reach your laptop's localhost, and a server bound to 127.0.0.1 refuses every network connection by design.",
+    "IP-based rate limits and geo-blocks see the public address, so they treat an entire office — or an entire corporate NAT — as one user.",
+    "When something won't connect, ask which of the three addresses it actually used. `netstat`, `ipconfig` and `ping 127.0.0.1` answer in seconds what guessing won't answer in an hour.",
+  ]}
+/>
+
+<Complete xp={10} />

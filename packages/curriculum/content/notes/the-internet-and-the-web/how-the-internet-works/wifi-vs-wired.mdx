@@ -1,0 +1,240 @@
+---
+title: "Wi-Fi vs wired"
+summary: "Radio is shared, unreliable and invisible; copper is private, boring and dependable. Knowing exactly which one is lying to you turns 'the internet is bad' into a fault you can find in one command."
+tags: ["internet", "networking", "testing", "track-a"]
+updated: "2026-07-10"
+---
+
+<Hook>
+Wi-Fi is the only part of the internet that behaves like a crowded room. Everyone
+shouts at once, walls eat words, and the microwave has opinions. Ethernet is a private
+corridor where your data walks alone. Both deliver packets, and every serious debugging
+session begins by asking which one you're standing in — because they fail in completely
+different ways, and only one of them can be fixed by moving your chair.
+</Hook>
+
+<Callout type="analogy">
+Wi-Fi is **a conversation in a busy café.** One person speaks at a time, everyone else
+waits, and volume drops with distance. Add ten more people and nobody has to be *rude*
+for everyone to get slower — the room is simply shared. Ethernet is **a private phone
+line to one person.** No competition, no interference, no waiting your turn. This is
+not a metaphor for how they *feel*; it is mechanically what they are.
+</Callout>
+
+## The differences that actually matter
+
+| | Wi-Fi | Ethernet |
+|---|---|---|
+| **Medium** | Radio waves, shared by everyone nearby | Copper, private to you |
+| **Access** | One device transmits at a time per channel | Simultaneous both directions |
+| **Latency** | 2–30ms, *varies* (jitter) | Under 1ms, stable |
+| **Failure mode** | Degrades gradually, unpredictably | Works or doesn't |
+| **Interference** | Walls, microwaves, neighbours, distance | Essentially none |
+
+The last row is why testers care most. Ethernet fails **honestly** — the cable's in or
+it isn't. Wi-Fi fails **ambiguously**, getting slowly worse in ways that look exactly
+like a slow application. The measurement that exposes it is <Term define="The variation in latency between packets — how much the round-trip time bounces around, not how big it is on average. Steady 12ms is healthy; a 4ms–90ms swing is jitter. Calls stutter and tests time out from jitter while speed tests, which report averages, call the connection excellent.">jitter</Term>, and no speed test will show it to you.
+
+<HotspotImage
+  src="/notes/the-internet-and-the-web/router.jpg"
+  alt="A router with antennas for Wi-Fi and Ethernet ports for wired connections"
+  credit="Photo: ASUS Wi-Fi router — Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:ASUS_Wi-Fi_ROUTER_TUF_6500.jpg"
+  pins={[
+    { x: 50, y: 30, label: "Antennas — the shared café", desc: "Every device in range takes turns transmitting on the same channel. Your neighbour's router, on the same channel, is a person shouting in your café. Nobody is doing anything wrong; the room is just full." },
+    { x: 58, y: 72, label: "Ethernet ports — the private corridor", desc: "Plug in here and you leave the café entirely: no sharing, no interference, sub-millisecond latency, no jitter. Thirty seconds of effort eliminates the single most common cause of 'the internet is weird today'." },
+    { x: 80, y: 40, label: "2.4 GHz vs 5 GHz — the physics trade", desc: "2.4 GHz travels further and penetrates walls, but is crowded (and shared with microwaves and old cordless phones). 5 GHz is faster and quieter but stops at walls. There is no 'better' band — there is only the trade you chose." },
+    { x: 22, y: 72, label: "The WAN port — unchanged by any of this", desc: "Whether you're on Wi-Fi or Ethernet, everything past this port is identical. If your problem persists on a cable, the fault is out here — beyond your house, beyond your control, and beyond the point of restarting anything." },
+    { x: 50, y: 55, label: "Bars measure the café, not the journey", desc: "Signal strength describes ONE hop of maybe ten metres. Full bars with a dead connection is not a paradox: it means your device hears the router perfectly and the router has nothing to say." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Why Wi-Fi slows down when nothing changed — press Play"
+  intervalMs={1700}
+  nodes={[
+    { label: "📻 One channel, one speaker", desc: "Wi-Fi is half-duplex on a shared channel: only one device transmits at a time. Everyone else waits, then contends for the next slot. Your laptop, your phone, the TV, the doorbell camera — all queueing politely for air." },
+    { label: "👥 Neighbours share your air", desc: "Wi-Fi channels overlap between homes. Your neighbour's router isn't attacking you; it's transmitting on the same frequency, and radio doesn't respect walls or leases. In a flat block, dozens of networks compete for a handful of channels." },
+    { label: "🧱 Walls and distance eat signal", desc: "Signal weakens with distance (and brutally through concrete or foil-backed insulation). When it weakens, devices don't disconnect — they drop to a SLOWER, more robust encoding to keep the link alive. You get connectivity, at a fraction of the speed." },
+    { label: "📉 So one slow device slows everyone", desc: "A device transmitting at a low rate occupies the channel LONGER for the same data. Everyone else waits through it. One phone in a far bedroom genuinely does slow down the whole house — the notorious effect people always suspect and rarely believe." },
+    { label: "🔌 Ethernet: none of the above", desc: "Private wire, both directions at once, no contention, no interference, latency under a millisecond and steady. This is why servers, CI runners and anyone who values their sanity use cables — and why 'test it on the cable first' is the fastest diagnostic in networking." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="Try it — jitter is the thing that ruins calls, not average speed"
+  code={`import statistics
+
+# Two connections, IDENTICAL average latency. Only one is usable for a call.
+wired = [12, 12, 13, 12, 12, 13, 12, 12, 13, 12]
+wifi  = [4, 38, 6, 45, 5, 9, 51, 4, 7, 41]
+
+def report(name, samples):
+    avg = statistics.mean(samples)
+    jit = statistics.stdev(samples)              # how much it BOUNCES
+    worst = max(samples)
+    print(f"{name:8} avg={avg:5.1f}ms  jitter={jit:5.1f}ms  worst={worst:3}ms")
+    return avg, jit
+
+a1, j1 = report("wired", wired)
+a2, j2 = report("wifi",  wifi)
+print()
+print(f"Averages are nearly identical ({a1:.1f} vs {a2:.1f} ms).")
+print(f"Jitter is {j2/j1:.0f}x worse on Wi-Fi. THAT is what stutters a video call.")
+print()
+
+# A call needs packets to arrive at even intervals. Simulate a 20ms jitter buffer:
+BUFFER = 20
+for name, samples in [("wired", wired), ("wifi", wifi)]:
+    base = min(samples)
+    late = sum(1 for s in samples if s - base > BUFFER)
+    print(f"{name:8} packets arriving too late for the buffer: {late}/{len(samples)}")
+print()
+print("Your speed test reports the average and calls it 'good'.")
+print("Your colleague reports that you sound like a robot. Both are correct.")`}
+/>
+
+## What this means for testing software
+
+- **Test on a bad network on purpose.** Chrome DevTools → Network → throttle to "Slow 4G". Most apps have never been run under conditions their users live in daily.
+- **Wi-Fi makes flaky tests.** An automated suite on office Wi-Fi will fail randomly, and the failures will look like application bugs. CI runners are wired for exactly this reason. If your local suite is flakier than CI's, suspect the café before the code.
+- **Jitter, not bandwidth, breaks real-time features.** Chat, calls, live updates, websockets. The average looks fine and the experience is terrible.
+
+<Callout type="tip">
+**The thirty-second bisect:** plug in an Ethernet cable and try again. Problem gone →
+it was the radio hop (move closer, change channel, use 5 GHz). Problem stays → it's
+your ISP or beyond, and nothing you do indoors will help. One cable, one variable, half
+the internet eliminated. This is the single highest-value diagnostic move in this
+entire module, and almost nobody makes it before spending an hour restarting things at
+random.
+</Callout>
+
+<FirstTime title="Your mission: measure the café">
+<StepChecklist
+  steps={[
+    { text: "Ping continuously over Wi-Fi", detail: "`ping -c 30 8.8.8.8` (or `ping -n 30` on Windows). Watch the times. Note the lowest, the highest, and how much they bounce. That bounce is jitter, and you're seeing it live." },
+    { text: "Now do it on a cable", detail: "Plug in Ethernet, disable Wi-Fi, run the same command. The numbers should be lower AND remarkably steady. That steadiness is what a call needs; the average was never the point." },
+    { text: "Walk away from the router", detail: "Back on Wi-Fi, run the ping while walking to the far end of your home. Watch the times climb and start missing. You are personally measuring signal decay, and it's not subtle." },
+    { text: "Test the microwave hypothesis", detail: "Run a continuous ping over 2.4 GHz Wi-Fi and start a microwave for 30 seconds. If loss spikes, you've just proven interference with a household appliance. Then switch to 5 GHz and repeat — it should be untouched." },
+    { text: "Throttle a real site", detail: "Chrome DevTools (F12) → Network → 'Slow 4G' → reload a site you like. That's your app for a huge fraction of the world. Sit with it. That's the whole lesson." },
+  ]}
+/>
+You measured jitter, watched signal decay, and experienced your own product the way a distant user does.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "Full Wi-Fi bars, but pages hang.",
+      fix: "Bars measure the radio hop only: your device hears the router clearly. It's a statement about ten metres of a ten-thousand-kilometre journey. Test the rest: `ping 192.168.1.1` (your router — should be ~1ms) then `ping 8.8.8.8` (the world). Router fast, world slow = the fault is past your front door, and your bars were never going to tell you.",
+    },
+    {
+      symptom: "Video calls stutter even though the speed test says 200 Mbps.",
+      fix: "Speed tests report bandwidth and an average latency. Calls die of JITTER — irregular arrival times — and of upload capacity. Run `ping -c 50` and look at the spread, not the mean, exactly as the playground did. Then try a cable. If wired calls are perfect, your radio hop is the whole story and no plan upgrade will change it.",
+    },
+    {
+      symptom: "My automated test suite fails randomly, but only on my machine.",
+      fix: "Are you on Wi-Fi? Packet loss and jitter produce timeouts that look exactly like application bugs, and they're unreproducible by definition. CI runners are wired precisely so this doesn't happen. Move to a cable and re-run before you spend a day 'fixing' a test that was never broken. This is one of the most-wasted debugging days in the industry.",
+    },
+    {
+      symptom: "The internet is slow only in one room.",
+      fix: "Congratulations, you've localized it to physics. Distance and walls attenuate the signal; your device then negotiates a slower encoding to stay connected — which also means it holds the shared channel longer, slowing everyone else. Fix with 5 GHz proximity, a mesh node, a repeater, or a cable. Not with a faster plan, which changes nothing about the room.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Distinguishing radio problems from real problems:
+
+- **`ping <your router>` vs `ping 8.8.8.8`** — splits your home from the world in two commands. Do this first, always.
+- **The spread of ping times, not the average** — steady means healthy, bouncy means jitter, and jitter is what humans actually notice.
+- **A cable** — the physical bisect. Nothing else eliminates so many suspects so fast.
+- **`ping -c 100`** and read the packet-loss summary — even 2% loss will make a call ugly and a test suite flaky, while a speed test cheerfully reports "great".
+- **Your router's admin page** — which band each device is on, and its signal strength. That phone on 2.4 GHz in the far bedroom is why the living room stutters.
+- **DevTools throttling** — the deliberate version of a bad network, applied to your own product before your users apply it for you.
+
+Tester's habit: **never debug an app on Wi-Fi without first proving the network isn't
+the bug.** Two pings and a cable. The alternative is filing bug reports about the
+weather.
+</WhereToCheck>
+
+<WorkedExample title="the flaky test suite that was a wall">
+An automation engineer's week, compressed:
+
+1. **Symptom:** a Playwright suite fails 1 test in 20, randomly, different tests each time, always a timeout. On CI it passes every single run.
+2. **The trap:** "flaky tests" get blamed on the tests. Two days go into adding waits and retries — which *reduce* the symptom just enough to look like progress while proving nothing.
+3. **The question nobody asked:** what's physically different between this laptop and the CI runner? The runner is wired, in a data centre, metres from the server. The laptop is on office Wi-Fi, one floor and two concrete walls from the access point.
+4. **The measurement:** `ping -c 200 <app-host>` from the laptop while the suite runs. **3% packet loss and jitter swinging from 4ms to 90ms.** Meanwhile the office speed test reports a magnificent 300 Mbps, because bandwidth was never the problem.
+5. **The bisect:** plug in Ethernet. Run the suite ten times. **Zero failures.** The application code, the tests, and the retries were never the issue. Two concrete walls were.
+6. **What gets written down:** not "tests are flaky" but "test failures correlate with 3% packet loss on Wi-Fi; wired runs are 10/10 green." That sentence ends the argument. And notice the two days of added waits are now revealed as noise permanently baked into the suite — the true cost of debugging a symptom you never measured.
+</WorkedExample>
+
+<Callout type="mistake">
+Debugging application behaviour over Wi-Fi and trusting what you see. Radio is a shared,
+lossy, invisible medium that degrades *gradually* — so it never announces itself. It
+manufactures timeouts, half-loaded pages, stalled uploads and random test failures, all
+of which are indistinguishable from real application bugs when you're staring at a
+browser. Ethernet fails honestly; Wi-Fi fails as a convincing impostor. Before you file
+anything, before you add a single retry, prove the network is not your bug. It takes
+one cable and one ping.
+</Callout>
+
+<Quiz
+  question="Your speed test shows 300 Mbps and 15ms average latency, yet video calls stutter and your test suite times out randomly. `ping -c 50` shows times ranging from 4ms to 90ms with 3% loss. What's the diagnosis?"
+  options={[
+    "Your ISP is throttling video traffic",
+    "Jitter and packet loss on the Wi-Fi radio hop. The average latency and the bandwidth are both fine — real-time features and timeouts are destroyed by irregular arrival times and lost packets, which averages conceal. Test on a cable to confirm.",
+    "You need a faster internet plan",
+    "The application has a bug in its retry logic"
+  ]}
+  answer={1}
+  explain="An average of 15ms can hide a range of 4–90ms, and a speed test will never show you the spread. Calls need packets at even intervals; test suites time out when packets vanish. Both die of variance, not of insufficient bandwidth — so upgrading the plan changes nothing. The Ethernet cable is the controlled experiment: one variable changed, and if the symptoms vanish, the radio hop was the culprit all along."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Wi-Fi is a shared café", back: "One device transmits at a time per channel; neighbours share your air; walls and distance force slower encodings, which occupy the channel longer and slow everyone." },
+    { front: "Ethernet's real advantage", back: "It fails honestly. Private wire, both directions at once, sub-millisecond stable latency, no interference. Wi-Fi degrades gradually and imitates application bugs." },
+    { front: "Jitter", back: "Variation in latency. Averages hide it. It's what stutters calls and times out tests, while the speed test reports 'excellent'." },
+    { front: "2.4 vs 5 GHz", back: "2.4 GHz: further, through walls, crowded (microwaves live here). 5 GHz: faster, quieter, stops at walls. A trade, not a ranking." },
+    { front: "The thirty-second bisect", back: "Plug in a cable. Gone = radio hop. Stays = ISP or beyond. One variable changed, half the internet eliminated." },
+    { front: "Why CI runners are wired", back: "Because Wi-Fi loss and jitter manufacture random timeouts that look exactly like application bugs. Never debug an app on Wi-Fi without first proving the network isn't the bug." },
+  ]}
+/>
+
+<Challenge>
+Run `ping -c 30 8.8.8.8` on Wi-Fi, write down the highest and lowest times, then repeat
+it on a cable. Compute the spread for each. Then open DevTools, throttle to Slow 4G, and
+use your favourite website for five full minutes without turning it off. Those five
+minutes are the most valuable empathy exercise in this module: you have just met the
+user whose experience of your product is the only one you never test.
+</Challenge>
+
+<AskCommunity prompt="Wi-Fi question: `ping -c 30 8.8.8.8` on Wi-Fi gives [min/avg/max, loss %]. Same on Ethernet: [min/avg/max, loss %]. Band: [2.4/5 GHz]. Distance to router: [m, through N walls]. Symptom: [stutter / timeouts / flaky tests].">
+Bringing both ping runs answers the question before anyone reads the symptom: if wired
+is clean and Wi-Fi is lossy, the diagnosis is complete and everything else is detail.
+Running the experiment yourself is what changes 'my internet is bad' into a finding.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.eff.org/deeplinks/2019/07/wi-fi-basics", title: "How Wi-Fi channels and interference actually work", kind: "read" },
+    { href: "https://developer.chrome.com/docs/devtools/network/#throttle", title: "Chrome DevTools — throttle your network like a real user's", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=7_LPdttKXPc", title: "Wi-Fi vs Ethernet: latency, jitter and interference", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=7_LPdttKXPc" title="Why Wi-Fi is slower than the cable next to it" minutes={7} />
+
+<Takeaways
+  points={[
+    "Wi-Fi is a shared radio channel: one transmitter at a time, neighbours compete for the same air, and weak signal forces slower encodings that slow everyone else.",
+    "Ethernet fails honestly (works or doesn't). Wi-Fi degrades gradually and convincingly imitates application bugs — timeouts, stalls, flaky tests.",
+    "Jitter and packet loss break calls and test suites; bandwidth and average latency conceal both. Read the spread, not the mean.",
+    "The thirty-second bisect: plug in a cable. Symptoms gone = radio hop. Symptoms stay = ISP or beyond.",
+    "Never debug an application over Wi-Fi without first proving the network isn't the bug — and throttle your own app to Slow 4G before your users do it for you.",
+  ]}
+/>
+
+<Complete xp={10} />

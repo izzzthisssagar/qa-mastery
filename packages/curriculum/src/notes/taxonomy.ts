@@ -150,6 +150,63 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
     ],
   },
   {
+    slug: "the-internet-and-the-web",
+    title: "The internet & the web",
+    summary: "How machines find each other, how a page arrives on your screen, and the request-response conversation underneath every bug you will ever file.",
+    chapters: [
+      {
+        slug: "how-the-internet-works",
+        title: "How the internet works",
+        topics: [
+          { slug: "networks-and-the-internet", title: "Networks & the internet" },
+          { slug: "isps-and-connections", title: "ISPs & connections" },
+          { slug: "ip-addresses", title: "IP addresses" },
+          { slug: "wifi-vs-wired", title: "Wi-Fi vs wired" },
+        ],
+      },
+      {
+        slug: "browsers-and-page-loading",
+        title: "Browsers & page loading",
+        topics: [
+          { slug: "what-a-browser-is", title: "What a browser is" , planned: true },
+          { slug: "how-a-page-loads", title: "How a page loads" , planned: true },
+          { slug: "tabs-history-bookmarks", title: "Tabs, history & bookmarks" , planned: true },
+          { slug: "a-peek-at-dev-tools", title: "A peek at dev tools" , planned: true },
+        ],
+      },
+      {
+        slug: "client-server-and-http",
+        title: "Client, server & HTTP",
+        topics: [
+          { slug: "client-vs-server", title: "Client vs server" , planned: true },
+          { slug: "request-and-response", title: "Request & response" , planned: true },
+          { slug: "http-in-plain-words", title: "HTTP in plain words" , planned: true },
+          { slug: "what-a-site-is-made-of", title: "What a site is made of" , planned: true },
+        ],
+      },
+      {
+        slug: "what-the-cloud-is",
+        title: "What \"the cloud\" is",
+        topics: [
+          { slug: "the-cloud-explained", title: "The cloud explained", planned: true },
+          { slug: "cloud-storage", title: "Cloud storage", planned: true },
+          { slug: "web-apps", title: "Web apps", planned: true },
+          { slug: "saas", title: "SaaS", planned: true },
+        ],
+      },
+      {
+        slug: "domains-urls-and-hosting",
+        title: "Domains, URLs & hosting",
+        topics: [
+          { slug: "anatomy-of-a-url", title: "Anatomy of a URL", planned: true },
+          { slug: "domains-and-dns", title: "Domains & DNS", planned: true },
+          { slug: "hosting", title: "Hosting", planned: true },
+          { slug: "https-and-the-padlock", title: "HTTPS & the padlock", planned: true },
+        ],
+      },
+    ],
+  },
+  {
     slug: "foundations",
     title: "QA Foundations",
     summary: "The vocabulary and mental models every tester needs.",
