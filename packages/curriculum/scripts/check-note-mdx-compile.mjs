@@ -62,12 +62,39 @@ function walk(dir) {
   return out;
 }
 
+// Mirror packages/curriculum/src/notes/load.ts noteFrontmatterSchema so the
+// frontmatter failures that only surface in the CI unit test (notably a
+// summary over 300 chars) are caught here, pre-commit, instead. Parse with the
+// SAME library the loader uses (gray-matter) so every valid YAML form — quoted,
+// unquoted, block scalar — is read exactly as production reads it.
+const matter = (await import(require.resolve("gray-matter", { paths: [pkgRoot] }))).default;
+
+function checkFrontmatter(raw) {
+  let data;
+  try {
+    ({ data } = matter(raw));
+  } catch (e) {
+    return `unparseable frontmatter: ${String(e.message).split("\n")[0]}`;
+  }
+  if (typeof data.title !== "string" || !data.title.trim()) return "missing/empty title";
+  if (typeof data.summary !== "string" || data.summary.length < 1) return "missing/empty summary";
+  if (data.summary.length > 300) return `summary is ${data.summary.length} chars (max 300)`;
+  return null;
+}
+
 const files = walk(notesRoot).sort();
 let fail = 0;
 for (const f of files) {
-  // strip YAML frontmatter exactly as next-mdx-remote (vfile-matter) does
-  const src = fs.readFileSync(f, "utf8").replace(/^---\n[\s\S]*?\n---\n/, "");
+  const raw = fs.readFileSync(f, "utf8");
   const rel = path.relative(notesRoot, f);
+  const fmError = checkFrontmatter(raw);
+  if (fmError) {
+    fail++;
+    console.error(`FAIL  ${rel}\n      frontmatter: ${fmError}`);
+    continue;
+  }
+  // strip YAML frontmatter exactly as next-mdx-remote (vfile-matter) does
+  const src = raw.replace(/^---\n[\s\S]*?\n---\n/, "");
   try {
     await compile(src, { format: "mdx" });
   } catch (e) {
@@ -77,7 +104,7 @@ for (const f of files) {
 }
 
 if (fail) {
-  console.error(`\n${fail}/${files.length} note(s) FAILED to compile.`);
+  console.error(`\n${fail}/${files.length} note(s) FAILED (compile or frontmatter).`);
   process.exit(1);
 }
-console.log(`ok — all ${files.length} notes compile through @mdx-js/mdx`);
+console.log(`ok — all ${files.length} notes compile through @mdx-js/mdx and pass frontmatter checks`);

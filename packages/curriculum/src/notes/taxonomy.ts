@@ -348,6 +348,53 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
     ],
   },
   {
+    slug: "logic-and-control-flow",
+    title: "Logic & control flow",
+    summary: "Conditions, loops and functions — the control structures that turn a straight list of statements into a program that decides, repeats and reuses.",
+    chapters: [
+      {
+        slug: "conditions",
+        title: "Conditions",
+        topics: [
+          { slug: "if-else", title: "if / else" },
+          { slug: "comparison-and-logic", title: "Comparison & logic" },
+          { slug: "nested-conditions", title: "Nested conditions" },
+          { slug: "switch-and-match", title: "switch / match" },
+        ],
+      },
+      {
+        slug: "loops",
+        title: "Loops",
+        topics: [
+          { slug: "for-loops", title: "for loops", planned: true },
+          { slug: "while-loops", title: "while loops", planned: true },
+          { slug: "break-and-continue", title: "break & continue", planned: true },
+          { slug: "iterating-collections", title: "Iterating collections", planned: true },
+        ],
+      },
+      {
+        slug: "functions",
+        title: "Functions",
+        topics: [
+          { slug: "defining-functions", title: "Defining functions", planned: true },
+          { slug: "parameters-and-return", title: "Parameters & return", planned: true },
+          { slug: "scope", title: "Scope", planned: true },
+          { slug: "reuse-and-dry", title: "Reuse & DRY", planned: true },
+        ],
+      },
+      {
+        slug: "first-bugs-and-debugging",
+        title: "First bugs & debugging",
+        topics: [
+          { slug: "reading-errors", title: "Reading errors", planned: true },
+          { slug: "print-debugging", title: "Print debugging", planned: true },
+          { slug: "using-a-debugger", title: "Using a debugger", planned: true },
+          { slug: "common-mistakes", title: "Common mistakes", planned: true },
+        ],
+      },
+    ],
+  },
+  {
     slug: "foundations",
     title: "QA Foundations",
     summary: "The vocabulary and mental models every tester needs.",
