@@ -1,0 +1,272 @@
+---
+title: "Print debugging"
+summary: "Printing a value mid-run is the oldest debugging trick and still the most-used, at every level. The skill isn't typing print — it's knowing WHAT to print (label, value, type), WHERE, and how to halve the search each time so you corner the bug in a few prints, not forty."
+tags: ["logic-and-control-flow", "java", "python", "debugging", "track-b"]
+updated: "2026-07-11"
+---
+
+<Hook>
+There's a myth that "real" programmers use fancy debuggers and only beginners sprinkle `print`
+statements. It's nonsense. Open the terminal of nearly any senior engineer chasing a bug and
+you'll find it full of `print("HERE 1")`, `print("x =", x)`, `console.log(">>>>", data)`. Adding
+a print to see what a program is *actually* doing — versus what you *assume* it's doing — is the
+fastest way to close the gap between those two, and that gap is where every bug lives. The trick
+is not the `print`. It's knowing what to put inside it and where to place it.
+</Hook>
+
+<Callout type="analogy">
+A print statement is a footprint in snow. When you find one, you know something *walked exactly
+here* — and the tread pattern even tells you *what*. That's precisely what a print does: it
+proves your program reached this exact line, and shows the value it carried at that instant. And
+the untouched snow matters just as much: **no footprint means nothing walked there.** When you
+add a print and it never appears in the output, that's the discovery — the line you were sure
+ran, didn't. Half of all print-debugging bugs are found not by a print that shows a wrong value,
+but by a print that never prints at all.
+</Callout>
+
+## The three questions a good print answers
+
+A bare `print(x)` is a weak footprint. A *good* debug print answers three questions at once, so
+you never have to guess which print produced which line:
+
+**1. WHERE am I?** A label. `print("after the loop:", ...)` — so when six prints fire, you can
+tell them apart. `print(x)` alone gives you `7` and no idea which of your prints said it.
+
+**2. WHAT is the value?** The variable, printed with its *raw* form. In Python use `repr()` /
+`!r` so a string shows its quotes and a trailing space becomes visible. The pretty value hides
+bugs; the raw value reveals them.
+
+**3. WHAT TYPE is it?** When a value surprises you, print `type(x)` too. Half of dynamic-language
+bugs are a value that's secretly the wrong type — a `"3"` where you expected a `3` — and the
+type is the only thing that exposes it.
+
+Put together: `print(f"[loop] item={item!r} type={type(item).__name__} total={total}")`. That one
+line tells you where, what, and what-kind — and that's a footprint you can actually follow.
+
+<HotspotImage
+  src="/notes/logic-and-control-flow/footprint-in-snow.jpg"
+  alt="A single crisp boot print pressed into fresh snow, surrounded by untouched snow"
+  credit="Footprint in snow — Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Footprints_in_the_snow,_Munich_2021_01.jpg"
+  pins={[
+    { x: 50, y: 48, label: "The whole print = 'execution reached HERE'", desc: "A footprint is proof something passed this exact spot. A `print` is identical: if the line runs, its output appears, and now you KNOW the program got to that point. This is the most basic and most powerful use — not to see a value, but to confirm a line executed at all. 'Did this code even run?' is answered instantly by whether the print shows up." },
+    { x: 42, y: 42, label: "The tread pattern = the VALUE you captured", desc: "The detail in the print — the specific ridges — is like the value you logged: `x = 7`, `item = 'banana'`. A footprint without tread tells you someone passed; a footprint WITH tread tells you who. `print('here')` is treadless; `print('here: x =', repr(x))` records exactly what the program was carrying at that step." },
+    { x: 20, y: 70, label: "The untouched snow = code that NEVER RAN", desc: "This is the insight beginners miss. The blank snow around the print is every path nothing walked. When you add a print and it never appears, that blank snow is your bug: the line you were certain executed, didn't — a condition was false, a loop ran zero times, a function returned early. A MISSING footprint is often louder than a present one." },
+    { x: 65, y: 30, label: "Crisp edges = an exact, in-the-moment record", desc: "The print captures the value at the precise instant it ran — not before, not after. That timing is everything: a variable can be right on line 10 and wrong on line 40, and only a print placed at the right spot catches the moment it changed. Move the footprint and you sample a different point in the program's walk." },
+    { x: 78, y: 62, label: "One clear print beats ten vague ones", desc: "A single, well-labelled footprint tells you more than a scramble of `print(1)`, `print(2)`, `print(3)`. Resist spraying prints everywhere; place a few good ones with labels and values, read them, then move them. Debugging is aiming, not carpet-bombing — and a tidy trail is one you can actually read." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Bisection: corner the bug in a few prints, not forty. Press Play"
+  intervalMs={1900}
+  nodes={[
+    { label: "You know the START is right and the END is wrong", desc: "The input is fine; the output is wrong. Somewhere between line 1 and line 100, a correct value became a wrong one. Adding a print on every line would work but is slow. There's a far faster way — the same idea as guessing a number between 1 and 100." },
+    { label: "Print ONCE, in the MIDDLE", desc: "Put a single print at roughly the halfway point. Is the value still correct there, or already wrong? One print, one yes/no answer — and that answer just eliminated HALF the code. The bug is either before the midpoint or after it." },
+    { label: "Jump to the middle of the half that's wrong", desc: "Say the midpoint value was already wrong — the bug is in the first half. Print at the middle of THAT half. Right or wrong? Another half gone. You're doing binary search on your own code, and each print throws away 50% of the suspects." },
+    { label: "Repeat — each print halves what's left", desc: "100 lines becomes 50, then 25, then 12, then 6, then 3, then 1. Around SEVEN prints, placed by halving, pin the exact line where the value goes bad — versus dozens of prints placed by guessing. This is the single biggest efficiency multiplier in print-debugging." },
+    { label: "The last print sits right on the bug", desc: "When 'correct just before' meets 'wrong just after' on adjacent lines, the line between them is your bug. You didn't read the whole program; you asked six or seven well-placed yes/no questions and let each one delete half the haystack." },
+  ]}
+/>
+
+Here's print-debugging catching a real bug. This Python function adds up prices, but a string
+snuck into the list — the debug print shows each item's value **and type**, so you can see the
+culprit the instant before it crashes:
+
+<CodePlayground
+  language="python"
+  title="Run it — a labelled debug print exposes the bad value"
+  code={`def total_price(items):
+    total = 0
+    for item in items:
+        # the debug print: WHERE (loop), WHAT (item, raw), TYPE, and running total
+        print(f"  [debug] item={item!r}  type={type(item).__name__}  total_before={total}")
+        total += item
+    return total
+
+prices = [10, 5, "3", 2]        # oops -- a string "3" snuck in among the ints
+print("adding up prices...")
+print("total:", total_price(prices))`}
+/>
+
+Read the debug lines: `item=10 type=int`, `item=5 type=int`, then `item='3' type=str` — and
+right there, before the crash, you can SEE that `'3'` is a string, not a number. The `TypeError`
+that follows just confirms what the print already told you. Now the same technique in Java —
+where the compiler stops that exact string bug, so print-debugging instead hunts a *logic*
+slip (watch the running total reveal it):
+
+<CodePlayground
+  language="java"
+  title="Run it — labelled prints trace the running state in Java"
+  code={`public class Main {
+    static int highestEven(int[] numbers) {
+        int best = 0;
+        for (int n : numbers) {
+            boolean isEven = n % 2 == 0;
+            // the debug print: which n, is it even, and the best-so-far
+            System.out.println("  [debug] n=" + n + "  isEven=" + isEven + "  best_so_far=" + best);
+            if (isEven && n > best) {
+                best = n;
+            }
+        }
+        return best;
+    }
+
+    public static void main(String[] args) {
+        int[] data = {3, 8, 5, 12, 7, 6};
+        System.out.println("finding the highest even number...");
+        System.out.println("highest even: " + highestEven(data));   // should be 12
+    }
+}`}
+/>
+
+The Java debug line lets you watch `best` climb — 0, then 8, then 12 — and confirm each `n` was
+tested for evenness. If the answer were ever wrong, you'd see *exactly* which step misbehaved,
+without guessing. Same footprints, same idea; the only difference is Java's compiler already
+swept up the type bug that bit Python.
+
+<Term define={`A method for finding a bug fast by repeatedly cutting the search space in half — the same idea as binary search. You know the value is right at the start and wrong at the end, so you place ONE print in the middle: if the value is still correct there, the bug is in the second half; if already wrong, it's in the first half. Either way, one print eliminated 50% of the code. Repeat inside the guilty half, and a program of 100 lines is narrowed to the exact faulty line in roughly seven prints instead of dozens. Bisection is why an experienced debugger finds bugs so much faster than a beginner spraying prints everywhere — they're not printing more, they're printing in the places that each throw away half the remaining suspects. The same technique works with git (git bisect) to find which COMMIT introduced a bug, and it's the reason 'divide and conquer' is the debugger's core instinct.`}>bisection</Term>
+
+<Callout type="tip">
+Make your debug prints **findable and removable**. Prefix them with a distinctive marker you'd
+never ship — `print("XXXX total =", total)` or `>>>>`. Then before you commit, search the file
+for `XXXX` / `>>>>` and delete every one in seconds. This solves the two problems with
+print-debugging at once: during the hunt you can spot your own prints in a busy log, and
+afterwards you can guarantee none leaked into the codebase. A committed `print("XXXX")` is a
+small embarrassment; a systematic marker makes it impossible.
+</Callout>
+
+<FirstTime title="Your mission: follow the footprints to a bug">
+<StepChecklist
+  steps={[
+    { text: "Watch the values stream by", detail: "Run the Python playground. Each loop pass prints the item, its type, and the running total. You're seeing the program's actual state at each step — not what you assume, what IS." },
+    { text: "Spot the culprit before the crash", detail: "Find the line 'item='3' type=str'. There's your bug, called out by the print BEFORE the TypeError even fires. The print diagnosed it; the error just confirmed it." },
+    { text: "Add a footprint of your own", detail: "In the Java playground, add a print right after 'best = n;' saying 'NEW BEST:' + best. Run it — now you see the exact moments best changed (at 8, then 12), a tighter trail than before." },
+    { text: "Find a missing footprint", detail: "In Python, change the list to all odd numbers and add a print INSIDE an 'if item % 2 == 0' block. Run it — the print never appears. That blank output is the discovery: the block never ran." },
+    { text: "Try bisection", detail: "Imagine a 20-step calculation gone wrong. Instead of printing all 20, print once at step 10. Right or wrong there? You just deleted 10 steps with one print. That's the whole efficiency trick." },
+  ]}
+/>
+You've now used prints to see a value, expose a type, prove a line ran — and prove one didn't. That's the entire technique.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "My debug print never appears in the output.",
+      fix: "That's a finding, not a failure — the line didn't run. The condition around it was false, the loop ran zero times, or the function returned before reaching it. A missing footprint tells you the code path you assumed executed, didn't. Move the print earlier to find where execution actually stopped or branched away.",
+    },
+    {
+      symptom: "The value prints as expected but the program still behaves wrong.",
+      fix: "Print in a DIFFERENT spot — the value is right where you looked but goes wrong elsewhere. Use bisection: if it's correct at the midpoint, the bug is after it. Also print the RAW value (`repr()` / `!r`) — a string that looks like `42` on screen might be `'42 '` with a trailing space, right the whole time to your eye and wrong to the code.",
+    },
+    {
+      symptom: "There are so many print lines I can't find mine.",
+      fix: "Two fixes. Prefix every debug print with a unique marker (`XXXX`, `>>>>`) so you can eyeball or grep just yours. And print FEWER, better prints — a handful with clear labels beats fifty bare ones. If the real logs are drowning you, that's the moment to switch from print to a logging library with levels you can filter.",
+    },
+    {
+      symptom: "My prints show up in the wrong order, or after a crash.",
+      fix: "Output buffering. Prints can sit in a buffer and flush late — so a print right before a crash may never appear, making you think the line didn't run. Force it out: Python `print(..., flush=True)`, Java `System.out.flush()`. Also, stdout and stderr can interleave oddly; if order matters, send debug prints to the same stream consistently.",
+    },
+    {
+      symptom: "I fixed the bug but forgot to remove my prints, and they shipped.",
+      fix: "This is why the marker habit matters — grep `XXXX` before every commit and delete. Long term, prefer a logging library: `logger.debug(...)` can be left in place and switched OFF in production by config, giving you the trail when you need it and silence when you don't. Print is scratch paper; logging is the permanent, switchable record.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Print-debugging is a discipline, not a reflex. Aim before you fire:
+
+- **Print WHERE, WHAT, and TYPE** — a label, the raw value (`repr`/`!r`), and `type(x)` when a value surprises you. Bare `print(x)` wastes the technique.
+- **Bisect, don't carpet-bomb** — one print at the midpoint deletes half the code. Seven aimed prints beat forty scattered ones.
+- **Watch for the MISSING print** — a footprint that never appears means the line never ran. That's often the whole bug.
+- **Mark your prints** — a unique prefix (`XXXX`) so you can find them in a busy log and delete them all before committing.
+- **Flush before a crash** — `flush=True` / `System.out.flush()` so a print right before the failure actually reaches the screen.
+
+Tester's habit: **when you can't reproduce a bug, add prints and ask the user to run it.** A
+labelled print that reports the actual value on the machine where the bug happens turns "works
+on mine" into "here's the exact value that's different on theirs." Print-debugging isn't only
+for your own code — it's a remote-diagnosis tool.
+</WhereToCheck>
+
+<WorkedExample title="the print that wasn't there">
+1. **The report:** "Premium users aren't getting their discount. Regular users are billed fine. We've checked the discount math ten times and it's correct."
+2. **The developer keeps re-reading the discount CALCULATION** — the multiply, the rounding, the total. All correct. Hours pass. The math was never the problem, so staring at it reveals nothing.
+3. **A tester adds one print INSIDE the discount block:** `print("XXXX applying discount, rate =", rate)` — right where the discount is actually applied.
+4. **They run it for a premium user. The print never appears.** Blank. The discount code isn't producing a wrong number — it's *not running at all*. The footprint that should be there, isn't.
+5. **So they move the print UP**, to just before the `if user.is_premium:` that guards the block, printing `user.is_premium`. It shows `False` — for a user who is definitely premium.
+6. **There's the bug, and it's nowhere near the math.** `is_premium` is being read from a field that's set later than this code runs — a timing/ordering bug. The discount block is skipped because the flag isn't `True` yet. Ten re-reads of the calculation could never have found it, because the calculation was innocent.
+7. **The fix is about ORDER, not arithmetic** — set `is_premium` before the discount step runs. A one-line move, found by a print that *refused to appear*.
+8. **The lesson for a tester.** The most valuable print is often the one that stays silent. A present footprint shows a wrong value; a missing footprint proves a line never executed — and 'the code you're all staring at never even ran' is a bug that re-reading the code cannot find, only running it can. When something 'should work', put a print inside it and confirm it runs at all before you trust a single line of it.
+</WorkedExample>
+
+<Callout type="mistake">
+Printing without a label: `print(x)`, `print(total)`, `print(data)`. In a loop or a busy
+program you get a column of bare values — `7`, `12`, `banana`, `0` — and no idea which print
+produced which, or which iteration you're looking at. You end up adding *more* prints just to
+tell your prints apart. Spend the extra three seconds: `print("total after loop:", total)`. The
+label is what turns a pile of numbers into a readable trail, and it costs nothing but a few
+keystrokes you'll save tenfold in confusion.
+</Callout>
+
+<Quiz
+  question="You add a debug print inside a function to check a value, run the program, and the print never appears in the output at all. What does that most likely mean?"
+  options={[
+    "Printing is broken or the value is invalid",
+    "The line never executed — the function wasn't called, a condition around it was false, or the code returned before reaching it. A print that doesn't appear is proof that path didn't run, which is frequently the bug itself: the code you assumed ran, didn't.",
+    "You need to add flush=True and it will definitely appear",
+    "The value is None, so print produced nothing"
+  ]}
+  answer={1}
+  explain="This is the most underused insight in all of print-debugging: a MISSING print is a discovery, not a dud. When your footprint never shows up, execution never reached that line — the function wasn't called, an `if` guarding it was false, a loop ran zero times, or an early `return`/exception jumped past it. Beginners assume 'the print didn't work' and move on; pros realise 'the CODE didn't run' and follow that thread, which often lands right on the bug (see the premium-discount example — the whole block was silently skipped). The move: when a print doesn't appear, walk it backwards up the code until it DOES, and the last silent spot is where execution branched away from what you expected. (Buffering can occasionally hide a final print before a crash — flush to rule that out — but 'the line didn't run' is the far more common and more useful answer.)"
+/>
+
+<Flashcards
+  cards={[
+    { front: "What three things should a debug print show?", back: "WHERE (a label), WHAT (the raw value via repr/!r), and TYPE (type(x)) when the value surprises you. `print(f'[loop] item={item!r} type={type(item).__name__}')`." },
+    { front: "What does a MISSING print tell you?", back: "The line never ran — condition false, loop ran zero times, early return, or the function wasn't called. A silent footprint is often the whole bug." },
+    { front: "What is bisection?", back: "Binary-search your code: print ONCE at the midpoint. Correct there → bug is after; wrong there → bug is before. Each print halves the search — ~7 prints pin a bug in 100 lines." },
+    { front: "Why label every debug print?", back: "So you can tell six prints apart. `print(x)` gives a bare `7` with no context; `print('total after loop:', x)` tells you what and where in one line." },
+    { front: "How do you keep debug prints from shipping?", back: "Prefix with a unique marker (XXXX, >>>>), grep and delete before committing. Long term, use a logging library with levels you can switch off in production." },
+    { front: "A value prints correctly but the program is still wrong — now what?", back: "Print somewhere else (bisect), and print the RAW value (repr) — the bug is at a different spot, or the 'correct-looking' value has a hidden trailing space / wrong type." },
+    { front: "print vs logging", back: "print = scratch paper, delete after the hunt. logging = permanent, level-based (debug/info/warning), left in and switched off in production. Graduate from one to the other." },
+  ]}
+/>
+
+<Challenge>
+In the Python playground, remove the string `"3"` so the list is all ints and run it — the crash
+vanishes and you see a clean trail ending in `total: 20`. Now add a print AFTER the loop, before
+the `return`, saying `[debug] final total = ` and the value, and confirm it matches. Then delete
+the `"3"` fix and instead wrap `total += item` so it converts with `int(item)` — watch the trail
+continue past where it used to crash. Write one sentence: describe a bug you would find faster by
+a print that NEVER appears than by any print that shows a value.
+</Challenge>
+
+<AskCommunity prompt="Print-debugging stuck: I expected `[X]` but a debug print shows `[Y]` (or shows NOTHING). The print I added: `[paste the print line]`. Where I placed it: `[which function/line]`. Language: `[Java/Python]`. Did the print appear at all? `[yes/no]`. Raw value via repr/!r: `[paste]`.">
+Whether the print APPEARED at all is the first thing to say — a missing print (line never ran)
+and a present-but-wrong print (bad value) are completely different bugs. State that, paste the
+print line and the raw value, and the diagnosis usually follows immediately.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://realpython.com/python-debugging-print/", title: "Real Python — print-debugging done well (and when to stop)", kind: "read" },
+    { href: "https://docs.python.org/3/library/logging.html", title: "Python docs — logging: the grown-up successor to print", kind: "read" },
+    { href: "https://git-scm.com/docs/git-bisect", title: "git bisect — bisection applied to finding the guilty commit", kind: "read" },
+    { href: "https://blog.regehr.org/archives/199", title: "A guide to debugging — the discipline behind the prints", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=Ioyb2iJyBI0" title="Debugging with print statements, the right way" minutes={10} />
+
+<Takeaways
+  points={[
+    "Print-debugging is the most-used technique at every level — the skill is what to print (label + raw value + type), not typing print itself.",
+    "A MISSING print is a discovery: the line never ran. That silent footprint is frequently the whole bug — the code you assumed executed, didn't.",
+    "Bisect instead of carpet-bombing: one print at the midpoint deletes half the code. Around seven aimed prints pin a bug in 100 lines.",
+    "Mark debug prints with a unique prefix (XXXX) so you can find and delete them all before committing — or graduate to a logging library you can switch off.",
+    "For a tester: a labelled print run on the machine where a bug reproduces turns 'works on mine' into the exact value that differs on theirs — remote diagnosis in one line.",
+  ]}
+/>
+
+<Complete xp={10} />
