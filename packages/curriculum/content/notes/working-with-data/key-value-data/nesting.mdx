@@ -1,0 +1,295 @@
+---
+title: "Nesting"
+summary: "Real data isn't flat. A user contains an address, which contains a city; an order contains a list of items. Nesting is putting maps and lists inside each other, and reaching a value means opening one level at a time — `data['user']['address']['city']`. Every JSON response you test is nested."
+tags: ["working-with-data", "java", "python", "data-structures", "track-b"]
+updated: "2026-07-11"
+---
+
+<Hook>
+The maps and lists you've met so far were flat: a name to a price, a row of numbers. But almost no
+real data is flat. A user has an **address**, which has a **city** and a **postcode**. An order has
+a **list of items**, and each item is its own little object with a name and a quantity. Data comes in
+layers — structures inside structures — and that's **nesting**. Reaching a value deep inside means
+opening one layer at a time: `data['user']['address']['city']`. Master this and you can read any JSON
+response, any config file, any API payload — because they're all just maps and lists, nested.
+</Hook>
+
+<Callout type="analogy">
+Nested data is a set of Russian dolls. The biggest doll is your whole structure; open it and there's
+a smaller doll inside; open that and there's a smaller one still, until you reach the tiny one at the
+centre — the value you actually wanted. `data['user']['address']['city']` is you opening doll after
+doll: the `user` doll, then the `address` doll inside it, then finally the `city` at the core. Two
+things follow from the picture. You have to open them **in order** — you can't skip to the middle
+doll. And if any doll along the way is **missing or empty**, you can't open the next one — the chain
+stops right there, which is exactly where nested data breaks in code.
+</Callout>
+
+## Reaching into nested data
+
+Nesting combines the two structures you know — maps and lists — by letting their *values* be other
+maps and lists. Everything about reaching in follows from that:
+
+**Each step is one bracket.** `data['user']` gets the user map; `['address']` gets the address map
+inside it; `['city']` gets the string inside that. You chain the steps, left to right, going one
+level deeper each time.
+
+**Maps and lists interleave.** A value can be a list of maps: `data['user']['orders'][0]['total']`
+reads the user's orders (a list), takes the first (`[0]`), then that order's total. Bracket by
+bracket, you don't care whether each level is a map or a list — you just open the next doll.
+
+**Any level can be missing.** The deeper you reach, the more places it can fail: no `user`, or a user
+with no `address`, or an address with no `city`. Each level is a chance for a `KeyError`/`null`, which
+is why safe descent matters more the deeper you go.
+
+<HotspotImage
+  src="/notes/working-with-data/nested-dolls.jpg"
+  alt="A row of seven Russian nesting dolls from largest to smallest"
+  credit="Russian Matryoshka dolls — Wikimedia Commons, CC BY-SA 2.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:DGJ_4705_-_Russian_Matryoshka_(4312413546).jpg"
+  pins={[
+    { x: 12, y: 45, label: "The biggest doll = the whole structure", desc: "The outermost doll is your entire data object — the top-level map, say the whole API response. Everything else lives INSIDE it. In code this is `data` itself, before you've opened anything. You always start here, at the outside, and work inward one level at a time." },
+    { x: 33, y: 50, label: "Each doll inside = one level of nesting", desc: "Open the big doll and there's a smaller one: that's a nested map or list — `data['user']`. Open THAT and there's another: `['address']`. Every doll is one level deeper, one more bracket in the chain. The number of dolls you open is exactly the number of brackets you write." },
+    { x: 88, y: 62, label: "The smallest doll = the value you're after", desc: "At the very centre is the tiny doll — the actual value you wanted, like the city string or an order total. Everything before it was structure you opened to GET here. `data['user']['address']['city']` — the city is the last, smallest doll, and the whole chain existed just to reach it." },
+    { x: 55, y: 55, label: "Open them IN ORDER — you can't skip", desc: "You can't jump straight to the third doll; you open the first, then the second, then the third. Nested access is the same — `data['city']` fails if city lives inside address; you must go `data['user']['address']['city']`, in order. Skipping a level is one of the most common nested-data mistakes." },
+    { x: 70, y: 30, label: "A missing doll = the chain BREAKS here", desc: "If one doll in the set is missing, you open its parent and find nothing — you can't open the next. Nested data fails the same way: reach `data['user']['address']` when there's no address and you get null/KeyError, and the `['city']` after it blows up. The deeper you reach, the more levels can be absent, which is why deep access needs safe descent at every step." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Reading data['user']['orders'][0]['total'] — press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Start at the whole object", desc: "`data` is the outermost doll — the full structure, maybe a whole API response. You want one number buried inside it: the total of the user's first order. You'll get there by opening one layer at a time, left to right." },
+    { label: "`['user']` — open the first doll", desc: "This gives you the user map: name, address, orders, all nested inside. You've gone one level down. Whatever else is in `data`, you've now narrowed to just the user's part of it." },
+    { label: "`['orders']` — a LIST this time", desc: "Inside the user is a list of orders. Nesting freely mixes maps and lists: this level isn't a named field, it's a sequence you index into. The next step won't be a key — it'll be a position." },
+    { label: "`[0]` — take the first order", desc: "Index into the list to grab the first order, which is itself a map (id, total, items). You've opened a doll that was inside a list that was inside a map. Each bracket didn't care what kind of level it was — it just opened the next one." },
+    { label: "`['total']` — the value at the centre", desc: "The first order's total: the number you came for, the smallest doll. Four brackets, four dolls opened, one value reached. And every one of those four levels was a place the chain could have broken if something upstream was missing." },
+  ]}
+/>
+
+Here's nested data in Python — a small version of exactly the shape an API returns, and the ways
+you'll read it, including **safe descent** so a missing level doesn't crash:
+
+<CodePlayground
+  language="python"
+  title="Run it — reading (and safely reading) nested data in Python"
+  code={`data = {
+    "user": {
+        "name": "Willeke",
+        "address": {"city": "Amsterdam", "zip": "1011"},
+        "orders": [
+            {"id": 1, "total": 30},
+            {"id": 2, "total": 55},
+        ],
+    }
+}
+
+# Reach in, one bracket per level
+print("city:", data["user"]["address"]["city"])
+print("first order total:", data["user"]["orders"][0]["total"])
+
+# Sum a nested list of maps
+total = sum(order["total"] for order in data["user"]["orders"])
+print("all orders total:", total)
+
+# SAFE descent: chain .get with {} defaults so a missing level returns a default, not a crash
+city = data.get("user", {}).get("address", {}).get("city", "unknown")
+print("safe city:", city)
+
+phone = data.get("user", {}).get("phone", "no phone on file")   # 'phone' doesn't exist
+print("safe phone:", phone)
+
+# The UNSAFE version -- uncomment to see it crash on the missing level:
+# print(data["user"]["phone"]["number"])   # KeyError: 'phone'`}
+/>
+
+Now Java. Nested `Map`/`List` works, but notice how much **casting** it takes, because each level is
+typed only as `Object` — this verbosity is exactly why Java code usually models nested data with real
+classes/records instead of raw maps:
+
+<CodePlayground
+  language="java"
+  title="Run it — nested maps in Java (and why classes are usually better)"
+  code={`import java.util.*;
+
+public class Main {
+    public static void main(String[] args) {
+        Map<String, Object> address = new HashMap<>();
+        address.put("city", "Amsterdam");
+        address.put("zip", "1011");
+
+        List<Map<String, Object>> orders = new ArrayList<>();
+        orders.add(Map.of("id", 1, "total", 30));
+        orders.add(Map.of("id", 2, "total", 55));
+
+        Map<String, Object> user = new HashMap<>();
+        user.put("name", "Willeke");
+        user.put("address", address);
+        user.put("orders", orders);
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("user", user);
+
+        // Reach in -- every level needs a cast, because the value type is Object
+        Map<String, Object> u = (Map<String, Object>) data.get("user");
+        Map<String, Object> addr = (Map<String, Object>) u.get("address");
+        System.out.println("city: " + addr.get("city"));
+
+        int total = 0;
+        for (Object o : (List<?>) u.get("orders")) {
+            total += (int) ((Map<?, ?>) o).get("total");
+        }
+        System.out.println("all orders total: " + total);
+        System.out.println("(all those casts are WHY Java models nested data with classes/records)");
+    }
+}`}
+/>
+
+<Term define={`Data structures placed inside other data structures — a map whose values are maps or lists, a list whose items are maps, to any depth. Nesting is how real data models the real world: a user CONTAINS an address which CONTAINS a city; an order CONTAINS a list of items. You reach a nested value by chaining access one level at a time, left to right — \`data['user']['address']['city']\` — where each bracket opens one more level, and the levels can freely mix maps (accessed by key) and lists (accessed by index). JSON, the format almost every API speaks, is exactly nested maps ('objects') and lists ('arrays'), which is why reading nested data IS reading API responses. The central hazard is that ANY level can be absent — no user, or a user with no address — so a deep access has many points of failure; the defence is 'safe descent', supplying a default at each step (chained \`.get(key, {})\` in Python, or null-checks/Optional in Java) so a missing level yields a default instead of a KeyError/NullPointerException. The deeper you reach, the more this matters.`}>nesting</Term>
+
+<Callout type="tip">
+The deeper you reach, the more you should **descend safely** — because each level is another place the
+data might not exist. `data['user']['address']['city']` has three chances to throw. If any level can
+legitimately be missing (optional fields in an API response very often are), chain safe access:
+Python `data.get('user', {}).get('address', {}).get('city')`, or in Java check each level (or use
+`Optional`/a library). And when nested data gets deep and repetitive, that's often the signal to model
+it with real classes/records instead of raw maps — which turns bracket-chains into checked, dotted
+field access and moves the 'missing level' failures from runtime to compile time.
+</Callout>
+
+<FirstTime title="Your mission: open the dolls">
+<StepChecklist
+  steps={[
+    { text: "Reach the centre", detail: "In the Python playground, `data['user']['address']['city']` returns 'Amsterdam'. Count the brackets: three levels down. Each `[...]` opened one more doll." },
+    { text: "Cross a list boundary", detail: "`data['user']['orders'][0]['total']` mixes a map, a list index `[0]`, then a map again. Nesting doesn't care about the mix — you just keep opening. Change `[0]` to `[1]` for the second order." },
+    { text: "Sum a nested list", detail: "The comprehension `sum(order['total'] for order in data['user']['orders'])` loops the nested list of orders and adds their totals. Reading nested lists is a daily task once data has depth." },
+    { text: "Break it on purpose", detail: "Uncomment `print(data['user']['phone']['number'])` and run — KeyError: 'phone', because that level doesn't exist. The chain broke at the missing doll. Comment it back." },
+    { text: "Descend safely", detail: "See `data.get('user', {}).get('phone', 'no phone on file')` return the default instead of crashing. Each `.get(key, {})` opens a doll if present, or hands back an empty one so the next step is safe." },
+  ]}
+/>
+You've reached deep values, crossed map/list boundaries, summed a nested list, crashed on a missing level, and descended safely past it — the whole skill of nested data.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "KeyError / NullPointerException partway through a chain of brackets.",
+      fix: "One of the middle levels is missing. `data['user']['address']['city']` fails if there's no 'address' — and the error names the level that broke ('address'), which tells you exactly where the chain stopped. If that level can legitimately be absent, use safe descent (`.get(key, {})` chained in Python; null-check each level in Java). Don't guard only the last level — the gap is usually in the middle.",
+    },
+    {
+      symptom: "'TypeError: string indices must be integers' or 'list indices must be integers'.",
+      fix: "You treated one level as the wrong kind. You did `['name']` on something that's actually a list (needs `[0]`), or `[0]` on something that's a map (needs a key). Print the intermediate level — `print(type(data['user']['orders']))` — to see whether it's a map or a list, then use the matching access for that level.",
+    },
+    {
+      symptom: "I get the whole nested object printed when I wanted one value.",
+      fix: "You stopped opening dolls too early. `data['user']` gives the entire user map; you need to keep going to the field you want: `data['user']['name']`. Printing an intermediate level and seeing a big `{...}` means the value is nested further inside — add the next bracket(s).",
+    },
+    {
+      symptom: "Editing one nested item accidentally changed another.",
+      fix: "Shared references again, but nested. If two places hold the SAME inner map/list (not copies), mutating one mutates both. This bites hard with nested data because inner structures are easy to share by accident. Copy explicitly when you need independence (Python `copy.deepcopy` for deep structures), especially before mutating a nested list/map you didn't create.",
+    },
+    {
+      symptom: "The nesting is so deep the code is unreadable.",
+      fix: "`data['a']['b']['c']['d']['e']` is a smell. Either pull intermediate levels into named variables (`user = data['user']; addr = user['address']`) so each step is readable and checkable, or — better for deep, repeated structures — model it with classes/records so it's `user.address.city` with real types. Deeply chained brackets are hard to read and hard to guard; naming or typing the levels fixes both.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Nested data is where API and config testing actually happens, so probe every level:
+
+- **Each level's presence** — does the code assume `response['data']['items']` exists at every step, or descend safely? Missing middle levels are the classic deep-data crash.
+- **Optional fields deep in the tree** — an optional `address.line2` or `user.phone`. Send the object without it and check the code defaults rather than throws.
+- **Empty vs missing lists** — is `user['orders']` an empty list `[]` or absent entirely? Code that loops it must handle both; a missing key and an empty list fail differently.
+- **Type of each level** — a field that's sometimes an object and sometimes a list (APIs do this) breaks bracket-chains. Feed both shapes.
+- **Depth and shape changes across versions** — a backend that moves a field one level deeper, or wraps a value in a new object, silently breaks every client reading the old path.
+
+Tester's habit: **against nested data, the highest-value inputs are the missing middle level and the
+empty-vs-absent list.** The developer wrote the happy path where the full tree is present; you send
+the response with an optional level omitted, or a list that's empty instead of absent, and watch
+whether the descent handles it or crashes at depth. JSON is nested, APIs speak JSON, so this is a huge
+share of real-world testing.
+</WhereToCheck>
+
+<WorkedExample title="the optional address that wasn't always there">
+1. **The report:** "The order confirmation page crashes for some customers right after they place an order. Most are fine. The order clearly saved — it's in the database."
+2. **The developer looks at the page code:** it reads `order['user']['address']['city']` to show a delivery city. Works for them, works for most customers, crashes for a few.
+3. **A tester asks: which customers?** Comparing crashing vs working orders, the pattern emerges — the crashes are all **digital-only** orders (a subscription, a gift card) that have no shipping address at all.
+4. **There's the missing doll.** For physical orders, `order['user']['address']` exists, so the chain reaches `['city']` fine. For digital orders, there's no address — `order['user']['address']` is absent — so opening `['city']` on nothing throws, and the confirmation page dies at depth.
+5. **Why 'the order saved' misled them.** The order absolutely saved; the crash was in READING it, three levels deep, at a level that's optional for some order types. Checking the database (which just holds the data) or 'did the order save?' both said yes. Only tracing the exact nested path the page reads, against an order type that legitimately lacks that level, found it.
+6. **The fix is safe descent:** read the city defensively — `order.get('user', {}).get('address', {}).get('city', 'N/A')` — so a digital order with no address shows 'N/A' instead of crashing. Deep reads of optional data must descend safely at the optional level.
+7. **The tester's angle that cracked it.** The developer tested with the order they naturally make — a physical one, full tree present. The bug lived entirely in a DIFFERENT SHAPE of the same data: an order missing an optional middle level. Nested data has many shapes, and the crash was in the shape nobody thought to test.
+8. **The lesson for a tester.** Deep access has a failure point at every level, and the dangerous ones are the OPTIONAL middle levels — present in the data you naturally create, absent in a valid variant you didn't think of. Your instinct with any nested read should be: which of these levels is optional, and what happens when it's not there? Send that shape, and you find the crash before the customer does.
+</WorkedExample>
+
+<Callout type="mistake">
+Guarding only the last level of a deep access. People write `data['user']['address'].get('city',
+'N/A')` — safe on `city`, but it still crashes if `address` (or `user`) is missing, because those
+were accessed with raw brackets. Safe descent has to be safe at EVERY level that can be absent, not
+just the leaf: `data.get('user', {}).get('address', {}).get('city', 'N/A')`. The failure is almost
+never the value you were thinking about (the leaf) — it's a structural level in the middle that
+turned out to be optional. Guard the whole path, or better, model it with types so the optionality is
+explicit and checked.
+</Callout>
+
+<Quiz
+  question="Reading `data['user']['address']['city']` throws KeyError: 'address'. What happened, and what's the fix?"
+  options={[
+    "The city value is wrong; check the database",
+    "A MIDDLE level is missing — this user has no 'address' key, so opening ['city'] on it fails. The error names the level that broke ('address'). Fix with safe descent at every level that can be absent: data.get('user', {}).get('address', {}).get('city', 'unknown') — not just guarding the final 'city'.",
+    "Python can't read nested dictionaries this deep",
+    "You must load the data again because it's corrupted"
+  ]}
+  answer={1}
+  explain="The error message is precise: `KeyError: 'address'` means the chain broke at the 'address' level — this particular user simply doesn't have that key, so trying to open `['city']` on a nonexistent address fails. This is the defining hazard of nested data: every level is a place it can be absent, and the dangerous ones are the OPTIONAL middle levels (an address is present for physical orders, absent for digital ones — see the worked example). The fix is safe descent at every level that can go missing, not just the leaf — `data.get('user', {}).get('address', {}).get('city', 'unknown')` returns a default the moment any level is absent, instead of crashing. For a tester the takeaway is a reflex: for any deep read, ask 'which of these levels is optional?' and send the data shape that omits it. The developer tested the full tree; the bug lives in the valid variant missing a middle level, and that's the input that finds it."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What is nesting?", back: "Data structures inside other structures — maps/lists whose values are themselves maps/lists, to any depth. A user contains an address contains a city." },
+    { front: "How do you read a nested value?", back: "Chain access one level at a time, left to right: `data['user']['address']['city']`. Each bracket opens one level; levels mix maps (by key) and lists (by index)." },
+    { front: "Why is JSON relevant to nesting?", back: "JSON is exactly nested maps ('objects') and lists ('arrays'). Every API response is nested data — reading nested data IS reading API payloads." },
+    { front: "What's the main hazard of deep access?", back: "ANY level can be missing, so a deep read has many failure points. A missing MIDDLE level (often an optional field) throws KeyError/null partway through the chain." },
+    { front: "What is safe descent?", back: "Supplying a default at each level so a missing one returns a default, not a crash: Python `.get('k', {})` chained; Java null-checks/Optional. Guard EVERY optional level, not just the leaf." },
+    { front: "When should nested maps become classes?", back: "When nesting is deep and repetitive. Classes/records turn bracket-chains into typed dot-access (user.address.city) and move 'missing level' errors from runtime to compile time." },
+    { front: "The tester's instinct for nested data", back: "Ask 'which level is optional?' and send the shape that omits it. The missing middle level and empty-vs-absent list are the highest-value inputs." },
+  ]}
+/>
+
+<Challenge>
+In the Python playground, add a second user's worth of data by nesting `data` one level deeper under
+`"customers"` (a list of user-maps), then read the first customer's city — count how many brackets it
+now takes. Next, remove the `"address"` key entirely and run `data["user"]["address"]["city"]` to see
+the KeyError name the exact level. Finally, rewrite that read with chained `.get` so it returns
+'unknown' instead. Write one sentence: for an API response with an optional nested field, what's the
+first shape you'd send to test the code that reads it?
+</Challenge>
+
+<AskCommunity prompt="Nested data problem: reading `[paste the bracket chain]` gave `[KeyError/null/TypeError/whole object]`. Language: `[Java/Python]`. Which level broke (from the error)? `[paste]`. Is that level optional in your data? `[yes/no]`. Did you descend safely at each level? `[yes/no]`.">
+The error usually names the exact level that broke — paste that, and say whether that level is
+optional. A missing OPTIONAL middle level (guarded only at the leaf, or not at all) is the nested-data
+bug nine times out of ten.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://docs.python.org/3/tutorial/datastructures.html#nested-list-comprehensions", title: "Python docs — nested data structures", kind: "read" },
+    { href: "https://www.json.org/json-en.html", title: "JSON — nested objects and arrays, the shape of API data", kind: "read" },
+    { href: "https://realpython.com/python-json/", title: "Real Python — working with JSON (nested maps and lists)", kind: "read" },
+    { href: "https://docs.oracle.com/javase/tutorial/java/javaOO/nested.html", title: "Java — modelling nested data with classes rather than raw maps", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=pTT7HMqDnyA" title="Working with nested JSON data" minutes={11} />
+
+<Takeaways
+  points={[
+    "Real data is nested — maps and lists inside each other. Reach a value by chaining access one level at a time: `data['user']['address']['city']`, each bracket opening one more level.",
+    "Levels freely mix maps (by key) and lists (by index): `data['user']['orders'][0]['total']`. Bracket by bracket, you just open the next level whatever kind it is.",
+    "The hazard is that ANY level can be absent, so deep reads have many failure points. A missing MIDDLE level (often an optional field) throws partway through — the error names which level broke.",
+    "Descend safely at EVERY optional level, not just the leaf: chained `.get(k, {})` (Python) or null-checks/Optional (Java). Deep, repetitive nesting is a signal to use classes/records instead.",
+    "For a tester: JSON is nested and APIs speak JSON, so the highest-value inputs are the missing middle level and empty-vs-absent list — send the valid shape that omits an optional level and watch the descent.",
+  ]}
+/>
+
+<Complete xp={10} />

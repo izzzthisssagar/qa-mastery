@@ -1,0 +1,334 @@
+---
+title: "String parsing"
+summary: "Pulling structured, typed data out of raw text: split a line into fields, convert '42' into the number 42, and clean the mess first. Plus the tester's daily reality — real input is never as tidy as you hoped."
+tags: ["working-with-data", "strings", "track-b"]
+updated: "2026-07-11"
+---
+
+<Hook>
+Data almost never arrives as neat variables — it arrives as *text*: a line from a CSV file, a form field, a
+log entry, a chunk of an API response. Before you can use it, you have to take it apart: split
+`"Sam,42,New York"` into a name, an age, and a city, and turn the text `"42"` into the actual number `42`
+you can do math on. That's **parsing** — extracting structured, typed data from raw text — and it's a huge
+part of real programming. It's also where a tester earns their keep, because *real input is never as clean as
+the example*: there are trailing spaces, missing fields, a letter where a number should be, a date in the
+wrong format. Code that parses the happy-path example but explodes on a slightly-off real row is one of the
+most common bugs there is. This note is about pulling data out of text — and doing it defensively, because
+the input will surprise you.
+</Hook>
+
+<Callout type="analogy">
+Parsing is **sorting cash into a register's coin drawer.** You start with a jumbled handful of mixed coins —
+an undifferentiated pile, like a raw line of text — and drop each one into its own compartment by
+denomination: pennies in this well, quarters in that one, each now separated and identified. To
+<Term define="Take raw text and pull structured, typed data out of it — e.g. split 'Sam,42' into fields and convert the text '42' into the number 42. Because real input is messy (spaces, wrong formats, missing fields), parsing must be done defensively.">parse</Term>
+a string is to do the same: cut the jumble into separate fields (split), and give each field its real type —
+this pile of coins is *money* you can add up, not just metal. And just as a stray button or foreign coin
+fits no compartment, a parser trips on input that doesn't fit the expected shape — which is exactly the
+messy reality you have to handle.
+</Callout>
+
+## Split into fields, then convert types
+
+Two moves do most parsing: **split** the text into pieces, then **convert** the pieces that are really
+numbers (or dates) into their proper type.
+
+**Python:**
+```python
+line = "Sam,42,New York"
+fields = line.split(",")          # ['Sam', '42', 'New York']
+name = fields[0]                  # 'Sam'   (stays text)
+age  = int(fields[1])            # 42      (text '42' -> real number)
+city = fields[2]                 # 'New York'
+print(age * 2)                   # 84  -- it's a NUMBER now, so math works
+```
+
+**Java:**
+```java
+String line = "Sam,42,New York";
+String[] fields = line.split(",");
+String name = fields[0];
+int age = Integer.parseInt(fields[1]);   // "42" -> 42
+String city = fields[2];
+System.out.println(age * 2);             // 84
+```
+
+The key step is the type conversion: `int("42")` (Python) / `Integer.parseInt("42")` (Java) turns the
+*text* `"42"` into the *number* `42`. Until you convert, `"42"` is a string — `"42" * 2` would repeat it or
+error, not double it. Splitting gives you the fields; converting gives them meaning. `float(...)` /
+`Double.parseDouble(...)` do the same for decimals.
+
+<HotspotImage
+  src="/notes/working-with-data/cash-drawer.jpg"
+  alt="An open wooden cash drawer with rows of round coin compartments of different sizes, one per denomination"
+  credit="Photo: a cash drawer with coin compartments (HABS survey) — Wikimedia Commons, public domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:CASH_DRAWER_UNDER_REAR_COUNTER,_NOTE_BELL_MECHANISM_TO_BACK_OF_DRAWER_-_Coffren_House,_Store,_10007_Croom_Road,_Croom,_Prince_George%27s_County,_MD_HABS_MD,17-CROM,2A-8.tif"
+  pins={[
+    { x: 42, y: 57, label: "The drawer of compartments = the parsed structure", desc: "The open drawer with a well for each denomination is what parsing turns your raw text INTO — a place for each piece. A jumbled line like 'Sam,42,New York' becomes separated parts, each dropped where you can find it. Parsing's job is to impose this structure on an undifferentiated string." },
+    { x: 30, y: 51, label: "One round well = one FIELD", desc: "Each compartment holds one thing you can reach for. After split(','), each field lands in its own slot: fields[0] the name, fields[1] the age, fields[2] the city. The pile became labelled parts you can grab individually, by position." },
+    { x: 50, y: 61, label: "Wells sized by denomination = TYPES", desc: "The compartments differ by denomination — like fields of different types. Parsing gives each field its real type: the name stays text, but int(fields[1]) turns '42' into the NUMBER 42. A coin isn't just metal, it's worth 25 cents; a field isn't just text, it's a number you can total." },
+    { x: 27, y: 48, label: "A coin in its well = a value in its typed slot", desc: "A quarter dropped into the quarter well is a value placed in its correct, typed compartment — int('42') becoming 42 in the 'age' field, ready to compute with. Until you convert, it's just text sitting there; converting makes it usable money you can add up." },
+    { x: 14, y: 58, label: "The clutter around it = messy input", desc: "The boxes and odds-and-ends around the drawer are the messy real world: a stray button, a foreign coin, a bent token that fits no well. In parsing that's the bad row — a letter where a number goes, a blank field, a wrong field count — which makes int() throw or an index go out of range. Real input WILL include these; parse defensively." },
+  ]}
+/>
+
+## Clean before you convert, and expect a mess
+
+Real input is dirty, so two habits matter. First, **strip before converting** — Python's `int(" 42 ")`
+tolerates spaces, but that's luck you shouldn't rely on, and Java's `Integer.parseInt(" 42 ")` throws
+outright. `int(raw.strip())` / `Integer.parseInt(raw.trim())` is the safe pattern. Second, **expect
+conversion to fail** — `int("hello")` raises `ValueError` (Python) / `NumberFormatException` (Java), and a
+missing field makes `fields[2]` an index error. So guard it:
+
+```python
+def to_int(text, default=0):
+    text = text.strip()
+    return int(text) if text.lstrip("-").isdigit() else default
+
+print(to_int(" 42 "))     # 42
+print(to_int("oops"))     # 0   -- didn't crash; used the default
+```
+
+The real skill in parsing isn't the happy path (`split` then `int`) — it's handling the row that's *almost*
+right: the trailing space, the empty cell, the `"N/A"` where a number belongs. A parser that assumes clean
+input is a bug waiting for real data. (Full error handling with try/except is a debugging-chapter topic; for
+now, check before you convert, or supply a default.)
+
+<FlowAnimation
+  title="Turning a raw line into usable data. Press Play."
+  intervalMs={1800}
+  nodes={[
+    { label: "Start with one raw string", desc: "Input arrives as text: 'Sam,42,New York' — one string with fields hidden inside, separated by commas. You can't do much with it as-is; the age is stuck to the name is stuck to the city. Step one is to see the structure." },
+    { label: "Split on the separator into fields", desc: "line.split(',') cuts at each comma, producing a list: ['Sam', '42', 'New York']. Now the fields are separate, reachable by index. Pick the separator that matches your data — comma for CSV, space for words, '=' for key=value, tab for TSV." },
+    { label: "Clean each field", desc: "Real fields have stray whitespace: ' 42 ', 'New York '. strip()/trim() each one before using it, especially before converting a number. Skipping this is where a lot of 'it works on my clean example but not the real file' bugs come from." },
+    { label: "Convert to the right type", desc: "The name stays text, but the age should be a NUMBER: int(fields[1]) turns '42' into 42, so age * 2 gives 84 instead of repeating text. float() for decimals. This step is what makes the data computable, not just displayable." },
+    { label: "Guard against bad input", desc: "Not every row is clean: 'Sam,,NYC' (empty age), 'Sam,N/A,NYC' (not a number), a row with only two fields. int('N/A') raises an error; fields[2] on a short row is out of range. Check or default BEFORE converting, because the real file will contain these." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="Try it — parse a line into typed fields in Python. Press Run."
+  code={`line = "Sam,42,New York"
+
+# 1) split into fields
+fields = line.split(",")
+print("fields:", fields)             # ['Sam', '42', 'New York']
+
+# 2) name the fields and CONVERT the number
+name = fields[0]
+age = int(fields[1])                 # '42' -> 42 (a real number)
+city = fields[2]
+print(name, "is", age, "in", city)
+print("age * 2 =", age * 2)          # 84  -- math works because it's an int
+
+# 3) clean before converting (strip whitespace)
+print("parsed ' 30 ':", int("  30  ".strip()))   # 30
+
+# 4) a key=value pair
+key, value = "timeout=30".split("=")
+print(key, "->", int(value))         # timeout -> 30
+
+# 5) DEFENSIVE: guard the conversion so bad input doesn't crash
+def to_int(text, default=0):
+    text = text.strip()
+    return int(text) if text.lstrip("-").isdigit() else default
+
+print("good:", to_int(" 42 "))       # 42
+print("bad:", to_int("N/A"))         # 0  -- used the default instead of crashing`}
+/>
+
+Here's the **same in Java** — `split`, `Integer.parseInt`, and note that Java's `parseInt` does NOT tolerate
+spaces, so you must `trim()` first:
+
+<CodePlayground
+  language="java"
+  title="Try it — parse a line into typed fields in Java. Press Run."
+  code={`public class Main {
+    public static void main(String[] args) {
+        String line = "Sam,42,New York";
+        String[] fields = line.split(",");
+
+        String name = fields[0];
+        int age = Integer.parseInt(fields[1]);   // "42" -> 42
+        String city = fields[2];
+        System.out.println(name + " is " + age + " in " + city);
+        System.out.println("age * 2 = " + (age * 2));   // 84
+
+        // Java's parseInt does NOT trim -- clean first:
+        int n = Integer.parseInt("  30  ".trim());       // 30
+        System.out.println("parsed: " + n);
+
+        // key=value
+        String[] kv = "timeout=30".split("=");
+        System.out.println(kv[0] + " -> " + Integer.parseInt(kv[1]));  // timeout -> 30
+    }
+}`}
+/>
+
+<Callout type="tip">
+Parse in three steps and most input bugs disappear: **split** on the right separator, **strip** each field,
+then **convert** the ones that are really numbers/dates — and guard those conversions, because real data will
+hand you a `"N/A"` or an empty cell that makes `int()` throw. Two reminders that bite constantly: a field
+read from text is a STRING until you convert it (so `fields[1]` for age is `"42"`, and `"42" + 1` errors or
+concatenates — convert first); and Java's `Integer.parseInt` won't tolerate surrounding spaces, so `trim()`
+before you parse. When a parser 'works on my example but fails on the file,' the culprit is almost always an
+un-cleaned field or an unexpected row shape — test with deliberately messy rows.
+</Callout>
+
+<FirstTime title="First time? Turn a line of text into data">
+<StepChecklist
+  steps={[
+    { text: "Split a line into fields", detail: "line.split(',') on 'Sam,42,New York' gives a list of three. Splitting is the first move of parsing — it turns one string into separate, reachable pieces. Try splitting on a different separator (a space, an '='), and see the cuts move." },
+    { text: "Convert a field to a number", detail: "int(fields[1]) turns the text '42' into the number 42. Prove it: age * 2 is 84 (math), whereas without int, '42' * 2 would repeat the text. Converting is what makes a field usable as a number, not just displayable." },
+    { text: "Clean a field before converting", detail: "int('  30  '.strip()) parses to 30. Real fields carry stray spaces; strip/trim them first. In Java this is mandatory (parseInt won't tolerate spaces); in Python it's a good habit that avoids surprises. Clean, then convert." },
+    { text: "Break it with bad input (on purpose)", detail: "In your head: int('N/A') raises an error, and fields[5] on a 3-field row is out of range. Real files contain exactly these. Seeing WHERE parsing fails teaches you where to guard: around conversions and around field access." },
+    { text: "Add a defensive default", detail: "The to_int helper returns a default instead of crashing on bad input. Run it on ' 42 ' (42) and 'N/A' (0). This is the essence of defensive parsing: don't assume the field is a clean number — check, and have a fallback. Real-world parsing lives here." },
+  ]}
+/>
+Ten minutes and you can turn a raw line of text into named, typed fields — and handle the messy rows that real data always includes.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "“ValueError: invalid literal for int() (Python) / NumberFormatException (Java).”",
+      fix: "You tried to convert text that isn't a clean number — int('N/A'), int('42.5') (int can't take a decimal string), int('') (empty), or int(' 42 ') in Java (spaces). Strip first, and guard: check the text looks numeric before converting, or wrap it with a default. Print the exact value you're converting (with repr()/brackets) — it's often an empty string, a header row, or a stray non-digit you didn't expect.",
+    },
+    {
+      symptom: "“IndexError / ArrayIndexOutOfBoundsException reading a field.”",
+      fix: "The line had fewer fields than you assumed — fields[2] on a row that split into only two pieces. Causes: a missing value ('Sam,,NYC' vs 'Sam,NYC'), a different separator, or a blank line. Check len(fields) before indexing, and decide what to do with short rows (skip, default, or error clearly). Never assume every row has the same field count until you've handled the ones that don't.",
+    },
+    {
+      symptom: "“My 'number' won't add up — it concatenates or errors.”",
+      fix: "You forgot to convert: a field from split() is a STRING. '42' + '8' is '428' (concatenation), and '42' * 2 is '4242' (Python) or an error (Java). Convert with int()/float() (parseInt/parseDouble) before doing math. If a total looks like glued-together digits, you're adding strings, not numbers.",
+    },
+    {
+      symptom: "“It works on my test line but breaks on the real file.”",
+      fix: "Your test line was clean; the file isn't. Real data has trailing spaces, empty fields, header rows, quoted values with commas inside, different line endings, and the occasional garbage row. Strip fields, guard conversions, check field counts, and test with deliberately messy rows. This gap between the tidy example and the real file is the #1 parsing bug — and exactly what testers probe.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Debugging a parser:
+
+- **Print the raw field** — with `repr()`/brackets, before converting. It's often an empty string, a header, or has hidden spaces you didn't expect.
+- **Strip before converting** — `int(field.strip())` / `Integer.parseInt(field.trim())`. Java throws on spaces; strip is the safe habit either way.
+- **Check the field count** — `len(fields)` before indexing. Short/blank rows cause index errors; decide how to handle them.
+- **Convert before math** — split gives strings; `int()`/`float()` (parseInt/parseDouble) first, or numbers will concatenate.
+- **Test with messy rows** — empty fields, non-numeric values, header lines, extra spaces. The real file will have them; make sure your parser does something sane.
+</WhereToCheck>
+
+<WorkedExample title="the CSV import that crashed on row 500 — a parsing bug, traced">
+An import reads a CSV of 'name,age,city' and works for hundreds of rows, then crashes. Here's the parser:
+
+```python
+def parse_row(line):
+    name, age, city = line.split(",")   # assumes EXACTLY 3 fields
+    return name, int(age), city         # assumes age is a clean number
+
+# row 500 is:  "Dana, , Boston"   (age is blank)
+print(parse_row("Dana, , Boston"))       # ValueError: invalid literal for int(): ' '
+```
+
+1. **The symptom:** it processes hundreds of rows fine, then throws `ValueError` on one. Intermittent
+   crashes on 'good-looking' data are the signature of a parser meeting a row it didn't expect.
+2. **Find the offending row:** row 500 is `"Dana, , Boston"` — the age field is blank (just a space between
+   commas). `line.split(",")` gives `['Dana', ' ', ' Boston']`, so `age` is `' '`.
+3. **See the failure:** `int(' ')` can't parse a blank/space into a number — `ValueError`. The parser assumed
+   every age is a clean integer; this one is empty. (A row with a missing city would instead break the
+   three-way unpack with a 'not enough values' error — the same class of wrong-shape bug.)
+4. **The fix — clean and guard:**
+   ```python
+   def parse_row(line):
+       parts = [p.strip() for p in line.split(",")]
+       if len(parts) != 3:
+           return None                 # skip/flag malformed rows
+       name, age, city = parts
+       age = int(age) if age.isdigit() else None   # default for blank/non-numeric
+       return name, age, city
+   print(parse_row("Dana, , Boston"))  # ('Dana', None, 'Boston') -- no crash
+   ```
+5. **Why the happy path lied:** the first 499 rows were clean, so the naive parser looked correct. Its
+   assumptions (exactly 3 fields, age always a valid number) held — until they didn't. Parsing bugs hide
+   until the one weird row arrives, which in a big file is a near-certainty.
+6. **Tester's angle:** this is the essence of data-quality testing. Testers deliberately feed parsers the
+   nasty rows — blank fields, extra/missing columns, non-numeric numbers, header rows, unicode, quoted
+   commas — because that's where parsers break. 'Works on the sample, crashes on the full export' is a
+   classic bug report, and the fix is always: clean, guard, and handle the malformed row on purpose.
+</WorkedExample>
+
+<Callout type="mistake">
+Assuming input is clean. The naive parser — `split`, then `int`, then index the fields — works perfectly on
+the tidy example and then crashes on real data, because real data has trailing spaces, empty cells, a `"N/A"`
+where a number belongs, a row with the wrong number of fields, or a header line. The result is `int()`
+raising `ValueError`/`NumberFormatException`, or an index error on a short row — usually deep into a big file,
+which makes it look intermittent. Parse defensively instead: **strip** each field, **check** the field count
+before indexing, and **guard** every conversion (validate, or supply a default), so a bad row degrades
+gracefully instead of exploding. Two specifics that bite: a split field is a STRING until you convert it (so
+convert before doing math), and Java's `parseInt` won't tolerate surrounding spaces (`trim` first). The gap
+between the clean example and the messy file is where parsing bugs live — and it's exactly the gap a good
+tester attacks.
+</Callout>
+
+<Quiz
+  question="A parser does name, age, city = line.split(',') then int(age). Which real-world row is MOST likely to crash it?"
+  options={[
+    "'Sam,42,New York' — a normal clean row",
+    "'Dana, , Boston' — a blank age field, because int(' ') can't parse to a number (and a missing field could also break the 3-way unpack)",
+    "'Amir,30,Cairo' — another clean row",
+    "Any row will crash it equally"
+  ]}
+  answer={1}
+  explain="'Dana, , Boston' has a blank age (just a space between the commas), so after split, age is ' ' and int(' ') raises ValueError — the parser assumed every age is a clean number. Clean rows like 'Sam,42,New York' parse fine; the danger is the row that's ALMOST right. Two assumptions make this parser fragile: that age is always a valid integer, and that every line splits into exactly three fields (a missing field would break the 3-way unpack with 'not enough values'). Defensive parsing fixes both: strip each field, check the field count before unpacking/indexing, and guard the int() conversion with a validity check or a default. Real files always contain these odd rows, so parsers must expect them."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Parsing", back: "Taking raw text and pulling structured, TYPED data out of it: split a line into fields, convert '42' into the number 42, clean the mess. Real input is dirty, so parse defensively. Like sorting mixed coins into a cash drawer's compartments by denomination." },
+    { front: "The two core moves", back: "split(sep) cuts text into a list of fields; int()/float() (Java parseInt/parseDouble) convert a numeric field from string to number. Split gives the pieces; convert gives them meaning (and makes math work)." },
+    { front: "A field is a STRING until converted", back: "split() returns strings. '42' + '8' = '428' (concatenation), not 50. Convert with int()/float() before doing math, or numbers will glue together / error. The most common 'my total is wrong' parsing bug." },
+    { front: "Clean before converting", back: "Strip whitespace off a field before parsing a number: int(field.strip()). Python often tolerates spaces; Java's Integer.parseInt does NOT (throws) — so trim() first. Safe habit either way." },
+    { front: "Guard the conversion", back: "int('N/A')/int('') raises ValueError (NumberFormatException in Java); a short row makes fields[2] an index error. Check validity or field count first, or supply a default — real files contain bad rows." },
+    { front: "Happy path lies", back: "A parser that works on a clean example often crashes deep in a real file on a blank/extra/non-numeric field. 'Works on the sample, breaks on the export' is the classic parsing bug — test with deliberately messy rows." },
+  ]}
+/>
+
+<Challenge>
+Parse a line. (1) Split 'Amir,30,Cairo' into fields and convert the age to a number; prove it's numeric with
+age times 2. (2) Parse the key=value string 'retries=5' into a name and an int. (3) Clean and parse ' 88 '
+into the number 88. (4) Feed your parser the messy row 'Dana, , Boston' and make it NOT crash (strip, check
+the field count, default a blank age). (5) Write one sentence: why does a parser that works on your example
+often crash on the real file? If you can say 'real input is messy — blank fields, non-numbers, wrong field
+counts — so you must strip, check, and guard the conversions', you've got the tester's parsing mindset.
+</Challenge>
+
+<AskCommunity prompt="Parsing question: my parser [raises ValueError/NumberFormatException / an index error / gives wrong numbers]. Here's the code and a row that breaks it [paste both]. I'm using [Python/Java]. What's wrong?">
+Paste the exact row that breaks it, printed with repr()/brackets so hidden spaces and blank fields show — 'it
+crashes on Dana, , Boston with the blank age' points straight at an unguarded int() on an empty field. If a
+total is wrong, check you converted the fields to numbers (split returns strings). If it's an index error,
+mention how many fields you assumed vs what the row actually has.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.learnpython.org/en/String_Formatting", title: "LearnPython — strings & conversion (interactive)", kind: "read" },
+    { href: "https://docs.python.org/3/library/functions.html#int", title: "Python docs — int() and type conversion", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=k9TUPpGqYTo", title: "Working with strings (split, convert) — Corey Schafer", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=k9TUPpGqYTo" title="Splitting and converting text into data — Corey Schafer" minutes={21} />
+
+<Takeaways
+  points={[
+    "Parsing pulls structured, typed data out of raw text with two core moves: split(sep) cuts a line into fields, and int()/float() (Java parseInt/parseDouble) convert the numeric fields from string to number.",
+    "A field from split() is a STRING until you convert it — so '42' + '8' concatenates to '428', and you must convert before doing math. Forgetting is the classic 'my total is wrong' bug.",
+    "Clean before converting: strip/trim each field, especially before a number. Python often tolerates spaces but Java's parseInt throws on them, so trim() first — the safe habit either way.",
+    "Guard the conversions: int('N/A')/int('') raises an error, and a short row makes fields[2] an index error. Check validity and field count, or supply a default, because real files contain bad rows.",
+    "The core lesson: real input is never as clean as the example. A parser that handles the happy path but explodes on a blank/extra/non-numeric field is the #1 parsing bug — strip, check, and guard, and test with deliberately messy rows.",
+  ]}
+/>
+
+<Complete xp={10} />

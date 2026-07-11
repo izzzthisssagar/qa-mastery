@@ -1,0 +1,315 @@
+---
+title: "Adding & removing"
+summary: "Grow and shrink a list: append to the end, insert at a position, remove by value, pop by index. Why adding or removing anywhere but the end shifts every later item — and the Java remove(index) vs remove(value) trap."
+tags: ["working-with-data", "lists-arrays", "track-b"]
+updated: "2026-07-11"
+---
+
+<Hook>
+A list that never changes isn't much use — real collections grow and shrink constantly: items land in a
+cart, records stream in from a file, a user deletes a row. So the everyday work with lists is *adding* and
+*removing*. Most of it is one cheap move — stick a new item on the end (`append`) — but you'll also insert
+at a position, remove by value, and pop an item off (getting it back as you do). The subtlety that matters,
+especially to a tester, is what happens *underneath*: adding or removing anywhere except the end **shifts
+every item after it** to make or close a gap. That shifting is why middle operations cost more, and it's the
+same mechanic behind the modifying-while-iterating bug from the loops chapter. This note covers the add/remove
+toolkit and one notorious Java trap — `remove(2)` removing the item at *index* 2, not the *value* 2.
+</Hook>
+
+<Callout type="analogy">
+Adding and removing is **a queue of people.** The easy, everyday move is joining the **back** of the line —
+nobody else has to budge; that's
+<Term define="Add an item to the END of a list — list.append(x) in Python, list.add(x) in Java. The cheap, common way to grow a list, because nothing else moves. Adding or removing in the MIDDLE instead shifts every later item.">append</Term>.
+But if someone cuts into the **middle**, everyone behind them has to shuffle back a step to make room
+(that's `insert`); and if a person leaves from the middle, everyone behind shuffles forward to close the gap
+(that's `remove`/`pop`). That shuffle is the hidden cost: touching the end is cheap, but touching the middle
+makes everyone after it move. Take the person at the **front** and the whole line steps up — which is exactly
+what `pop(0)` does, and why it's pricier than popping the back.
+</Callout>
+
+## The add/remove toolkit
+
+**Python:**
+```python
+items = ["a", "b", "c"]
+items.append("d")      # add to the END -> ['a','b','c','d']  (the common, cheap move)
+items.insert(1, "X")   # insert at index 1 -> ['a','X','b','c','d']  (b,c,d shift right)
+items.remove("X")      # remove the first matching VALUE -> ['a','b','c','d']
+last = items.pop()     # remove & RETURN the last -> 'd';  items is ['a','b','c']
+first = items.pop(0)   # remove & RETURN index 0 -> 'a';  the rest shift left -> ['b','c']
+```
+
+**Java** (`ArrayList` — arrays can't grow, so growth uses `ArrayList`):
+```java
+List<String> items = new ArrayList<>(List.of("a", "b", "c"));
+items.add("d");                 // add to the end
+items.add(1, "X");              // insert at index 1
+items.remove("X");              // remove by value (first match)
+String last = items.remove(items.size() - 1);  // remove by index, returns the item
+```
+
+The two you'll use most are `append`/`add` (grow at the end) and `remove`/`pop`. The key distinction between
+the removers: `remove(value)` deletes the first item *equal to* that value, while `pop(index)` (Python) /
+`remove(index)` (Java) deletes the item *at* that position — and **`pop` returns the removed item**, which is
+handy when you want to use it (`last = items.pop()`). `insert(i, x)` and `pop(0)` are the position-based ones
+that trigger the shift.
+
+<HotspotImage
+  src="/notes/working-with-data/queue.jpg"
+  alt="A queue of people standing in a line, front to back"
+  credit="Photo: people waiting in a queue — Wikimedia Commons, CC BY-SA 3.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:People_Waiting_Shuttle_Buses_in_Line_20121013.JPG"
+  pins={[
+    { x: 58, y: 40, label: "The line = the list", desc: "People standing in order, each at a position, is the list — an ordered collection you add to and remove from. The front is index 0, then 1, 2... Every add/remove operation changes who stands where, which is the whole subject of this note." },
+    { x: 92, y: 50, label: "The back = append / add (cheap)", desc: "Joining the END of the line is the easy move: nobody already in line has to shift. That's append (Python) / add (Java) — grow the list at the end, and it's cheap because no other element moves. It's the most common way to build a list up, one item at a time." },
+    { x: 49, y: 45, label: "The middle = insert (others shift back)", desc: "Someone cutting into the middle forces everyone behind them to step back one place to make room. That's insert(i, x): the new item takes index i, and every later element's index goes up by one. More work than appending, because it shifts the tail of the list." },
+    { x: 24, y: 52, label: "The front = pop / remove (returns it)", desc: "Take the person at the front and the whole line steps forward to close the gap — pop(0) (Python) / remove(0) (Java). pop RETURNS the removed item (last = items.pop()), unlike remove(value). Removing from the front or middle shifts everyone after the gap." },
+    { x: 72, y: 47, label: "Shifting is the hidden cost", desc: "Add or remove anywhere but the END and every element after that spot moves — the list re-closes or re-opens around the change. That's why middle operations cost more than end ones, and it's the same shift that causes the modifying-a-list-while-looping bug from the loops chapter: the indices move under you." },
+  ]}
+/>
+
+## The shift, and why it matters
+
+When you `insert` or `remove` anywhere but the end, the list doesn't leave a hole — it **re-packs**, sliding
+every later element over by one. Watch the indices:
+
+```python
+items = ["a", "b", "c", "d"]
+items.remove("b")     # 'b' leaves; c and d slide left to fill the gap
+print(items)          # ['a', 'c', 'd']  -- c is now index 1, d is index 2
+```
+
+`c` and `d` each moved down one index. This is invisible in the result but has two real consequences.
+**Performance:** appending to the end is cheap, but inserting/removing near the front of a big list shifts
+many elements, so it's slower — for lots of front operations you'd use a different structure (a
+`deque`/queue). **Correctness:** this shift is exactly why *removing items while looping over a list* skips
+elements (the modifying-while-iterating bug from the loops note) — the indices move under the loop. The safe
+patterns from that note still apply: build a new list, or iterate a copy.
+
+<FlowAnimation
+  title="How add and remove reshape a list. Press Play."
+  intervalMs={1800}
+  nodes={[
+    { label: "append/add: grow at the end", desc: "items.append('d') puts the new item after the last one — index length, the next free spot. Nothing else moves, so it's the cheap, everyday way to build a list up. Most list-building is a loop that appends one item per pass." },
+    { label: "insert(i, x): make room in the middle", desc: "items.insert(1, 'X') drops 'X' at index 1 and pushes everything from the old index 1 onward up by one place. The list grew by one and the tail shifted right to open a gap. More work than appending because of that shift." },
+    { label: "remove(value): delete the first match", desc: "items.remove('b') finds the FIRST element equal to 'b' and takes it out, then slides the rest left to close the gap. It removes by VALUE (the first matching one), and it does NOT return anything — it just mutates the list." },
+    { label: "pop(index): delete AND hand it back", desc: "items.pop() removes and RETURNS the last item; items.pop(0) removes and returns the first (shifting the rest forward). Use pop when you want to USE the removed item — last = items.pop(). remove(value) throws it away; pop gives it to you." },
+    { label: "The shift ripples through later indices", desc: "Any insert or remove that isn't at the very end re-indexes every element after the change point. That's the hidden cost (slower for big front-operations) and the hidden bug (indices move under a loop that's deleting as it goes). End operations avoid it; middle ones don't." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="Try it — add and remove in Python. Press Run."
+  code={`items = ["a", "b", "c"]
+
+items.append("d")          # add to the end
+print("append:", items)    # ['a', 'b', 'c', 'd']
+
+items.insert(1, "X")       # insert at index 1 -> b, c, d shift right
+print("insert:", items)    # ['a', 'X', 'b', 'c', 'd']
+
+items.remove("X")          # remove the first matching VALUE (no return)
+print("remove:", items)    # ['a', 'b', 'c', 'd']
+
+last = items.pop()         # remove & RETURN the last item
+print("pop ->", last, "leaves", items)     # d  ['a', 'b', 'c']
+
+first = items.pop(0)       # remove & RETURN index 0; the rest shift left
+print("pop(0) ->", first, "leaves", items) # a  ['b', 'c']
+
+# the SHIFT in action: removing from the middle re-indexes the rest
+letters = ["a", "b", "c", "d"]
+letters.remove("b")
+print("after removing b:", letters)        # ['a', 'c', 'd'] -- c,d slid left`}
+/>
+
+Here's the **same in Java** with `ArrayList` — plus the infamous `remove(int)` vs `remove(Object)` trap on a
+list of numbers:
+
+<CodePlayground
+  language="java"
+  title="Try it — add/remove in Java, and the remove() trap. Press Run."
+  code={`import java.util.*;
+
+public class Main {
+    public static void main(String[] args) {
+        List<String> items = new ArrayList<>(List.of("a", "b", "c"));
+        items.add("d");                 // add to end
+        items.add(1, "X");              // insert at index 1
+        System.out.println(items);      // [a, X, b, c, d]
+        items.remove("X");              // remove by value
+        String last = items.remove(items.size() - 1);   // remove by index, returns it
+        System.out.println("removed " + last + " -> " + items);  // removed d -> [a, b, c]
+
+        // THE TRAP: on a List of Integers, remove(int) is BY INDEX, not by value!
+        List<Integer> nums = new ArrayList<>(List.of(10, 20, 30));
+        nums.remove(1);                         // removes INDEX 1 (the 20), not the value 1
+        System.out.println("remove(1): " + nums);              // [10, 30]
+        nums.remove(Integer.valueOf(30));       // THIS removes the VALUE 30
+        System.out.println("remove(value 30): " + nums);       // [10]
+    }
+}`}
+/>
+
+<Callout type="tip">
+Default to `append`/`add` for building lists — it's the cheap move that shifts nothing, and most list-building
+is just a loop appending one item per pass. Reach for `insert`/`pop(0)`/middle-`remove` only when you truly
+need a position other than the end, knowing they shift the tail. Two things to keep straight: `remove(value)`
+deletes by value and returns nothing, while `pop(index)` deletes by position and RETURNS the item (use it when
+you want the removed value). And in Java, beware `remove(int)` on a `List` of `Integer` — a bare number is
+treated as an INDEX, so use `remove(Integer.valueOf(x))` to delete by value. Finally, never remove from a list
+while looping over it — the shift skips elements (loops chapter); build a new list or iterate a copy.
+</Callout>
+
+<FirstTime title="First time? Grow and shrink a list">
+<StepChecklist
+  steps={[
+    { text: "Append to the end", detail: "items.append('d') adds to the back — the cheap, common move. Run it a few times to build the list up. This is how most lists get filled: start empty (or small) and append in a loop, one item at a time." },
+    { text: "Insert into the middle", detail: "items.insert(1, 'X') drops 'X' at index 1 and pushes b, c, d right. Notice everything after the insertion point moved up an index. Inserting is append's pricier cousin — it has to shift the tail to open a gap." },
+    { text: "Remove by value vs pop by index", detail: "items.remove('X') deletes the first 'X' (by value, returns nothing). items.pop() removes AND returns the last; items.pop(0) removes and returns the first. Use pop when you want the removed item back — that's the difference that matters." },
+    { text: "Watch the shift", detail: "Remove 'b' from ['a','b','c','d'] and print — you get ['a','c','d'], with c and d slid down to indexes 1 and 2. The list re-packs to close the gap. This shift is invisible in the result but is why middle ops cost more and why deleting during a loop misbehaves." },
+    { text: "Meet the Java remove() trap (mentally)", detail: "On a List of Integers, nums.remove(1) removes INDEX 1, not the value 1 — a genuinely confusing Java quirk. To remove the value, use nums.remove(Integer.valueOf(1)). Knowing this saves an afternoon of debugging when your 'remove the number 1' deletes the wrong element." },
+  ]}
+/>
+Ten minutes and you can grow and shrink a list every way you'll need — and you understand the shift that makes middle operations special.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "“In Java, remove(2) deleted the wrong element from my number list.”",
+      fix: "The infamous trap: List has both remove(int index) and remove(Object). On a List<Integer>, remove(2) matches remove(int) — so it deletes the item at INDEX 2, not the value 2. To remove by value, box it: remove(Integer.valueOf(2)). This only bites Integer lists (where a value and an index are both ints); for String lists there's no ambiguity. If a numeric remove deletes the wrong thing, this is why.",
+    },
+    {
+      symptom: "“ValueError: list.remove(x): x not in list / removing something that isn't there.”",
+      fix: "remove(value) requires the value to exist — removing something absent raises an error (Python ValueError; Java remove(Object) just returns false without deleting). Check first: 'if x in items: items.remove(x)' (Python) so you don't crash on a missing value. Also remember remove deletes only the FIRST match — if there are duplicates, the others remain.",
+    },
+    {
+      symptom: "“I removed items in a for loop and it skipped some.”",
+      fix: "The modifying-while-iterating bug (loops chapter), caused by the shift: when you remove an element, the rest slide down, so the loop's index lands past the item that moved into the gap. Don't mutate a list you're looping over. Build a new list (a comprehension: keep = [x for x in items if not condition]), or iterate a copy: 'for x in list(items): ...'. In Java, use an Iterator's remove() or removeIf().",
+    },
+    {
+      symptom: "“My Java array has no .add() / I can't grow it.”",
+      fix: "Arrays are fixed-size (last note) — no add/remove. Only ArrayList grows. If you're trying to append to a String[]/int[], switch to a List (List<String> list = new ArrayList<>(); list.add(...)). Choosing an array for a collection that changes size is the setup for this wall; use ArrayList when the count isn't fixed.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Adding and removing:
+
+- **remove(value) vs pop/remove(index)** — value-based deletes the first match (no return); index-based deletes a position (pop RETURNS it). Pick by whether you have the value or the position, and whether you need the item back.
+- **Java number lists** — `remove(int)` is BY INDEX; use `remove(Integer.valueOf(x))` to delete by value. The classic Integer-list trap.
+- **Removing a missing value** — errors (Python) / no-op (Java). Guard with `if x in items` first; and remove deletes only the first duplicate.
+- **Deleting in a loop** — don't. The shift skips elements. Build a new list or iterate a copy (`for x in list(items)`), or use `removeIf` (Java).
+- **Trying to grow an array (Java)** — arrays are fixed; use `ArrayList`.
+</WhereToCheck>
+
+<WorkedExample title="the 'remove item 2' that deleted the wrong product — a Java remove() trap, traced">
+A Java cart stores product IDs in a `List<Integer>`. 'Remove product 2' deletes the wrong item. Here's the code:
+
+```java
+List<Integer> cart = new ArrayList<>(List.of(101, 2, 305));  // product IDs; 2 is a real ID
+cart.remove(2);   // intended: remove the product with ID 2
+System.out.println(cart);   // [101, 2] -- WRONG: it removed ID 305, and ID 2 is still there!
+```
+
+1. **The symptom:** the code says `remove(2)`, meaning to delete product ID 2, but ID 2 survives and a
+   different product (305) vanishes. Baffling if you don't know the trap.
+2. **Two overloads, one ambiguity:** `List` has `remove(int index)` AND `remove(Object o)`. When you write
+   `remove(2)`, the literal `2` is an `int`, so Java picks `remove(int index)` — it removes the element at
+   **index 2**, which is 305. The value 2 is never even looked for.
+3. **See the wrong deletion:** index 2 of `[101, 2, 305]` is `305`, so that's what goes, leaving `[101, 2]`.
+   The intent (remove the value 2) and the effect (remove index 2) are completely different operations that
+   happen to look identical in the code.
+4. **The fix — force the Object overload by boxing the value:**
+   ```java
+   cart.remove(Integer.valueOf(2));   // now it removes the VALUE 2
+   System.out.println(cart);          // [101, 305]  -- correct
+   ```
+   `Integer.valueOf(2)` is an `Object`, so Java calls `remove(Object)`, which deletes the first element equal
+   to 2.
+5. **Why it's a rite-of-passage bug:** it only appears on `List<Integer>` (where a value and an index are both
+   plain ints), so it hides until exactly that case, and the code reads as if it's obviously correct. Every
+   Java developer meets it once. For `List<String>` there's no ambiguity, so the trap is invisible until you
+   hit a number list.
+6. **Tester's angle:** the give-away is 'delete X removed something else,' especially on numeric IDs. Testing
+   deletion with a value that also happens to be a valid index — and asserting the RIGHT element is gone and
+   the target isn't — surfaces it immediately. It's a great reminder that 'the code looks right' is not
+   'the code is right,' which is the tester's whole creed.
+</WorkedExample>
+
+<Callout type="mistake">
+Two traps live here. First, the Java `remove(int)` vs `remove(Object)` ambiguity: on a `List<Integer>`,
+`remove(2)` deletes the element at INDEX 2, not the value 2 — use `remove(Integer.valueOf(2))` to delete by
+value. It only strikes number lists and reads as obviously correct, which is why everyone gets caught once.
+Second, the shift: inserting or removing anywhere but the end slides every later element over by one — the
+hidden cost that makes middle operations slower and, crucially, the reason removing items while looping over a
+list skips elements (build a new list or iterate a copy instead). Keep the removers straight, too:
+`remove(value)` deletes the first match and returns nothing, while `pop(index)` deletes a position and RETURNS
+the item. Default to `append`/`add` (cheap, shifts nothing), reach for position-based ops deliberately, and
+never mutate a list you're iterating.
+</Callout>
+
+<Quiz
+  question="On a Java List<Integer> containing [10, 20, 30], what does nums.remove(1) do?"
+  options={[
+    "Removes the value 1 (which isn't present, so nothing changes)",
+    "Removes the element at INDEX 1 (the value 20), leaving [10, 30], because a bare int calls remove(int index)",
+    "Removes the first element, leaving [20, 30]",
+    "Throws an error"
+  ]}
+  answer={1}
+  explain="List has two remove methods: remove(int index) and remove(Object). A bare int literal like 1 matches remove(int index), so nums.remove(1) deletes the element at INDEX 1 — the value 20 — leaving [10, 30]. It does NOT remove the value 1. To delete by value you must box it: nums.remove(Integer.valueOf(1)), which calls remove(Object). This trap only appears on List<Integer> (where value and index are both ints) and is a classic Java gotcha — the code reads as 'remove 1' but means 'remove index 1'. For a List<String> there's no ambiguity."
+/>
+
+<Flashcards
+  cards={[
+    { front: "append / add", back: "Add an item to the END of a list (list.append(x) / list.add(x)). The cheap, common way to grow — nothing else moves. Most list-building is a loop that appends one item per pass." },
+    { front: "insert(i, x)", back: "Add x at index i; every element from i onward shifts up one place to make room. Pricier than append because it shifts the tail. Use only when you need a specific position, not the end." },
+    { front: "remove(value) vs pop(index)", back: "remove(value) deletes the FIRST item equal to the value and returns nothing. pop(index) (Java remove(index)) deletes the item AT that position and RETURNS it. Use pop when you want the removed value back." },
+    { front: "The shift", back: "Insert/remove anywhere but the end slides every later element over by one. Costs more for big front-operations, and causes the modifying-while-iterating bug (indices move under the loop). Build new / iterate a copy instead." },
+    { front: "Java remove() trap", back: "On a List<Integer>, remove(2) removes INDEX 2, not the value 2 (a bare int calls remove(int index)). To remove by value: remove(Integer.valueOf(2)). Only bites number lists; a rite-of-passage Java bug." },
+    { front: "Removing a missing value", back: "remove(value) on something not present errors in Python (ValueError) / returns false in Java. Guard with 'if x in items' first. And remove deletes only the FIRST match — duplicates remain." },
+  ]}
+/>
+
+<Challenge>
+Reshape a list. (1) Start with ['a','b','c'], append 'd', then insert 'X' at index 1 — predict the result
+before running. (2) pop() the last item and pop(0) the first, printing what each returns. (3) Remove 'b' from
+['a','b','c','d'] and note how c and d shift down. (4) In Java, make a List of [10,20,30], call remove(1) and
+explain why it leaves [10,30], then remove the VALUE 30 correctly. (5) Write one sentence: why does removing an
+item from the middle of a list shift the others, and why does that matter? If you can say 'the list re-packs to
+close the gap, so later indices move — costing performance and breaking loops that delete as they go', you've
+mastered add and remove.
+</Challenge>
+
+<AskCommunity prompt="Add/remove question: my [remove deleted the wrong item / loop skipped elements / array won't grow]. Here's the code [paste it]. I'm using [Python/Java]. What's happening?">
+If a Java numeric remove deleted the wrong element, you likely hit remove(int) vs remove(Object) — say whether
+it's a `List<Integer>` and use remove(Integer.valueOf(x)) for by-value. If a loop skipped items, mention you're
+removing while iterating (the shift — build a new list or iterate a copy). If a Java array 'won't grow', you
+need an ArrayList.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://docs.python.org/3/tutorial/datastructures.html#more-on-lists", title: "Python docs — list methods (append, insert, remove, pop)", kind: "read" },
+    { href: "https://docs.oracle.com/javase/8/docs/api/java/util/ArrayList.html", title: "Java docs — ArrayList (add, remove)", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=nhkiHfebmhs", title: "Python list methods: append, insert, remove, pop — CodeLucky", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=nhkiHfebmhs" title="Adding & removing — append, insert, remove, pop — CodeLucky" minutes={10} />
+
+<Takeaways
+  points={[
+    "Grow a list with append/add (to the end — the cheap, common move that shifts nothing) or insert(i, x) (at a position — shifts every later item up to make room). Most list-building is a loop that appends.",
+    "Remove two ways: remove(value) deletes the first matching value and returns nothing; pop(index) (Java remove(index)) deletes the item at that position and RETURNS it — use pop when you want the removed value back.",
+    "Inserting or removing anywhere but the end SHIFTS every later element by one as the list re-packs. That's the hidden cost (slower for big front-ops) and the cause of the modifying-while-iterating bug (indices move under the loop).",
+    "Java's classic trap: on a List<Integer>, remove(2) deletes INDEX 2, not the value 2 (a bare int calls remove(int index)) — use remove(Integer.valueOf(2)) to delete by value.",
+    "Guardrails: don't remove while looping (build a new list or iterate a copy); removing a missing value errors (Python) — check 'if x in items' first; and Java arrays can't grow, so use ArrayList when the count changes.",
+  ]}
+/>
+
+<Complete xp={10} />

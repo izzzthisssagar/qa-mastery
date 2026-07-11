@@ -395,6 +395,53 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
     ],
   },
   {
+    slug: "working-with-data",
+    title: "Working with data",
+    summary: "The three shapes almost all data comes in — text, lists, and key–value pairs — and the everyday operations and small algorithms a tester uses to pull them apart and check them.",
+    chapters: [
+      {
+        slug: "strings-and-text",
+        title: "Strings & text",
+        topics: [
+          { slug: "string-basics", title: "String basics" },
+          { slug: "common-string-methods", title: "Common string methods" },
+          { slug: "string-formatting", title: "String formatting" },
+          { slug: "string-parsing", title: "String parsing" },
+        ],
+      },
+      {
+        slug: "lists-and-arrays",
+        title: "Lists & arrays",
+        topics: [
+          { slug: "creating-lists", title: "Creating lists" },
+          { slug: "add-and-remove", title: "Add & remove" },
+          { slug: "iterating-and-searching", title: "Iterating & searching" },
+          { slug: "sorting-lists", title: "Sorting lists" },
+        ],
+      },
+      {
+        slug: "key-value-data",
+        title: "Key–value data",
+        topics: [
+          { slug: "maps-and-dictionaries", title: "Maps & dictionaries" },
+          { slug: "objects", title: "Objects" },
+          { slug: "nesting", title: "Nesting" },
+          { slug: "when-to-use-which", title: "When to use which" },
+        ],
+      },
+      {
+        slug: "simple-algorithms",
+        title: "Simple algorithms",
+        topics: [
+          { slug: "problem-solving-steps", title: "Problem-solving steps" },
+          { slug: "looping-over-data", title: "Looping over data" },
+          { slug: "basic-sort-and-search", title: "Basic sort & search" },
+          { slug: "practice-katas", title: "Practice katas" },
+        ],
+      },
+    ],
+  },
+  {
     slug: "foundations",
     title: "QA Foundations",
     summary: "The vocabulary and mental models every tester needs.",
