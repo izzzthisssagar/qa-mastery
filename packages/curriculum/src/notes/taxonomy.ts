@@ -376,10 +376,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "functions",
         title: "Functions",
         topics: [
-          { slug: "defining-functions", title: "Defining functions", planned: true },
-          { slug: "parameters-and-return", title: "Parameters & return", planned: true },
-          { slug: "scope", title: "Scope", planned: true },
-          { slug: "reuse-and-dry", title: "Reuse & DRY", planned: true },
+          { slug: "defining-functions", title: "Defining functions" },
+          { slug: "parameters-and-return", title: "Parameters & return" },
+          { slug: "scope", title: "Scope" },
+          { slug: "reuse-and-dry", title: "Reuse & DRY" },
         ],
       },
       {
