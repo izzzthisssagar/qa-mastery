@@ -1,0 +1,391 @@
+---
+title: "Exceptions & try/catch"
+summary: "Programs hit trouble at runtime — bad input, missing files, dead networks. Exceptions are how code says so, and try/except (Python) or try/catch (Java) is how you respond. Raising your own, cleaning up with finally, and why silently swallowing errors is the worst bug of all."
+tags: ["a-first-language-deeper", "collections", "track-b"]
+updated: "2026-07-11"
+---
+
+<Hook>
+Some errors you cause and fix before the program ever runs — typos, wrong syntax. But a whole other family
+only shows up *while the program is running*: the user types `"abc"` where a number belongs, the file isn't
+where it should be, the network dies mid-request. Your code was fine; the *world* misbehaved. Exceptions are
+the language's way of shouting 'something went wrong HERE' — and `try`/`except` (Python) or `try`/`catch`
+(Java) is your way of shouting back 'I've got this.' Handled well, a crash becomes a helpful message and a
+graceful recovery. Handled badly — caught and silently ignored — errors vanish without a trace, which is far
+worse than crashing. And here's the career secret: happy paths mostly work; it's the *error paths* nobody
+tested where production incidents live. This note is how you learn to read, handle, raise, and — above all —
+test them.
+</Hook>
+
+<Callout type="analogy">
+An exception handler is **the safety net under a trapeze.** The act (your code) usually goes fine, and the
+net does nothing at all. But when a catch is missed mid-air — the unexpected input, the missing file — the
+performer doesn't hit the floor: the net takes them, the show recovers, and everyone learns *which* trick
+failed. That's a caught
+<Term define="A runtime error object that interrupts normal execution and travels up the call stack until something catches it. Python raises exceptions handled by try/except; Java throws them handled by try/catch. Uncaught, it crashes the program with a traceback/stack trace.">exception</Term>:
+the fall still *happened*, but it was expected as a possibility and handled on purpose. Two rules complete
+the picture. A net only works where you hang it — `try` marks exactly which part of the act is protected.
+And a net is not a blindfold: a crew that quietly resets the net and *never reports the fall* guarantees the
+same slip happens again tomorrow. Catching an error and saying nothing is exactly that.
+</Callout>
+
+## Errors at runtime: what an exception is
+
+When something impossible is asked of running code — turning `"abc"` into a number, dividing by zero,
+indexing past a list's end — the language doesn't guess. It **raises** (Python) or **throws** (Java) an
+exception: an object that says what went wrong and where. Unhandled, it stops the program and prints the
+famous traceback:
+
+```python
+int("abc")
+# Traceback (most recent call last):
+#   File "main.py", line 1, in <module>
+# ValueError: invalid literal for int() with base 10: 'abc'
+```
+
+Read tracebacks bottom-up: the **last line** names the exception type (`ValueError`) and the message; the
+lines above show where it happened. Java's version is a stack trace, read top-down, but carries the same two
+answers: *what* went wrong, and *where*. Every exception has a **type** — `ValueError`, `KeyError`,
+`FileNotFoundError` in Python; `NumberFormatException`, `NullPointerException`, `IOException` in Java — and
+the type is what you'll catch by.
+
+<HotspotImage
+  src="/notes/a-first-language-deeper/collections-and-exceptions/exceptions-and-try-catch.png"
+  alt="Nine circus performers sitting safely in a large safety net after a drop, all smiling, against a starry backdrop"
+  credit="Group of circus performers in a safety net — Wikimedia Commons, Public domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:Group_of_Circus_Performers_WDL10692.png"
+  pins={[
+    { x: 50, y: 10, label: "The act above = the try block", desc: "The performance happened up there, in the starry dark above the frame — that's your risky code running inside try. Most nights the act goes perfectly and nobody touches the net; most runs of your code never raise anything. Exception handling isn't for the normal case — it's insurance for the moment reality diverges from the plan: bad input, missing file, dead network." },
+    { x: 30, y: 65, label: "The net = the except/catch block", desc: "When a performer drops, the net catches the fall — your except/catch receives the exception and decides what happens next: show a friendly message, retry, use a default, or re-raise. A net catches only what falls INTO it: a handler catches only exceptions of the type it names, raised inside its try. The same fall one metre outside the net's edge is not caught." },
+    { x: 15, y: 42, label: "Performers IN the net = the program continues", desc: "Look at them: the drop already happened, and the show goes on. That is handled-exception behaviour — execution resumes after the catch block instead of dying at the raise. The error still occurred (they DID fall); handling it means the failure was absorbed in a controlled place instead of ending the whole performance." },
+    { x: 88, y: 85, label: "Take the net away = the crash", desc: "Same drop, no net: that's an UNCAUGHT exception. Execution stops at the raising line, the exception falls through every stack frame looking for a handler, finds none, and hits the floor — crash, traceback on screen, program over. The traceback is the incident report: read it bottom-up for the error type and the exact line that fell." },
+    { x: 53, y: 45, label: "The smiles = graceful recovery the user never feels", desc: "Everyone is grinning because a controlled catch is undramatic — and that's the goal. Done right, the user sees 'Could not load your file, try again' instead of a raw stack trace. But a catch that does NOTHING (except: pass) is a net with no incident log: the error happened and nobody knows. At minimum, log what you caught — silent swallowing turns loud, findable bugs into quiet corrupt data. As a tester, hunt for these." },
+  ]}
+/>
+
+## try/except and try/catch: same idea, two accents
+
+Wrap the risky code in `try`; put the response in `except` (Python) or `catch` (Java), naming the exception
+type you expect:
+
+**Python:**
+```python
+text = "abc"
+try:
+    number = int(text)              # the risky line
+    print("Got:", number)
+except ValueError:                  # runs ONLY if that type was raised
+    print("Not a number:", text)
+```
+
+**Java:**
+```java
+String text = "abc";
+try {
+    int number = Integer.parseInt(text);   // the risky line
+    System.out.println("Got: " + number);
+} catch (NumberFormatException e) {        // runs ONLY on that type
+    System.out.println("Not a number: " + text);
+}
+```
+
+The flow is identical: if the try block succeeds, the handler is skipped entirely. If the named exception is
+raised inside it, execution jumps straight to the handler — lines after the failing one don't run — and the
+program *continues* afterward instead of crashing. Catch the **specific type** you expect: a bare
+`except:` in Python (or `catch (Exception e)` in Java) grabs *everything*, including bugs you never meant to
+hide. One Java extra you'll meet immediately: *checked exceptions*. For some types (like `IOException`), the
+compiler refuses to build until you either catch them or declare `throws IOException` on the method —
+Java forcing you to acknowledge the failure path up front. Python trusts you to remember; Java nags you.
+
+## Raising your own, cleaning up with finally
+
+Exceptions aren't only received — you can *raise* them when your own code detects nonsense, and you can
+attach a `finally` block that runs **no matter what** for cleanup:
+
+**Python:**
+```python
+def withdraw(balance, amount):
+    if amount > balance:
+        raise ValueError("amount exceeds balance")   # refuse loudly
+    return balance - amount
+
+try:
+    withdraw(100, 250)
+except ValueError as e:
+    print("Rejected:", e)
+finally:
+    print("Audit log written.")     # runs on success AND on failure
+```
+
+**Java:**
+```java
+if (amount > balance) {
+    throw new IllegalArgumentException("amount exceeds balance");
+}
+// try { ... } catch (...) { ... } finally { /* always runs */ }
+```
+
+Raising early — the moment your function receives values it can't honor — is a *gift* to whoever debugs
+later: the failure happens at the cause, with a clear message, instead of three functions downstream as a
+mystery. `finally` is for must-happen cleanup (closing files, releasing connections); it runs whether the try
+succeeded, failed, or failed with an exception nobody caught.
+
+<FlowAnimation
+  title="The life of an exception, from raise to resolution. Press Play."
+  intervalMs={1800}
+  nodes={[
+    { label: "Code runs normally", desc: "Execution proceeds line by line inside a try block. If nothing goes wrong, every except/catch attached to it is skipped completely — handlers cost nothing on the happy path. Most runs end here, which is exactly why untested error paths rot quietly." },
+    { label: "Something impossible happens", desc: "A line asks for the impossible: int('abc'), a missing file, index 10 of a 3-item list. The language raises/throws an exception object carrying a TYPE (ValueError, NumberFormatException) and a message. Execution stops at that exact line — the rest of the try block never runs." },
+    { label: "The exception searches for a handler", desc: "It travels outward: first any except/catch on the current try, then the caller, then the caller's caller — up the call stack. The first handler naming a MATCHING type wins. This is why catching a specific type matters: the type is the address on the envelope." },
+    { label: "Caught — or crash", desc: "If a matching handler exists, it runs: message, retry, default value, or re-raise after logging. The program continues. If NOTHING matches all the way up, the program dies and prints the traceback/stack trace — which, honestly, beats continuing with corrupt state." },
+    { label: "finally runs regardless", desc: "On the way out — success, handled failure, or unhandled failure — any finally block attached to the try executes. That's the home for cleanup that must never be skipped: close the file, release the connection, write the audit line. Success and disaster both pass through finally." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="Try it — catch, raise, finally in Python. Press Run."
+  code={`# 1) Catching: the same risky call with good and bad input
+for text in ["42", "abc"]:
+    try:
+        number = int(text)
+        print("parsed:", number)
+    except ValueError:
+        print("not a number:", repr(text), "-- handled, no crash")
+
+# 2) Raising your own: refuse nonsense loudly at the source
+def withdraw(balance, amount):
+    if amount > balance:
+        raise ValueError("amount " + str(amount) + " exceeds balance " + str(balance))
+    return balance - amount
+
+# 3) finally: cleanup that runs on success AND failure
+for amount in [30, 250]:
+    try:
+        remaining = withdraw(100, amount)
+        print("ok, remaining:", remaining)
+    except ValueError as e:
+        print("rejected:", e)
+    finally:
+        print("(audit entry written)")
+
+# 4) The sin: a silent swallow. The error still HAPPENED -- now it's invisible.
+try:
+    total = int("oops") * 3
+except ValueError:
+    pass   # <-- never do this: no log, no message, no trace
+print("program 'succeeded'... but total was never computed. Spooky, right?")`}
+/>
+
+Here's the **same in Java** — `catch` instead of `except`, exception types in parentheses, and the same
+`finally` guarantee:
+
+<CodePlayground
+  language="java"
+  title="Try it — catch, throw, finally in Java. Press Run."
+  code={`public class Main {
+
+    static int withdraw(int balance, int amount) {
+        if (amount > balance) {
+            throw new IllegalArgumentException(
+                "amount " + amount + " exceeds balance " + balance);
+        }
+        return balance - amount;
+    }
+
+    public static void main(String[] args) {
+        // 1) Catching: same risky call, good and bad input
+        String[] inputs = {"42", "abc"};
+        for (String text : inputs) {
+            try {
+                int number = Integer.parseInt(text);
+                System.out.println("parsed: " + number);
+            } catch (NumberFormatException e) {
+                System.out.println("not a number: '" + text + "' -- handled, no crash");
+            }
+        }
+
+        // 2) Throwing our own + 3) finally always runs
+        int[] amounts = {30, 250};
+        for (int amount : amounts) {
+            try {
+                int remaining = withdraw(100, amount);
+                System.out.println("ok, remaining: " + remaining);
+            } catch (IllegalArgumentException e) {
+                System.out.println("rejected: " + e.getMessage());
+            } finally {
+                System.out.println("(audit entry written)");
+            }
+        }
+    }
+}`}
+/>
+
+<Callout type="tip">
+Three habits cover ninety percent of good exception hygiene. **Catch narrow:** name the specific type you
+expect (`ValueError`, `NumberFormatException`) — broad catches hide bugs you didn't anticipate. **Keep the
+try tight:** wrap the one risky line, not the whole function, so a caught error can only mean one thing.
+**Never swallow silently:** an empty handler makes failure *invisible*, which is strictly worse than a crash
+— a crash at least tells you where. If you truly must continue past an error, log it first. And the tester's
+habit on top: for every `try` you see in the code, there's an error path someone intended — feed it the bad
+input on purpose and check the handling actually works. Error paths are the least-tested, highest-risk code
+in any system.
+</Callout>
+
+<FirstTime title="First time? Break things on purpose">
+<StepChecklist
+  steps={[
+    { text: "Cause a crash and read the traceback", detail: "Run int('abc') bare, no try. Read the last line: the TYPE (ValueError) and the message. Python tracebacks read bottom-up, Java stack traces top-down — either way the type + message + location are your three debugging clues. Learn to love this output; it's the most honest error report you'll ever get." },
+    { text: "Wrap it in try/except (or try/catch)", detail: "Same call, now wrapped, catching the specific type. Watch the program print a friendly message and KEEP GOING. Then feed it good input and confirm the handler is skipped entirely — handlers only run on the named failure." },
+    { text: "Catch the WRONG type and watch it sail through", detail: "Catch KeyError around int('abc') — the ValueError ignores your net completely and crashes anyway. This is the point: handlers match by TYPE. A net in the wrong place catches nothing." },
+    { text: "Raise/throw your own", detail: "Write a function that raises ValueError (Python) or IllegalArgumentException (Java) when handed a nonsense argument, like a negative age. Failing fast at the source, with a clear message, is kinder than letting garbage flow three functions downstream before something explodes." },
+    { text: "Prove finally always runs", detail: "Add a finally that prints '(cleanup)'. Trigger the success path, the caught-error path, and an uncaught error — cleanup prints every single time. That guarantee is why file closing and connection releasing live in finally." },
+  ]}
+/>
+Twenty minutes of deliberate breakage and exceptions go from scary red text to a control-flow tool you own.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "“My try/except is there but the program still crashes with the same error.”",
+      fix: "Check two things. TYPE: your handler only catches what it names — except ValueError won't stop a KeyError; read the traceback's last line and match it exactly. PLACE: only code inside the try is protected; if the error is raised on a line before the try, after it, or in code the try never reaches, the net isn't under it. The traceback tells you the exact line — is that line truly inside your try?",
+    },
+    {
+      symptom: "“Java refuses to compile: 'unreported exception IOException; must be caught or declared to be thrown'.”",
+      fix: "You've met checked exceptions. For certain types (IOException and friends), Java demands you handle the failure path AT COMPILE TIME: either wrap the call in try/catch, or add 'throws IOException' to your method signature to pass responsibility to your caller. It's not an error in your logic — it's Java forcing the question 'what if this fails?' before it lets you run. Python has no equivalent; it trusts you to remember.",
+    },
+    {
+      symptom: "“Nothing crashes, but the results are silently wrong — values missing, totals off.”",
+      fix: "Hunt for a swallowed exception: except: pass, except Exception: pass, or a catch block with an empty body. Something IS failing; the empty handler erases the evidence and lets the program continue half-done. Add logging (or temporarily re-raise) inside every suspect handler and run again — the hidden failure will surface immediately. Silent swallowing is the number-one way real bugs hide in production code.",
+    },
+    {
+      symptom: "“My cleanup code didn't run after an error (file left open, connection left hanging).”",
+      fix: "Cleanup placed AFTER the risky line inside the try never runs when that line throws — execution jumps straight to the handler. Move must-run cleanup into a finally block (or use with in Python / try-with-resources in Java, coming next note): finally executes on success, on caught errors, and even on uncaught ones. If cleanup must survive failure, finally is its only safe home.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Debugging an exception problem:
+
+- **Read the type and message first** — traceback's last line (Python) or stack trace's first line (Java). The type tells you what family of problem; the message usually names the offending value.
+- **Find the exact line** — the trace points at file and line number. That line, with those values, is where reality diverged. Everything else is commentary.
+- **Is the failing line inside the try?** — nets only cover what they're hung over. One line outside and the handler is decoration.
+- **Does the handler's type match?** — `except ValueError` vs an actual `KeyError` = no catch. Match the trace's type exactly, or catch a documented parent type on purpose.
+- **Any empty handlers?** — grep for `except` and `catch` blocks with `pass` or empty bodies. When behavior is silently wrong, a swallowed exception is suspect number one.
+</WhereToCheck>
+
+<WorkedExample title="the import that 'worked' — a swallowed exception, traced">
+A script loads user records from strings, and the team swears it works — no errors, ever. But the loaded
+count keeps coming up short: 200 lines in, 187 users out. Here's the loader:
+
+```python
+def load_users(lines):
+    users = []
+    for line in lines:
+        try:
+            name, age = line.split(",")
+            users.append((name, int(age)))
+        except Exception:
+            pass                     # BUG: any failure, silently skipped
+    return users
+```
+
+1. **The symptom:** no crash, no warning, nothing in the logs — yet 13 users are simply *missing* from the
+   output. The program reports total success while quietly doing 93% of its job.
+2. **The suspect:** that `except Exception: pass`. It catches *every* possible failure — malformed lines,
+   non-numeric ages, even genuine bugs in the code itself — and does *nothing*: no log, no count, no trace.
+3. **What it was hiding:** add one print inside the handler and rerun — out tumble 13 messages. Some lines
+   had a missing comma (`ValueError` from the unpacking), some had ages like `"twenty-two"` (`ValueError`
+   from `int()`), and one was an empty line. Three *different* data problems, all erased by one lazy handler.
+4. **The fix — handle narrowly, and always leave evidence:**
+   ```python
+   except ValueError as e:
+       print("skipped bad line:", repr(line), "-", e)
+       skipped += 1
+   ```
+   Catch the *specific* expected type, log the offending line, and count skips — then report the count so a
+   13-line loss is *visible* at the end of every run instead of invisible forever.
+5. **Why the original is so dangerous:** `except Exception` also swallows errors that have nothing to do
+   with bad data — a typo'd variable name inside the try, a `None` where a string belonged. Real bugs get
+   classified as 'bad input' and vanish. Broad catch + empty body is how systems lie about their own health.
+6. **Tester's angle:** 'no errors' is not the same as 'correct'. Test the error paths *deliberately*: feed
+   the loader a malformed line, a non-numeric age, an empty line, and assert on what SHOULD happen — a
+   logged skip, a counted skip, a visible report. If the spec doesn't say what happens on bad input, that's
+   a question worth raising — because right now, the answer is 'silence', and silence in an error path is a
+   bug waiting for production.
+</WorkedExample>
+
+<Callout type="mistake">
+Swallowing exceptions silently — the empty `except: pass` in Python, the empty `catch (Exception e)` block
+in Java. It feels like defensive programming ('my program never crashes!') but it's the opposite: the error
+still *happens*, and now nobody knows. Data goes missing, totals drift, and weeks later someone debugs a
+mystery that a one-line log message would have named on day one. A crash is loud, located, and honest; a
+swallowed exception is a lie about the program's health. The sibling mistakes: catching overly broad types
+(`Exception` grabs real bugs along with expected failures), wrapping half the function in one giant try (so
+a caught error could mean anything), and putting cleanup after the risky line instead of in `finally`. If
+you must continue past a failure: catch the *specific* type, *log* what happened, and make the skip
+*countable*. Never let an error path end in silence.
+</Callout>
+
+<Quiz
+  question="A Python function wraps int(text) in try/except ValueError and the except block is just 'pass'. When text is 'abc', what happens — and why is this dangerous?"
+  options={[
+    "The program crashes with ValueError — pass doesn't stop exceptions",
+    "The exception is caught and silently discarded: no crash, no message, and the number is simply never produced — dangerous because the failure becomes invisible and surfaces later as wrong or missing data",
+    "int() returns 0 for invalid input, so the except never runs",
+    "Python converts 'abc' to its character codes and continues normally"
+  ]}
+  answer={1}
+  explain="int('abc') raises ValueError inside the try, the handler matches, and pass means 'do nothing' — so execution continues as if all were well, minus the number that was never computed. Nothing is printed, nothing is logged, no default is supplied. That's the silent swallow: strictly worse than a crash, because a crash names the time, place, and type of the failure while a swallow erases all three. The disciplined version catches the SPECIFIC type, logs the offending value, and either supplies an explicit default or re-raises. And for a tester, this pattern is a target: feed the bad input on purpose and verify something VISIBLE happens."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Exception", back: "A runtime error object (type + message) that interrupts execution and travels up the call stack until caught. Uncaught, it crashes the program with a traceback (Python) / stack trace (Java) — read it for TYPE, MESSAGE, LINE." },
+    { front: "try/except vs try/catch", back: "Same mechanism, two accents. Wrap risky code in try; the handler (except in Python, catch in Java) names the exception type it handles and runs ONLY when that type is raised inside the try. Success skips handlers entirely." },
+    { front: "Catch narrow, try tight", back: "Name the specific expected type (ValueError, NumberFormatException); broad catches (Exception) hide genuine bugs. Wrap only the risky line(s) so a caught error has one possible meaning. A giant try with a broad catch can hide anything." },
+    { front: "raise / throw", back: "Fail fast at the source: Python 'raise ValueError(msg)', Java 'throw new IllegalArgumentException(msg)'. Refusing nonsense input immediately, with a clear message, beats letting bad data flow downstream and explode somewhere confusing." },
+    { front: "finally", back: "The always-runs block: executes after the try on success, on caught failure, and even on uncaught failure. Home for must-happen cleanup — closing files, releasing connections. Cleanup placed merely after the risky line is skipped when it throws." },
+    { front: "Checked exceptions (Java only)", back: "For types like IOException, Java won't compile until you catch them or declare 'throws' on your method — the failure path is acknowledged at compile time. Python has no equivalent: any call may raise anything, and remembering is on you." },
+  ]}
+/>
+
+<Challenge>
+Break a parser, then armor it. (1) Write a function parse_age(text) that returns int(text) — call it with
+'19' and with 'abc' bare, and read the traceback. (2) Add try/except ValueError (Java: catch
+NumberFormatException) that prints a clear message including the bad input and returns -1. (3) Make it raise
+instead when the parsed age is negative — your first hand-raised exception with a message. (4) Add finally
+printing '(done)' and prove it fires on both paths. (5) The tester's rep: write down the THREE inputs you'd
+use to test this function's error handling ('abc', '-5', and '' are a fine start) and what should visibly
+happen for each. If your answer for any input is 'nothing happens', you've found the design bug.
+</Challenge>
+
+<AskCommunity prompt="Exception question: my code raised [paste the traceback's last line] at [the line it points to]. Here's the try/except (or try/catch) I wrote [paste it] and what I expected it to do. I'm using [Python/Java]. Why didn't it catch / what should the handler do?">
+Paste the actual traceback, not a paraphrase — the exception TYPE on its last line answers half of all
+questions ('except ValueError' can't catch a KeyError). Say whether the failing line is inside your try
+block, and show the handler body: if it's empty or just pass, the answers will start there, and rightly so.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://docs.python.org/3/tutorial/errors.html", title: "Python docs — errors and exceptions (try/except/raise/finally)", kind: "read" },
+    { href: "https://dev.java/learn/exceptions/", title: "Dev.java — exceptions (try/catch/finally, checked vs unchecked)", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=NIWwJbo-9_8", title: "Using Try/Except Blocks for Error Handling — Corey Schafer", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=NIWwJbo-9_8" title="try/except — handling errors without hiding them — Corey Schafer" minutes={10} />
+
+<Takeaways
+  points={[
+    "Exceptions are runtime errors as objects: a TYPE (ValueError, NumberFormatException) plus a message, raised/thrown at the failing line and traveling up the call stack until caught — or crashing with a traceback that names what, where, and why.",
+    "try marks the protected code; except (Python) / catch (Java) names the type it handles and runs only on that failure. Catch NARROW (the specific expected type) and keep the try TIGHT (just the risky lines) so a caught error can only mean one thing.",
+    "Raise/throw your own exceptions to fail fast: refuse nonsense input at the source with a clear message instead of letting bad data explode downstream. Java adds checked exceptions — some types must be caught or declared before the code even compiles.",
+    "finally runs no matter what — success, caught failure, or uncaught failure — making it the only safe home for must-happen cleanup like closing files and releasing connections.",
+    "Never swallow exceptions silently: an empty except/catch erases the evidence and turns loud, findable failures into silent data corruption. Log, count, or re-raise. And as a tester, error paths are your beat — feed bad input on purpose and verify something VISIBLE happens.",
+  ]}
+/>
+
+<Complete xp={10} />

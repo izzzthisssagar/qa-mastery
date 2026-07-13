@@ -442,6 +442,177 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
     ],
   },
   {
+    slug: "a-first-language-deeper",
+    title: "A first language, deeper",
+    summary: "Set up a real development environment and go deeper into Java and Python — syntax, object-oriented basics, collections, and exceptions — the working vocabulary of automation code.",
+    chapters: [
+      {
+        slug: "setup-and-ide",
+        title: "Setup & IDE",
+        topics: [
+          { slug: "installing-the-jdk", title: "Installing the JDK" },
+          { slug: "installing-python", title: "Installing Python" },
+          { slug: "intellij-and-vscode", title: "IntelliJ and VS Code" },
+          { slug: "running-programs", title: "Running programs" },
+        ],
+      },
+      {
+        slug: "syntax-essentials",
+        title: "Syntax essentials",
+        topics: [
+          { slug: "java-syntax-tour", title: "Java syntax tour" },
+          { slug: "python-syntax-tour", title: "Python syntax tour" },
+          { slug: "key-differences", title: "Key differences" },
+          { slug: "style-conventions", title: "Style conventions" },
+        ],
+      },
+      {
+        slug: "object-oriented-basics",
+        title: "Object-oriented basics",
+        topics: [
+          { slug: "classes-and-objects", title: "Classes and objects" },
+          { slug: "methods-and-fields", title: "Methods and fields" },
+          { slug: "inheritance", title: "Inheritance" },
+          { slug: "encapsulation", title: "Encapsulation" },
+        ],
+      },
+      {
+        slug: "collections-and-exceptions",
+        title: "Collections & exceptions",
+        topics: [
+          { slug: "lists-maps-sets", title: "Lists, maps & sets" },
+          { slug: "exceptions-and-try-catch", title: "Exceptions & try/catch" },
+          { slug: "file-io", title: "File I/O" },
+          { slug: "packages-and-modules", title: "Packages & modules" },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "version-control-with-git",
+    title: "Version control with Git",
+    summary: "Why version control exists, the everyday Git workflow, GitHub collaboration — and the tester's superpower: reading diffs and spotting risky changes before they ship.",
+    chapters: [
+      {
+        slug: "why-version-control",
+        title: "Why version control",
+        topics: [
+          { slug: "the-problem-it-solves", title: "The problem it solves" },
+          { slug: "what-git-is", title: "What Git is" },
+          { slug: "repositories", title: "Repositories" },
+          { slug: "local-vs-remote", title: "Local vs remote" },
+        ],
+      },
+      {
+        slug: "git-basics",
+        title: "Git basics",
+        topics: [
+          { slug: "init-and-clone", title: "init & clone" },
+          { slug: "add-and-commit", title: "add & commit" },
+          { slug: "status-and-log", title: "status & log" },
+          { slug: "gitignore", title: ".gitignore" },
+        ],
+      },
+      {
+        slug: "branches-and-merging",
+        title: "Branches & merging",
+        topics: [
+          { slug: "branches", title: "Branches" },
+          { slug: "switching", title: "Switching branches" },
+          { slug: "merging", title: "Merging" },
+          { slug: "resolving-conflicts", title: "Resolving conflicts" },
+        ],
+      },
+      {
+        slug: "github-and-pull-requests",
+        title: "GitHub & pull requests",
+        topics: [
+          { slug: "pushing-to-github", title: "Pushing to GitHub" },
+          { slug: "pull-requests", title: "Pull requests" },
+          { slug: "code-review", title: "Code review" },
+          { slug: "collaboration-flow", title: "The collaboration flow" },
+        ],
+      },
+      {
+        slug: "reading-code-as-a-tester",
+        title: "Reading code as a tester",
+        topics: [
+          { slug: "reading-a-diff", title: "Reading a diff" },
+          { slug: "understanding-blast-radius", title: "Understanding blast radius" },
+          { slug: "white-box-awareness", title: "White-box awareness" },
+          { slug: "spotting-risky-changes", title: "Spotting risky changes" },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "linux-for-testers",
+    title: "Linux for testers",
+    summary: "The server-side survival kit — shell fluency, everyday commands, log investigation, remote servers, permissions and processes, and the first bash scripts that automate a tester's repetitive checks.",
+    chapters: [
+      {
+        slug: "linux-essentials",
+        title: "Linux essentials",
+        topics: [
+          { slug: "why-servers-run-linux", title: "Why servers run Linux" },
+          { slug: "distros-and-the-filesystem", title: "Distros & the filesystem" },
+          { slug: "the-shell-properly", title: "The shell, properly" },
+          { slug: "man-pages-and-getting-help", title: "man pages & getting help" },
+        ],
+      },
+      {
+        slug: "everyday-commands",
+        title: "Everyday commands",
+        topics: [
+          { slug: "navigating-and-managing-files", title: "Navigating & managing files" },
+          { slug: "find-and-wildcards", title: "find & wildcards" },
+          { slug: "viewing-files", title: "Viewing files" },
+          { slug: "pipes-and-redirection", title: "Pipes & redirection" },
+        ],
+      },
+      {
+        slug: "logs-and-investigation",
+        title: "Logs & investigation",
+        topics: [
+          { slug: "tail-f-a-live-log", title: "tail -f a live log" },
+          { slug: "grep-and-basic-regex", title: "grep & basic regex" },
+          { slug: "cut-sort-uniq-wc", title: "cut, sort, uniq, wc" },
+          { slug: "from-log-line-to-bug-report", title: "From log line to bug report" },
+        ],
+      },
+      {
+        slug: "remote-servers",
+        title: "Remote servers",
+        topics: [
+          { slug: "ssh-and-keys", title: "SSH & keys" },
+          { slug: "scp-and-rsync", title: "scp & rsync" },
+          { slug: "tmux-basics", title: "tmux basics" },
+          { slug: "collecting-evidence-remotely", title: "Collecting evidence remotely" },
+        ],
+      },
+      {
+        slug: "permissions-and-processes",
+        title: "Permissions & processes",
+        topics: [
+          { slug: "chmod-and-chown", title: "chmod & chown" },
+          { slug: "ps-top-kill", title: "ps, top, kill" },
+          { slug: "disk-and-memory", title: "Disk & memory" },
+          { slug: "environment-variables", title: "Environment variables" },
+        ],
+      },
+      {
+        slug: "bash-scripting-for-qa",
+        title: "Bash scripting for QA",
+        topics: [
+          { slug: "variables-ifs-and-loops", title: "Variables, ifs & loops" },
+          { slug: "your-first-useful-script", title: "Your first useful script" },
+          { slug: "cron-scheduling", title: "cron scheduling", planned: true },
+          { slug: "automating-repetitive-checks", title: "Automating repetitive checks", planned: true },
+        ],
+      },
+    ],
+  },
+  {
     slug: "foundations",
     title: "QA Foundations",
     summary: "The vocabulary and mental models every tester needs.",

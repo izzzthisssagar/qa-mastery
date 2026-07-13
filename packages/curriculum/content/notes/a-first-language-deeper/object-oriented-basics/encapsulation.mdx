@@ -1,0 +1,429 @@
+---
+title: "Encapsulation"
+summary: "Hide an object's data and expose safe methods instead: Java's private fields with getters and setters, Python's _underscore convention and properties. Why letting outside code poke fields directly leads to impossible state, and how encapsulation puts a guard at the only door."
+tags: ["a-first-language-deeper", "oop", "track-b"]
+updated: "2026-07-11"
+---
+
+<Hook>
+So far, any code anywhere could reach into your objects and do this: `acct.balance = -5000`. No
+deposit, no withdrawal — just a hand through the window, setting the state to something impossible.
+Every rule you carefully wrote into `withdraw()` ('never go below zero') is worthless if the field
+itself is wide open. Encapsulation closes the window: mark the data private, and force all access
+through methods — the one place where rules can be enforced. Java does this with the `private` keyword
+plus getters and setters; Python does it with a leading-underscore convention and properties. For a
+future tester this idea is gold twice over: it's *why* well-built software validates at the boundary,
+and 'can I reach the state without going through the rules?' is one of the sharpest bug-hunting
+questions you will ever ask.
+</Hook>
+
+<Callout type="analogy">
+An object with encapsulation is **an ATM.** The cash — the precious state — is locked in a safe you
+cannot reach. What you get instead is a small set of buttons: withdraw, deposit, check balance. Every
+button press goes through the machine's rules — card valid? PIN right? sufficient funds? daily limit?
+— before a single note moves. That's
+<Term define="Hiding an object's internal data so outside code cannot read or change it directly, and exposing a small set of public methods instead — the one place where validation and rules are enforced on every access.">encapsulation</Term>:
+private data, public buttons, rules at the only door. Nobody laments that they can't reach into the
+safe barehanded — the restriction is exactly what makes the machine trustworthy. Compare a cash box on
+a table with a sign saying 'please only take what's yours': same data, no enforcement. A public field
+is the cash box; a private field behind checked methods is the ATM.
+</Callout>
+
+## Why hide state at all?
+
+Here's the disaster in four lines — a class with rules, and a public field that ignores them:
+
+```python
+class BankAccount:
+    def __init__(self, owner):
+        self.owner = owner
+        self.balance = 0            # public: anyone can touch it
+
+    def withdraw(self, amount):     # the ONLY rule in the system
+        if amount <= self.balance:
+            self.balance = self.balance - amount
+
+acct = BankAccount("Alice")
+acct.withdraw(500)          # politely refused -- rule enforced
+acct.balance = -500         # rule ignored -- straight through the window
+```
+
+The `withdraw` method guards the door, but the field is an open window right next to it. Any code —
+including well-meaning code, six months from now, written by you — can set `balance` to `-500`, to a
+string, to anything. The class can no longer *promise* its own state makes sense, and every piece of
+code that reads `balance` has to worry about garbage. Encapsulation is the fix, and it's a deal: the
+class hides its data and in exchange **guarantees** its rules hold. Small print you should also know:
+it's not paranoia about attackers — it's protection against *mistakes*, and it buys freedom too. If
+callers only ever use the methods, the class can later rename fields or change how state is stored
+without breaking a single caller. Hidden inside = free to change.
+
+<HotspotImage
+  src="/notes/a-first-language-deeper/object-oriented-basics/atm.jpg"
+  alt="A person at night using a wall-mounted ATM: the lit screen and keypad face the user while the machine's mechanics stay hidden behind the fascia in the wall"
+  credit="Photo: withdrawing money at an ATM — Wikimedia Commons, CC BY-SA 3.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Withdraw_Money_(143955197).jpeg"
+  pins={[
+    { x: 80, y: 40, label: "The safe inside = private fields", desc: "The cash lives in a safe no customer can open — that's a private field: Java's private int balance, Python's self._balance. Outside code cannot (Java) or must not (Python convention) touch it directly. The state exists, but only the object itself handles it." },
+    { x: 55, y: 55, label: "The keypad = public methods", desc: "The buttons are the class's public interface: deposit(), withdraw(), getBalance(). This small, deliberate set of operations is the ONLY way in or out — and because there's one way in, there's one place to enforce every rule." },
+    { x: 52, y: 48, label: "The PIN check = validation in setters", desc: "Every button press runs checks before anything moves: withdraw(amount) verifies amount is positive and covered by the balance, a setter rejects garbage before storing it. Validation at the single entry point means invalid state simply cannot get in." },
+    { x: 47, y: 40, label: "The receipt = getters (read-only access)", desc: "You can always ASK the machine what your balance is — getBalance() / a read-only property. Encapsulation isn't secrecy from readers; it's control over writers. Expose reads freely, guard writes fiercely." },
+    { x: 88, y: 62, label: "The sealed panel = free to change inside", desc: "The bank can swap the safe, reorganize the cash trays, upgrade the firmware — customers never notice, because they only touch the buttons. Same for a class: while callers use only methods, the internals (field names, storage, formulas) can change without breaking anyone." },
+  ]}
+/>
+
+## Java: private fields, public getters and setters
+
+Java enforces encapsulation with an access keyword. Mark a field `private` and code outside the class
+that touches it **does not compile** — the guard is the compiler itself:
+
+```java
+class BankAccount {
+    private int balance = 0;          // sealed: no outside access
+
+    public int getBalance() {         // getter: controlled reading
+        return balance;
+    }
+
+    public void deposit(int amount) { // setter-like: controlled writing
+        if (amount > 0) {
+            balance = balance + amount;
+        }
+    }
+}
+```
+
+The naming pattern is a strong convention you'll see everywhere: `getX()` to read, `setX(value)` to
+write — together called *accessors*. Note the payoff in `deposit`: because it is the only door, its
+`if` is a law of physics inside this class — a negative deposit cannot happen, ever, from anywhere.
+Default to `private` for every field; expose a getter only if outsiders genuinely need to read, and a
+setter only if they genuinely need to write. No setter at all is a fine choice — that makes the field
+effectively read-only from outside.
+
+## Python: the underscore convention and properties
+
+Python has no `private` keyword and no compiler wall. Instead it has a convention every Python
+programmer respects: **a leading underscore means 'internal — don't touch.'**
+
+```python
+class BankAccount:
+    def __init__(self):
+        self._balance = 0            # _ = internal, hands off
+
+    def get_balance(self):
+        return self._balance
+```
+
+Nothing physically stops `acct._balance = -500` — Python trusts adults — but the underscore is a
+contract, and code that reaches past it is understood to be wrong (and code reviews will say so).
+Python then adds a lovely refinement Java lacks: **properties**, which let a method *pose* as a plain
+field, so callers write `acct.balance` and validation still runs:
+
+```python
+class BankAccount:
+    def __init__(self):
+        self._balance = 0
+
+    @property
+    def balance(self):               # runs on: print(acct.balance)
+        return self._balance
+
+    @balance.setter
+    def balance(self, value):        # runs on: acct.balance = 100
+        if value < 0:
+            raise ValueError("balance cannot be negative")
+        self._balance = value
+```
+
+Clean caller syntax, guarded access — the ATM keypad disguised as an open cash box that quietly checks
+your PIN anyway. The idiom this enables: start with a plain public field; if rules become necessary
+later, upgrade it to a property *without changing any caller*.
+
+<FlowAnimation
+  title="One write, two doors: guarded vs unguarded. Press Play."
+  intervalMs={1800}
+  nodes={[
+    { label: "Code wants to change the balance", desc: "Somewhere in the program: 'set Alice's balance to -500'. Maybe malicious, more likely just a bug — a sign flipped, a refund applied twice. The question that decides everything: which door does this write go through?" },
+    { label: "Open door: the public field", desc: "acct.balance = -500 on a public field just... happens. No check, no error, no log. The object now holds a state its own rules say is impossible, and it sits there quietly like a landmine." },
+    { label: "The landmine goes off later", desc: "Fifty lines (or five days) later, interest is computed on -500, or a withdrawal check behaves absurdly. The crash or wrong number appears far from the bad write — which is why unguarded state produces the hardest bugs to trace." },
+    { label: "Guarded door: the method or property", desc: "With private/underscore fields, the same intent must go through deposit(), withdraw(), or the balance setter — where the rule lives. The write is validated at the moment it happens: rejected with a clear error, pointing at the actual culprit line." },
+    { label: "The class can now promise its state", desc: "Because every write passed the checks, balance is ALWAYS valid — code reading it never worries. And since outsiders only touch methods, the class may reorganize its internals freely. That double promise — valid state, changeable insides — is encapsulation's whole payoff." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="Try it — underscore convention and properties in Python. Press Run."
+  code={`class BankAccount:
+    def __init__(self, owner):
+        self.owner = owner
+        self._balance = 0          # underscore: internal, hands off
+
+    @property
+    def balance(self):             # getter: acct.balance reads through here
+        return self._balance
+
+    @balance.setter
+    def balance(self, value):      # setter: acct.balance = x runs the check
+        if value < 0:
+            raise ValueError("balance cannot be negative")
+        self._balance = value
+
+    def deposit(self, amount):
+        if amount <= 0:
+            print("rejected: deposit must be positive")
+            return
+        self._balance = self._balance + amount
+
+acct = BankAccount("Alice")
+acct.deposit(100)
+print("balance:", acct.balance)    # 100 -- reads via the property
+
+acct.balance = 250                 # write via the setter: validated, allowed
+print("balance:", acct.balance)    # 250
+
+acct.deposit(-40)                  # rejected: deposit must be positive
+print("balance:", acct.balance)    # still 250
+
+try:
+    acct.balance = -500            # setter slams the door
+except ValueError as e:
+    print("blocked:", e)
+
+print("final:", acct.balance)      # 250 -- invalid state never got in`}
+/>
+
+Here's the **same in Java** — `private` means the compiler itself is the guard; the commented line
+would not even build:
+
+<CodePlayground
+  language="java"
+  title="Try it — private fields with getters and setters in Java. Press Run."
+  code={`class BankAccount {
+    private String owner;
+    private int balance = 0;       // sealed by the compiler
+
+    BankAccount(String owner) { this.owner = owner; }
+
+    public int getBalance() {      // getter: read access only
+        return balance;
+    }
+
+    public void deposit(int amount) {
+        if (amount <= 0) {
+            System.out.println("rejected: deposit must be positive");
+            return;
+        }
+        balance = balance + amount;
+    }
+
+    public void withdraw(int amount) {
+        if (amount > balance) {
+            System.out.println("rejected: insufficient funds");
+            return;
+        }
+        balance = balance - amount;
+    }
+}
+
+public class Main {
+    public static void main(String[] args) {
+        BankAccount acct = new BankAccount("Alice");
+
+        acct.deposit(100);
+        acct.deposit(-40);              // rejected by the one guarded door
+        acct.withdraw(500);             // rejected: insufficient funds
+        acct.withdraw(30);
+
+        // acct.balance = -500;         // uncomment: DOES NOT COMPILE
+        // "balance has private access in BankAccount"
+
+        System.out.println("final: " + acct.getBalance());   // 70
+    }
+}`}
+/>
+
+<Callout type="tip">
+Make `private` your reflex, not your exception: in Java, every field starts `private`, and you add a
+getter *only* when outside code truly needs to read, a setter *only* when it truly needs to write —
+most fields deserve no setter at all. In Python, the working rule is even simpler: any field that has
+rules about it gets an underscore and a property; the rest can stay plain until they earn rules
+(properties let you upgrade later without breaking callers — that escape hatch is why Python people
+don't write boilerplate getters up front). And a naming habit that pays off: if you find a class where
+*every* field has a public getter AND setter, that's not encapsulation — that's a cash box with extra
+steps. Ask which writes should be forbidden, and delete those setters.
+</Callout>
+
+<FirstTime title="First time? Seal a class properly">
+<StepChecklist
+  steps={[
+    { text: "Feel the unguarded write", detail: "Take the Python playground and imagine (or try) acct._balance = -500 — Python allows it, and everything downstream now computes on garbage. In Java, uncomment the acct.balance line and watch it refuse to compile. Same intent, two enforcement styles: convention vs compiler." },
+    { text: "Route a write through the guard", detail: "acct.balance = 250 LOOKS like a raw field write, but the property setter runs and validates. Then try acct.balance = -500 and read the ValueError. Clean syntax outside, rules enforced inside — that's the property trick." },
+    { text: "Watch a method reject bad input", detail: "acct.deposit(-40) prints a rejection and changes nothing. Add your own rule: deposits over 10000 need a printed 'flagged for review'. One door means your new rule instantly applies to every deposit in the program." },
+    { text: "Choose access deliberately in Java", detail: "The Java class exposes getBalance() but NO setBalance() — outside code can read the balance but can never write it except via deposit/withdraw. Ask yourself why that's right for money, then add getOwner() and decide: does owner deserve a setter? (Probably not — accounts don't change hands casually.)" },
+    { text: "Say the contract out loud", detail: "Finish by stating the deal in one sentence: 'this class hides its fields, so it can promise they are always valid, and so it can change its insides without breaking anyone.' If you can also name the two guards — compiler in Java, convention plus properties in Python — the concept is yours." },
+  ]}
+/>
+Twenty minutes and you can seal a class in both languages, decide field-by-field what to expose, and explain why the restriction is a feature, not a nuisance.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "“Java: 'balance has private access in BankAccount' — it won't compile.”",
+      fix: "Working as designed: code outside the class touched a private field. Don't fix it by making the field public — that reopens the window. Go through the class's methods (deposit, getBalance), and if no suitable method exists, that's your cue to add one WITH its validation, not to strip the seal.",
+    },
+    {
+      symptom: "“Python: RecursionError — maximum recursion depth exceeded — the moment I set my property.”",
+      fix: "Inside your setter you wrote self.balance = value — but that IS the property, so the setter calls itself forever. Inside the getter and setter, always use the underscore field: self._balance = value. The property is the public door; _balance is the room behind it. Mixing them up is the number-one property bug.",
+    },
+    {
+      symptom: "“My Python validation never runs — invalid values get in anyway.”",
+      fix: "Some code is writing to the raw field directly: acct._balance = -500 skips the property entirely (Python won't stop it — underscore is a convention). Search the codebase for _balance outside the class and reroute those writes through the property or a method. If the write comes from inside the class, decide deliberately: internal code MAY use _balance, but then it owns the responsibility of keeping it valid.",
+    },
+    {
+      symptom: "“Getter and setter for everything — my class is drowning in boilerplate.”",
+      fix: "A public getter AND setter on every private field gives almost no protection — it's the open window with a doorframe painted around it. Audit each field: does anyone outside need to READ it (keep the getter)? To WRITE it arbitrarily (rarely — usually they need an operation like deposit, not raw assignment)? Delete unearned setters and replace them with intention-revealing methods. Fewer doors, each one guarded.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Debugging state that went bad:
+
+- **Find every door** — who can write this field? Java: check the access modifier; `private` means writers are all inside the class. Python: search for both `balance` and `_balance` — underscore writes from outside the class are rule bypasses.
+- **Is validation AT the door?** — checks inside deposit/withdraw/setters run on every write; checks sprinkled at call sites run only where someone remembered. Move rules into the class.
+- **Property wired correctly?** — Python: getter/setter must touch `self._x` (underscore) inside; `self.x` inside its own property recurses forever.
+- **Read-only where it should be?** — a field with a getter but no setter can still be changed by class methods. If a 'read-only' value changes, the writer is inside the class — or someone bypassed the underscore.
+- **When state is impossible, work backwards** — a balance of -500 with a guarded setter means some write skipped the guard. The bug is at the write site, not where the bad value was noticed.
+</WhereToCheck>
+
+<WorkedExample title="the negative balance nobody withdrew — an open window, traced">
+A bug report from a practice app: an account shows balance -500, but the logs show every withdrawal was
+validated and none was refused incorrectly. How can guarded withdrawals produce a negative balance?
+
+```python
+class BankAccount:
+    def __init__(self, owner):
+        self.owner = owner
+        self.balance = 0                      # public field -- the window
+
+    def withdraw(self, amount):
+        if amount <= self.balance:            # the guard... on ONE door
+            self.balance = self.balance - amount
+
+# elsewhere, in refund-handling code:
+def apply_refund_reversal(acct, amount):
+    acct.balance = acct.balance - amount      # BUG: direct write, no checks
+```
+
+1. **The symptom:** balance is -500, yet `withdraw` provably never allowed an overdraft. The guarded
+   door has a perfect record — so the bad write came through somewhere else.
+2. **Inventory the doors:** who can write `balance`? With a public field, the honest answer is *the
+   entire program*. Searching for `.balance =` finds the second writer: `apply_refund_reversal`
+   subtracts directly, with no check at all.
+3. **The root cause isn't the refund code — it's the design:** the class *has* a rule ('never below
+   zero') but only enforces it in `withdraw`. The rule lives at one door while the state has unlimited
+   doors. Any new code that touches `balance` must remember the rule by itself; one forgetful function
+   and the invariant is gone.
+4. **The fix — seal the field, funnel every write through validation:**
+   ```python
+   class BankAccount:
+       def __init__(self, owner):
+           self.owner = owner
+           self._balance = 0
+
+       def withdraw(self, amount):
+           if amount > self._balance:
+               raise ValueError("insufficient funds")
+           self._balance = self._balance - amount
+   ```
+   Now `apply_refund_reversal` *cannot* (honestly) subtract directly — it must call `withdraw`, and the
+   rule applies to refunds automatically. In Java, `private int balance` makes the direct write a
+   compile error, so the forgetful function could never have been written.
+5. **The deeper lesson:** validation belongs *with the state*, not with the callers. Rules enforced at
+   the single entry point cannot be forgotten; rules that rely on every caller remembering them are
+   already broken, just not yet.
+6. **Tester's angle:** this is a genuinely great bug-hunting heuristic — *find the second door.* When a
+   'validated' value goes bad, don't re-test the validated path; hunt for writes that bypass it: a
+   direct API call behind the pretty form, a bulk-import script, an admin panel, a mobile app hitting
+   the same database. 'The UI validates it' means one door is guarded. Your job is to ask how many
+   doors the state really has.
+</WorkedExample>
+
+<Callout type="mistake">
+Guarding the method but leaving the field open. A class that validates inside `withdraw()` while
+`balance` sits public has rules in one door and an open window beside it — every future line of code is
+one careless assignment away from impossible state, and the failure will surface far from the bad
+write. The reflex to build: fields are `private` (Java) or `_underscored` behind properties (Python)
+*by default*, and every write funnels through the one place the rules live. The sibling mistakes:
+Python setters that assign `self.x` instead of `self._x` inside the property (instant infinite
+recursion); 'fixing' Java's private-access compile error by making the field public instead of using
+the methods; and generating a getter-and-setter pair for every field out of habit — an open window with
+a doorframe painted around it. Expose reads where needed; earn every setter.
+</Callout>
+
+<Quiz
+  question="A Java class has private int balance with getBalance() and a validating deposit(int) — but no setBalance(). A teammate says: make balance public, it's less typing. What does the class actually lose if you do?"
+  options={[
+    "Nothing important — public fields behave identically, just with shorter syntax",
+    "The class loses its guarantee: any code can now write balance directly, skipping deposit()'s validation, so invalid state (like a negative balance) can appear with no error at the write site — and internals can no longer change without breaking callers",
+    "The code stops compiling, because Java requires all fields to be private",
+    "Only performance — public fields are slower because they skip the compiler's checks"
+  ]}
+  answer={1}
+  explain="private is what makes deposit()'s if-check a real guarantee: with the field sealed, every write in the entire program must pass through validation, so the balance is provably always valid. Make it public and any line anywhere can write balance = -500 — no check, no error, and the failure shows up later, far from the culprit. You also lose change-freedom: with callers touching the field directly, renaming it or changing how it's stored breaks them all, whereas method-only access keeps internals swappable. (Java doesn't require private — option three is false — it's a choice, and this is why you choose it.) Python gets the same protections by convention: _balance plus a property."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Encapsulation", back: "Hiding an object's data and exposing a small set of public methods instead — so every read/write passes the one place where rules are enforced. Private data, public buttons: the ATM model." },
+    { front: "private (Java)", back: "Access modifier sealing a member inside its class: outside code touching it fails to COMPILE ('has private access'). Default choice for every field; expose behaviour via public methods." },
+    { front: "Getter / setter (accessors)", back: "Controlled read/write methods: getBalance(), setOwner(v). Getters expose reads safely; setters host validation. A field with a getter but NO setter is read-only from outside — often exactly right." },
+    { front: "_underscore (Python)", back: "Leading underscore = 'internal, hands off' — a convention, not a lock. self._balance signals that outside code must go through methods/properties. Respected universally; bypassing it is understood to be a bug." },
+    { front: "Property (Python)", back: "@property (+ @x.setter) makes methods pose as a plain field: acct.balance = 100 runs the validating setter. Inside the property, always touch self._x — using self.x recurses forever. Lets you add rules later without changing callers." },
+    { front: "Why hide state?", back: "Two promises: (1) validity — every write passes validation, so impossible states can't get in; (2) freedom — callers touch only methods, so internals can change without breaking anyone. Rules live WITH the state, not scattered across callers." },
+  ]}
+/>
+
+<Challenge>
+Seal a `TestRun` class. (1) In Java: fields `name` and `passRate` (an int, 0 to 100), both private;
+constructor sets `name`; add `getPassRate()` and a method `recordRate(int rate)` that rejects anything
+outside 0 to 100 with a printed message. Prove the seal: try a direct write from `main` and read the
+compile error, then delete that line. (2) In Python: same class with `self._pass_rate`, a `@property`
+for reading, and a setter that raises ValueError outside 0 to 100. (3) Test your own guard like a
+tester: try 0, 100, -1, 101, and confirm the boundaries behave (the classic boundary-value analysis
+you'll formally meet in the testing modules). (4) Deliberately write the recursive-property bug — setter
+assigning `self.pass_rate` instead of `self._pass_rate` — run it, recognise the RecursionError, fix it.
+(5) Decide and defend in one sentence each: should `name` get a setter? Should `pass_rate` be settable
+directly at all, or only via a `record_result(passed, total)` method that computes it? There's a strong
+case for the computed version — if you saw why, you're thinking in encapsulation.
+</Challenge>
+
+<AskCommunity prompt="Encapsulation question: in [Python/Java] I'm trying to [stop direct writes to a field / add a validating setter / fix a private-access compile error / fix a RecursionError in a property]. Here's my class and the failing line [paste both]. What should this look like?">
+Say which door the failing write should legitimately use — a compile error on a private field usually
+means 'call the method instead', not 'make it public'. For Python property bugs, paste the whole
+property (getter and setter): a RecursionError means the setter touches `self.x` where it needs
+`self._x`, and it's visible in one glance at the code.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://docs.python.org/3/library/functions.html#property", title: "Python docs — property (getters/setters, the Pythonic way)", kind: "read" },
+    { href: "https://dev.java/learn/classes-objects/", title: "Dev.java — classes, members, and access control", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=jCzT9XFZ5bw", title: "Python OOP 6: Property Decorators — Getters, Setters — Corey Schafer", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=jCzT9XFZ5bw" title="Getters, setters and properties — encapsulation in practice — Corey Schafer" minutes={9} />
+
+<Takeaways
+  points={[
+    "A public field is an open window: any code can write any value, skipping every rule your methods enforce. Encapsulation closes it — hide the data, expose guarded methods, and rules become guarantees instead of hopes.",
+    "Java enforces with the compiler: private fields, public getters/setters (accessors). Touching a private field from outside doesn't compile. Default every field to private; add a getter only for needed reads, a setter only for needed writes — often never.",
+    "Python enforces by convention plus properties: _underscore means 'internal, hands off', and @property lets acct.balance = 100 run a validating setter behind plain-field syntax. Inside a property, always use self._x — self.x recurses forever.",
+    "The payoff is a double promise: state is always valid (every write passed the one guarded door), and internals are free to change (callers only touch methods, so storage and names can be reorganized without breaking anyone).",
+    "The tester's takeaway: 'validated' means one door is guarded — so hunt for the second door. Direct API calls, imports, admin tools, and raw field writes that bypass the pretty validated path are where impossible state sneaks in.",
+  ]}
+/>
+
+<Complete xp={10} />

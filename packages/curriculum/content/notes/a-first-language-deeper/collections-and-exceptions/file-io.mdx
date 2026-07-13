@@ -1,0 +1,374 @@
+---
+title: "File I/O"
+summary: "Programs forget everything when they stop — files are how data survives. Reading and writing text files with Python's open()/with and Java's Files/BufferedReader, why you must close what you open (with / try-with-resources), and the error every program meets: the file that isn't there."
+tags: ["a-first-language-deeper", "collections", "track-b"]
+updated: "2026-07-11"
+---
+
+<Hook>
+Everything your program holds in variables evaporates the instant it exits. Files are the fix — the way a
+program writes something down today and finds it again tomorrow: test results, config, logs, that CSV of
+users someone *swears* is well-formatted. Reading and writing text files is a four-step ritual in every
+language — open, read or write, close — and the interesting parts are the two places it goes wrong. First,
+forgetting to *close*: an unclosed file can hold your written data hostage in a buffer, producing the
+maddening 'I wrote it but the file is empty' bug — which is why both languages grew a construct that closes
+*for* you (`with` in Python, try-with-resources in Java). Second, the most famous runtime error in
+programming: the file that isn't where you said it was. Last note taught you exceptions; this is where
+they earn their keep.
+</Hook>
+
+<Callout type="analogy">
+Working with a file is **pulling a folder from a filing cabinet.** The document lives in the cabinet
+(the disk) — permanent, but you can't edit paper *in* the drawer. So you open the drawer, pull the folder to
+your desk, read or mark up the pages, and — the step everyone skips — **put it back and close the drawer**.
+Opening the folder hands you a
+<Term define="The object a program gets back when it opens a file — your connection to it, used for every read and write. It must be closed when you're done: closing flushes buffered writes to disk and releases the file. with (Python) and try-with-resources (Java) close it automatically.">file handle</Term>:
+not the document itself, but your active connection to it. Leave folders strewn on the desk (unclosed
+handles) and trouble follows — your pencil edits never make it back into the cabinet (unflushed writes),
+and eventually the desk is too full to open anything else. And of course: ask the cabinet for a folder
+that was never filed — or look in the wrong drawer — and you get the filing clerk's shrug: *file not found*.
+</Callout>
+
+## Writing and reading: the core ritual
+
+**Python** — `open()` gives you the handle; mode `"w"` writes (creating or *replacing* the file), `"r"`
+reads. The `with` block closes the handle automatically when you leave it:
+
+```python
+with open("demo.txt", "w") as f:      # open for Writing (replaces existing!)
+    f.write("hello file\n")
+    f.write("line two\n")
+                                      # <- leaving the block CLOSES f
+
+with open("demo.txt", "r") as f:      # open for Reading
+    content = f.read()                # the whole file as one string
+print(content)
+```
+
+**Java** — the modern way is the `Files` class with a `Path`; one call to write, one to read:
+
+```java
+import java.nio.file.*;
+
+Path p = Path.of("demo.txt");
+Files.writeString(p, "hello file\nline two\n");   // create/replace + close, one call
+String content = Files.readString(p);              // read whole file + close
+System.out.println(content);
+```
+
+For **line-by-line** reading of big files, Python iterates the handle directly (`for line in f:`), and Java
+uses the classic `BufferedReader` (`reader.readLine()` until it returns `null`) — same idea: don't load a
+gigabyte into one string when you only need a line at a time. Two mode warnings worth tattooing somewhere:
+`"w"` **truncates** — opening an existing file for write instantly erases it, even if you never write a
+byte. Appending to the end is a different mode, `"a"`.
+
+<HotspotImage
+  src="/notes/a-first-language-deeper/collections-and-exceptions/file-io.jpg"
+  alt="A black filing cabinet with one drawer open revealing rolled white papers, a yellow sticky-note label on the drawer front, closed drawers around it, and a FedEx box and red milk crate on top"
+  credit="Black filing cabinet with open drawer — Wikimedia Commons, Public domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:EFTA00000040_-_Black_filing_cabinet_drawer_open_revealing_rolled_white_paper_and_a_yellow_sticky_note_labeled_List_with_a_red_milk_crate_and_FedEx_box_on_top.jpg"
+  pins={[
+    { x: 52, y: 59, label: "Pulling the drawer = open()", desc: "That chrome handle is open() in Python or a reader/writer in Java: the moment you pull, the operating system hands you a live connection to the file — a handle, not a copy of the data. Everything else (read, write, close) only works on a drawer you've actually pulled. Skip the pull and you get the classic FileNotFoundError / 'stream closed' family of errors." },
+    { x: 48, y: 44, label: "The papers inside = the file contents", desc: "The rolled sheets are the bytes and lines your program reads and writes. Note they're just sitting there — inert — until the drawer is open. Reading pulls their content into variables (desk scratch paper, gone when the program exits); writing files new sheets INTO the drawer so they survive reboots, next Tuesday, everything. Anything that must outlive the run belongs in here." },
+    { x: 51, y: 68, label: "The sticky-note label = the filename and path", desc: "The yellow note tells you WHICH drawer this is — that's your path, and it's where most beginner file bugs live. A RELATIVE path like 'demo.txt' means 'in the folder I'm running from' (the working directory), which changes depending on HOW you launch the program. Right label, wrong cabinet = file not found, even though the file exists." },
+    { x: 6, y: 45, label: "The closed drawers = files not yet opened", desc: "The cabinet is full of other drawers, all shut — files on disk your program can't touch yet. Every one must be opened before reading or writing, and each open is a live resource the operating system tracks. A program that pulls drawers and never shuts them eventually hits the OS limit on open handles — the slow leak that works fine in tests and dies in production." },
+    { x: 76, y: 90, label: "Shutting the drawer = close(), made automatic", desc: "Every pulled drawer must go back. close() flushes buffered writes to disk — pencil edits still on your desk aren't in the cabinet until the drawer shuts, which is why a killed program can leave a mysteriously empty file. The habit that makes this automatic: Python's with block and Java's try-with-resources shut the drawer when the block exits, EVEN if an exception blows through it. Use them every time." },
+  ]}
+/>
+
+## Always close — and let the language do it
+
+Why the fuss about closing? Two concrete reasons. **Buffering:** for speed, written bytes are often parked
+in memory and only *flushed* to disk when the file closes — forget to close and your data may never fully
+arrive. **Resources:** every open handle is an entry in an operating-system table; leak enough of them
+(open in a loop, never close) and the OS starts refusing: *too many open files*.
+
+You *could* call `close()` yourself, but there's a trap — if an exception fires between open and close, the
+close is skipped. Sound familiar? That's exactly the `finally` problem from last note, and both languages
+built the solution in:
+
+```python
+# Python: with = open + guaranteed close, even on exceptions
+with open("demo.txt", "r") as f:
+    data = f.read()
+# f is closed HERE, success or crash
+```
+
+```java
+// Java: try-with-resources -- declare the resource in the try's parentheses
+try (BufferedReader reader = Files.newBufferedReader(Path.of("demo.txt"))) {
+    String first = reader.readLine();
+}   // reader closed HERE, success or crash
+```
+
+Rule of thumb: if you typed `open(` in Python without `with`, or `new BufferedReader` in Java outside a
+try-with-resources, stop and add it. There's no everyday reason to manage closes by hand.
+
+## The file that isn't there
+
+The most common file error, and your first *real* meeting with exceptions in the wild: reading a file that
+doesn't exist raises `FileNotFoundError` in Python, `NoSuchFileException` (an `IOException` — checked!) in
+Java. Nine times out of ten the file *does* exist — just not where the program is looking, because a
+**relative path** like `"demo.txt"` resolves against the *working directory*: the folder the program was
+launched from, which changes with how you launch it (IDE run button vs terminal vs scheduler). Handle the
+miss like you learned last note — catch the specific type, say something useful:
+
+```python
+try:
+    with open("config.txt") as f:
+        config = f.read()
+except FileNotFoundError:
+    print("config.txt not found -- using defaults")
+    config = ""
+```
+
+Writing is more forgiving — `"w"` mode *creates* missing files — but it can't create missing *folders*:
+writing to `"reports/out.txt"` when `reports/` doesn't exist fails too.
+
+<FlowAnimation
+  title="One write-then-read round trip, with the trap doors marked. Press Play."
+  intervalMs={1800}
+  nodes={[
+    { label: "Open for writing", desc: "open('demo.txt', 'w') in Python, or Files.writeString in Java. The 'w' mode CREATES the file if missing — and TRUNCATES it (erases everything) if it exists. First trap door: opening an existing file in write mode destroys its contents even if you write nothing. Appending is a separate mode, 'a'." },
+    { label: "Write goes to a buffer", desc: "f.write('hello') usually lands in a memory buffer, not yet on disk — batching writes is faster than trickling bytes. The file on disk may STILL BE EMPTY at this moment. Second trap door: judge a write by what's on disk after the CLOSE, not by whether write() was called." },
+    { label: "Close flushes to disk", desc: "Leaving the with block (Python) or the try-with-resources (Java) closes the handle: buffered bytes flush to disk and the OS releases the file. This is why the auto-closing constructs matter — they make the flush guaranteed, even when an exception rips through the block." },
+    { label: "Open for reading", desc: "open('demo.txt') / Files.readString finds the file... by resolving its PATH. A relative path resolves against the working directory — the folder the program was LAUNCHED from. Third trap door: launched from a different folder, the same code looks in a different place. The file exists; the program is looking in the wrong drawer." },
+    { label: "Read — or handle the miss", desc: "Found: you get the text back — the data survived the program that wrote it, which is the whole point of files. Missing: FileNotFoundError (Python) / NoSuchFileException (Java). Catch the specific type and respond usefully — defaults, a clear message naming the FULL path it tried. 'File not found' with no path is a bug report you'll regret." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="Try it — write a file, read it back, survive the missing one. Press Run."
+  code={`# 1) WRITE -- 'w' creates (or replaces!) demo.txt; with closes + flushes for us
+with open("demo.txt", "w") as f:
+    f.write("suite: login\n")
+    f.write("passed: 12\n")
+    f.write("failed: 1\n")
+print("wrote demo.txt")
+
+# 2) READ it back -- whole file as one string
+with open("demo.txt", "r") as f:
+    content = f.read()
+print("--- full content ---")
+print(content)
+
+# 3) READ line by line -- the big-file-friendly way
+with open("demo.txt", "r") as f:
+    for line in f:
+        print("line:", line.strip())    # strip the trailing newline
+
+# 4) THE CLASSIC ERROR: a file that isn't there -- caught, not crashed
+try:
+    with open("no-such-file.txt", "r") as f:
+        data = f.read()
+except FileNotFoundError:
+    print("no-such-file.txt is missing -- handled gracefully, using defaults")`}
+/>
+
+Here's the **same in Java** — `Files.writeString` / `Files.readString` for whole files, `BufferedReader` in
+a try-with-resources for line-by-line, and the miss caught as `NoSuchFileException`:
+
+<CodePlayground
+  language="java"
+  title="Try it — write, read back, survive the missing file in Java. Press Run."
+  code={`import java.io.BufferedReader;
+import java.nio.file.*;
+
+public class Main {
+    public static void main(String[] args) throws Exception {
+        Path p = Path.of("demo.txt");
+
+        // 1) WRITE -- creates or replaces demo.txt, closes for us
+        Files.writeString(p, "suite: login\npassed: 12\nfailed: 1\n");
+        System.out.println("wrote demo.txt");
+
+        // 2) READ whole file back
+        String content = Files.readString(p);
+        System.out.println("--- full content ---");
+        System.out.println(content);
+
+        // 3) READ line by line -- try-with-resources closes the reader
+        try (BufferedReader reader = Files.newBufferedReader(p)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                System.out.println("line: " + line);
+            }
+        }
+
+        // 4) THE CLASSIC ERROR: missing file -- caught, not crashed
+        try {
+            Files.readString(Path.of("no-such-file.txt"));
+        } catch (NoSuchFileException e) {
+            System.out.println("no-such-file.txt is missing -- handled gracefully");
+        }
+    }
+}`}
+/>
+
+<Callout type="tip">
+Three habits make file code boring, in the best way. **Always use the auto-closer** — `with` in Python,
+try-with-resources in Java — so flushing and closing are guaranteed even when exceptions fly; bare `open()`
+with a manual `close()` is a bug waiting for its exception. **Know your mode** — `"r"` read, `"w"`
+write-and-erase, `"a"` append; the `"w"`-truncates surprise has destroyed real data. **Print the full path
+when things get weird** — in Python, `import os; print(os.getcwd())` shows the working directory your
+relative paths resolve against; in Java, `Path.of("demo.txt").toAbsolutePath()`. The moment a file 'doesn't
+exist' when you can see it in your editor, it's almost always a working-directory mismatch — you're looking
+in the right cabinet but the program was launched in front of a different one.
+</Callout>
+
+<FirstTime title="First time? One full round trip">
+<StepChecklist
+  steps={[
+    { text: "Write a small file with with / try-with-resources", detail: "Three lines of pretend test results into demo.txt, inside a with block (Python) or via Files.writeString (Java). Note what you DIDN'T do: no close() call — leaving the block did it, flushing your bytes to disk on the way out." },
+    { text: "Read the whole thing back", detail: "f.read() / Files.readString gives you the entire file as one string. Print it and compare with what you wrote — this round trip, data surviving from one operation to the next, is the entire point of files. Run the read again: still there. Variables can't do that." },
+    { text: "Read it line by line", detail: "for line in f: (Python) or BufferedReader.readLine() until null (Java). Notice each Python line keeps its trailing newline — strip() it. Line-by-line is the shape you'll use for logs and CSVs, and it doesn't care if the file is ten lines or ten million." },
+    { text: "Ask for a file that doesn't exist", detail: "Read no-such-file.txt without a try first, and meet FileNotFoundError / NoSuchFileException in person. Then wrap it in try/except (or try/catch) and turn the crash into a graceful message. That's last note's skill, doing its most common real-world job." },
+    { text: "Prove the 'w' trap to yourself", detail: "Open your demo.txt in 'w' mode, write NOTHING, close it, read it back: empty. Write mode truncates on open. Now you know why append mode ('a') exists — and why 'the log file keeps only the last run' is such a common bug." },
+  ]}
+/>
+One round trip — write, read, miss, truncate — and you've personally met every file behavior that will ever bite you.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "“FileNotFoundError / NoSuchFileException — but the file is RIGHT THERE, I can see it.”",
+      fix: "The program isn't looking where you're looking. A relative path like 'demo.txt' resolves against the working directory — the folder the program was launched from, which differs between your IDE's run button, the terminal, and CI. Print the working directory (os.getcwd() in Python; Path.of('x').toAbsolutePath() in Java) and compare it with where the file actually sits. Fix by running from the right folder or building the path robustly. Also check for typos and extensions hidden by the OS ('demo.txt.txt').",
+    },
+    {
+      symptom: "“My program 'wrote' the file, but it's empty (or missing the last lines).”",
+      fix: "The write landed in a buffer that never got flushed — the file wasn't closed. This happens with a bare open() and a close() that an exception or early return skipped, or checking the file WHILE the program still has it open. Use with (Python) / try-with-resources (Java) so closing is guaranteed, and judge the file's contents only after the writing block has exited.",
+    },
+    {
+      symptom: "“I opened an existing file to add a line, and everything that was in it is GONE.”",
+      fix: "You opened it in 'w' mode, which truncates — erases the file the moment it opens, before any write. To add to the end, open in APPEND mode: open('log.txt', 'a') in Python; in Java, Files.writeString(p, text, StandardOpenOption.APPEND). Sadly there's no undo — which is exactly why this bite is memorable. Data-destroying defaults like this are prime territory for a tester's attention.",
+    },
+    {
+      symptom: "“Java won't compile: 'unreported exception IOException; must be caught or declared'.”",
+      fix: "File operations in Java throw CHECKED exceptions — the compiler insists you acknowledge that files go missing and disks fail. Either wrap the calls in try/catch (IOException e), or add 'throws Exception' / 'throws IOException' to your method signature (as our playground's main does). It's not being pedantic — it's the type system forcing the question every file program must answer: what happens when the file isn't there?",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Debugging a file problem:
+
+- **Where is the program actually looking?** — print the working directory and the absolute path being opened. 'File not found' + file visibly exists = wrong working directory, almost every time.
+- **Which mode did you open with?** — `"r"` read, `"w"` write-and-TRUNCATE, `"a"` append. Vanished contents point at an accidental `"w"`.
+- **Was the file closed before you judged it?** — buffered writes flush on close. Check contents after the `with` / try-with-resources block exits, not during.
+- **Does the target FOLDER exist?** — write mode creates missing files but not missing directories; `reports/out.txt` fails if `reports/` doesn't exist.
+- **Is the miss handled?** — every read of a path that might not exist needs a `FileNotFoundError` / `IOException` plan: default, clear message with the full path, or a deliberate crash. Silence is not a plan.
+</WhereToCheck>
+
+<WorkedExample title="works in the IDE, dies in the terminal — a working-directory bug, traced">
+A test-data loader runs perfectly from the IDE's green Run button. The same script, run from the terminal
+during a demo, crashes instantly. Nothing changed. Here's the code:
+
+```python
+with open("data/users.csv") as f:      # relative path
+    users = f.read().splitlines()
+# Terminal: FileNotFoundError: [Errno 2] No such file or directory: 'data/users.csv'
+```
+
+1. **The symptom:** identical code, identical file, two different outcomes depending on *how* it's launched.
+   The file demonstrably exists — the IDE run proves it. So `open()` isn't broken; something *contextual*
+   differs between the two launches.
+2. **The clue is in the path:** `"data/users.csv"` is a *relative* path — it means 'starting from the
+   working directory'. The error message even confirms what was tried. The question becomes: what's the
+   working directory in each case?
+3. **Print it and see:** add `import os; print(os.getcwd())` and run both ways. IDE: the project root, where
+   `data/` lives — found. Terminal: launched from the user's home folder — so the program looked for
+   `~/data/users.csv`, which doesn't exist. Same drawer label, different filing cabinet.
+4. **The fix — anchor the path instead of hoping:** run from the project root (`cd project && python
+   load.py`), or make the script anchor paths to its own location so launch-place stops mattering:
+   ```python
+   from pathlib import Path
+   here = Path(__file__).parent           # folder this script lives in
+   with open(here / "data" / "users.csv") as f:
+       users = f.read().splitlines()
+   ```
+5. **Why this bug is everywhere:** working directory is *invisible context* — nothing in the code names it,
+   and every launcher (IDE, terminal, scheduler, CI runner) sets its own. Code that 'works on my machine'
+   and dies in CI with file-not-found is this exact bug wearing a lanyard.
+6. **Tester's angle:** 'runs differently depending on how it's launched' is a *class* of bug worth probing
+   deliberately: run the app from another directory, on a clean machine, in CI — anywhere the implicit
+   context differs. And when you report a file-not-found, always capture the full attempted path and the
+   working directory: those two lines turn 'weird flaky crash' into a five-minute fix.
+</WorkedExample>
+
+<Callout type="mistake">
+Opening files without the auto-closing construct — a bare `open()` in Python or a raw reader in Java, with a
+manual `close()` at the end (or no close at all). It works in the demo, then an exception fires between open
+and close, the close is skipped, and you inherit the whole family of unclosed-file bugs: written data stuck
+in a never-flushed buffer ('the file is empty!'), handles leaking until the OS refuses ('too many open
+files'), files locked against other programs. The fix costs one line of syntax: `with open(...) as f:` in
+Python, `try (var reader = ...)` in Java — close guaranteed on success *and* failure. The sibling mistakes:
+`"w"` mode truncating a file you meant to append to (that's `"a"`), trusting relative paths to resolve the
+same way everywhere (they resolve against the launch folder), and reading paths that might not exist with no
+`FileNotFoundError` plan. Files are where your program touches the messy outside world — treat every step as
+something that can fail, because each one can.
+</Callout>
+
+<Quiz
+  question="A Python script does f = open('out.txt', 'w') and f.write('results'), then crashes with an exception before reaching f.close(). What's likely true about out.txt, and what construct prevents this?"
+  options={[
+    "out.txt definitely contains 'results' — write() puts data on disk immediately",
+    "out.txt may well be empty: the written bytes can sit in an unflushed buffer, and the skipped close() never flushed them — a with block prevents it by guaranteeing close-and-flush even when an exception exits the block",
+    "The file cannot be created at all, because 'w' mode requires the file to already exist",
+    "Python automatically closes and flushes every file the moment write() returns, so nothing is ever lost"
+  ]}
+  answer={1}
+  explain="write() typically hands bytes to an in-memory buffer for efficiency; they're only guaranteed to reach the disk when the file is flushed/closed. The crash jumped over f.close(), so the buffer may never have been written out — leaving out.txt empty or truncated even though the code 'wrote' to it ('w' mode created/emptied the file at open). The cure is structural, not vigilance: with open('out.txt', 'w') as f: closes and flushes when the block exits, whether it exits normally OR via an exception — the same guarantee Java gets from try-with-resources. If you open a file, the close must be exception-proof, and the auto-closing constructs are how."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Why files?", back: "Variables die with the program; files persist on disk. Anything that must survive the run — results, logs, config — gets written to a file and read back later. The core ritual in both languages: open, read/write, close." },
+    { front: "File handle", back: "What open() returns: your live connection to the file, used for every read/write. It's an OS-tracked resource, not the data itself — every handle you open must be closed to flush writes and free the file." },
+    { front: "with / try-with-resources", back: "The auto-closers: Python's with block and Java's try (resource) close the handle when the block exits — even via exception. They make flush-and-close guaranteed. Bare open() + manual close() is skipped by whatever exception shows up between them." },
+    { front: "Modes: r / w / a", back: "'r' reads (missing file = error). 'w' writes — creating the file OR TRUNCATING an existing one at open, before any write. 'a' appends to the end. The 'w'-erases surprise is the classic data-destroying file bug; when adding to logs, you want 'a'." },
+    { front: "FileNotFoundError / NoSuchFileException", back: "The miss: reading a path that doesn't exist. Usually the file EXISTS — but a relative path resolved against a different working directory (IDE vs terminal vs CI). Debug by printing the cwd and the absolute path; handle by catching the specific type." },
+    { front: "Buffering & flush", back: "Writes park in memory and reach disk on flush/close. Unclosed file = possibly empty file, despite write() being called. Judge a file's contents only after the writing block exits. 'I wrote it but it's empty' = the close never happened." },
+  ]}
+/>
+
+<Challenge>
+Run the full ritual and both trap doors. (1) Write a three-line results file inside a with block (Java:
+Files.writeString), then read it back whole and line-by-line. (2) Read 'ghost.txt' (which doesn't exist)
+bare — meet the exception — then wrap it to print a graceful message that includes the path it tried.
+(3) Reopen your results file in 'w' mode, write nothing, close, read: explain in one sentence where the data
+went. (4) Fix it properly: rewrite the file, then ADD a fourth line using append mode, and prove all four
+lines survive. (5) Tester's rep: list the three file-related failure modes you'd now test in any app that
+saves data (missing file, wrong directory, interrupted-before-close is a solid trio) and what the app SHOULD
+do for each.
+</Challenge>
+
+<AskCommunity prompt="File I/O question: I'm trying to [read/write] [the path], launched from [IDE/terminal/CI]. Here's my code [paste it] and the full error [paste the traceback]. The file [does/does not] visibly exist at [where you see it]. What's going wrong?">
+File-not-found questions answer themselves once two facts are on the table: the FULL path the program tried
+(it's in the error message) and your working directory (print os.getcwd() or the Java absolute path). Include
+both. If the file is mysteriously empty, say whether you checked it before or after the writing block closed
+— unflushed buffers fool everyone once.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://docs.python.org/3/tutorial/inputoutput.html#reading-and-writing-files", title: "Python docs — reading and writing files (open, with, modes)", kind: "read" },
+    { href: "https://dev.java/learn/java-io/reading-writing/", title: "Dev.java — reading and writing files (Files, readers, try-with-resources)", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=Uh2ebFW8OYM", title: "File Objects — Reading and Writing to Files — Corey Schafer", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=Uh2ebFW8OYM" title="Reading and writing files — open, with, and close — Corey Schafer" minutes={24} />
+
+<Takeaways
+  points={[
+    "Files are how data outlives the program: variables evaporate at exit, disk persists. The ritual in both languages is open → read/write → close, with Python's open()/with and Java's Files.writeString/readString + BufferedReader as the everyday tools.",
+    "Always close what you open — closing flushes buffered writes to disk and releases the handle. Use the constructs that make it automatic and exception-proof: with (Python), try-with-resources (Java). 'I wrote it but the file is empty' = it never closed.",
+    "Modes matter: 'r' reads, 'a' appends, and 'w' TRUNCATES the file at open — an accidental 'w' on a file you meant to append to erases it before you write a byte.",
+    "The most common file error is the miss: FileNotFoundError / NoSuchFileException — and usually the file exists but a relative path resolved against a different working directory (IDE vs terminal vs CI). Debug with the cwd + the full attempted path; handle by catching the specific type.",
+    "For a tester, file I/O is an error-path goldmine: the missing file, the wrong launch directory, the interrupted write, the truncating mode. Apps that save data should be probed on all of them — and a file bug report with the full path + working directory in it is a five-minute fix instead of a mystery.",
+  ]}
+/>
+
+<Complete xp={10} />
