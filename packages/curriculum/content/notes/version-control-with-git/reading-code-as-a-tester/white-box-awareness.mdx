@@ -1,0 +1,316 @@
+---
+title: "White-box awareness"
+summary: "You don't have to write code to read it: white-box awareness is using function names, ifs, and branches to find the paths nobody tested. Count the forks, map each branch to a test case, and ask developers the one question that reveals what a change really covers."
+tags: ["version-control-with-git", "reading-code", "track-b"]
+updated: "2026-07-13"
+---
+
+<Hook>
+Somewhere out there is a tester still typing into the same three form fields, wondering why bugs keep
+escaping — while the answer sits in a file they never opened. Here's the secret nobody tells manual
+testers: **you don't need to WRITE code to READ enough of it.** A function called `apply_discount` is
+telling you what it does. A line that says `if country != 'US'` is telling you there are two worlds —
+US and everywhere else — and one of them probably has fewer tests. That's **white-box awareness**: not
+becoming a developer, just refusing to test blindfolded when the map is right there. Every `if` in the
+code is a fork in the road, every fork is a path, and every path someone forgot to walk is where your
+next bug lives. This note teaches you to read the map — and to ask developers the exact questions that
+reveal which roads nobody has driven.
+</Hook>
+
+<Callout type="analogy">
+A home inspector doesn't build houses. They've possibly never swung a hammer in their life — and yet
+they'll find the cracked foundation, the wiring that violates code, and the damp patch the seller
+painted over, in one afternoon. How? They *read the structure*. They know a house has a foundation, a
+roof, wiring, plumbing — and they know where each one fails. That's exactly what
+<Term define="Testing informed by the internal structure of the code — its functions, branches, and paths — rather than only its external behaviour. A tester with white-box awareness reads the structure to design better tests, even without writing code.">white-box awareness</Term>
+is for a tester: you don't write the code, but you can read that `check_login` has four `if` statements
+and know — the way an inspector knows about foundations — that four forks mean at least five paths, and
+the dev's two tests didn't walk all five. The inspector's superpower isn't construction skill. It's
+knowing where structures crack.
+</Callout>
+
+## Black box, white box, and the awareness in between
+
+**Black-box testing** is testing from the outside: inputs in, outputs out, no peeking at the code. It's
+honest and it's how users experience the app — but it's also guessing where the forks are.
+**White-box testing** in the formal sense means designing tests directly from the code, measuring
+<Term define="A measure of how many of the decision branches in the code (each side of every if, else, and condition) your tests actually executed. 100 lines covered can still mean whole branches never ran.">branch coverage</Term>,
+usually done by developers. What a manual tester needs is the ground in between: **white-box
+awareness** — reading just enough structure to stop guessing. You're not writing unit tests. You're
+opening the changed file, spotting that there are three `if` statements, and realising your test plan
+only covers one of them. Same tests you'd always write — now aimed instead of scattered.
+
+<HotspotImage
+  src="/notes/version-control-with-git/reading-code-as-a-tester/white-box-awareness.jpg"
+  alt="An airman in sunglasses works a socket wrench inside an open access bay on the underside of a C-17 engine nacelle, the riveted grey skin of the aircraft filling the frame behind him"
+  credit="Aircraft maintenance on a C-17 engine, U.S. Air Force — Wikimedia Commons, Public domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:EAMXS_C-17_panel_repair_(9376841).jpg"
+  pins={[
+    { x: 80, y: 18, label: "Peering into the open bay = reading conditionals", desc: "The inspector points light into the dark corners nobody looks at. For a tester, every if statement is a dark corner: it splits the code into two worlds, and one of them is usually less tested. You do not need to understand every line — just find the ifs and ask which side your tests actually visit." },
+    { x: 60, y: 8, label: "Every fastener accounted for = mapping branches to test cases", desc: "Inspectors work a checklist: foundation, roof, wiring. Your checklist is the branch list — one entry per fork in the code. Three ifs means at least four paths; write the input that walks each one. This is how code structure designs your test cases FOR you." },
+    { x: 12, y: 30, label: "Behind the painted skin = the untested branch", desc: "Sellers paint over damp patches; codebases hide untested branches behind passing happy-path tests. The else nobody wrote a test for, the non-US path, the zero-quantity case — structurally visible, behaviourally invisible until the right input arrives. Reading finds it before production does." },
+    { x: 38, y: 42, label: "Knowing the machine = asking the dev the right question", desc: "A good inspector asks the builder pointed questions: what is behind this panel, when was this rewired? Your version: what does this if cover, what happens if this value is empty, which of these branches do the new tests hit? Specific questions get specific answers — and respect." },
+    { x: 70, y: 13, label: "A wrench, not a design pen = you do not write the code", desc: "The inspector carries no hammer because building is not the job — judging structure is. White-box awareness is the same deal: you are not there to refactor or review style. You read names, ifs, and returns purely to aim your testing. No construction skills required." },
+  ]}
+/>
+
+## Function names are free documentation
+
+Developers agonise over names, then testers ignore them — which is like ignoring the labels in a
+supermarket and opening every can to see what's inside. `calculate_late_fee`, `retry_payment`,
+`is_eligible_for_refund` — each name is a claim about behaviour, and claims are what testers verify.
+Reading a diff's changed function names alone answers your first question: *what area of behaviour just
+moved?* A change inside `format_username` is cosmetics; a change inside `authorize_transaction` is your
+whole afternoon. Then the signature — `shipping_cost(total, country, express)` — hands you the input
+list: three things influence this answer, so your test cases need to vary all three, not just the one
+the bug report mentioned.
+
+## Every `if` is a fork — count the forks, find the paths
+
+Here's the core skill, and it's genuinely this simple: find each `if`, and ask *what makes this
+condition true, and what makes it false?* Each answer is a test case. An `if` with no visible `else`
+still has an else — the code that runs when the condition is false. Nested ifs multiply the paths.
+Watch it work on real code, and count how many paths the developer's own tests actually walked:
+
+<CodePlayground
+  language="python"
+  title="Read the forks — how many paths did the dev actually test? Press Run."
+  code={`def shipping_cost(total, country, express):
+    # Read like a tester: every if is a fork in the road.
+    if country != "US":            # fork 1: US or not?
+        return 25.00
+    if express:                    # fork 2: express or standard?
+        if total < 50:             # fork 3: small express order?
+            return 15.00
+        return 9.00
+    if total >= 35:                # fork 4: free-shipping threshold
+        return 0.00
+    return 5.99
+
+# The dev's tests, copied from the PR. Just these two calls:
+print("dev test 1:", shipping_cost(100, "US", False))  # expects 0.0
+print("dev test 2:", shipping_cost(20, "US", False))   # expects 5.99
+
+# 4 forks -> 5 distinct paths. The tests above walk exactly 2.
+# White-box awareness = noticing that, then walking the other 3:
+print("untested path: non-US    ->", shipping_cost(40, "CA", False))
+print("untested path: express+small ->", shipping_cost(20, "US", True))
+print("untested path: express+big   ->", shipping_cost(80, "US", True))
+
+# Three whole behaviours shipped with zero tests -- found by READING,
+# in about ninety seconds, without writing a single line of app code.`}
+/>
+
+Two happy-path tests, five paths — a 40% inspection of a house with five rooms. And notice what reading
+gave you that black-box guessing wouldn't: you now know the *exact* inputs that matter (country, the
+express flag, the 35 and 50 thresholds) instead of randomly varying whatever fields the UI shows.
+Boundary values fall out for free: the forks literally print their own boundaries — test 34.99, 35,
+49.99, 50.
+
+<FlowAnimation
+  title="From code structure to test cases — the white-box awareness loop. Press Play."
+  intervalMs={1800}
+  nodes={[
+    { label: "Open the changed function", desc: "The diff told you WHICH function changed (the hunk header even names it). Open the full file at that spot. You are not reviewing code quality — you are reading a map. Ignore anything you do not understand; you only need names, ifs, and returns." },
+    { label: "Read the name and the inputs", desc: "The function name is a behaviour claim (calculate_late_fee had better calculate late fees). The parameter list is your input inventory: three parameters means three things to vary in your tests. Already your test design is sharper than any black-box guess." },
+    { label: "Count the forks", desc: "Find every if, elif, else — each one splits execution into paths. Nested ifs multiply. An if without an else still has a false path. Four forks means at least five ways through. Write the number down; that is your minimum path count." },
+    { label: "Map each fork to an input", desc: "For each condition ask: what real-world input makes this TRUE, and what makes it FALSE? country != US -> test with Canada. total < 50 -> test 49.99 and 50. Every condition converts into one or two concrete test cases, with the boundaries handed to you." },
+    { label: "Ask the dev what the code will not tell you", desc: "Some forks read as mysteries: if user.legacy_flag — what IS that? Do not guess: ask 'what does this if cover, and how do I create that state?' Specific, structural questions. Devs answer those happily — and often go quiet, then say 'huh, good catch.'" },
+  ]}
+/>
+
+## Asking devs the right questions
+
+White-box awareness upgrades your questions from vague to surgical, and devs feel the difference
+immediately. 'What should I test?' invites a shrug. But point at a line and ask *'this `if
+user.legacy_flag` — what does it cover, and how do I get a user into that state?'* and you'll get a
+real answer, because you've done the reading. The all-star questions, all of them structural: **What
+does this `if` cover?** (the fork you can see but can't interpret). **What happens when this is
+empty/zero/missing?** (the fork that maybe isn't there — and should be). **Which of these branches do
+the new tests hit?** (the coverage question, in plain words). Ask that last one in a PR and watch:
+half the time the honest answer is 'the top two', and you've just scoped your testing to the bottom
+three.
+
+You can even do the structural read straight from the terminal, on files you've never opened, using
+tools you already know from this module:
+
+<CodePlayground
+  language="bash"
+  title="Structure-scan a changed file from the terminal. Press Run."
+  code={`# The diff says discount.py changed. Scan its structure before testing.
+# First: the shape of the change (which you know from reading-a-diff):
+git diff --stat main..feature-discounts
+#  discount.py | 18 ++++++++++++------
+#  1 file changed, 12 insertions(+), 6 deletions(-)
+
+# Now list every fork in the file. grep -n prints matches with line numbers:
+grep -n "if " discount.py
+# 12:    if code == "SAVE10":
+# 15:    if code == "SAVE20":
+# 16:        if total < 50:
+# 23:    if user.is_vip:
+
+# And every exit door:
+grep -n "return" discount.py
+# 13:        return total * 0.90
+# 17:            return total
+# 18:        return total * 0.80
+# 24:        return total * 0.50
+# 25:    return total
+
+# Four forks, five returns: at least five paths through this function.
+# Line 16 nests inside line 15: SAVE20 behaves differently under 50.
+# Your question for the PR thread, verbatim:
+echo "Which of the five paths in discount.py do the new tests walk?"
+# That one sentence is white-box awareness, deployed.`}
+/>
+
+<Callout type="tip">
+You never need to understand the *whole* file — that's the trap that scares manual testers off reading
+code. Skip the imports, skip the clever parts, skip anything that looks like wizardry. You're mining
+for exactly three things: **names** (what does this claim to do), **forks** (`if`/`else` — where do
+paths split), and **returns** (how many different answers can come out). Those three are readable in
+any language you'll ever meet — Python, Java, JavaScript — because every language has them and they
+always mean the same thing. Ninety seconds of that beats an hour of guessing which form fields matter.
+</Callout>
+
+<FirstTime title="First time? Do a structural read on real code">
+<StepChecklist
+  steps={[
+    { text: "Pick one small function", detail: "Open any code file — the Python playground above, a file from a public GitHub repo, or code from your own project's PR. Pick ONE function, ideally under 20 lines. You are reading, not reviewing: nobody is grading your programming knowledge." },
+    { text: "Say what the name claims", detail: "Write one sentence: 'this function claims to [do what the name says]'. Then list its parameters — that is your inventory of inputs that can change the answer. If the name and the code seem to disagree, congratulations: that is your first finding." },
+    { text: "Count the forks out loud", detail: "Find every if/elif/else and count the distinct paths through the function. Remember the invisible else: an if with no else still has a false path. Write the number down. Most beginners are shocked how fast 3 ifs becomes 5+ paths." },
+    { text: "Write one test input per path", detail: "For each path, write the concrete input that walks it: 'country=CA hits the non-US return', 'total=49.99 with express=True hits the 15.00 branch'. Note every boundary number that appears in a condition — those are free boundary tests." },
+    { text: "Form one question for the dev", detail: "Find the fork you CANNOT interpret from reading alone and phrase the question: 'what does this if cover, and how do I create that state?' Even if there is no dev to ask, phrasing it is the skill — vague testers ask what to test; aware testers ask about line 16." },
+  ]}
+/>
+Twenty minutes, one function, and you'll never test blindfolded again — the map was always right there.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "I opened the file and understood absolutely nothing — it's a wall of alien syntax.",
+      fix: "You opened at the wrong altitude, or the wrong file. Do not read top to bottom like a novel: use the diff's hunk header to jump straight to the changed function, then hunt only names, ifs, and returns — skip imports, decorators, type declarations, and anything clever. If the whole file is genuinely framework wiring (routers, configs, generated code), pick the file in the diff that has business words in it: price, user, order. That is where the forks that matter live.",
+    },
+    {
+      symptom: "I found the ifs but I can't tell what makes the condition true or false.",
+      fix: "That is not failure — that is a finding. A condition you cannot interpret (if user.legacy_flag, if feature.v2_enabled) is exactly what the ask-the-dev question exists for: 'what does this if cover, and how do I get the app into that state?' Half the time the flag maps to something visible (an account type, a setting, a country); the other half, the dev realises the branch is untestable from outside — which is a genuinely valuable thing to have surfaced.",
+    },
+    {
+      symptom: "The function calls five other functions and the real logic could be anywhere.",
+      fix: "Follow the names, not the code. If process_order calls validate_cart, apply_discount, and charge_payment, the names alone just gave you a test structure: bad cart, weird discount, failing payment. Only open the one whose name overlaps your change (the diff tells you which one actually changed). Depth-first reading of every call is developer work; testers read one level deep and let names summarise the rest.",
+    },
+    {
+      symptom: "I mapped all the branches, tested them all, and still missed a bug.",
+      fix: "White-box awareness finds missing BRANCH coverage, not every bug class. Two limits to know: first, code shows you the paths that exist, never the path that SHOULD exist but does not (the missing validation nobody wrote — no if to find). Second, branch-complete is not combination-complete: express+non-US might each work but fail together. Keep your black-box instincts — reading structure aims your testing, it does not replace thinking about what the code should do.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Wondering where a structural read pays off most? Aim it here:
+
+- **The diff's changed functions first** — the hunk header names them. Read forks in changed code before anything else; changed forks are where this release's risk is.
+- **Conditions with magic numbers** — `total >= 35`, `attempts > 5`, `len(name) > 64`. Every number in a condition is a boundary test the code just handed you: test the number, one below, one above.
+- **The invisible else** — every `if` without an `else` still has a false path. Ask what happens when the condition fails; frequently the answer is 'nothing, silently', and that silence is a bug class.
+- **Early returns near the top** — guard clauses like `if user is None: return`. They're the code's own list of edge cases the developer worried about; each one is a test case AND a hint about what inputs are dangerous.
+- **Branches your black-box tests can't reach** — a fork on `legacy_flag` or `is_admin` you can't trigger from the UI. That's your cue to ask how to create the state, or to flag the branch as shipping untested.
+</WhereToCheck>
+
+<WorkedExample title="the refund nobody could get — reading the function beats guessing at the UI">
+1. **The setup:** a PR titled 'Refund eligibility cleanup' lands. The manual tester is told: 'just
+   check refunds still work.' The old approach: open the app, refund one order, see money come back,
+   done in ten minutes. Instead, the tester opens the changed file at the line the diff points to.
+2. **The read:** the function is `is_eligible_for_refund(order, user)`. Two parameters — so both the
+   *order* and the *user* affect the answer, which the black-box plan (vary the order only) would
+   have missed entirely. Then the fork count: four ifs.
+3. **The forks, translated:** `if order.age_days > 30: return False` (a 30-day boundary — test day
+   29, 30, 31); `if order.status != 'delivered': return False` (what about 'shipped'? 'returned'?);
+   `if user.country in EU_LIST: return True` (different rules per region — a whole second matrix);
+   and one the tester can't interpret: `if user.risk_score >= 80: return False`.
+4. **The question:** the tester doesn't guess. In the PR thread: 'What does the `risk_score >= 80`
+   branch cover, and how do I create a user above 80 to test it?' The dev's reply, verbatim from a
+   thousand real PRs: 'Oh — that's from the fraud system. Actually... I'm not sure staging has any
+   users with risk scores set. Huh.'
+5. **The find:** the risk branch had *never run anywhere* — staging data couldn't reach it. When they
+   seeded a high-risk user to test it, the branch threw an error: `risk_score` was a string in the
+   database, a number in the code, and the comparison crashed the whole refund page for flagged users.
+   In production that would have been every fraud-flagged customer seeing a 500 instead of a polite no.
+6. **The scoreboard:** happy-path plan — one test, bug ships. Structural read — the 30-day boundary,
+   the status matrix, the EU matrix, and a crash, in one reading session. The tester wrote no code.
+   They read four ifs and asked one question. That's the entire skill.
+</WorkedExample>
+
+<Callout type="mistake">
+The two ways beginners fumble this: **refusing to look** ('I'm a manual tester, code isn't my job') —
+which leaves you guessing at inputs while the exact boundary values sit in plain text one file away;
+and **drowning on purpose** — trying to understand every import and clever one-liner like a code
+reviewer, burning an hour, and concluding reading is impossible. Both miss that the skill is a
+*shallow, targeted* read: names, forks, returns, ninety seconds. A close third mistake: reading the
+code and then testing only the branches that exist. Code shows you what's there — it can't show you
+the validation nobody wrote. Read the forks to aim your tests, then still ask the tester's oldest
+question: what SHOULD happen that this code never mentions?
+</Callout>
+
+<Quiz
+  question="A changed function has this structure: if country != 'US' return A; if express { if total < 50 return B; return C }; if total >= 35 return D; return E. The PR's tests call it twice, both with country='US', express=False. As a tester reading this, what's your sharpest next move?"
+  options={[
+    "Approve it — two tests is more than many PRs have",
+    "Ask the developer to rewrite the function with fewer ifs so it's easier to test",
+    "Count five paths, notice the tests walk only the D and E paths, and test (or ask about) the non-US, express-small, and express-big branches — plus the boundaries 35 and 50",
+    "Run the two existing tests yourself to double-check they pass"
+  ]}
+  answer={2}
+  explain="Four forks create five distinct paths (non-US, express under 50, express 50-plus, US standard free-shipping, US standard paid). Tests varying only total with country='US' and express=False can ever touch just the last two — paths A, B, and C ship completely unexercised, and the conditions hand you the boundary values (35, 50) to probe for free. Approving on test COUNT ignores what the tests cover; asking for a rewrite is a code-review concern, not a testing move; and re-running passing tests adds nothing a CI run didn't. The white-box-aware move is always the same: count the forks, map tests to paths, and spend your effort on the paths left dark."
+/>
+
+<Flashcards
+  cards={[
+    { front: "White-box awareness", back: "Reading code structure — names, forks, returns — to aim your testing, without writing code. Between black-box (no peeking) and formal white-box testing (dev-written, coverage-measured). The home inspector: judges structure, carries no hammer." },
+    { front: "Every if is a fork", back: "Each if splits execution into paths: a true world and a false world. Nested ifs multiply paths; an if with no else still HAS an else (the false path). Count the forks to get your minimum path count — then check how many paths the existing tests walk." },
+    { front: "What function names and signatures give you", back: "The name is a behaviour claim to verify (is_eligible_for_refund had better decide eligibility). The parameter list is your input inventory: every parameter is something your tests should vary — including ones the UI never showed you." },
+    { front: "Magic numbers in conditions", back: "total >= 35, attempts > 5, age_days > 30 — every number in a condition is a free boundary test: the number itself, one below, one above. Reading conditions hands you exact boundaries that black-box guessing has to discover by luck." },
+    { front: "The three ask-a-dev questions", back: "1) What does this if cover, and how do I create that state? 2) What happens when this value is empty/zero/missing? 3) Which of these branches do the new tests hit? All three are structural, specific, and get real answers — unlike 'what should I test?'" },
+    { front: "What reading code CANNOT find", back: "The missing branch: code shows paths that exist, never validation nobody wrote (no if to find). And branch-complete is not combination-complete — branches can pass alone and fail together. Structure aims your testing; it never replaces asking what SHOULD happen." },
+  ]}
+/>
+
+<Challenge>
+Do a full structural read, cold. (1) Find a small real function: any public GitHub repo, or the
+`shipping_cost` playground above if you want training wheels. (2) Write the name's claim in one
+sentence and list every parameter. (3) Count the forks and the paths — remember invisible elses.
+(4) Write one concrete test input per path, plus a boundary test for every number in any condition.
+(5) Write the one dev question you'd post on this code, naming a specific line. Bonus round: find an
+`if` whose false path does nothing, and describe the bug that silence could hide. If you finished all
+five, you just did white-box-aware test design — no code written, no hammer required.
+</Challenge>
+
+<AskCommunity prompt="White-box read-through: I'm testing a change to [function name] and I've mapped its structure: [N] ifs, which I read as these paths: [list them in plain words]. The existing tests cover [which paths]. My planned tests for the rest: [your inputs]. The branch I can't interpret is [paste the condition] — what state would trigger it? Am I reading the structure right?">
+Paste the actual conditions (the if lines), not a description of them — the community can read forks
+faster than prose. Say which paths the existing tests walk and which inputs you've planned for the
+dark ones. The best replies will spot the path you didn't count — usually an invisible else or a
+combination of two flags — and that correction is exactly how branch-counting instinct builds.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://testing.googleblog.com/2020/08/code-coverage-best-practices.html", title: "Google Testing Blog — code coverage best practices (what coverage does and doesn't tell you)", kind: "read" },
+    { href: "https://martinfowler.com/bliki/TestCoverage.html", title: "Martin Fowler — TestCoverage: coverage as a tool for finding untested code, not a target", kind: "read" },
+    { href: "https://www.ministryoftesting.com/", title: "Ministry of Testing — community threads on testers reading code", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=6tNS--WetLI" title="Unit testing your code — seeing the branches inside — Corey Schafer" minutes={39} />
+
+<Takeaways
+  points={[
+    "White-box awareness is reading, not writing: names, forks (if/else), and returns are legible in any language, and ninety seconds of reading them beats an hour of black-box guessing at inputs.",
+    "Every if is a fork with two worlds, and an if without an else still has a false path. Count the forks, get the path count, then check how many paths the existing tests actually walk — the dark ones are your test plan.",
+    "Conditions hand you test design for free: parameters are your input inventory, and every magic number in a condition (35, 50, 30 days) is a boundary to probe at the value, one below, one above.",
+    "Upgrade your dev questions from vague to structural: 'what does this if cover and how do I create that state?' beats 'what should I test?' every single time — and often surfaces branches the dev realises nobody can reach.",
+    "Know the limits: code shows the paths that exist, never the validation nobody wrote, and branches that pass alone can fail in combination. Read structure to aim your testing — keep asking what SHOULD happen.",
+  ]}
+/>
+
+<Complete xp={10} />

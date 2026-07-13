@@ -1,0 +1,323 @@
+---
+title: "Understanding blast radius"
+summary: "One edit rarely stays put: a shared function feeds screens nobody touched. Blast radius is everything a change could affect — trace callers, callers-of-callers, and shared data, then scope your regression testing to the ripple instead of retesting the whole world."
+tags: ["version-control-with-git", "reading-code", "track-b"]
+updated: "2026-07-11"
+---
+
+<Hook>
+A developer changes one function in one file and says 'it's a small change, just retest the cart page.'
+Three days later a bug report arrives — from the *invoices* screen, which nobody touched. Except somebody
+did: the cart and the invoice both call the same shared helper, and the 'small change' rippled into every
+place that helper is used. That ripple has a name — the **blast radius** — and mapping it is one of the
+most valuable things a tester does. The diff tells you *what* changed; blast radius tells you *what else
+could break because of it*. Learn to trace who calls the changed code and you'll stop retesting the whole
+app out of fear, stop trusting 'just retest the cart' out of hope, and start scoping regression tests to
+exactly the places the change can actually reach. That's not busywork — that's the difference between a
+tester who runs scripts and a tester who thinks.
+</Hook>
+
+<Callout type="analogy">
+A code change is **a stone dropped in a pond.** The splash is the diff — obvious, right where the stone
+went in. But the ripples spread: the first ring is every function that directly calls the changed code,
+the next ring is everything that calls *those*, and the rings keep widening until they reach screens and
+reports far from the splash. The
+<Term define="Everything a change could possibly affect: the changed code itself, every caller of it, every caller of those callers, plus anything sharing the same data, config, or database tables. Regression testing is scoped to this radius.">blast radius</Term>
+is the full area the ripples can reach — no further. Water beyond the last ripple stays flat, and code
+that never touches the changed function (directly or indirectly) can't be broken by it. Your job as a
+tester is to see the whole ripple pattern, not just the splash — and to know where the water's edge is,
+because that's where your regression testing can safely stop.
+</Callout>
+
+## One change, many callers
+
+Here's why the ripple exists: code is built on shared functions. One helper, written once, gets called
+from everywhere — that's good engineering, and it's exactly what spreads a change:
+
+```python
+# shared/pricing.py -- ONE function, used all over the app
+def final_price(base, discount_pct):
+    return round(base * (1 - discount_pct / 100), 2)
+
+# cart.py         -> shows final_price() on the cart page
+# invoice.py      -> prints final_price() on PDF invoices
+# email_offers.py -> puts final_price() in marketing emails
+# refunds.py      -> uses final_price() to compute refund amounts
+```
+
+A developer edits `final_price` to fix a rounding complaint from the cart team. The diff shows one file,
+one function. But the *behaviour* of four features just changed — cart, invoices, offer emails, and
+refunds — and the developer was only thinking about one of them. The other three are where regressions
+hide: nobody planned them, nobody tested them, and the diff never mentions their names.
+
+<HotspotImage
+  src="/notes/version-control-with-git/reading-code-as-a-tester/understanding-blast-radius.jpg"
+  alt="A wide reservoir under heavy clouds: a circular disturbance ring spreads on the water mid-frame, finer wind ripples radiate across the surface, and grass stands in the clear shallows at the near shore"
+  credit="Water surface disturbance, Owalla Dam reservoir — Wikimedia Commons, CC BY 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Water_surface_disturbance_Owalla_Dam_reservoir_Osun.jpg"
+  pins={[
+    { x: 40, y: 61, label: "The splash: the changed code itself", desc: "Dead centre is the edit — the function or file the diff shows. This is what the developer tested and what the PR describes. Testing only the splash is the classic under-scope: correct, necessary, and nowhere near sufficient." },
+    { x: 50, y: 57, label: "First ring: direct callers", desc: "Every function, page, or endpoint that calls the changed code directly. Find them with git grep or your editor's find-usages. These inherit the new behaviour immediately and are your highest-priority regression targets after the change itself." },
+    { x: 63, y: 52, label: "Second ring: callers of callers", desc: "The ripple keeps going — whatever uses the direct callers is also downstream of the change. A pricing helper feeds a total, the total feeds a report, the report feeds an export. Trace at least one hop beyond the direct callers before you call the radius mapped." },
+    { x: 76, y: 70, label: "The dark water below: shared data and config", desc: "Ripples also travel underwater: a changed function may write different values to a database table, a cache, or a file that OTHER code reads later. Code that never calls the changed function can still break by reading what it wrote. Ask: what does this change persist, and who reads it?" },
+    { x: 85, y: 88, label: "The water's edge: where testing can stop", desc: "Beyond the last ripple the pond is flat. Features with no call path and no shared data with the change cannot be broken by it — and that's your evidence-based reason to NOT retest them. Blast radius isn't just about testing more; it's about proving where you can test less." },
+  ]}
+/>
+
+## Tracing the ripple: who uses this?
+
+You don't need to be a developer to answer 'who calls this function?' — you need one command. `git grep`
+searches every tracked file for a string, and the function's name is the string:
+
+```bash
+git grep -n "final_price"
+# cart.py:88:          total = final_price(item.base, promo)
+# invoice.py:41:       line.amount = final_price(base, disc)
+# email_offers.py:17:  price = final_price(p.base, campaign_pct)
+# refunds.py:63:       refund = final_price(order.base, order.disc)
+
+git log --oneline -5 -- shared/pricing.py   # who's been changing this file lately?
+```
+
+Four hits, four features in the first ring. Your editor's 'Find usages' does the same job with more
+precision. Then take one more hop: what uses `cart.total`? What reads the refund amount? Two hops out is
+usually enough to see the shape of the radius. And don't forget the underwater currents — if the changed
+code *writes* somewhere (a database column, a cache, a file), anything that *reads* from there is in the
+radius too, even though no grep for the function name will ever find it.
+
+## From radius to regression plan
+
+Now turn the map into a test plan, ring by ring. The changed code gets the deepest testing — new
+behaviour, edge cases, the works. Direct callers each get checked in their own context, because the same
+new behaviour can be fine in one caller and a bug in another (rounding down is fine on a cart display;
+it's a real-money discrepancy in refunds). The second ring gets a lighter pass — key flows, sanity
+checks. And everything outside the radius gets consciously skipped, *with a reason you can say out loud*:
+'password reset has no path to pricing code, so this change can't affect it.' When a manager asks why you
+didn't retest everything, 'I traced the blast radius; here's the map' is a professional answer.
+'I didn't have time' is not.
+
+<FlowAnimation
+  title="Mapping a blast radius, splash to shoreline. Press Play."
+  intervalMs={1800}
+  nodes={[
+    { label: "Read the diff: find the splash", desc: "Start with what actually changed — which functions, in which files. The diff gives you the exact names to trace. A change to final_price() in shared/pricing.py means your search string is final_price. No guessing, no folklore: the diff decides." },
+    { label: "Grep for direct callers", desc: "Run git grep for each changed function name (or use your editor's find-usages). Every hit is first-ring: code that inherits the new behaviour immediately. List the features these hits belong to — cart, invoices, emails, refunds — in your own words." },
+    { label: "Hop one more ring outward", desc: "For each direct caller, ask what depends on ITS output. The cart total feeds the order summary; the refund amount feeds the finance export. One extra hop catches the regressions that surprise everyone — the screen that broke without touching the changed code." },
+    { label: "Check the underwater paths", desc: "Does the changed code write to a database, cache, file, or shared config? Then everything READING that data is in the radius even with zero function calls. Data-shaped ripples are the ones grep can't see — you have to ask the question deliberately." },
+    { label: "Test ring by ring, skip beyond the edge", desc: "Deepest testing at the centre, solid checks on the first ring, sanity passes on the second, and a conscious, justified skip for everything outside. You now have a regression scope built on evidence — not on fear, and not on the developer's optimism." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="One shared helper, four callers — watch the ripple hit refunds. Press Run."
+  code={`# The change: the cart team wanted prices to TRUNCATE instead of round.
+# One function edited, in one file. Small diff, right?
+
+def final_price_old(base, discount_pct):
+    return round(base * (1 - discount_pct / 100), 2)
+
+def final_price_new(base, discount_pct):
+    return int(base * (1 - discount_pct / 100) * 100) / 100  # truncates now
+
+base, disc = 34.99, 15   # a 34.99 item with 15% off
+
+# Ring 0 -- the splash: the function itself
+print("old:", final_price_old(base, disc), "| new:", final_price_new(base, disc))
+
+# Ring 1 -- direct callers inherit the change instantly:
+cart_shows   = final_price_new(base, disc)   # cart team: happy, they asked for this
+invoice_says = final_price_new(base, disc)   # invoices: silently changed too
+
+# The customer PAID under the old code, and refunds now use the new one:
+paid   = final_price_old(base, disc)
+refund = final_price_new(base, disc)
+print("customer paid:", paid)
+print("refund gives :", refund)
+print("discrepancy  :", round(paid - refund, 2), "<- a real-money bug in a")
+print("feature the PR never mentioned. That is blast radius.")`}
+/>
+
+The ripple gets sneakier when the change is to a **default**. Nothing that passes the argument explicitly
+feels a thing — only the callers that *relied on the old default* break, and they're the hardest ones to
+spot in a diff because they don't appear in it at all:
+
+<CodePlayground
+  language="python"
+  title="A changed default — only the caller you can't see in the diff breaks. Press Run."
+  code={`# The diff shows ONE changed line: the default value of channel.
+# Old signature: def notify(user, channel="email")
+# New signature: def notify(user, channel="push")
+
+def notify(user, channel="push"):
+    if channel == "push" and not user.get("push_token"):
+        return "FAILED: " + user["name"] + " has no push token"
+    return "sent " + channel + " to " + user["name"]
+
+amy = {"name": "Amy", "push_token": "tok_123"}   # has the mobile app
+raj = {"name": "Raj", "push_token": None}        # email-only user
+
+# Caller 1: the mobile team -- passes channel explicitly. Unaffected.
+print("order update :", notify(amy, channel="push"))
+
+# Caller 2: password reset -- was written YEARS ago, relies on the default.
+# It does not appear in the diff. It was not in the PR. It just broke.
+print("password reset:", notify(raj))
+
+print()
+print("Blast radius lesson: to find this, you grep for callers of notify()")
+print("and check which ones OMIT the channel argument -- those are the")
+print("ones the changed default silently rewired.")`}
+/>
+
+<Callout type="tip">
+Make 'who calls this?' a reflex. The moment a diff names a function, run `git grep` for it (or hit 'Find
+usages' in any editor) *before* you plan a single test — thirty seconds of tracing beats three days of
+bug-report archaeology. Prioritise the radius by stakes, not distance: a second-ring feature that touches
+money (refunds, invoices, payouts) outranks a first-ring feature that renders a label. And always ask the
+data question grep can't answer: *what does this change write, and who reads it later?* Shared tables,
+caches, and config files carry ripples between features that never call each other.
+</Callout>
+
+<FirstTime title="First time? Map a blast radius end to end">
+<StepChecklist
+  steps={[
+    { text: "Pick a change and name the splash", detail: "Take any diff — a real PR at work, or a commit in a practice repo — and write down exactly which functions changed. Those names are your search strings. If the diff touches five functions, you'll trace five little ripples; start with the scariest one." },
+    { text: "Find the first ring", detail: "Run git grep -n on each changed function's name. Every hit is a direct caller. Next to each hit, write the FEATURE it belongs to in user terms: 'cart page', 'invoice PDF', 'offer email'. Code paths matter, but you test features." },
+    { text: "Take one hop outward", detail: "For two or three direct callers, ask: what consumes this caller's output? A total feeds a summary; a saved value feeds a report. Add those to your map as the second ring. You're allowed to stop at two hops — the goal is shape, not a full dependency graph." },
+    { text: "Ask the data question", detail: "Does the changed code write to a database, cache, file, or config? List who reads from there. This is the ripple grep can't see, and it's how 'unrelated' features break. If the answer is 'writes nothing', say so explicitly — that shrinks the radius and that's valuable too." },
+    { text: "Write the ring-by-ring test plan", detail: "Three lines: deep tests for the changed code, one check per first-ring feature, sanity passes for the second ring — plus one sentence naming what you're consciously NOT retesting and why it's outside the radius. That sentence is what makes the scoping defensible." },
+  ]}
+/>
+One traced radius and you'll never again accept 'it's a small change, just retest the cart' without asking who else drinks from that function.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A bug appeared in a feature nobody touched this release.",
+      fix: "Almost always a shared dependency: the feature calls a function that WAS changed, or reads data that changed code now writes differently. Work backwards — git log on the buggy feature's files will show nothing recent, so instead ask what shared helpers it calls and grep those names against the release's diffs. When you find the changed helper, you've found the splash; the 'untouched' feature was just standing in the ripple.",
+    },
+    {
+      symptom: "git grep for the changed function returns a hundred hits — I can't test them all.",
+      fix: "You don't have to; you have to PRIORITISE them. Group hits by feature, then rank by stakes: money, auth, and data-deletion features first, cosmetic rendering last. Deduplicate — fifty hits in one module is one feature to check, not fifty. And check how callers use the result: a caller that only logs the value is low risk; a caller that stores or charges it is not. Wide radius plus ranking beats narrow radius plus hope.",
+    },
+    {
+      symptom: "Grep finds no callers, but I'm sure the code is used.",
+      fix: "The call may be indirect: the function might be referenced via a variable, a dictionary of handlers, a route table, or a framework convention (decorators, dependency injection) — so its literal name never appears at the call site. Grep for pieces of the name, for the route or event it handles, and for its module's import line. Also check templates and config files: 'no hits' usually means 'called by a mechanism grep can't see', not 'safe to skip'.",
+    },
+    {
+      symptom: "I mapped the callers, but the regression showed up through the DATABASE anyway.",
+      fix: "Call-graph tracing only catches code-shaped ripples. If the change altered WHAT gets written — a different format, a new default, a column now left empty — every reader of that data is in the radius with zero function calls connecting them. For any change that persists something, add a second map: what tables/keys/files does it write, and which features read them? Ask a developer if you can't tell from the code; the question itself marks you as a tester who gets it.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Scoping regression tests for a change:
+
+- **The diff** — which functions and files actually changed? Those names are your trace targets; everything starts there.
+- **`git grep -n` each changed name** — the direct callers. Group hits by feature and rank by stakes (money and auth outrank labels).
+- **One hop further** — what consumes each caller's output? The second ring is where the surprising regressions live.
+- **The data trail** — what does the change write (tables, caches, files, config), and who reads it? Grep can't see this ripple; ask the question deliberately.
+- **The edge** — name what's outside the radius and why. A justified skip ('no call path, no shared data') is a scoping decision; an unexamined skip is a gamble.
+</WhereToCheck>
+
+<WorkedExample title="the loyalty-points bug that came from a rounding 'fix' — a radius traced">
+Support tickets say loyalty points are wrong: a customer spent 49.99 and got 4,998 points instead of
+4,999. Points code hasn't been touched in months. Here's the trail:
+
+1. **The symptom is far from the splash:** `git log --oneline -- loyalty/` shows nothing for weeks. The
+   buggy feature wasn't changed — so something it *depends on* was. Time to look at what loyalty code
+   calls.
+2. **Find the shared dependency:** the points calculation reads `order.total`, and order totals come from
+   `final_price()` in `shared/pricing.py`. Now check that file's history: `git log --oneline -3 --
+   shared/pricing.py` shows a commit from last Tuesday: 'fix cart rounding for promo prices'.
+3. **Read the diff of that commit:** `git show` reveals the one-line change — `round(x, 2)` became a
+   truncation. The cart team wanted 34.99-style prices to stop rounding up. Reasonable fix, tested on the
+   cart, shipped.
+4. **Map the radius they missed:** `git grep -n "final_price"` returns cart.py, invoice.py,
+   email_offers.py, refunds.py — and points.py, which multiplies the total by 100 to award points.
+   Truncation shaved a fraction of a cent off some totals, and multiplying by 100 turned that invisible
+   sliver into a visibly missing point.
+5. **Confirm ring by ring:** cart shows the intended prices (the fix works!), invoices match the cart,
+   but refunds and points both inherit the truncated totals — refunds are off by a cent on some orders,
+   points by one point. Two regressions, both in the first ring, neither mentioned in the PR.
+6. **Tester's angle:** the fix for the *next* release isn't just 'repair the rounding' — it's process:
+   when this PR appeared, a thirty-second `git grep final_price` would have put refunds and points on the
+   test plan before shipping. Blast radius tracing isn't after-the-fact detective work; done at review
+   time, it's how the detective work never becomes necessary.
+</WorkedExample>
+
+<Callout type="mistake">
+Testing only what the developer says to test. 'Just retest the cart' reflects what the developer was
+*thinking about*, not what the change *touches* — and the gap between those two is exactly where
+regressions live. The opposite mistake is just as costly: fearful full-regression on every two-line
+change, which burns days and trains everyone to ignore your test plans. Both errors come from not
+mapping: without a traced radius you either trust the dev's guess or trust no one and retest the world.
+Trace callers with `git grep`, hop one ring out, ask what data the change writes — then test the radius
+deeply and skip beyond it *with stated reasons*. Scoped-by-evidence beats both scoped-by-hope and
+scoped-by-panic.
+</Callout>
+
+<Quiz
+  question="A developer changes one shared function, format_date(), used by the orders page, the reports export, and the audit log. The PR says 'display fix — retest the orders page'. What should a tester do?"
+  options={[
+    "Retest the orders page as instructed — the developer knows the code best",
+    "Trace the callers (git grep format_date), put orders, reports, AND the audit log in scope, check whether anything stores formatted dates for other code to read, and consciously skip features with no path to the change",
+    "Run the entire regression suite for the whole application, since any change can break anything",
+    "Ask the developer to revert the change, because shared functions should never be edited"
+  ]}
+  answer={1}
+  explain="The diff — not the PR description — defines the risk. A shared function's change reaches every caller, so the first move is git grep (or find-usages) to list them: here that's orders, reports, and the audit log, all inheriting the new behaviour even though the developer was only thinking about orders. The data question matters too: if formatted dates get stored anywhere, readers of that data join the radius. Retesting only orders under-scopes (two callers untested); running everything over-scopes (features with no path to date formatting can't be affected, and burning time there is its own risk). The professional move is the middle one: trace, scope to the radius, and skip beyond it with reasons you can state."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Blast radius", back: "Everything a change could affect: the changed code, its direct callers, their callers, plus anything reading data/config the change writes. Regression scope = the radius. Beyond the last ripple, code with no path to the change can't be broken by it." },
+    { front: "Why one edit ripples", back: "Shared functions. One helper is called from many features, so editing it changes ALL their behaviour at once — while the developer is typically thinking about only one. The unconsidered callers are where regressions hide." },
+    { front: "git grep -n 'name'", back: "The tester's radius-mapping tool: finds every tracked file mentioning the changed function. Each hit is a direct caller (first ring). Group hits by feature, rank by stakes. Editor 'Find usages' does the same with more precision." },
+    { front: "Rings of testing depth", back: "Centre: the changed code — deepest testing. First ring: each direct caller checked in its own context. Second ring: sanity passes on key flows. Outside: consciously skipped, with a stated reason (no call path, no shared data)." },
+    { front: "The data-shaped ripple", back: "If changed code WRITES differently (table, cache, file, config), every READER of that data is in the radius — with zero function calls linking them, so grep never sees it. Always ask: what does this change persist, and who consumes it?" },
+    { front: "Changed defaults", back: "The sneakiest ripple: callers that pass the argument explicitly are untouched; callers relying on the old default silently break — and they never appear in the diff. Grep the function, then check which call sites OMIT the changed parameter." },
+  ]}
+/>
+
+<Challenge>
+Trace a radius for real. (1) In any repo (a practice project works), pick one function that's called
+from at least two places — or create one: a small helper used by two scripts. (2) Change its behaviour
+subtly (round becomes truncate, a default flips) and commit. (3) Run git grep -n on its name and list
+every caller, labelled by feature in plain words. (4) For each caller, predict: fine, degraded, or
+broken? Then run them and check your predictions. (5) Write the three-line ring-by-ring test plan,
+including one sentence on what you'd consciously skip and why. If your predictions matched reality,
+you just did impact analysis — the skill behind every good regression scope.
+</Challenge>
+
+<AskCommunity prompt="Blast radius question: a change touched [function/file] and I traced these callers: [your grep results, grouped by feature]. My planned scope is [rings + skips]. What am I missing — especially any data-shaped ripple I can't see with grep?">
+Show your trace, not just your conclusion: the changed function's name, the callers you found, and how
+you grouped them by feature. Flag anything the change writes (tables, caches, config) — the community's
+best catches are usually the data-path ripples and the callers hiding behind indirect calls that grep
+missed.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://git-scm.com/docs/git-grep", title: "git-grep — official Git documentation", kind: "read" },
+    { href: "https://en.wikipedia.org/wiki/Change_impact_analysis", title: "Change impact analysis — the formal name for blast-radius thinking", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=u6QfIXgjwGQ", title: "Software testing explained in 100 seconds — Fireship", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=u6QfIXgjwGQ" title="Software testing explained in 100 seconds — Fireship" minutes={3} />
+
+<Takeaways
+  points={[
+    "Blast radius = everything a change could affect: the changed code, its direct callers, their callers, and anything that reads data or config the change writes. The diff is the splash; the radius is the ripples.",
+    "Shared functions are why 'small' changes break 'unrelated' features: one edit changes the behaviour of every caller at once, and the developer was usually thinking about only one of them.",
+    "Trace the first ring in thirty seconds: git grep -n the changed function's name (or editor find-usages), group hits by feature, rank by stakes. Then hop one ring further — what consumes each caller's output?",
+    "Grep can't see data-shaped ripples. If the change writes differently to a table, cache, or file, every reader of that data is in the radius with no calling relationship at all. Ask the data question deliberately, every time.",
+    "Scope regression testing to the radius: deep at the centre, solid on the first ring, sanity on the second, and a conscious, justified skip beyond the edge. Evidence-based scoping beats both the developer's optimism and fear-driven retest-everything.",
+  ]}
+/>
+
+<Complete xp={10} />

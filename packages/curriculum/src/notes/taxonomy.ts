@@ -606,12 +606,80 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         topics: [
           { slug: "variables-ifs-and-loops", title: "Variables, ifs & loops" },
           { slug: "your-first-useful-script", title: "Your first useful script" },
-          { slug: "cron-scheduling", title: "cron scheduling", planned: true },
-          { slug: "automating-repetitive-checks", title: "Automating repetitive checks", planned: true },
+          { slug: "cron-scheduling", title: "cron scheduling" },
+          { slug: "automating-repetitive-checks", title: "Automating repetitive checks" },
         ],
       },
     ],
   },
+  // ── Track C · QA & Manual Testing — Module 12 (curriculum v4). Chapters are
+  // auto-reconciled from disk while M12 drafting is in flight; hand-finalize
+  // order at gate time. Full shape = 7 chapters x 4 topics. Supersedes the
+  // legacy "foundations" module below — retirement pending Sajan's call.
+  // BEGIN qa-foundations
+  {
+    slug: "qa-foundations",
+    title: "QA foundations",
+    summary: "How professional testing thinks — what QA is, where it came from, why it matters, the seven principles, the tester's mind, and where testing fits in how software gets built.",
+    chapters: [
+      {
+        slug: "what-is-qa",
+        title: "What is QA",
+        topics: [
+          { slug: "qa-vs-qc-vs-testing", title: "QA vs QC vs testing" },
+          { slug: "the-testers-mindset", title: "The tester's mindset" },
+        ],
+      },
+      {
+        slug: "where-qa-came-from",
+        title: "Where QA came from",
+        topics: [
+          { slug: "the-1947-moth-story", title: "The 1947 moth story" },
+          { slug: "five-eras-debugging-to-prevention", title: "Five eras: debugging to prevention" },
+        ],
+      },
+      {
+        slug: "why-testing-matters",
+        title: "Why testing matters",
+        topics: [
+          { slug: "cost-of-defects", title: "The cost of defects" },
+          { slug: "famous-failures", title: "Famous testing failures" },
+          { slug: "risk-and-value", title: "Risk and value: what testing actually buys you" },
+        ],
+      },
+      {
+        slug: "the-seven-principles",
+        title: "The seven principles",
+        topics: [
+          { slug: "the-7-principles", title: "The 7 principles of testing" },
+        ],
+      },
+      {
+        slug: "the-testers-mind",
+        title: "The tester's mind",
+        topics: [
+          { slug: "critical-thinking-for-testers", title: "Critical thinking for testers" },
+          { slug: "cognitive-biases", title: "Cognitive biases in testing" },
+        ],
+      },
+      {
+        slug: "sdlc-and-stlc",
+        title: "SDLC & STLC",
+        topics: [
+          { slug: "sdlc-phases", title: "SDLC phases" },
+          { slug: "stlc-phases", title: "STLC phases" },
+        ],
+      },
+      {
+        slug: "models",
+        title: "Models",
+        topics: [
+          { slug: "waterfall", title: "Waterfall model" },
+          { slug: "agile", title: "Agile model" },
+        ],
+      },    ],
+  },
+  // END qa-foundations
   {
     slug: "foundations",
     title: "QA Foundations",

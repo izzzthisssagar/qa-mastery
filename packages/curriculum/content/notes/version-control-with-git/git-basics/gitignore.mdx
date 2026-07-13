@@ -1,0 +1,331 @@
+---
+title: ".gitignore"
+summary: ".gitignore is the repo's do-not-track list: node_modules, build output, and .env secrets never enter history. Learn the glob patterns, why an already-committed file needs git rm --cached, and the pushed-secret horror story — rotate the key, history remembers. Spotting secrets in a repo is a QA win."
+tags: ["version-control-with-git", "git-basics", "track-b"]
+updated: "2026-07-13"
+---
+
+<Hook>
+Run `git status` in a fresh JavaScript project and Git will cheerfully offer to track all 40,000 files in
+`node_modules` — because Git, bless it, has no taste. It will also happily commit your `.env` file, the one
+holding your database password, and push it to a public GitHub repo where automated scanners will find it in
+under a minute. (Not 'someday'. Under a minute. Bots watch the public commit firehose specifically for
+this.) **`.gitignore`** is the fix: a plain text file listing what Git should pretend doesn't exist.
+Dependencies, build output, secrets, editor junk — named once, invisible forever. It's the least glamorous
+file in the repo and it prevents the most expensive category of beginner disaster. This note covers what it
+does, the pattern language it speaks, and the horror story every tester should know how to spot — and how
+to recover from.
+</Hook>
+
+<Callout type="analogy">
+`.gitignore` is **the bouncer's list at the door of your repo.** Every time you run `git status` or
+`git add`, a crowd of files shows up at the door wanting in. The bouncer checks each one against the list:
+'`node_modules/`? Not tonight. `*.log`? Never heard of you. `.env`? Absolutely not, and I'm pretending I
+didn't see you.' Files on the list don't get rejected loudly — they become *invisible*: status doesn't
+mention them, `git add .` walks right past them, and the commit stays clean. Two fine-print clauses matter.
+First, the bouncer only screens *new* faces: a file that's **already inside the club** (already committed)
+keeps its wristband even if you add it to the list later — you have to escort it out yourself
+(`git rm --cached`). Second, the list is written in a small pattern language called
+<Term define="A filename-matching mini-language used by .gitignore (and shells). The star * matches anything within one name (*.log matches app.log), a trailing slash marks a directory (node_modules/), a leading slash anchors to the repo root (/config.json means only the top-level one), double star ** crosses folder levels (docs/**/*.pdf), and a leading exclamation mark ! re-admits an exception (!important.log). One pattern per line; lines starting with # are comments.">glob patterns</Term>
+— so one line can turn away whole families of files at once.
+</Callout>
+
+## What never gets committed — and why
+
+Three families of files belong on the list in almost every project. Notice the shared logic: they're either
+**regenerable**, **machine-specific**, or **secret** — and none of that belongs in shared history.
+
+**Dependencies** (`node_modules/`, Python's `venv/`, Java's downloaded jars): tens of thousands of files you
+didn't write and can regenerate in one command from `package.json` or `pom.xml`. Committing them bloats the
+repo from megabytes to gigabytes and buries your actual changes in noise — a diff with 3,000 changed files,
+2,998 of them inside node_modules, is a diff nobody reviews.
+
+**Build artifacts** (`dist/`, `build/`, `target/`, `*.class`, test reports, screenshots from test runs):
+outputs *derived from* the source. The source is the truth; committing the output is committing the same
+information twice, and the copies drift out of sync — the stale-copy plague from the start of this module,
+sneaking back in through the fire exit.
+
+**Secrets** (`.env`, `credentials.json`, `*.pem` keys): passwords, API keys, tokens. These must never enter
+history because — remember the time machine — **history is forever**. A secret deleted in the next commit is
+still sitting in the previous snapshot, fully readable by anyone who can view the repo. More on this horror
+below.
+
+```gitignore
+# A respectable starter .gitignore:
+node_modules/        # dependencies -- regenerable, huge
+dist/                # build output -- derived from source
+*.log                # runtime noise
+.env                 # SECRETS. Never. Ever.
+.DS_Store            # macOS shrapnel
+test-results/        # test run artifacts (reports, screenshots)
+```
+
+## The pattern language, in five lines
+
+Each line is one rule; Git checks every candidate file against the list. The five moves that cover 95% of
+real gitignores: a plain name (`.env`) matches that name anywhere in the repo; a trailing slash
+(`node_modules/`) says 'this is a directory — ignore everything inside'; a star (`*.log`) matches any
+single filename, so all logs everywhere; a leading slash (`/config.local.json`) anchors the rule to the
+repo root only; and a leading exclamation mark (`!README.md`) punches an exception through an earlier rule.
+Order matters for exceptions — the re-admit line must come after the rule it overrides.
+
+<HotspotImage
+  src="/notes/version-control-with-git/git-basics/gitignore.jpg"
+  alt="The gated entrance to Oceano Dunes beach at Pismo: a wooden fence and gate hung with many rule signs — a large 'possession of illegal fireworks: $2,000 fine' board, speed limit and camping-fine signs — while a car already drives on the sand beyond"
+  credit="Signs at the beach entrance, Pismo Beach, California — Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Pismo_Beach_(California,_USA),_Signs_at_the_Beach_--_2012_--_4733.jpg"
+  pins={[
+    { x: 80, y: 38, label: "The wall of posted signs = .gitignore", desc: "A plain text file at the repo root, one pattern per line, itself committed to the repo (yes — you track the ignore list, so the whole team enforces the same door policy). Every git status and git add consults these signs before showing or staging anything. No magic: change the list, and the policy changes instantly." },
+    { x: 42, y: 85, label: "The open entrance road = untracked files arriving", desc: "New files Git has noticed but never committed roll up this road. This is the ONLY traffic the signs screen: .gitignore decides which untracked files stay invisible. The usual arrivals: node_modules (regenerable), dist/ (derived), .env (secret), .DS_Store (macOS litter). None of them should ever get onto the beach." },
+    { x: 18, y: 55, label: "The gate and fence = git add / git status enforcing the list", desc: "The fence is where the signs are enforced. Ignored files don't appear in git status, and git add . skips them silently — which is exactly what makes 'git add .' safe once the list is right. Want to know WHY a file is being turned away? git check-ignore -v names the exact .gitignore line responsible." },
+    { x: 28, y: 52, label: "The car already out on the sand = an already-tracked file", desc: "The signs' blind spot: .gitignore only affects files Git isn't tracking yet. Commit .env on Monday, add it to .gitignore on Tuesday — Git keeps tracking it and committing its changes, signs or no signs. Eviction is manual: git rm --cached .env removes it from tracking (keeping your local copy), THEN the ignore rule takes over. And its past appearances are still in history — see the horror story." },
+    { x: 49, y: 38, label: "The 'OHV use area, 1 mile' sign = the ! exception", desc: "Amid all the prohibitions, one sign PERMITS something specific — exactly what a leading exclamation mark does: ignore all logs with *.log, then re-admit one with !important.log. The exception line must come AFTER the rule it overrides — the list is read top to bottom, last matching rule wins." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One file walks up to the door. What the bouncer does — press Play."
+  intervalMs={1800}
+  nodes={[
+    { label: "A new file appears: debug.log", desc: "Your test run just wrote debug.log into the project folder. Git notices immediately — any file inside the repo folder is a candidate. Without a list, git status would show it as untracked and a lazy git add . would sweep it into the next commit, forever." },
+    { label: "Already tracked? Skip the list entirely", desc: "First check: is this file already committed from before? If yes, .gitignore is IGNORED for it — Git keeps tracking changes to it no matter what the list says. This is the rule that surprises everyone once: the list screens newcomers only. Evicting a tracked file takes git rm --cached." },
+    { label: "Check the list, top to bottom", desc: "debug.log is new, so the patterns run: node_modules/? No. dist/? No. *.log? MATCH — the star swallows 'debug' and the rest matches exactly. Last matching rule wins, so a later !important.log exception could still re-admit a special log — but nothing re-admits debug.log." },
+    { label: "Matched = invisible", desc: "debug.log vanishes from git status, git add . passes over it, and the working folder can fill with logs, caches, and build junk while commits stay surgically clean. Not deleted — the file still exists on disk and your app still uses it. Just invisible to version control." },
+    { label: "No match = untracked, and that's a signal", desc: "Files matching nothing show up in git status as untracked, waiting for a decision: source file? Add and commit. Junk or secret? Add a pattern for it NOW, before muscle memory git add .'s it into history. A tester reading git status treats every unexpected untracked file as a small question worth answering." },
+  ]}
+/>
+
+Watch the bouncer start work mid-shift — messy status, add the list, clean status:
+
+<CodePlayground
+  language="bash"
+  title="Try it — a cluttered repo gets a .gitignore. Press Run."
+  code={`# A fresh project, already accumulating clutter:
+echo "SECRET_KEY=sk_live_abc123" > .env
+mkdir -p node_modules/somepkg && echo "junk" > node_modules/somepkg/index.js
+echo "checkout test notes" > notes.txt
+
+git status --short
+# ?? .env
+# ?? node_modules/
+# ?? notes.txt
+# Three untracked files -- two of which must NEVER be committed.
+
+# Write the bouncer's list (one pattern per line):
+printf '.env\nnode_modules/\n*.log\n' > .gitignore
+
+git status --short
+# ?? .gitignore
+# ?? notes.txt
+# .env and node_modules are now invisible. Commit stays clean:
+git add . && git commit -m "Add notes and gitignore"
+# 2 files changed  <- notes.txt + .gitignore. No secrets, no junk.
+
+# Ask WHY a file is ignored (names the exact rule and line):
+git check-ignore -v .env
+# .gitignore:1:.env	.env`}
+/>
+
+The matching logic is simple enough to build yourself — and building it once makes the pattern rules stick.
+Here's a mini bouncer in Python:
+
+<CodePlayground
+  language="python"
+  title="Run it — a tiny .gitignore matcher in Python (glob patterns in action)"
+  code={`import fnmatch
+
+# The bouncer's list -- same patterns a real .gitignore would hold:
+gitignore = ["*.log", ".env", "node_modules/", "dist/"]
+
+# The crowd at the door:
+files = [
+    "notes.txt",
+    "debug.log",
+    ".env",
+    "node_modules/somepkg/index.js",
+    "dist/bundle.js",
+    "src/checkout.js",
+]
+
+def is_ignored(path):
+    for pattern in gitignore:
+        if pattern.endswith("/"):                      # directory rule
+            folder = pattern.rstrip("/")
+            if path == folder or path.startswith(folder + "/"):
+                return True
+        else:                                          # filename glob
+            name = path.split("/")[-1]
+            if fnmatch.fnmatch(name, pattern):
+                return True
+    return False
+
+for f in files:
+    verdict = "IGNORED " if is_ignored(f) else "tracked "
+    print(verdict + f)
+
+# tracked  notes.txt
+# IGNORED debug.log                      <- *.log
+# IGNORED .env                           <- exact name
+# IGNORED node_modules/somepkg/index.js  <- directory rule
+# IGNORED dist/bundle.js                 <- directory rule
+# tracked  src/checkout.js`}
+/>
+
+<Callout type="tip">
+Two habits that make ignore-problems rare. First: **write the .gitignore before the first commit**, not
+after the mess — every language has a battle-tested starter list (GitHub maintains a whole repo of them;
+see Resources), so you never start from scratch. Second: for secrets, commit a **`.env.example`** with the
+variable *names* but fake values (`SECRET_KEY=put-real-key-here`), and ignore the real `.env`. New
+teammates copy the example, fill in real values, and the real file never risks the door. And when a file
+mysteriously won't show up or won't stay hidden, `git check-ignore -v somefile` tells you exactly which
+rule on which line is responsible — the ignore-list debugger nobody discovers until year two.
+</Callout>
+
+<FirstTime title="First time? Hire the bouncer and test him">
+<StepChecklist
+  steps={[
+    { text: "Make clutter on purpose", detail: "In a practice repo, create a fake secret (echo SECRET=123 > .env), a junk folder (mkdir node_modules), and a real file (notes.txt). Run git status --short and see all three queueing as untracked. This is the danger moment where git add . would commit everything." },
+    { text: "Write the list, watch the queue shrink", detail: "Create .gitignore containing .env and node_modules/ (one per line). Run git status again: only notes.txt and .gitignore remain. Nothing was deleted — ls shows .env still on disk. Invisible to Git and gone are different things." },
+    { text: "Interrogate a rule", detail: "Run git check-ignore -v .env and read the answer: file, line number, and the exact pattern that matched. This one command turns 'why is this file (not) ignored?!' from a mystery into a lookup. File it next to git status in your daily kit." },
+    { text: "Trip over the already-tracked trap", detail: "Commit a file first (echo x > temp.txt, add, commit), THEN add temp.txt to .gitignore. Modify it and run git status — Git still tracks it! Now evict it: git rm --cached temp.txt, commit, and watch the ignore rule finally take hold. Feel this once and you'll never be confused by it in a real repo." },
+    { text: "Read a professional list", detail: "Open github.com/github/gitignore and read Node.gitignore or Java.gitignore top to bottom. Recognise the three families — dependencies, build output, local junk — and notice how few patterns cover them. Steal the right one for every new project; writing gitignores from memory is how .env gets through." },
+  ]}
+/>
+You've hidden junk and secrets, debugged a rule, and hit the already-tracked trap in a sandbox where it cost nothing. That trap costs real money in production repos.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "I added node_modules to .gitignore but git status STILL shows changes in it.",
+      fix: "It was committed before the rule existed — .gitignore only affects files Git isn't already tracking. Evict it: git rm -r --cached node_modules (removes it from tracking; --cached keeps the folder on disk), then commit. From then on the ignore rule applies. Same recipe for any tracked-but-should-be-ignored file: rule in .gitignore, git rm --cached, commit.",
+    },
+    {
+      symptom: "My pattern doesn't match: 'logs' is ignored but 'logs/debug.txt' still shows up — or the opposite.",
+      fix: "Slash semantics. 'logs/' (trailing slash) ignores the directory and everything in it. 'logs' (no slash) matches a file OR directory named logs. '/logs/' (leading slash) matches only at the repo root, not nested ones. And an exception like !logs/keep.txt cannot resurrect a file whose PARENT directory is ignored — un-ignore the directory contents first. When puzzled, git check-ignore -v path/to/file names the winning rule.",
+    },
+    {
+      symptom: "I committed .env, then added it to .gitignore and deleted it in the next commit. We're safe now, right?",
+      fix: "No — and this is the most important 'no' in the module. Every past commit still contains the secret; anyone with repo access (or a clone made in the meantime) can read it with one command. Two-step recovery, in strict order: 1) ROTATE the secret — revoke the key/password and issue a new one; treat the old value as public knowledge. 2) Then clean up: git rm --cached .env, ignore it, and if the repo is shared, scrub history with git filter-repo or BFG (a rewrite everyone must re-clone after). Rotation first, always — cleanup without rotation is theatre.",
+    },
+    {
+      symptom: "A teammate cloned the repo and the app crashes: 'missing .env / missing config'.",
+      fix: "Working as designed — the secret file is ignored, so it never travelled, and each machine needs its own. The fix is convention, not un-ignoring: commit a .env.example with variable names and placeholder values, and a README line saying 'copy to .env and fill in'. If the app needs a value to even boot, that example file is part of the definition of done — a nice thing for a tester to check on fresh-clone setup.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where ignore-rules and leaked secrets show up in a tester's day:
+
+- **Is the file ignored, and by which rule?** — `git check-ignore -v path/to/file` prints the file, line, and pattern responsible. Silence means no rule matches.
+- **What's about to be committed?** — `git status --short` before every commit. Unexpected untracked files (reports, screenshots, .env.local) are candidates for the list, not for git add.
+- **Is anything ignored-but-tracked?** — after adding rules to an old repo, `git status` still showing changes in a 'ignored' path means it was committed earlier: needs the git rm --cached eviction.
+- **Are secrets already in history?** — search the whole timeline, not just the current files: `git log --all --oneline -- .env` shows commits that touched it, and `git grep sk_live` (or AKIA for AWS keys) hunts key-shaped strings. GitHub's secret scanning and tools like gitleaks or trufflehog automate exactly this.
+- **Does a fresh clone actually run?** — clone into a clean folder and follow the README. Missing-.env crashes, undocumented setup, or a repo that only works on the author's machine all surface here — the cheapest environment test there is.
+</WhereToCheck>
+
+<WorkedExample title="the .env that went to GitHub — anatomy of the classic horror story">
+This one happens somewhere every single day. Here's the full arc, and where a tester changes the ending:
+
+1. **The slip:** a developer scaffolds a new service at speed. No .gitignore yet. `git add .` scoops up
+   everything — including `.env`, holding a live payment-provider API key. Commit, push, public repo. Total
+   elapsed time: eleven seconds.
+2. **The clock is already running:** bots continuously scan every public commit on GitHub for key-shaped
+   strings (AWS keys, Stripe keys, tokens — they have patterns for all of them). Median time to first
+   malicious use of a leaked cloud key is minutes. This is not a theoretical threat; it's a queue.
+3. **The wrong fix:** the developer notices, goes pale, deletes `.env`, commits 'remove env file', pushes,
+   exhales. **The key is still fully visible** in the previous commit — `git show HEAD~1:.env` prints it to
+   anyone. Deleting a file from the present does nothing to the past; that's the whole point of Git.
+4. **The right fix, in order:** (a) **Rotate immediately** — revoke the key at the provider, issue a new
+   one; the leaked value is now worthless regardless of what history says. (b) Stop the bleeding:
+   `git rm --cached .env`, add it to `.gitignore`, commit a `.env.example`. (c) Scrub history with
+   `git filter-repo` or BFG and force-push — necessary hygiene, but note it *cannot un-leak* anything:
+   clones and caches already exist. Rotation is the fix; scrubbing is the cleanup.
+5. **Where the tester comes in:** on a routine look through the repo, a QA engineer runs
+   `git log --all -- .env` — and it returns commits. Even though the file is gone *today*, history says it
+   was there. She files a severity-critical bug: 'live API key present in git history, commits a1b2c3d..;
+   key must be rotated'. The team rotates within the hour instead of finding out from an invoice.
+6. **Tester's angle:** secrets-in-repo is a *test case*, not just a developer hygiene issue. Add it to your
+   review checklist: does the repo have a .gitignore before the first commit? Is there a .env.example? Does
+   `git log --all` show secret files in history? Do key-shaped strings appear in `git grep`? Finding a live
+   credential in a repo is one of the highest-value bugs a QA engineer can file — cheap to check,
+   catastrophic to miss, and it makes exactly the right people take testing seriously.
+</WorkedExample>
+
+<Callout type="mistake">
+The double misconception that powers the horror story: thinking `.gitignore` protects files that are
+already committed (it doesn't — it screens newcomers only; tracked files need `git rm --cached`), and
+thinking deleting a secret in a new commit removes it (it doesn't — every earlier snapshot still holds it,
+because history is append-only and forever; that's the time machine doing its job on the one file you wish
+it wouldn't). The corollary everyone learns exactly once: **a pushed secret is a leaked secret** — recovery
+is rotate-the-key first, tidy the repo second. Two smaller cousins while we're confessing: ignoring too
+much (a broad pattern like *.json silently hiding a config file teammates need — fresh-clone testing
+catches it), and never committing the .gitignore itself (it's a tracked file like any other; the whole
+team should share one bouncer, not bring their own).
+</Callout>
+
+<Quiz
+  question="You committed .env (with a live API key) three commits ago. Today you added .env to .gitignore and committed a change deleting the file. Is the key safe?"
+  options={[
+    "Yes — the file is deleted and ignored, so it's gone from the repo",
+    "Yes — .gitignore retroactively removes matching files from old commits",
+    "Mostly — only repo admins can view old commits anyway",
+    "No — every earlier snapshot still contains the key (git show can print it), so it must be treated as leaked: rotate the key first, then clean tracking and history"
+  ]}
+  answer={3}
+  explain="Git history is append-only: deleting a file changes what the LATEST snapshot contains, but the three earlier snapshots still hold .env in full, and anyone with repo access can read it in seconds (git show HEAD~3:.env). .gitignore is even less help — it only stops UNTRACKED files from being added, and never rewrites the past. And 'only admins' is wishful thinking: anyone who can clone the repo has the entire history on their own disk, and on a public repo automated scanners have likely already found the key. The professional response order: rotate/revoke the credential immediately (the only step that actually ends the exposure), then git rm --cached + ignore going forward, then optionally scrub history with git filter-repo or BFG. For a tester, checking history for secret files is a cheap, high-severity find — the repo's past is part of the product's attack surface."
+/>
+
+<Flashcards
+  cards={[
+    { front: ".gitignore", back: "A committed text file (usually at repo root) listing glob patterns for files Git must not track: they vanish from git status and git add. Screens UNTRACKED files only — already-committed files keep being tracked until evicted with git rm --cached." },
+    { front: "The three never-commit families", back: "Dependencies (node_modules/, venv/) — regenerable and huge. Build artifacts (dist/, target/, reports) — derived from source, drift out of sync. Secrets (.env, keys, credentials) — history is forever, so one commit = permanent exposure." },
+    { front: "Glob pattern quick grammar", back: "*.log = any log file; node_modules/ = that directory and contents; /config.json = root only; ** = any depth (docs/**/*.pdf); !keep.log = exception to an earlier rule (must come after it); # = comment. One pattern per line." },
+    { front: "Ignoring an already-tracked file", back: "Adding the rule is not enough — .gitignore doesn't affect tracked files. Recipe: add the pattern, git rm --cached thefile (-r for folders; keeps it on disk), commit. From then on changes to it are invisible." },
+    { front: "I committed a secret — recovery order", back: "1) ROTATE the credential immediately; a pushed secret is a leaked secret, and deleting the file later does not un-leak it. 2) git rm --cached + .gitignore + .env.example. 3) Scrub history (git filter-repo / BFG) if shared. Rotation first — cleanup without rotation is theatre." },
+    { front: "Tester's secret-hunting kit", back: "git log --all -- .env (did a secret file EVER exist?), git grep for key-shaped strings (sk_live, AKIA), git check-ignore -v (which rule matches?), fresh-clone test (does the app run without the ignored files, given .env.example?). Secrets in history = severity-critical bug." },
+  ]}
+/>
+
+<Challenge>
+Run the gauntlet. (1) In the bash playground, explain why .gitignore itself shows up as untracked — should
+it be committed? (Yes: why?) (2) In the Python playground, add the pattern '!important.log' handling — what
+extra logic does the exception need, and why must order matter? (3) Predict, then verify: with *.log in
+the list, is 'logs/debug.log' ignored by the Python matcher? Would real Git agree? (4) Write the recovery
+runbook from memory, in order, for 'I just pushed .env to a public repo' — three steps, and the reason
+rotation comes first. (5) Tester drill: list the three checks you'd run on any new repo to catch
+secrets-in-history before an attacker does. Nail all five and you're ahead of a scary percentage of
+working developers.
+</Challenge>
+
+<AskCommunity prompt="gitignore puzzle: I want [file/folder] ignored. My .gitignore line is [pattern]. git status still shows it: [paste]. git check-ignore -v [file] says [paste or 'nothing']. Was the file ever committed before the rule existed?">
+That last question is the answer 80% of the time — .gitignore can't un-track a file that's already
+committed (the fix is git rm --cached, then the rule works). check-ignore -v settles pattern debates
+instantly by naming the matching line. And if the file you're asking about is a SECRET that reached a
+remote: stop debugging patterns and rotate the credential first — the pattern discussion can wait, the
+leaked key can't.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://git-scm.com/docs/gitignore", title: "Git docs — gitignore pattern format (the authoritative grammar)", kind: "read" },
+    { href: "https://github.com/github/gitignore", title: "GitHub's collection of starter .gitignore files for every language", kind: "read" },
+    { href: "https://docs.github.com/en/code-security/secret-scanning/about-secret-scanning", title: "GitHub Docs — secret scanning (what the bots see)", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=HVsySz-h9r4", title: "Git command-line fundamentals (includes .gitignore) — Corey Schafer", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=HVsySz-h9r4" title="Git command-line fundamentals (includes .gitignore) — Corey Schafer" minutes={30} />
+
+<Takeaways
+  points={[
+    ".gitignore is a committed list of glob patterns naming files Git must never track — they disappear from git status and git add, keeping commits clean while the working folder stays as messy as real work requires.",
+    "Three families never get committed: dependencies (regenerable), build artifacts (derived from source), and secrets (history is forever). If a file is regenerable, machine-specific, or secret, it goes on the list — ideally before the first commit.",
+    "Pattern essentials: *.log, node_modules/ (trailing slash = directory), /root-only, ** for depth, !exception (after the rule it overrides). Debug any of it with git check-ignore -v.",
+    "The trap: .gitignore only screens UNTRACKED files. Already-committed files need git rm --cached (plus the rule) — and a committed SECRET needs rotation first, because deleting it later leaves it readable in every earlier snapshot. A pushed secret is a leaked secret.",
+    "For a tester: repo hygiene is testable. Check for a .gitignore and .env.example on new repos, run fresh-clone setup, and hunt history for secrets (git log --all -- .env, git grep for key patterns). A live credential found in history is a severity-critical bug — and a career-grade QA win.",
+  ]}
+/>
+
+<Complete xp={10} />
