@@ -1,0 +1,318 @@
+---
+title: "disk and memory: df, du, and free before the box fills up"
+summary: "Out-of-disk is one of the commonest environment bugs in QA: uploads fail, logs stop, builds break -- with errors that never say 'disk'. df -h shows how full each drive is, du -sh hunts what ate the space, free -h reads memory. Spot the disk-full bug class before users do."
+tags: ["linux-for-testers", "permissions-and-processes", "track-b"]
+updated: "2026-07-13"
+---
+
+<Hook>
+Here is a bug class that hides in plain sight: the machine runs out of **disk space**, and *nothing*
+says so directly. Instead the file upload fails with a cryptic write error, the app's logs simply stop
+mid-sentence, the build dies with 'cannot write output', the database refuses new rows, and a dozen
+features break at once in ways that look unrelated. A tester who does not know to check disk can burn
+a day chasing 'flaky' symptoms that all trace back to one full drive. Three commands cut through it:
+`df -h` shows how full each disk is (the first thing to run when a staging box acts possessed),
+`du -sh` hunts down *what* ate the space, and `free -h` does the same job for memory — the other
+finite resource that, when exhausted, gets processes killed by the system without a polite word.
+Out-of-disk and out-of-memory are two of the commonest environment bugs a QA meets on staging and CI,
+and they are also two of the easiest to *rule in or out* in ten seconds — if you know the three
+commands. This note makes you the person in the room who says 'wait, is the disk full?' and is right.
+</Hook>
+
+<Callout type="analogy">
+Disk and memory are **a kitchen's freezer and its countertop**, and they fail in tellingly different
+ways. The **freezer** is disk: long-term storage, and when it is packed solid you *cannot fit one more
+thing in* — the delivery just gets refused at the door. That refusal is what a full disk does to every
+program at once: uploads, logs, builds, database writes all hit 'no room' and fail, and the failures
+look unrelated because the freezer does not announce itself — each cook just finds nowhere to put
+their tray. The **countertop** is memory (RAM): working space for what you are actively cooking, wiped
+clean each night (a reboot). When the counter is full you cannot lay out a new dish, so the kitchen
+either shoves older prep into a back room to make room (that is **swap**, and it makes everything
+slow) or, if things get desperate, the head chef throws out whoever's ingredients are biggest to
+reclaim space — that is the **OOM killer** ending a process with no warning. `df` checks how full the
+freezer is, `du` walks in to find *what* is hogging the shelves, and `free` reads the countertop. Two
+different resources, two different flavours of disaster — and a tester who confuses them chases the
+wrong ghost.
+</Callout>
+
+## df -h: is the disk full?
+
+`df` means 'disk free', and the `-h` flag makes it **h**uman-readable (sizes in G and M instead of raw
+blocks). Run `df -h` and you get one row per filesystem — the columns that matter are **Size**,
+**Used**, **Avail**(able), and, above all, **Use%**. That last column is the headline: when a mount
+sits at 100% (or the ominous 99%), the disk is full and writes to it will fail. The **Mounted on**
+column tells you *which* directory tree lives on that disk — `/` is the root filesystem, but big
+systems often mount `/var`, `/home`, or a data volume separately, so a disk can be full even though
+another shows plenty of room. The tester's very first move when a staging box misbehaves in weird,
+write-shaped ways is `df -h`: it takes one second and either implicates the disk immediately (a mount
+at 100%) or clears it, letting you look elsewhere. Do not skip it because the error 'doesn't sound
+like disk' — disk-full errors almost never sound like disk.
+
+## du -sh: what ate the space?
+
+`df` tells you a disk is full; `du` ('disk usage') tells you **what filled it**. The pattern to
+memorise is `du -sh *` run inside a directory: **s** summarises (one total per item instead of listing
+every file within), **h** is human-readable, and `*` means 'each thing in this folder'. It prints a
+size next to each subdirectory and file, so you can see at a glance that `/var/log` is 40G or that one
+`node_modules` is eating half the drive. Then you `cd` into the biggest one and run it again, walking
+down the tree until you find the culprit — usually runaway logs, cached build artifacts, old Docker
+layers, or a forgotten pile of uploaded files. A gotcha worth knowing: `du` can be slow on huge trees
+(it actually walks them), and it may differ from `df` because of deleted-but-still-open files — a log
+that was `rm`-ed while a process still holds it open frees no space until the process closes it, which
+is its own classic disk-full head-scratcher.
+
+{/* IMAGE: a nearly-full disk-usage gauge or a storage bar at high percentage, or a packed freezer */}
+<HotspotImage
+  src="/notes/linux-for-testers/permissions-and-processes/disk-and-memory.jpg"
+  alt="A street recycling bin stuffed to overflowing: bottles and cans piled on its lid because the deposit slots are jammed full, litter collecting at its base, and a second overflowing bin behind it"
+  credit="Overflowing recycling bins, Haringey — Wikimedia Commons, CC BY-SA 2.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Bins_outside_the_College_of_Haringey,_Enfield_%26_North_East_London_(15367005846).jpg"
+  pins={[
+    { x: 58, y: 48, label: "The jammed slots = the Use% column at 100", desc: "A pin over a near-full percentage. The ideal image shows a usage figure at or near 100%, because Use% in df -h is the single number that implicates the disk. A mount at 99% or 100% means writes are failing right now; this is the first thing a tester reads when a box behaves in weird, write-shaped ways." },
+    { x: 30, y: 38, label: "The second bin behind = Mounted on, WHICH disk is full", desc: "A pin indicating a labelled volume or path. The photo should suggest that storage comes in separate compartments, mirroring how / , /var , and a data volume can be separate filesystems. A disk can be full while another shows plenty free, so the mount point tells you where the write is actually failing." },
+    { x: 63, y: 33, label: "The bottles piled on the lid = du drilling down to what ate it", desc: "A pin on the largest item in a breakdown. The ideal capture shows one clearly dominant chunk, standing in for du -sh finding the one directory -- runaway logs, build cache, old Docker layers -- that filled the disk. df says 'full'; du says 'this is what filled it', and the fix follows from the culprit." },
+    { x: 68, y: 88, label: "The litter on the pavement = the failure has no 'disk' label on it", desc: "A pin on an unrelated-looking error. The image should evoke a surprised or confused reaction, because a full disk surfaces as an upload failure, a truncated log, or a build write error -- none of which say 'disk'. This pin exists to teach the reflex: weird write-shaped failures, run df -h first." },
+    { x: 12, y: 48, label: "The bike racks beside = memory (free) is a different gauge entirely", desc: "A pin on a second, separate meter. The ideal photo distinguishes two resources, because memory (RAM, read with free -h) is the countertop and disk is the freezer -- confusing them sends you chasing the wrong ghost. Out-of-memory gets processes OOM-killed; out-of-disk refuses writes. Different gauge, different disaster." },
+  ]}
+/>
+
+<FlowAnimation
+  title="How a full disk becomes a dozen 'unrelated' bugs -- press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "The disk quietly fills", desc: "Over days, something writes without cleanup -- verbose logs, accumulating build artifacts, a table of uploads, old Docker images. No alarm sounds. Use% creeps from 80 to 95 to 99 to 100. Everything still works right up until the moment the disk has zero bytes free, and then, all at once, it does not." },
+    { label: "Every write starts failing at once", desc: "The kernel refuses new writes with ENOSPC -- 'No space left on device', Errno 28. But no single feature owns this error; it hits everything that writes: the app saving an upload, the logger appending a line, the build emitting a file, the database extending a table. A dozen features break in the same minute." },
+    { label: "The symptoms look unrelated and weird", desc: "The bug reports pour in and none of them mention disk: 'uploads return 500', 'logs just stopped', 'build fails with a write error', 'the database is throwing errors', 'the app is acting corrupted'. A tester chasing each one separately sees chaos. They share one invisible root cause, but nothing on the surface connects them." },
+    { label: "df -h names it in one second", desc: "Instead of chasing symptoms, you run df -h and read the Use% column. One mount at 100%. The whole mystery collapses into a single fact: the disk is full, and that is why everything that writes is failing. Ten seconds of the right command beats a day of chasing ghosts individually." },
+    { label: "du finds the culprit, you reclaim space", desc: "du -sh * from the full mount, drilling into the biggest directory, reveals what ate it -- say a 60G log directory. You truncate or rotate the logs (or clear the build cache, or prune old images), Use% drops, and every 'unrelated' symptom clears at once -- proof they were one bug. Then you fix the root cause so it cannot refill." },
+  ]}
+/>
+
+Here is the disk half in one session: check how full each drive is, then hunt down what filled the
+guilty one. Every line is real `df`/`du` output:
+
+<CodePlayground
+  language="bash"
+  title="Try it -- df to spot a full disk, du to find the cause"
+  code={`df -h
+# Filesystem      Size  Used Avail Use% Mounted on
+# /dev/root        79G    75G  0.5G  99% /            <- the smoking gun
+# tmpfs           7.8G     0  7.8G   0% /dev/shm
+# /dev/sdb1       197G   40G  148G  22% /data
+# Use% is the headline: / is at 99% -- writes there are failing RIGHT NOW.
+# Note /data on a SEPARATE disk is fine; only the root filesystem is full.
+
+# What filled / ? Drill down from a likely suspect, biggest-first:
+du -sh /var/* 2>/dev/null | sort -h | tail -5
+# 1.2G   /var/lib
+# 3.4G   /var/cache
+# 61G    /var/log            <- there it is: 61G of logs
+# du -sh summarises each item (s) in human sizes (h); sort -h orders by size.
+
+# Zoom into the guilty directory:
+du -sh /var/log/* | sort -h | tail -3
+#  980M  /var/log/nginx
+#  2.1G  /var/log/syslog
+#  57G   /var/log/app.log    <- one runaway log file ate the disk`}
+/>
+
+Now memory — `free -h` reads RAM the way `df` reads disk, and it explains the *other* resource-out
+disaster: the slowdown, the swap thrash, and the process killed without warning.
+
+<CodePlayground
+  language="bash"
+  title="Try it -- free to read memory, and spot the OOM risk"
+  code={`free -h
+#                total        used        free      shared  buff/cache   available
+# Mem:            15Gi        13Gi       220Mi        88Mi       1.8Gi       1.1Gi
+# Swap:          2.0Gi       1.9Gi        64Mi
+# Read 'available', NOT 'free': the kernel uses spare RAM for buff/cache and
+# hands it back on demand, so low 'free' is normal and healthy. Here
+# 'available' is only 1.1Gi and Swap is nearly full (1.9 of 2.0Gi) -- real
+# memory pressure. When available hits zero, the OOM killer picks a victim.
+
+# Who is eating the memory? (top by memory, non-interactive one-shot)
+ps aux --sort=-%mem | head -4
+# USER   PID  %CPU %MEM    VSZ    RSS TTY STAT START TIME COMMAND
+# sajan 3301  4.0 62.1 9200400 9.5G  ?  Sl  09:02 5:10 node --max-old-space
+# sajan 4102  0.5  8.8 2100300 1.4G  ?  Sl  09:05 0:40 chrome
+
+# The system log records OOM kills after the fact -- worth checking:
+dmesg -T | grep -i 'killed process'
+# [Mon Jul 13 09:31:02 2026] Out of memory: Killed process 3301 (node)`}
+/>
+
+<Term define={`Two finite resources a machine can exhaust. DISK is long-term storage measured by df -h, whose Use% column shows how full each filesystem is; when a mount hits 100%, writes fail with ENOSPC ('No space left on device', Errno 28) and unrelated-looking features break at once -- failed uploads, truncated logs, broken builds, database write errors. du -sh finds WHAT filled a disk by summarising each directory's size so you can drill down to the culprit. MEMORY (RAM) is fast working space measured by free -h; read the 'available' column, not 'free', because the kernel borrows idle RAM for cache and returns it on demand. When memory runs out the system pushes pages to swap (slow) and, in the worst case, the OOM (out-of-memory) killer terminates a process with no warning to reclaim space. For a tester these are two of the commonest environment bugs on staging and CI, and both are ruled in or out in seconds with df -h and free -h.`}>disk and memory</Term>
+
+<Callout type="tip">
+Make `df -h` the *first* command you run on any staging or CI box that is 'acting weird' —
+before reading a single application log. A full disk is the great impersonator: it masquerades as
+upload bugs, logging bugs, build bugs, and database bugs simultaneously, and none of them mention the
+disk. `df -h` either implicates a mount at 99–100% in one second or clears the disk and lets you move
+on. If it *is* full, `du -sh * | sort -h` from the guilty mount walks you straight to the cause. For
+memory, read `free -h`'s **available** column, not **free** — a low 'free' number panics beginners but
+is completely normal, because Linux deliberately uses spare RAM as cache and gives it back when asked.
+Real trouble is 'available' near zero plus swap filling up, which precedes the OOM killer ending
+something.
+</Callout>
+
+<FirstTime title="First time? Read all three gauges on your own machine">
+<StepChecklist
+  steps={[
+    { text: "Read df -h and find your fullest disk", detail: "Run df -h. Find the Use% column and your most-full filesystem. Note which directory it is 'Mounted on' (usually / ). Ask yourself: if this hit 100%, what would start failing? Everything that writes to that tree. That mental model is the whole point." },
+    { text: "Hunt the biggest folders with du", detail: "cd to your home directory and run du -sh * | sort -h to rank everything by size, largest last. The biggest item is probably a Downloads, a project's node_modules, or a cache. This is exactly how you would hunt a disk-full culprit on a server -- practise the drill where it is safe." },
+    { text: "Read free -h and find 'available'", detail: "Run free -h. Locate the 'available' column on the Mem line -- that, not 'free', is how much memory apps can actually still use. Notice buff/cache is large: that is the kernel using idle RAM as cache, which it returns on demand. Low 'free' is normal; low 'available' is the worry." },
+    { text: "Rank processes by memory", detail: "Run ps aux --sort=-%mem | head -5 to see your top five memory users. Recognise the shape: browsers and language runtimes usually top the list. On a staging box, a single process climbing this list over time is your memory-leak suspect." },
+    { text: "Connect a symptom to a gauge", detail: "Write one line each: what does df tell you when uploads fail? (Is the disk full?) What does free tell you when a process died for no reason? (Was it OOM-killed?) Building the reflex 'weird failure -> check the right gauge' is worth more than memorising columns." },
+  ]}
+/>
+Five minutes with three commands and you can now rule disk and memory in or out on any box — the exact triage that saves a wasted day.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "File uploads fail, or the app throws 'No space left on device' / Errno 28.",
+      fix: "The disk the app writes to is full. Run df -h and read Use% -- a mount at 99-100% confirms it. Find the cause with du -sh * | sort -h from that mount, drilling into the biggest directory (usually logs, caches, or accumulated uploads). Reclaim space by rotating or truncating logs, clearing build/Docker caches, or archiving old data -- then fix the root cause (log rotation, a cleanup job) so it cannot silently refill.",
+    },
+    {
+      symptom: "Logs suddenly stop, or a build dies with a vague write/output error.",
+      fix: "Same root cause wearing a different mask: the disk is full, so the process can no longer append to its log or emit build artifacts, and it fails in whatever way that code handles a failed write -- which is often unhelpfully vague. df -h first, every time. Truncated logs are an especially sneaky tell, because the very tool you would use to investigate (the log) is the thing that stopped when space ran out.",
+    },
+    {
+      symptom: "df says the disk is full but du can't find the missing space.",
+      fix: "Classic deleted-but-open-file trap: a large file (often a log) was removed with rm while a process still had it open, so the space is not freed until that process closes the handle -- and du, which walks the visible tree, cannot see the vanished file. Find the holder with lsof | grep deleted, then restart or signal that process to release the space. Until then the freed bytes stay invisibly locked.",
+    },
+    {
+      symptom: "A process dies with no error, or the system gets sluggish then kills something.",
+      fix: "Out of memory, not disk. Check free -h: 'available' near zero and Swap filling up means pressure; heavy swapping makes everything crawl. When memory is truly exhausted the kernel's OOM killer terminates a process to survive -- confirm with dmesg -T | grep -i 'killed process', which logs the victim after the fact. Fix by finding the memory hog (ps aux --sort=-%mem), addressing a leak, or giving the box more RAM.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Disk-full and out-of-memory hide behind symptoms that never name them — check the gauges here:
+
+- **Any 'weird' staging or CI box** — `df -h` FIRST, before app logs. A full disk imitates a dozen
+  unrelated bugs at once; ruling it in or out takes one second.
+- **Upload and export features** — these write files, so they are the first to break when disk runs
+  out. 'Upload returns 500' plus a full `df` is an open-and-shut case.
+- **Long-lived CI runners** — build caches, Docker layers, and old workspaces accumulate until the
+  runner's disk fills and every job starts failing at the write step. `du -sh` on the workspace and
+  Docker dirs finds it.
+- **Logging that stopped** — a truncated or frozen log is often the disk filling, not the app hanging;
+  the investigation tool went down with the ship.
+- **Processes dying 'for no reason'** — `free -h` and `dmesg | grep -i killed`: the OOM killer leaves a
+  fingerprint in the kernel log even when the app's own logs say nothing.
+
+Tester's habit: **when failures are many, write-shaped, and 'unrelated', suspect one full resource
+before you suspect a dozen bugs.** `df -h` and `free -h` collapse the mystery — one full disk or one
+exhausted memory explains the whole storm.
+</WhereToCheck>
+
+<WorkedExample title="the staging release where everything broke at 4pm">
+1. **The report:** at 16:02, three separate bug reports land within a minute — "image uploads are
+   returning 500", "the activity log page is blank", and "the nightly report export failed". A fourth
+   arrives: "signups are erroring". Four teams, four features, one minute. The instinct is to open four
+   investigations.
+2. **The tester resists that** and asks the question this note trains: *are these really four bugs, or
+   one?* Four unrelated features failing in the same minute is suspiciously coordinated — that pattern
+   smells like a shared resource, not four independent regressions.
+3. **They run one command on the staging box:** `df -h`. The root filesystem reads `Use% 100%`,
+   `Avail 0`. Every one of those features writes to disk — an uploaded image, a log line, an export
+   file, a new user row — and the disk has zero bytes free. One root cause, four masks.
+4. **They find the culprit with `du`:** `du -sh /var/log/* | sort -h` shows `app.log` at 58G. A debug
+   log level got left on in the last deploy, and the app had been writing verbose logs all afternoon
+   until the 79G root disk filled at 16:02 — the exact minute the reports started.
+5. **The immediate rescue** is to reclaim space: truncate the runaway log (`truncate -s 0 app.log`,
+   or rotate it) and confirm `df -h` drops back to a healthy Use%. The moment space returns, all four
+   'bugs' clear at once — the proof that they were always one.
+6. **The real fix is prevention:** turn the log level back down, add log rotation so no single file can
+   grow unbounded, and add a disk-usage alert at 85% so the next fill is caught *before* it becomes a
+   4pm outage. A regression check: verify logging config in the deploy checklist.
+7. **The tester's angle.** No application code was broken; every feature worked perfectly and would
+   have passed its own test in isolation. The bug lived in the *environment*, and only an environment
+   command — `df -h` — could see it. The skill was not fixing code; it was recognising that 'many
+   write-shaped failures at once' means 'check the disk', and then reading one gauge.
+8. **The lesson for a tester.** Simultaneous, unrelated-looking, write-shaped failures are the
+   signature of a full disk (or full memory). Before opening N investigations, run `df -h` and
+   `free -h` — one full resource is a far simpler explanation than N coincident bugs, and it is true
+   more often than you would think.
+</WorkedExample>
+
+<Callout type="mistake">
+Investigating each write-shaped failure as its own separate bug, and never checking the two gauges
+that would explain all of them at once. When uploads, logging, builds, and database writes fail
+together, the beginner opens four tickets and chases four stack traces — burning hours — because no
+single error says the word 'disk' or 'memory'. The whole trap is that a full disk (ENOSPC) and
+exhausted memory (the OOM killer) are *systemic*: they break everything that writes or allocates,
+simultaneously, wearing whatever error each unlucky feature happens to throw. The disciplined reflex
+costs ten seconds: on any 'everything is weird' box, run `df -h` and `free -h` *first*. Either a mount
+at 100% or 'available' near zero hands you the real, single root cause — or both come back healthy and
+you have genuinely ruled them out before spending real time on the application. One full resource is a
+simpler and more common explanation than a coincidence of many bugs.
+</Callout>
+
+<Quiz
+  question="On a staging box, uploads fail, logs stopped, and a build died with a write error -- all in the same minute. What is the fastest first move?"
+  options={[
+    "Open a separate bug investigation for each failing feature and read every stack trace",
+    "Run df -h and check the Use% column -- one full disk explains all three write-shaped failures at once",
+    "Reboot the machine; a fresh start usually clears intermittent issues",
+    "Roll back the last deploy, since three failures means the release was bad"
+  ]}
+  answer={1}
+  explain="Three write-shaped failures in the same minute is the signature of one exhausted resource, not three independent bugs -- and df -h reads the disk gauge in one second. A mount at 99-100% Use% means writes are failing with ENOSPC ('No space left on device'), which breaks uploads, logging, and builds simultaneously because all three write to disk, each surfacing whatever vague error its own code produces. Option 1 (four investigations) is the exact trap: hours spent chasing symptoms that share a single root cause no stack trace names. Option 3 (reboot) may briefly help if it clears temp files, but it neither diagnoses nor prevents the refill -- and if a runaway log is the cause, the disk fills right back up. Option 4 (roll back) is a guess that could be right (a deploy left debug logging on, say) but skips the ten-second confirmation; you roll back knowing WHY only after df -h shows the disk full and du finds the runaway file. Check the gauge first; act on what it says."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What does df -h show, and which column matters most?", back: "df -h ('disk free', human-readable) lists each filesystem with Size, Used, Avail, Use%, and Mounted on. Use% is the headline: 99-100% means the disk is full and writes fail. Mounted on tells you WHICH tree lives on that disk -- / , /var , or a data volume can be separate, so one can be full while another is empty." },
+    { front: "What does du -sh do and how do you hunt a disk hog?", back: "du -sh * ('disk usage', summarise, human-readable, each item) prints one size per file/folder in the current directory. Pipe to sort -h to rank by size: du -sh * | sort -h. Then cd into the biggest and repeat, walking down the tree until you find the culprit -- usually runaway logs, caches, or old artifacts." },
+    { front: "Reading free -h: why 'available' not 'free'?", back: "free -h shows total, used, free, buff/cache, and available memory. Read AVAILABLE -- it is what apps can actually still use. 'free' looks alarmingly low because Linux deliberately uses idle RAM as buff/cache and returns it on demand. Low 'free' is normal and healthy; low 'available' plus filling swap is real memory pressure." },
+    { front: "What is the OOM killer?", back: "When memory is truly exhausted, the kernel's Out-Of-Memory killer terminates a process (usually the biggest) with NO warning to reclaim RAM and keep the system alive. A process 'dying for no reason' plus low 'available' is the tell; confirm with dmesg -T | grep -i 'killed process', which logs the victim after the fact." },
+    { front: "Why do full-disk bugs look unrelated?", back: "A full disk (ENOSPC, Errno 28) breaks EVERYTHING that writes at the same moment -- uploads, logging, builds, database rows -- and no error says 'disk'; each feature throws its own vague message. So a dozen 'unrelated' bugs appear at once. df -h collapses them into one root cause: the disk is full." },
+    { front: "df says full but du can't find the space -- why?", back: "A deleted-but-still-open file: a big file (often a log) was rm-ed while a process still had it open, so the space is NOT freed until that process closes the handle -- and du, walking the visible tree, cannot see the deleted file. Find the holder with lsof | grep deleted and restart/signal it to release the space." },
+  ]}
+/>
+
+<Challenge>
+Practise the triage on your own machine. (1) Run `df -h` and write down your fullest filesystem's
+Use% and mount point; predict what would break first if it hit 100%. (2) Use `du -sh * | sort -h` in
+your home folder to find your single biggest directory — drill one level deeper into it with the same
+command. (3) Run `free -h` and identify 'available' vs 'free'; explain in one sentence why 'free' looks
+low even on a healthy machine. (4) Run `ps aux --sort=-%mem | head -5` and name your top memory user.
+(5) Finish by writing the two commands you will run *first*, in order, the next time a staging box is
+'acting weird' — and one sentence on why you run them before opening the app logs.
+</Challenge>
+
+<AskCommunity prompt="Disk/memory question: on [which box -- staging/CI/local] I'm seeing [symptom -- uploads failing / logs stopped / build write error / process killed / box is slow]. df -h shows [paste the fullest row: Use% and Mounted on]. free -h shows [paste the Mem line, especially 'available' and Swap]. I expected [what]. Is this a full disk (ENOSPC) or memory pressure (OOM), and how do I find the cause?">
+Paste the `df -h` row for the fullest mount (Use% and Mounted on) and the `free -h` Mem line
+(especially 'available' and Swap). Those two lines settle almost every disk/memory question: a mount
+near 100% means ENOSPC (find the cause with `du -sh * | sort -h`), while 'available' near zero plus
+filling swap means memory pressure (find the hog with `ps aux --sort=-%mem`). Say which box, so
+'works on mine' confusion is ruled out.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://man7.org/linux/man-pages/man1/df.1.html", title: "Linux man page -- df (report filesystem disk space usage)", kind: "read" },
+    { href: "https://man7.org/linux/man-pages/man1/du.1.html", title: "Linux man page -- du (estimate file and directory space)", kind: "read" },
+    { href: "https://www.linuxatemyram.com/", title: "Linux ate my RAM -- why 'free' looks low and 'available' is the number that matters", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=rrB13utjYV4", title: "Linux in 100 seconds — where df, du and free fit — Fireship", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=rrB13utjYV4" title="Linux in 100 seconds — where df, du and free fit — Fireship" minutes={2} />
+
+<Takeaways
+  points={[
+    "Out-of-disk is a top environment bug class and it never says 'disk': a full drive breaks uploads, logging, builds, and database writes all at once, each with its own vague error. df -h is the one-second reflex that names it via the Use% column.",
+    "df -h shows how full each filesystem is (watch Use% and Mounted on -- disks can be separate, so one is full while another is empty); du -sh * | sort -h then hunts down WHAT filled it, drilling into the biggest directory.",
+    "free -h reads memory -- but read the 'available' column, not 'free'. Low 'free' is normal because Linux uses idle RAM as cache and returns it on demand; the real warning is 'available' near zero plus filling swap.",
+    "When memory truly runs out the OOM killer terminates a process with no warning (confirm with dmesg | grep -i killed). A process 'dying for no reason' plus low available memory is out-of-memory, a different disaster from out-of-disk.",
+    "For a tester, many simultaneous write-shaped failures mean one exhausted resource, not many bugs. On any 'weird' staging or CI box, run df -h and free -h FIRST -- one full disk or one full memory is a simpler, commoner explanation than a coincidence of N failures.",
+  ]}
+/>
+
+<Complete xp={10} />

@@ -1,0 +1,314 @@
+---
+title: "ps, top, and kill: finding and stopping runaway processes"
+summary: "A stuck test process pins the CI runner, a port is already in use, an app won't die. ps aux plus grep finds the process, top and htop show what is eating CPU and memory, and kill (then kill -9 as a last resort) stops it. Plus zombies, and why kill -9 is the sledgehammer, not the default."
+tags: ["linux-for-testers", "permissions-and-processes", "track-b"]
+updated: "2026-07-13"
+---
+
+<Hook>
+Every running program on a Linux box is a **process** with a number — its **PID** — and testing life
+is full of moments when you need to find one, ask what it is doing, and sometimes make it stop. The
+port your app should bind to is 'already in use' because a crashed run never let go. A CI job hangs
+forever because a test spawned a browser that never closed. The staging box grinds to a halt and
+nobody knows which process ate all the memory. Three tools handle almost all of it: `ps` lists
+processes (usually as `ps aux | grep something` to find the one you want), `top` (or its nicer cousin
+`htop`) shows them live, sorted by who is hogging the CPU and memory, and `kill` sends a process the
+signal to shut down. The one trap for beginners is `kill -9` — the force-kill that feels satisfying
+and is exactly the wrong first move, because it denies the process any chance to clean up. Learn to
+find, watch, and *politely* stop processes, and 'the runner is stuck again' becomes a two-minute fix
+instead of a mystery reboot.
+</Hook>
+
+<Callout type="analogy">
+Think of the running system as **a busy restaurant kitchen**, and each process as **a line cook**.
+`ps aux` is walking in with a clipboard and taking a full roster: every cook (process), their ID
+badge (PID), which station they run, and how long they have been on shift. `top` is standing in the
+doorway watching *live* — who is sweating, who is idle, who is burning through ingredients (CPU) and
+counter space (memory) fastest, the list re-sorting every couple of seconds. And `kill` is the
+manager telling a cook to wrap up. The important part is *how* you tell them: the normal signal
+(`kill`, which sends **SIGTERM**) is 'please finish your current dish and clock out' — the cook saves
+their work, cleans their station, and leaves properly. `kill -9` (**SIGKILL**) is security dragging
+them out mid-motion — pans still on the fire, half-chopped onions, the station a mess for whoever
+comes next. Sometimes you need the bouncer. But you ask politely first, because a process yanked with
+`-9` leaves exactly the kind of mess — half-written files, orphaned locks — that turns into the *next*
+bug.
+</Callout>
+
+## ps: the roster, and finding one process in it
+
+`ps` on its own shows only your current shell's processes — nearly useless. The combination you will
+actually type, over and over, is `ps aux`: **a** (all users), **u** (user-readable columns), **x**
+(including processes not tied to a terminal, like background servers). It prints a table with a header
+row: `USER PID %CPU %MEM ... STAT ... TIME COMMAND`. The two columns you care about most are **PID**
+(the number you feed to `kill`) and **COMMAND** (what is actually running). But `ps aux` alone can
+list hundreds of lines, so the real move is to pipe it through `grep` to filter:
+`ps aux | grep node` shows only the lines mentioning node. One quirk to expect: the `grep` command
+itself often appears in its own results (grep is a process too, and its command line contains the word
+'node') — harmless, just ignore that self-match line.
+
+## top and htop: watching it live
+
+`ps` is a snapshot; `top` is a live feed. Run `top` and the screen refreshes every few seconds,
+processes sorted by CPU use with the heaviest at the top — which is exactly what you want when 'the
+box is slow' and you need to know *which* process is responsible. The header shows system-wide load,
+the `%CPU` and `%MEM` columns show each process's share, and pressing `q` quits (the same escape as
+most Linux full-screen tools). `htop` is the friendlier, colourful version — same idea, with scrolling
+and easier sorting — but it is not always installed, so know plain `top` as the one that is always
+there. For a tester the read is simple: a process sitting at 100%+ CPU is stuck in a loop or genuinely
+busy; a process whose `%MEM` keeps climbing over minutes is leaking memory — and a memory leak on a
+long-running staging service is a bug worth reporting with the `top` output attached as evidence.
+
+{/* IMAGE: a live server monitor or terminal running htop with CPU/memory bars, or a busy kitchen line */}
+<HotspotImage
+  src="/notes/linux-for-testers/permissions-and-processes/ps-top-kill.jpg"
+  alt="Inside a naval air traffic control tower: two controllers confer at a console of flight strips and keypads, a third works at radios behind, a green radar scope glows top-right, and the whole airfield of parked aircraft is visible through the windows"
+  credit="Air traffic controllers on duty in the tower, U.S. Navy — Wikimedia Commons, Public domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:US_Navy_021114-N-0226M-001_On_duty_in_the_base_air_traffic_control_tower,_Air_Traffic_Controller_2nd_Class_Daniel_Garza,_lower_left,_and_Air_Traffic_Controller_3rd_Class_Nicholas_Lennell,_lower_right,_discuss_aircraft_movement.jpg"
+  pins={[
+    { x: 15, y: 82, label: "The flight strips on the desk = the PID column", desc: "A pin over the PID column. The ideal screenshot shows a clear numeric process-id column, because the PID is the one piece of information every kill command needs. Testers learn to read across from a runaway COMMAND to its PID the way they read a row in any table -- the number is the handle you grab the process by." },
+    { x: 82, y: 8, label: "The radar scope = %CPU, the live view of who is where", desc: "A pin on the CPU-usage column. The image should show a process near the top with a high percentage, standing in for the 'box is slow, which process?' question. A value at or above 100% means a full core is busy -- often a stuck loop or a genuinely heavy job, and the first thing to identify when performance complaints arrive." },
+    { x: 55, y: 5, label: "The crowded apron outside = %MEM, how full the field is", desc: "A pin on the memory column. The ideal capture shows memory figures per process, because a %MEM that climbs steadily over minutes on a long-running service is the visible signature of a memory leak -- a real, reportable bug. Testers attach this column, watched over time, as evidence rather than a hunch." },
+    { x: 75, y: 92, label: "The radio to one aircraft = COMMAND, and kill's one target", desc: "A pin on the command/name column. The photo should show full command lines, because COMMAND is how you confirm you found the RIGHT process before killing it -- node server.js is your app, but a similarly named editor or grep is not. Killing by name without confirming the command line is how the wrong process dies." },
+    { x: 40, y: 60, label: "The controllers conferring = STAT, deciding what state it's in", desc: "A pin on the process-state column. The ideal screenshot includes a state code such as R (running), S (sleeping), or Z (zombie/defunct). A Z means the process has already exited but its parent has not collected it -- you cannot kill a zombie because it is already dead; you address its parent. This pin exists to demystify the state everyone eventually meets on CI." },
+  ]}
+/>
+
+<FlowAnimation
+  title="From 'port already in use' to a clean restart -- press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "The symptom: EADDRINUSE, port 3000", desc: "You start your app and it refuses: 'address already in use'. A previous run crashed or was closed badly and its process is still alive, still holding port 3000. Nothing is corrupt -- an old process simply never let go of the port, and a new one cannot bind to a port that is taken." },
+    { label: "Find the culprit with ps and grep", desc: "Run ps aux | grep node (or lsof -i :3000 to find who holds the port). The output lists the leftover process with its PID and command line. You confirm it is the right one by reading the COMMAND column -- node server.js, not some unrelated tool that happens to match your grep." },
+    { label: "Ask it politely: kill PID", desc: "Send the default signal with kill and the PID -- that is SIGTERM, signal 15, meaning 'shut down cleanly'. A well-behaved process releases the port, flushes its logs, removes its lock file, and exits. Give it a moment. Most processes stop here, cleanly, and you never need anything stronger." },
+    { label: "If it ignores you: kill -9 PID", desc: "A truly stuck process may ignore SIGTERM. Only now escalate to kill -9 (SIGKILL), which the kernel enforces and the process cannot catch or ignore. It dies instantly -- but with no chance to clean up, so it may leave a stale lock or a half-written file behind. This is the last resort, not the reflex." },
+    { label: "Confirm and restart clean", desc: "Re-run ps aux | grep node -- the line is gone, the port is free. Start your app again and it binds to 3000. You resolved 'port in use' in two minutes without rebooting the machine, and you learned the escalation ladder: find, ask politely, force only if it refuses." },
+  ]}
+/>
+
+Here is the find-it half in one session — list processes, filter to the one you want, and read the
+columns that matter. Every line is real `ps`/`top` output:
+
+<CodePlayground
+  language="bash"
+  title="Try it -- find a process with ps aux and grep"
+  code={`ps aux | head -1
+# USER   PID  %CPU %MEM    VSZ   RSS TTY  STAT START   TIME COMMAND
+# (the header: PID is the id, %CPU and %MEM are the hogs, COMMAND is what it is)
+
+ps aux | grep node
+# sajan  4821  0.3  1.2 1198400 98200 ?    Sl   09:02   0:11 node server.js
+# sajan  5190  0.0  0.0   4380   820 pts/1 S+   09:14   0:00 grep node
+# The first line is your app (PID 4821). The second is grep matching ITSELF --
+# ignore it. Read the COMMAND column to be sure you found the right process.
+
+# Just the PID, no noise (handy in scripts):
+pgrep -f server.js
+# 4821
+
+# Who is holding port 3000? (the 'address already in use' culprit)
+lsof -i :3000
+# COMMAND  PID  USER  FD  TYPE  DEVICE   SIZE/OFF NODE NAME
+# node    4821 sajan  22u IPv4  0x1a2b3c    0t0   TCP  *:3000 (LISTEN)`}
+/>
+
+Now the stop-it half — `top` to watch live, then the escalation ladder from a polite `kill` to the
+force-kill you save for last. Watch the STAT column for the zombie:
+
+<CodePlayground
+  language="bash"
+  title="Try it -- watch with top, then stop with kill"
+  code={`top
+# top - 09:20:14 up 2 days,  3:11,  1 user,  load average: 2.90, 1.44, 0.98
+# Tasks: 214 total,   2 running, 211 sleeping,   1 zombie
+#   PID USER   %CPU %MEM     TIME+ COMMAND
+#  4821 sajan  99.7  1.2   1:40.11 node        <- pinning a full core
+#  3301 sajan   0.3 18.4   0:55.20 chrome      <- eating 18% of memory
+# Press q to quit top. (Sorted by CPU, heaviest first, refreshes live.)
+
+# Polite stop first -- default kill sends SIGTERM (signal 15): 'clean up and exit'
+kill 4821
+# (no output) -- give it a second, then confirm:
+ps aux | grep 4821
+# (gone -- it shut down cleanly, released the port, flushed its logs)
+
+# A process that IGNORES SIGTERM and stays stuck -- escalate to SIGKILL:
+kill -9 5677
+# (dies instantly, cannot catch the signal -- but no cleanup: may leave a
+#  stale lock file or half-written output. Last resort, not the default.)
+
+# A zombie (STAT Z, 'defunct') cannot be killed -- it is already dead. You
+# signal its PARENT to reap it, or the parent's exit lets init clean it up:
+ps aux | grep defunct
+# sajan 6002  0.0  0.0  0  0 ?  Z  09:18  0:00 [node] <defunct>`}
+/>
+
+<Term define={`A process is a running program the kernel tracks by a unique number, its PID (process id). ps lists processes -- 'ps aux' shows all of them with columns including PID, %CPU, %MEM, STAT (state), and COMMAND. top and htop show the same live, sorted by CPU or memory. kill sends a process a SIGNAL: the default is SIGTERM (15), a polite 'shut down cleanly' the process can catch to flush files and release ports; SIGKILL (kill -9) is enforced by the kernel and cannot be caught, so it stops the process instantly but with no chance to clean up. A zombie (state Z, '<defunct>') is a process that has already exited but whose parent has not yet collected its exit status -- it holds no resources and cannot be killed, because it is already dead; you address its parent. For a tester these are the tools for stuck CI runners, ports 'already in use', and finding what is eating a staging box's CPU or memory.`}>processes and signals</Term>
+
+<Callout type="tip">
+The escalation ladder, in order, is the whole discipline: **find** (`ps aux | grep name`, or `pgrep`
+for just the PID, or `lsof -i :PORT` for who holds a port) → **watch if unsure** (`top`, sorted by
+CPU, `q` to quit) → **ask politely** (`kill PID` sends SIGTERM; wait a few seconds) → **force only if
+it refuses** (`kill -9 PID`). Reach for `-9` last, not first: a normal `kill` lets the process release
+ports, flush logs, and delete lock files, while `-9` yanks it mid-motion and the mess it leaves — a
+stale `.lock`, a half-written report, a database in an odd state — is a genuine source of the *next*
+flaky failure. And when you cannot find the PID, `top` sorted by CPU (or `M` inside top to sort by
+memory) tells you the hog by watching, no guessing required.
+</Callout>
+
+<FirstTime title="First time? Start something, find it, stop it">
+<StepChecklist
+  steps={[
+    { text: "Start a harmless long-running process", detail: "In one terminal run: sleep 600 (it just waits ten minutes doing nothing). Leave it running. You now have a known process to hunt for -- you know exactly what it is, so you can safely practise finding and killing it." },
+    { text: "Find it with ps and grep", detail: "In another terminal run ps aux | grep sleep. Read the line: note the PID (the number after your username) and the COMMAND (sleep 600). Notice the extra 'grep sleep' line matching itself -- learn to ignore that self-match now, so it never confuses you later." },
+    { text: "Watch the system live with top", detail: "Run top, look at the %CPU and %MEM columns and which process sits highest, then press q to quit. If htop is installed, try it too -- same information, friendlier layout. The goal is comfort reading a live process list, not memorising every column." },
+    { text: "Stop it politely, then confirm", detail: "Run kill PID with the sleep's PID. Back in the first terminal, 'sleep 600' has ended -- the default SIGTERM told it to stop and it obeyed. Run ps aux | grep sleep again to confirm the line is gone. This is the everyday, correct way to stop a process." },
+    { text: "Feel the difference of kill -9", detail: "Start another sleep 600, find its PID, and this time run kill -9 PID. It also stops -- but understand what you just did: SIGKILL gave it no chance to clean up. On a real app that means possible stale locks or half-written files. Now you know why -9 is the last rung, not the first." },
+  ]}
+/>
+Five minutes and you have found a process three ways, watched the system live, and stopped one both politely and forcibly — the entire toolkit of this note.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "The app won't start: 'address already in use' / EADDRINUSE on the port.",
+      fix: "A previous run crashed or was closed badly and its process still holds the port. Find who has it with lsof -i :3000 (or ps aux | grep yourapp), confirm the COMMAND is really the leftover process, then kill PID -- the polite SIGTERM makes a well-behaved process release the port. Re-check with lsof that the port is free, then start again. Rebooting the whole machine works too but is the sledgehammer for a one-process problem.",
+    },
+    {
+      symptom: "A CI job hangs forever and the runner never frees up.",
+      fix: "A test spawned a child process -- a browser, a dev server, a database -- that never exited, so the job waits on it indefinitely. On the runner, ps aux | grep chrome (or node, or whatever the test launches) finds the orphan; kill its PID to unstick the job. The real fix belongs in the test: ensure teardown closes what setup opened (driver.quit(), server.close()). Orphaned child processes are the classic 'stuck CI' cause.",
+    },
+    {
+      symptom: "kill PID does nothing -- the process just won't die.",
+      fix: "SIGTERM (the default kill) can be caught or ignored, and a wedged process may be stuck in a state where it never handles it. First confirm it is really still there (ps aux | grep PID) and not a zombie (see below). If it is a live, stuck process, escalate to kill -9 PID (SIGKILL), which the kernel enforces and the process cannot ignore. Accept that -9 skips cleanup, so check afterwards for leftover lock files or partial output.",
+    },
+    {
+      symptom: "A process shows as <defunct> or STAT Z and refuses to die no matter what.",
+      fix: "That is a zombie: it has already exited, but its parent process has not collected its exit status, so a dead entry lingers in the table. You cannot kill something already dead -- kill and kill -9 both do nothing to a zombie. The cure is the PARENT: find it (ps shows the PPID), and signal or restart the parent so it reaps the child, or let the parent exit so init adopts and cleans up the zombie. A few zombies are harmless; thousands mean a buggy parent that never reaps its children.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Process problems show up in a handful of tester-familiar situations:
+
+- **'Port already in use' on local or CI** — a leftover process from a crashed run holds the port.
+  `lsof -i :PORT` names it; a polite `kill` frees it.
+- **Hanging CI jobs** — a test opened a browser, server, or DB it never closed. `ps aux` on the runner
+  finds the orphan; the durable fix is teardown in the test.
+- **'The staging box is slow'** — `top` sorted by CPU (heaviest first) or by memory (press `M`) names
+  the hog in seconds, turning a vague complaint into a specific process.
+- **Suspected memory leaks** — a long-running service whose `%MEM` in `top` climbs steadily over
+  minutes is leaking; capture it over time as evidence for the bug report.
+- **Zombie pile-ups** — many `<defunct>` entries mean a parent process that never reaps its children;
+  a real bug in the parent, not something you fix by killing the zombies.
+
+Tester's habit: **when something is stuck, slow, or won't restart, name the process before you touch
+it.** `ps aux | grep` or `top` turns 'it's broken' into 'PID 4821, node server.js, pinning a core' —
+and a named process is a diagnosable one.
+</WhereToCheck>
+
+<WorkedExample title="the CI runner that got slower every single day">
+1. **The report:** "Our nightly Selenium suite takes 40 minutes now; a month ago it took 12. Same
+   tests, same machine. And sometimes a job just hangs until it times out." The team blames the tests
+   getting 'bigger', but the growth is too steep for that.
+2. **The tester logs into the runner mid-suite** and runs `top`. The load average is enormous and the
+   process list is startling: **dozens of `chrome` processes**, many idle at 0% CPU but each holding a
+   chunk of memory, plus a scattering of `<defunct>` entries in state `Z`.
+3. **They count them** with `ps aux | grep chrome | wc -l` and get 71. A suite that runs a handful of
+   browsers at a time should never have 71 of them alive at once. These are not this run's browsers —
+   they are the *accumulated corpses* of previous runs.
+4. **The pattern clicks.** Each test opens a ChromeDriver session; when a test fails or errors before
+   teardown, `driver.quit()` never runs, so that browser process is orphaned and lives on. Night after
+   night, the leftovers pile up, each one eating memory and swap until the whole machine thrashes and
+   every process — including the current tests — crawls. The occasional hang is a new browser waiting
+   on a resource the zombies are hoarding.
+5. **The immediate rescue** is exactly this note's toolkit: `pkill chrome` (kill all the leftover
+   browsers by name) — politely first — frees the memory and the runner speeds back up. But that is a
+   mop, not a fix.
+6. **The real fix is in the test framework:** put `driver.quit()` in an `@AfterMethod` / `finally`
+   / fixture teardown so it runs *even when the test fails*, and add a CI pre-step that kills stray
+   browser processes before the suite starts, so one bad night cannot poison the next.
+7. **The tester's angle.** No test *assertion* was failing — the suite was 'passing', just slower and
+   slower. Only looking at the *processes* on the machine revealed the leak. Performance decay plus
+   accumulating processes is a signature that setup is creating something teardown is not destroying.
+8. **The lesson for a tester.** When a long-lived machine degrades over time, don't just read test
+   output — read the process list. `ps aux | grep` counted the leak, `top` showed its effect, and a
+   polite `pkill` bought time while the teardown bug got fixed. Orphaned child processes are one of the
+   most common reasons CI 'just gets slower'.
+</WorkedExample>
+
+<Callout type="mistake">
+Making `kill -9` your reflex — the muscle memory of 'it won't die, dash-nine it'. `kill -9` (SIGKILL)
+is the one signal a process cannot catch, which is exactly why it is dangerous: it gives the process
+zero chance to flush its buffers, release its ports cleanly, delete its lock files, or leave its data
+in a consistent state. Force-kill a database or a file-writing app and you can leave a stale `.lock`
+that blocks the next start, a half-written export that fails validation, or corrupted state that
+becomes tomorrow's flaky bug — and now you are debugging a problem *you* created. The correct order is
+a plain `kill` first (SIGTERM asks nicely; most processes obey within a second or two), a short wait,
+and only *then* `-9` for the genuinely wedged. And never `-9` a zombie: it is already dead, so you are
+firing at a corpse — go find and fix its parent instead.
+</Callout>
+
+<Quiz
+  question="Your app won't start: 'port 3000 already in use'. A leftover process from a crashed run holds it. What is the correct sequence?"
+  options={[
+    "Immediately reboot the whole machine to clear everything",
+    "Run kill -9 on the first PID you see, since force is fastest",
+    "Find the process (lsof -i :3000 or ps aux | grep yourapp), confirm the COMMAND, kill PID (polite SIGTERM), verify the port is free, then start",
+    "Change your app to use a different port every time so it never collides"
+  ]}
+  answer={2}
+  explain="The disciplined path is find, confirm, ask politely, verify. lsof -i :3000 (or ps aux | grep yourapp) names the leftover process and its PID; reading the COMMAND column confirms you found the RIGHT one before acting. A plain kill PID sends SIGTERM -- 'shut down cleanly' -- which a well-behaved process obeys, releasing the port and flushing its state. Then you verify the port is actually free and start fresh. Option 1 (reboot) is the sledgehammer: it works but is wildly disproportionate to one stray process and disrupts everything else on the box. Option 2 (kill -9 first) skips the polite signal and forfeits cleanup, risking stale locks or half-written files -- SIGKILL is the last rung, used only when SIGTERM is ignored. Option 3 (dodge with random ports) hides the leak instead of fixing it and creates new problems (firewalls, configs, other tools expecting 3000). The skill is the escalation ladder: name it, ask nicely, force only if it refuses."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What does 'ps aux | grep name' do, and why the extra grep line?", back: "ps aux lists ALL processes with PID, %CPU, %MEM, STAT, and COMMAND; piping to grep filters to lines mentioning 'name'. The grep command itself appears in its own output (grep is a process whose command line contains 'name') -- a harmless self-match; ignore that line. Use pgrep -f name to get just the PID with no noise." },
+    { front: "top vs ps -- what is each for?", back: "ps is a one-time SNAPSHOT of processes. top is a LIVE feed, refreshing every few seconds, sorted by CPU (heaviest first) -- press M to sort by memory, q to quit. Use ps to find and script against a known process; use top when the box is slow and you need to see which process is the hog right now." },
+    { front: "kill vs kill -9 -- SIGTERM vs SIGKILL", back: "Plain kill PID sends SIGTERM (signal 15): 'shut down cleanly' -- the process CAN catch it to flush files, release ports, and remove locks. kill -9 PID sends SIGKILL: the kernel enforces it, the process CANNOT catch it, so it dies instantly with NO cleanup. Always try plain kill first; use -9 only for a process that ignores it." },
+    { front: "What is a zombie process (STAT Z / <defunct>)?", back: "A process that has already EXITED but whose parent has not yet collected its exit status, leaving a dead entry in the process table. It holds no CPU or memory and CANNOT be killed (it is already dead -- kill and kill -9 do nothing). The cure is the PARENT: signal or restart it so it reaps the child, or let it exit so init cleans up." },
+    { front: "How do you find which process holds a port?", back: "lsof -i :3000 lists the process (COMMAND, PID, USER) listening on that port -- the fix for 'address already in use'. Alternatively ss -ltnp or netstat -ltnp show listening sockets with their PIDs. Once you have the PID, a polite kill usually frees the port." },
+    { front: "How does top reveal a memory leak?", back: "Watch a long-running process's %MEM column over minutes: if it climbs steadily and never comes back down, the process is leaking memory. On a staging service that eventually exhausts RAM and thrashes or gets OOM-killed. Capture the climbing %MEM over time as evidence for the bug report -- it is real and reproducible, not a hunch." },
+  ]}
+/>
+
+<Challenge>
+Practise the full ladder safely. (1) Run `sleep 600` in one terminal; in another, find it three ways:
+`ps aux | grep sleep`, `pgrep sleep`, and by watching `top`. (2) Stop it with a polite `kill PID` and
+confirm with `ps` that it is gone. (3) Start another, and this time force it with `kill -9` — then
+write one sentence on what cleanup that process was denied. (4) Open `top`, press `M` to sort by
+memory, and identify the biggest memory user on your machine; press `q` to exit. (5) Finish with the
+escalation ladder in your own words, four steps: find, watch, ask politely, force — and one sentence
+on when `-9` is actually justified.
+</Challenge>
+
+<AskCommunity prompt="Process question: I have a process that is [stuck / holding a port / eating CPU or memory / showing as defunct]. ps aux | grep [name] shows [paste the line -- include PID, STAT, and COMMAND]. I tried [kill PID / kill -9 PID / nothing yet] and got [what happened]. I want to [free the port / unstick CI / stop the hog]. What is the right next step?">
+Paste the actual `ps` line (PID, STAT, and the full COMMAND) and say what you already tried. Most
+process questions resolve from those two facts: the STAT column tells whether it is a live process
+(kill it, politely first) or a zombie (address the parent instead), and the COMMAND confirms you are
+about to stop the right thing. If it is a port issue, add the `lsof -i :PORT` output.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://man7.org/linux/man-pages/man1/ps.1.html", title: "Linux man page -- ps (options and output columns)", kind: "read" },
+    { href: "https://man7.org/linux/man-pages/man1/kill.1.html", title: "Linux man page -- kill and signals (SIGTERM, SIGKILL)", kind: "read" },
+    { href: "https://htop.dev/", title: "htop -- the friendlier interactive process viewer", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=e7BufAVwDiM", title: "Bash scripting full course — processes, ps and kill included — linuxhint", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=e7BufAVwDiM" title="Bash scripting full course — processes, ps and kill included — linuxhint" minutes={180} />
+
+<Takeaways
+  points={[
+    "Every running program is a process with a PID. ps aux lists them (pipe to grep to find one); top and htop show them live, sorted by CPU or memory -- the tools for 'port in use', hung CI, and 'the box is slow'.",
+    "Finding is the first move: ps aux | grep name (ignore grep's self-match), pgrep -f name for just the PID, lsof -i :PORT for who holds a port. Confirm the COMMAND column before acting on a PID.",
+    "kill sends SIGNALS. Plain kill = SIGTERM (15), a polite 'clean up and exit' the process can honour; kill -9 = SIGKILL, kernel-enforced and uncatchable, so it stops instantly but skips all cleanup. Ask politely first, force last.",
+    "A zombie (STAT Z, <defunct>) is already dead and cannot be killed -- it is waiting for its parent to reap it. Fix the PARENT (restart or signal it), don't fire -9 at the corpse. A pile of zombies means a buggy parent.",
+    "For a tester, orphaned child processes are the classic cause of stuck and slow CI: setup opens a browser/server/DB that teardown never closes. Read the process list, not just test output -- and put quit/close in teardown that runs even on failure.",
+  ]}
+/>
+
+<Complete xp={10} />

@@ -1,0 +1,333 @@
+---
+title: "Variables, ifs, and loops in bash"
+summary: "Bash variables, quoting, if [ ] tests, for/while loops, and exit codes via $? — the same building blocks as Python and Java, wearing a much scrappier costume, and the actual language every CI pipeline speaks."
+tags: ["linux-for-testers", "bash-scripting-for-qa", "track-b"]
+updated: "2026-07-13"
+---
+
+<Hook>
+You already know variables, ifs, and loops. You wrote hundreds of them in Python and Java back in
+Modules 6 through 9. So here's the annoying part: bash has all three too, and it will punish you for
+assuming they work the same way. `VAR=value` looks like assignment. It is assignment — right up until
+you put a space near the `=` and bash decides you meant something else entirely. An `if` statement
+that looks perfectly reasonable will blow up with `unary operator expected` the first time a variable
+is empty. And the thing that actually decides whether your test passed or failed isn't a return value
+or a thrown exception — it's a lonely two-character variable, `$?`, that vanishes the instant you run
+another command. This note is not "loops, but scarier." It's the dialect every CI pipeline, cron job,
+and Docker entrypoint speaks, and once you're fluent, you'll read scripts other people are terrified
+of.
+</Hook>
+
+<Callout type="analogy">
+Bash is what happens when a language is built entirely out of running other programs and checking how
+they felt about it. In Python, `if user_exists:` asks a boolean a direct question. In bash, `if [ -f
+myfile.txt ]` is secretly running a tiny program called `test` (or its `[` alias) and asking "did you
+exit successfully?" Every single command you've ever run — `ls`, `curl`, `grep`, your own script — has
+an opinion when it finishes, expressed as a number between 0 and 255. Zero means "went fine." Anything
+else means "something's wrong," and the exact number is the command's way of being specific about
+*how* wrong. Bash's `if` doesn't evaluate truthiness the way Python does — it checks THIS exit
+opinion. Once that clicks, `if`, `&&`, `||`, and `while` all stop looking like magic and start looking
+like one idea, reused four ways.
+</Callout>
+
+## Variables: no spaces, no types, no mercy
+
+**Declaring a variable** in bash is `NAME=value` — no `let`, no `var`, no type. So far, easier than
+Python. The trap: `NAME = value`, with spaces around the `=`, does NOT assign anything. Bash sees
+`NAME`, treats it as a command name, and fails with `NAME: command not found` because there is no
+program called `NAME` on your machine. This single space is responsible for more first-hour bash rage
+than everything else in this note combined. The rule burned into memory: **no spaces touching the
+equals sign, ever**, when assigning.
+
+**Reading a variable** uses `$NAME` or `${NAME}` — the braces version is the same value, just with
+clearer boundaries when text follows immediately after (more on that in the CodePlayground). Unlike
+Python or Java, bash variables have no declared type: `COUNT=5` and `NAME=sajan` are both just text
+internally. Arithmetic needs its own syntax, `$(( COUNT + 1 ))`, because plain `$COUNT + 1` would just
+paste the digit "5" next to a literal " + 1" as text — bash doesn't know you meant math unless you
+say so explicitly.
+
+**Quoting is not optional politeness — it changes behaviour.** `echo $MSG` with an unquoted variable
+lets bash run *word splitting*: if `MSG` contains spaces, each chunk becomes a separate argument, and
+things like multiple spaces collapse into one. `echo "$MSG"` keeps it as a single value, spaces and
+all — exactly like Python's f-strings never needing this warning, because Python never re-splits a
+string just because you printed it. If you remember one habit from this section, make it this one:
+**quote your variables unless you have a specific reason not to.** Unquoted variables are how "file
+name with spaces.txt" becomes four separate arguments to whatever command you just ran.
+
+<HotspotImage
+  src="/notes/linux-for-testers/bash-scripting-for-qa/variables-ifs-and-loops.jpg"
+  alt="A Bengali lunch laid out: a plate of rice ringed by six small bowls, each holding exactly one dish — fish curry, dal, egg curry, chutney, sweets — plus a glass of water, everything prepped and named before the meal begins"
+  credit="A traditional Bengali lunch — Wikimedia Commons, CC BY-SA 4.0"
+  pins={[
+    { x: 15, y: 35, label: "Each bowl holds ONE thing = VAR=value, no spaces, one value per name", desc: "The ideal photo shows this line with zero whitespace touching the = — a visual anchor for the single most common first-week bash typo. A caption or highlight box on this exact line would make the 'no spaces' rule impossible to miss." },
+    { x: 10, y: 62, label: "The dal ladled onto rice = the quoted variable, contents used verbatim", desc: "Shows the double quotes wrapped tightly around $VAR, ideally in a line that would behave DIFFERENTLY unquoted (a value containing a space). The image should make quoting look like a deliberate choice, not decoration." },
+    { x: 50, y: 78, label: "Taste before serving = the if [ ] test", desc: "The ideal frame shows if [ -f somefile ] or if [ \"$COUNT\" -gt 0 ] with visible space after [ and before ] — spacing that bash actually requires. Testers scanning this image should be able to see that [ is a command, not decorative punctuation." },
+    { x: 52, y: 50, label: "Going around the plate bowl by bowl = the for loop", desc: "Shows the for...in...do structure on one line, ideally followed by an indented body and a closing done — enough to visually map bash's loop shape against the Python for/Java for-each the learner already knows." },
+    { x: 88, y: 45, label: "The water glass, full or empty = echo $?, the 0-or-1 verdict", desc: "The output pane shows a command running, then echo $? printed immediately after showing 0 (success) — ideally a second example further down showing a failed command followed by a non-zero code, so both outcomes are visible in one image." },
+  ]}
+/>
+
+## if [ ]: the brackets ARE a command
+
+**Writing a condition** in bash looks deceptively like Python's `if x:` — but `[ ]` (or its friendlier
+cousin `[[ ]]`) is not syntax, it's a program named `test` being invoked with square brackets as its
+alias. That's why spacing inside the brackets is mandatory: `[ -f file ]` needs a space after `[` and
+before `]`, because they're separate arguments to a command, not decorative punctuation. Forget the
+space and bash tells you `[: missing ']'` — annoying, but at least it tells you.
+
+**Common tests you'll actually use, constantly:** `-f path` (is this a regular file?), `-d path` (is
+this a directory?), `-z "$VAR"` (is this string empty?), `-n "$VAR"` (is this string non-empty?), `=`
+and `!=` for string equality, and `-eq`, `-ne`, `-gt`, `-lt`, `-ge`, `-le` for numeric comparison
+(bash's `[ ]` doesn't reliably support `<` and `>` for numbers — those are reserved for redirecting
+files inside `[ ]`, another landmine). The newer `[[ ]]` form is more forgiving: it allows `<` and `>`
+for numeric and string comparisons and handles unquoted empty variables without exploding. Most
+teams use `[[ ]]` in scripts and `[ ]` only when they need strict POSIX portability (`/bin/sh`, not
+bash).
+
+**The empty-variable trap is the single most common `if` failure.** `if [ $STATUS = "ok" ]` looks
+fine until `$STATUS` is empty — then bash expands it to nothing, and the line becomes `if [ = "ok" ]`,
+which is a syntax error (`unary operator expected`), not a false condition. The fix is always the
+same reflex: quote the variable. `if [ "$STATUS" = "ok" ]` expands the empty case to `if [ "" = "ok"
+]`, which is a perfectly valid — and correctly false — comparison.
+
+## for and while: two loops, same shapes you already know
+
+**`for` loops over a list** — files, words, command output — one item per pass, exactly like Python's
+`for x in items:`. The bash shape is `for x in item1 item2 item3; do ... done`. Swap the literal items
+for `$(command)` and you're looping over a command's output instead — `for f in $(ls *.log); do ...
+done` runs the body once per matching filename (though for real scripts, `for f in *.log; do` without
+`ls` is the safer idiom — it doesn't break on filenames with spaces).
+
+**`while` loops on a condition**, same shape as Java's `while (condition) { }`: `while [ condition ];
+do ... done`. The one bash-specific pattern worth memorizing now because you'll use it constantly
+later: `while read -r line; do ... done < file.txt` reads a file line by line, which is how bash
+scripts process logs, CSVs, and command output without loading the whole thing into memory first.
+
+<FlowAnimation
+  title="How bash decides an if — press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "1. Command runs: curl a URL", desc: "A real program executes — say, curl checking a health endpoint. Bash doesn't care what it printed to the screen; it's watching for one specific thing when the program finishes." },
+    { label: "2. The command exits with a number", desc: "Every process that ends hands the shell a number from 0 to 255 — its exit code. 0 always means success. Any other number means 'something went wrong,' and the specific number is often a hint about what." },
+    { label: "3. Bash stores it in $?", desc: "The very next thing bash does is remember that number in the special variable $?. It's overwritten by the NEXT command that runs — so if you want to check it, you check it immediately, before running anything else, even an echo for debugging." },
+    { label: "4. if [ ] asks: was that exit code zero?", desc: "if some_command; then ... runs the test implicitly: it checks whether some_command's own exit code was 0. if [ -f file ] is the same idea, one layer down — [ is itself a command, and its exit code (0 or 1) is what if is actually reading." },
+    { label: "5. Bash branches on the answer", desc: "Exit code 0 -> the then branch runs. Non-zero -> else runs (or nothing, if there's no else). This is the ENTIRE mechanism behind if in bash — no booleans, no truthiness, just 'did the last relevant command report success?'" },
+  ]}
+/>
+
+Here's variables, quoting, and the empty-variable trap, all runnable — read the comments, they show
+you the exact output each line produces:
+
+<CodePlayground
+  language="bash"
+  title="Run it — variables, quoting, and word splitting"
+  code={`# ASSIGNMENT -- no spaces around =
+NAME=sajan
+GREETING="hello there"
+echo $NAME
+# hello there? No -- prints: sajan
+
+# THIS FAILS ON PURPOSE (commented out so the script still runs):
+# NAME = sajan       -> "NAME: command not found"
+
+# QUOTING changes behaviour -- word splitting demo
+MSG="two   words"
+echo $MSG      # unquoted: bash collapses the spaces -> "two words"
+echo "$MSG"    # quoted: exact spacing preserved -> "two   words"
+
+# ARITHMETIC needs its own syntax
+COUNT=5
+echo $COUNT + 1        # prints literally: 5 + 1  (just pasted text)
+echo $(( COUNT + 1 ))  # prints: 6  (actual arithmetic)
+
+# THE EMPTY-VARIABLE TRAP
+STATUS=""
+if [ "$STATUS" = "ok" ]; then
+  echo "status is ok"
+else
+  echo "status is NOT ok (or empty)"
+fi
+# prints: status is NOT ok (or empty)   -- because it's quoted, this is SAFE.
+# Try removing the quotes around $STATUS above and re-run: it errors instead.`}
+/>
+
+Now the loops and exit codes together — the exact pattern every CI script leans on:
+
+<CodePlayground
+  language="bash"
+  title="Run it — for, while, and exit codes with $?"
+  code={`# FOR LOOP over a literal list
+for name in ali ben eva; do
+  echo "checking user: $name"
+done
+
+# FOR LOOP over command output (word-splits on whitespace)
+for word in $(echo "pass fail pass"); do
+  echo "result token: $word"
+done
+
+# EXIT CODES -- $? holds the last command's result, and only the last
+true
+echo "after true, exit code is: $?"   # prints: 0
+false
+echo "after false, exit code is: $?"  # prints: 1
+
+# A REALISTIC CI-STYLE CHECK
+grep -q "pass" <<< "the test result was pass"
+if [ $? -eq 0 ]; then
+  echo "verdict: PASS"
+else
+  echo "verdict: FAIL"
+fi
+# prints: verdict: PASS
+
+# WHILE LOOP counting down, the Java-while shape
+n=3
+while [ "$n" -gt 0 ]; do
+  echo "countdown: $n"
+  n=$(( n - 1 ))
+done
+echo "liftoff"`}
+/>
+
+<Term define={`The number a process hands back to the shell the instant it finishes, from 0 to 255. 0 always means success; any non-zero number means failure, and the specific value is often a hint at WHY (curl uses different codes for 'connection refused' vs 'timed out', for example). Bash stores the most recent one in the special variable $?, which gets overwritten by the very next command that runs -- so you check it immediately or lose it. This one number is the entire vocabulary CI pipelines use to decide pass or fail: a pipeline step 'succeeds' when its exit code is 0 and 'fails' the whole build otherwise, with no exceptions, no return values, no booleans -- just this.`}>exit code</Term>
+
+<Callout type="tip">
+Two habits that will save you real debugging time. First: **check `$?` immediately**, on the very
+next line — run so much as an extra `echo` for logging first and you've overwritten it with THAT
+command's exit code instead. Second: prefer `if some_command; then` over `some_command; if [ $? -eq 0
+]; then` when you can — it does the same check with less to get wrong, since bash lets `if` test any
+command's exit code directly, not just `[ ]`'s. Save the explicit `$?` capture for when you need the
+code for something else too, like logging the exact number.
+</Callout>
+
+<FirstTime title="Your mission: break it, then fix it, on purpose">
+<StepChecklist
+  steps={[
+    { text: "Run the first playground as-is", detail: "Confirm the quoted vs unquoted MSG output actually differs. If you can't see the difference, add a THIRD line with three spaces between words and compare all three outputs side by side." },
+    { text: "Break the assignment on purpose", detail: "Uncomment the NAME = sajan line (with spaces). Run it and read the exact error: 'NAME: command not found'. Bash isn't being cryptic here -- it genuinely thought you were trying to run a program called NAME." },
+    { text: "Break the empty-variable if on purpose", detail: "In the first playground, change if [ \"$STATUS\" = \"ok\" ] to if [ $STATUS = \"ok\" ] (removed quotes) with STATUS still empty. Run it and read the 'unary operator expected' error -- this is the single most common if crash you'll hit in real scripts." },
+    { text: "Trace $? across three commands", detail: "In the second playground, insert echo hello between false and the next echo. Predict what $? will print now -- then run it and see if you were right. (Hint: it's not 1 anymore.)" },
+    { text: "Rewrite the for loop as a while loop", detail: "Take the 'for name in ali ben eva' loop and rewrite it as a while loop using an array-free index counter (n=0, check n -lt 3, increment). Slower to write, same result -- good practice for reading while loops in scripts you didn't author." },
+  ]}
+/>
+You've now watched bash's assignment rule fail on purpose, watched an if crash on an unquoted empty variable, and traced $? across multiple commands -- the three habits that separate 'copies bash from Stack Overflow' from 'writes it.'
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "\"NAME: command not found\" right after what looks like a normal variable assignment.",
+      fix: "There's a space touching the = sign -- either NAME = value or NAME= value or NAME =value. Bash only treats it as assignment with ZERO whitespace around the equals sign: NAME=value. Remove every space near it and the error disappears.",
+    },
+    {
+      symptom: "\"[: unary operator expected\" or \"[: too many arguments\" from an if statement that looks fine.",
+      fix: "A variable inside the test is unquoted and currently empty (or contains spaces bash is splitting on). if [ $VAR = \"ok\" ] becomes if [ = \"ok\" ] when $VAR is empty -- a broken test, not a false one. Quote it: if [ \"$VAR\" = \"ok\" ]. This is the single most common if crash in real scripts.",
+    },
+    {
+      symptom: "A for loop over filenames or ls output mangles files that have spaces in their names.",
+      fix: "Unquoted word splitting is treating each space-separated chunk as a separate loop item. Use for f in *.txt (a glob, quoted implicitly by bash's pattern matching) instead of for f in $(ls *.txt), and quote the variable everywhere you use it inside the loop body: \"$f\", not $f.",
+    },
+    {
+      symptom: "echo $? always prints 0, even right after a command you know failed.",
+      fix: "Something ran between the failing command and the echo -- even a comment doesn't count, but an extra echo, a variable assignment, or a pipeline stage all overwrite $?. Capture it immediately: STATUS=$?; then use $STATUS as many times as you need afterward, since it won't be overwritten.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Variables, ifs, and loops show up wherever bash glues automation together -- and each has a
+signature failure spot to check first:
+
+- **CI pipeline YAML `run:` steps** — read them as bash, because that's what they are. A step that 'passes' with an unquoted empty variable inside an `if` may be crashing silently and the pipeline is only catching the crash, not the real check.
+- **Setup/teardown scripts in test suites** — often written once, years ago, and never re-read. Grep them for unquoted `$VAR` inside `if [ ]` — it's the most common latent bug in scripts nobody has touched since they were written.
+- **Any script that loops over `ls` output** — a strong signal of the space-in-filename bug waiting to happen, especially on CI runners where artifact names sometimes include timestamps or branch names with slashes.
+- **Docker `ENTRYPOINT`/`CMD` shell scripts** — these run with a minimal environment, so unquoted or unset variables misbehave more often here than on your local machine, where more is set by default.
+
+Tester's habit: **when a bash script "sometimes" fails, the two suspects are quoting and `$?` timing.**
+Grep the script for `if [ $` (missing quote) and count how many commands run between any failing step
+and its `$?` check. Nine times out of ten, that's the bug.
+</WhereToCheck>
+
+<WorkedExample title="the deploy script that always said 'ready'">
+1. **The report:** "Our deploy pipeline's health-check step always prints 'service is ready' — even during the one incident last week where the service was actually down for six minutes. Nobody caught it because the pipeline was green."
+2. **The tester reads the script** and finds the relevant chunk: `curl -s http://svc/health > /tmp/out; echo "logged response"; if [ $? -eq 0 ]; then echo "service is ready"; fi`.
+3. **The bug jumps out once you know the rule:** there's an `echo "logged response"` sitting BETWEEN the `curl` and the `if [ $? -eq 0 ]` check. `$?` at that point isn't curl's exit code anymore — it's the exit code of the `echo` command, which is always 0. The `if` was never actually checking curl at all.
+4. **Confirmed by testing it directly:** the tester runs `curl` against a deliberately unreachable URL, adds an `echo` in between, and reproduces the exact same false-positive "ready" message. Root cause confirmed in under two minutes once the theory existed.
+5. **The fix:** capture the exit code immediately, before anything else runs — `curl -s http://svc/health > /tmp/out; STATUS=$?; echo "logged response"; if [ "$STATUS" -eq 0 ]; then echo "service is ready"; fi`. Now the logging line can go anywhere without corrupting the check.
+6. **The regression test added:** a fake `curl` replacement (a shell function) in the test harness that always returns a non-zero exit code, confirming the pipeline now correctly reports "not ready" when the upstream check fails — the exact scenario that slipped through before.
+7. **The tester's angle.** No exception was thrown, nothing crashed — the script ran to completion and printed a cheerful, confident, wrong verdict. That's the signature of a `$?` timing bug: it doesn't fail loud, it fails green.
+8. **The lesson.** Every time you see `if [ $? -eq 0 ]` in a script, the very next thing to check is what runs on the line directly above it — because `$?` only ever remembers the LAST command, and "the last command" is easy to accidentally move.
+</WorkedExample>
+
+<Callout type="mistake">
+Treating bash conditions like Python booleans. `if [ $VAR ]` is not asking "is this value truthy" the
+way `if var:` does in Python — it's running the `test` command against whatever `$VAR` expanded to,
+and an empty or unquoted `$VAR` can turn a simple check into a syntax error instead of a clean false.
+Python raises an exception when something's wrong; bash, missing quotes, just breaks differently and
+often silently continues with whatever code path it landed on by accident. The fix is always the
+same reflex, repeated until it's automatic: **quote every variable inside a test**, and check `$?`
+on the line immediately after the command you actually care about.
+</Callout>
+
+<Quiz
+  question="A script runs: curl -s URL > out.txt, then echo 'saved', then if [ $? -eq 0 ]; then echo READY; fi. The curl actually FAILED (URL unreachable). What does the script print?"
+  options={[
+    "It prints READY -- $? at the if is echo's exit code (always 0), not curl's, because echo ran in between and overwrote it",
+    "It prints nothing -- curl failing stops the script immediately",
+    "It throws a syntax error because $? is undefined after a failed command",
+    "It correctly does NOT print READY, because bash remembers which command originally failed"
+  ]}
+  answer={0}
+  explain="Correct answer: $? only ever holds the exit code of the MOST RECENT command -- and here that's echo 'saved', which always succeeds (exit code 0), not the curl that actually failed. The if sees a 0 and prints READY: a false positive, exactly like the worked example above. Bash doesn't stop on a failed command by default (that's what set -e is for, a topic for a later note) and doesn't remember earlier exit codes once something else has run -- there's no built-in memory of 'which command failed', only the single most recent result. And $? is never undefined mid-script; it always holds SOME number, which is precisely what makes this bug so quiet -- the check runs, returns a real answer, and that answer is just wrong."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Assigning a bash variable", back: "NAME=value -- ZERO spaces around the =. Spaces make bash try to run \"NAME\" as a command instead of assigning. No `let`, no type, no declaration keyword needed." },
+    { front: "Reading a bash variable, and why quote it", back: "$NAME or \"$NAME\". Quoting prevents word splitting (spaces inside the value breaking it into multiple arguments) and keeps empty variables safe inside if [ ] tests. Default habit: quote it." },
+    { front: "if [ ] -- what is it, really?", back: "[ is a command (an alias for `test`), not syntax -- which is why it needs spaces around its arguments: if [ -f file ]. It runs, exits 0 or 1, and if reads that exit code, exactly like it reads any other command's." },
+    { front: "The empty-variable if crash", back: "if [ $VAR = \"x\" ] with an empty, unquoted $VAR becomes if [ = \"x\" ] -- a syntax error (\"unary operator expected\"), not a false result. Fix: always quote the variable, if [ \"$VAR\" = \"x\" ]." },
+    { front: "$? -- what it holds and its one rule", back: "The exit code (0-255) of the MOST RECENTLY run command. 0 = success, non-zero = failure. It gets overwritten by the very next command -- check it immediately, or capture it into a variable (STATUS=$?) if you need it later." },
+    { front: "for vs while, the shapes", back: "for x in item1 item2; do ... done -- loops over a fixed list, like Python's for-in. while [ cond ]; do ... done -- loops while a test stays true, like Java's while (cond) { }. while read -r line; do ... done < file reads a file line by line." },
+  ]}
+/>
+
+<Challenge>
+Write a short script (edit either playground) that: (1) sets `PASS_COUNT=0` and `FAIL_COUNT=0`, (2)
+loops with `for result in pass pass fail pass fail`, (3) inside the loop, uses `if [ "$result" =
+"pass" ]` to increment the right counter with `$(( ))` arithmetic, and (4) after the loop, prints
+both counts AND uses one final `if` to print "ALL CLEAR" only if `FAIL_COUNT` is `0`. This is the
+exact shape of a CI summary step — count, compare, verdict — and every part of it is something you
+just used above.
+</Challenge>
+
+<AskCommunity prompt="Bash issue: my script does `[what the script is meant to do]`. Symptom: `[unexpected output / crash message / silently wrong result]`. The relevant lines: `[paste the if/for/while block]`. Are all variables inside test brackets quoted? `[yes / no / not sure]`. What does `echo $?` print immediately after the command in question? `[the number, or 'never checked']`.">
+Most bash logic bugs are one of two things: an unquoted variable inside `[ ]`, or a `$?` check that's
+reading the wrong command because something ran in between. Post the exact block and both answers
+above, and the diagnosis is usually fast.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.gnu.org/software/bash/manual/html_node/Conditional-Constructs.html", title: "GNU Bash manual — conditional constructs (if, test, [[ ]])", kind: "read" },
+    { href: "https://www.gnu.org/software/bash/manual/html_node/Looping-Constructs.html", title: "GNU Bash manual — looping constructs (for, while, until)", kind: "read" },
+    { href: "https://www.shellcheck.net/", title: "ShellCheck — pastes your script, flags quoting and logic bugs instantly", kind: "tool" },
+    { href: "https://mywiki.wooledge.org/BashPitfalls", title: "Greg's Wiki — Bash Pitfalls (the classic list of exactly these traps)", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=e7BufAVwDiM", title: "Bash scripting full course — variables, ifs and loops — linuxhint", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=e7BufAVwDiM" title="Bash scripting full course — variables, ifs and loops — linuxhint" minutes={180} />
+
+<Takeaways
+  points={[
+    "Assignment is NAME=value with zero spaces around the = -- spaces make bash try to run a command called NAME instead.",
+    "if [ ] runs a real command (test) and checks ITS exit code -- that's why spacing inside the brackets is mandatory and why an unquoted empty variable causes a syntax error, not a false result.",
+    "Quote your variables by default: \"$VAR\" prevents word splitting and keeps if tests safe when the value is empty or contains spaces.",
+    "$? holds the exit code of the LAST command only, 0 for success and non-zero for failure -- it's overwritten by the next command, so check it immediately or capture it into a variable.",
+    "for loops over a list, while loops on a condition -- same shapes as Python's for-in and Java's while -- and while read -r line is the everyday pattern for processing files line by line.",
+  ]}
+/>
+
+<Complete xp={10} />

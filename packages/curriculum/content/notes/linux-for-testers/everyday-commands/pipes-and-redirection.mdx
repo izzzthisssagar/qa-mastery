@@ -1,0 +1,417 @@
+---
+title: "Pipes and redirection"
+summary: "The plumbing that turns single commands into pipelines: | feeds one command's output into the next, > and >> send output to files (truncate vs append), 2> handles the separate error stream, and tee saves evidence while you watch. Includes the classic grep | sort | uniq -c counting pipeline."
+tags: ["linux-for-testers", "everyday-commands", "track-b"]
+updated: "2026-07-13"
+---
+
+<Hook>
+So far every command you've learned is a soloist: it reads something, prints to the screen, done.
+This note is where they form a band. Three characters — `|`, `>`, `>>` — plus one weird sibling
+(`2>`) turn the commands you already know into **pipelines**: `grep` finds every error in a log,
+hands them to `sort`, which hands them to `uniq -c`, which counts the distinct ones — and suddenly
+"14 million lines of log" becomes "three kinds of error, one of them 4,000 times". This is the
+moment the command line stops being a clumsy replacement for clicking and becomes the thing GUIs
+can't do at all: **composing tools**. And for a tester there's a bonus organ in this anatomy: the
+*error stream*, a second, separate channel where programs send their complaints — the reason
+"I redirected the output but the errors still spam my screen" happens, and the reason it'll never
+confuse you again after today. By the end you'll summarise a monster log into bug-report-ready
+counts with one line, and save the evidence *while watching it scroll*. One line. Band together.
+</Hook>
+
+<Callout type="analogy">
+Think of every command as **a machine in a workshop with two hoses coming out the back**: a wide
+one for its *product* (the output) and a thin one for its *complaints* (the errors). By default both
+hoses point at your face — that's why everything prints to the terminal. Redirection is just
+re-aiming hoses. `>` points the product hose into a bucket, emptying the bucket first; `>>` adds to
+whatever's already in the bucket. `2>` re-aims the *complaints* hose separately — into a different
+bucket, or into `/dev/null`, the workshop's drain to nowhere. And a pipe `|` clamps one machine's
+product hose directly onto the intake of the next machine: no bucket in between, product flowing
+straight through a whole assembly line. The one that breaks the analogy into usefulness: `tee` is a
+Y-splitter — product flows into a bucket AND onward down the line at the same time, which is how a
+tester saves evidence while still watching it live. The complaints hose ignores all pipe clamps
+unless you re-aim it explicitly. Remember that; it's the topic's biggest gotcha.
+</Callout>
+
+## Two hoses: stdout and stderr
+
+Every Linux program is born with two output channels. The product goes to
+<Term define="Standard output - the default channel where a program sends its results. Numbered 1 by the system. The pipe | and the plain redirects > and >> operate on stdout ONLY. Its sibling stderr (standard error, numbered 2) carries warnings and errors, and keeps printing to the terminal even when stdout has been piped or redirected elsewhere - by design, so error messages are never silently buried in a data file.">stdout</Term>
+(standard output, channel 1); the complaints go to **stderr** (standard error, channel 2). On a bare
+terminal both land on your screen interleaved, so they *look* like one stream. They aren't — and the
+split is deliberate: when you save a command's results to a file, you want the *results* in the
+file, not error messages mixed into your data. The numbering is why the error-redirect operator is
+`2>` — it's literally "redirect channel 2".
+
+## Aiming the hoses: > , >> , 2>
+
+```bash
+echo "run 1 passed" > results.txt      # > : write stdout to file (TRUNCATES first!)
+echo "run 2 passed" >> results.txt     # >>: APPEND to the file
+cat results.txt
+# run 1 passed
+# run 2 passed
+
+echo "run 3 passed" > results.txt      # > again -- and runs 1 and 2 are GONE
+cat results.txt
+# run 3 passed
+```
+
+Read that last part twice: **`>` empties the file before writing** — even if the command then fails
+and writes nothing. The single-character difference between `>` (replace) and `>>` (append) has
+destroyed more carefully-collected evidence files than any other typo in this module. Now the error
+channel:
+
+```bash
+find /var -name "*.log" > found.txt              # results to file...
+# find: '/var/cache/private': Permission denied  # ...but complaints STILL hit the screen
+find /var -name "*.log" > found.txt 2> errors.txt   # each hose, its own bucket
+find /var -name "*.log" 2> /dev/null             # complaints to the void
+find /var -name "*.log" > all.txt 2>&1           # BOTH into one file
+```
+
+`/dev/null` is a real file that discards everything written to it — the drain to nowhere. And
+`2>&1` reads as "send channel 2 to wherever channel 1 is *currently* pointing". Order matters:
+`> all.txt 2>&1` first aims stdout at the file, then aims stderr at the same place — both captured.
+Reversed (`2>&1 > all.txt`), stderr gets aimed at the *terminal* (where stdout points at that
+moment) and only then does stdout move to the file — so errors still hit your screen. Aim the wide
+hose first, then clamp the thin one to it.
+
+## The pipe: machines in a row
+
+`|` connects one command's stdout to the next command's input. No temp files, no buckets — data
+flows through:
+
+```bash
+grep "ERROR" run.log | wc -l          # how many error lines? (count, not read)
+# 4212
+
+grep "ERROR" run.log | sort | uniq -c | sort -rn
+#    4104 ERROR: payment gateway timeout after 30000ms
+#      86 ERROR: connection refused to db:5432
+#      22 ERROR: session token expired
+```
+
+That second pipeline is the most useful line in this entire module, so let's autopsy it. `grep`
+pulls every error line out of the log. `sort` puts identical lines next to each other — necessary
+because `uniq` only collapses *adjacent* duplicates (forget the `sort` and `uniq` quietly
+undercounts; it's the topic's classic silent bug). `uniq -c` collapses each run of identical lines
+into one, prefixed with its count. The final `sort -rn` orders by that count, numerically (`-n`),
+biggest first (`-r`). Fourteen million lines in, three lines out — and those three lines *are* the
+summary section of your bug report: not "lots of errors" but "one dominant failure, 4,104
+occurrences, plus two minor ones". That's the difference between a ticket that gets triaged and a
+ticket that gets fixed.
+
+## tee: save it AND see it
+
+Redirect with `>` and the output vanishes into the file — you're watching a blank screen. Pipe it
+and you see it, but nothing is saved. `tee` does both at once — it's the Y-splitter:
+
+```bash
+grep "ERROR" run.log | sort | uniq -c | sort -rn | tee error-summary.txt
+#    4104 ERROR: payment gateway timeout after 30000ms
+#      86 ERROR: connection refused to db:5432
+#      22 ERROR: session token expired
+cat error-summary.txt        # ...and it is ALSO in the file, verbatim
+
+./run-flaky-test.sh 2>&1 | tee run-attempt-3.log     # live output AND a saved copy
+```
+
+That second line is the tester's evidence-collection idiom, worth memorising as a unit: `2>&1`
+merges the complaints into the product stream so *everything* travels down the pipe, and `tee`
+splits the flow — you watch the run live, and an exact copy lands in the file for the bug ticket.
+No more "it printed an error but I lost my scroll buffer". `tee -a` appends instead of overwriting,
+for accumulating evidence across multiple attempts.
+
+<HotspotImage
+  src="/notes/linux-for-testers/everyday-commands/pipes-valves.jpg"
+  alt="A close-up of an industrial pipe run at the Hercules Parlin plant: a wide horizontal main with two handwheel valves, bolted flange couplings joining every section, a diaphragm regulator seated on a tee fitting above, and a thin vertical line dropping away to the right"
+  credit="Photo: Valves and pipes at the Hercules Parlin plant - Wikimedia Commons (DPLA), No known restrictions"
+  creditHref="https://commons.wikimedia.org/wiki/File:Valves_and_pipes_at_Hercules_Parlin_plant_-_DPLA_-_522e710ba4eb21bbc99576e7d6f8b652.jpg"
+  pins={[
+    { x: 50, y: 66, label: "The wide main = stdout, the thin line = stderr", desc: "The fat horizontal pipe carries the product; the skinny vertical line at the right edge runs separately. That is the anatomy of every Linux command - results on channel 1 (stdout), errors on channel 2 (stderr), two physically separate pipes - and the reason 'I redirected the output but errors still printed' is not a bug but the design working as intended." },
+    { x: 25, y: 47, label: "The left handwheel = > and >>", desc: "A valve turned hard one way dumps the whole flow into the receiving tank - that is >: it TIPS THE TANK OUT before filling it, truncating the file even if the command then fails. Cracked open to add to what is already there is >>. One character of difference, and it has eaten more evidence files than any other typo." },
+    { x: 40, y: 62, label: "The bolted flange coupling = the pipe |", desc: "Every section of this run is joined outlet-to-intake by a bolted flange, no tank between - that is the pipe: grep's product flows straight into sort's intake, sort's into uniq's. This composition - small tools, each doing one thing, connected freely - is the command line's superpower over any GUI." },
+    { x: 88, y: 72, label: "The line dropping to the drain = /dev/null", desc: "The thin pipe heading down and away is 2> /dev/null: complaints discarded unread. Legitimate when the noise is known and irrelevant (find's Permission denied spam). Dangerous as a habit: a script ending in 2>/dev/null is a script that has chosen to hide every future error too - including the one you will spend a day hunting." },
+    { x: 50, y: 25, label: "The regulator on its tee fitting = tee", desc: "Look at what the diaphragm regulator sits on: a literal tee junction - one incoming flow split to continue down the line AND branch upward. That is tee: pipeline | tee evidence.txt shows you the output live while writing an exact copy to the file. With 2>&1 in front to merge the complaint pipe in, it is the tester's evidence idiom: watch the failing run AND capture it for the ticket, one line, no lost scroll buffer." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Fourteen million lines in, three lines out - a counting pipeline, stage by stage. Press Play."
+  intervalMs={1800}
+  nodes={[
+    { label: "1. grep 'ERROR' run.log - the filter", desc: "grep reads the giant log and lets through ONLY lines containing ERROR - 14 million lines shrink to 4,212. Its stdout would normally hit your screen; the pipe clamped onto it has other plans. Note what does NOT pass through the pipe: any complaints grep makes (file unreadable, etc.) travel on stderr, outside the pipeline." },
+    { label: "2. | sort - group the identical", desc: "sort receives grep's 4,212 lines through the pipe and orders them alphabetically, which forces identical error lines to sit ADJACENT to each other: all 4,104 gateway timeouts now form one solid block. This step looks cosmetic. It is not - it exists purely to feed the next machine, which only understands adjacency." },
+    { label: "3. | uniq -c - collapse and count", desc: "uniq -c walks the sorted stream and collapses each run of identical adjacent lines into a single line prefixed by its count: 4104 gateway timeout, 86 connection refused, 22 token expired. Fed UNSORTED input, uniq only merges lines that happen to touch - and silently undercounts. sort before uniq is a law, not a suggestion." },
+    { label: "4. | sort -rn - rank by count", desc: "The second sort reads the three counted lines and orders them numerically (-n, so 4104 beats 86 - text sorting would disagree) and in reverse (-r, biggest first). The dominant failure now sits on top. Three lines out of fourteen million: this is a bug report's summary section, manufactured by four small machines in a row." },
+    { label: "5. | tee error-summary.txt - see it AND keep it", desc: "tee is the Y-splitter finale: the ranked summary prints to your screen AND lands verbatim in error-summary.txt for the ticket. Add 2>&1 before a tee to merge stderr in when capturing a failing run live. Composition is the whole lesson: five commands you already knew, three characters of plumbing, one answer." },
+  ]}
+/>
+
+First playground: the redirection operators and the two streams, including the truncation trap and
+the `2>&1` order rule:
+
+<CodePlayground
+  language="bash"
+  title="Try it - aim the hoses: > , >> , 2> , 2>&1"
+  code={`echo 'attempt 1: PASS' > evidence.txt     # > writes (truncating first)
+echo 'attempt 2: FAIL' >> evidence.txt    # >> appends
+cat evidence.txt
+# attempt 1: PASS
+# attempt 2: FAIL
+
+echo 'attempt 3: PASS' > evidence.txt     # > again: attempts 1-2 are GONE
+cat evidence.txt
+# attempt 3: PASS
+
+# --- the two streams are separate ---
+ls evidence.txt no-such-file.txt
+# ls: cannot access 'no-such-file.txt': No such file or directory   <- stderr
+# evidence.txt                                                      <- stdout
+
+ls evidence.txt no-such-file.txt > out.txt      # redirect stdout only...
+# ls: cannot access 'no-such-file.txt': No such file or directory
+cat out.txt                                     # ...error stayed on screen,
+# evidence.txt                                  #    product went to the file
+
+ls evidence.txt no-such-file.txt 2> err.txt     # now redirect ONLY stderr
+# evidence.txt
+cat err.txt
+# ls: cannot access 'no-such-file.txt': No such file or directory
+
+ls evidence.txt no-such-file.txt > all.txt 2>&1   # both into one file
+cat all.txt
+# ls: cannot access 'no-such-file.txt': No such file or directory
+# evidence.txt
+
+ls evidence.txt no-such-file.txt 2> /dev/null   # discard complaints unread
+# evidence.txt`}
+/>
+
+Second playground: the counting pipeline built up one machine at a time, ending with `tee`:
+
+<CodePlayground
+  language="bash"
+  title="Try it - grep | sort | uniq -c | sort -rn | tee"
+  code={`printf 'INFO: checkout ok\\nERROR: gateway timeout\\nINFO: login ok\\nERROR: db connection refused\\nERROR: gateway timeout\\nERROR: gateway timeout\\nWARN: slow response\\nERROR: db connection refused\\nERROR: gateway timeout\\n' > run.log
+
+grep 'ERROR' run.log                    # machine 1: filter
+# ERROR: gateway timeout
+# ERROR: db connection refused
+# ERROR: gateway timeout
+# ERROR: gateway timeout
+# ERROR: db connection refused
+# ERROR: gateway timeout
+
+grep 'ERROR' run.log | wc -l            # quick count of error LINES
+# 6
+
+grep 'ERROR' run.log | sort             # machine 2: group identical lines
+# ERROR: db connection refused
+# ERROR: db connection refused
+# ERROR: gateway timeout
+# ERROR: gateway timeout
+# ERROR: gateway timeout
+# ERROR: gateway timeout
+
+grep 'ERROR' run.log | sort | uniq -c   # machine 3: collapse + count
+#       2 ERROR: db connection refused
+#       4 ERROR: gateway timeout
+
+grep 'ERROR' run.log | sort | uniq -c | sort -rn   # machine 4: rank
+#       4 ERROR: gateway timeout
+#       2 ERROR: db connection refused
+
+# the trap: uniq WITHOUT sort silently undercounts
+grep 'ERROR' run.log | uniq -c
+#       1 ERROR: gateway timeout
+#       1 ERROR: db connection refused
+#       2 ERROR: gateway timeout
+#       1 ERROR: db connection refused
+#       1 ERROR: gateway timeout
+
+# finale: see it AND save it
+grep 'ERROR' run.log | sort | uniq -c | sort -rn | tee error-summary.txt
+#       4 ERROR: gateway timeout
+#       2 ERROR: db connection refused
+cat error-summary.txt
+#       4 ERROR: gateway timeout
+#       2 ERROR: db connection refused`}
+/>
+
+<Callout type="tip">
+Build every pipeline **one machine at a time, reading the output between clamps**. Run the `grep`
+alone. Looks right? Add `| sort`, look again. Add `| uniq -c`, look again. Each stage is checkable
+in two seconds, and a mistake announces itself at the stage that introduced it — instead of hiding
+inside a five-command one-liner that "just gives wrong numbers somehow". This is incremental testing
+applied to your own tooling, and it's also how you *read* other people's pipelines in code review:
+mentally chop at each `|` and ask what flows across that joint. Bonus habit: before any `>`, ask
+"do I mean replace or add?" — and reach for `>>` or `tee -a` whenever the file is evidence you're
+accumulating.
+</Callout>
+
+<FirstTime title="Your mission: build the pipeline that summarises a log">
+<StepChecklist
+  steps={[
+    { text: "Lose data to > once, on purpose", detail: "In the first playground, watch attempts 1-2 vanish when > runs a second time. Feel the difference between > (replace) and >> (append) now, on a throwaway file, so you never feel it on a real evidence file at 2 a.m." },
+    { text: "See the two streams with your own eyes", detail: "Run the ls with one real and one fake file, redirecting > out.txt - and watch the error IGNORE your redirect and hit the screen anyway. Then split them with 2> err.txt. No amount of reading substitutes for watching the streams separate." },
+    { text: "Assemble the counting pipeline stage by stage", detail: "In the second playground, run each stage - grep, then | sort, then | uniq -c, then | sort -rn - reading the output between every clamp. This is both the skill and the debugging method: pipelines are built and fixed one machine at a time." },
+    { text: "Reproduce the silent undercount", detail: "Run the uniq -c WITHOUT sort and compare its numbers to the correct version. Same data, wrong answer, zero error messages. Remember what it looks like: repeated entries for the same message, small counts. That pattern in the wild means someone forgot the sort." },
+    { text: "Capture a run with tee", detail: "Finish with the tee line, then cat the file to prove the copy is verbatim. Then memorise the evidence idiom as one unit: command 2>&1 | tee attempt-1.log - complaints merged in, output watched live, exact copy saved for the ticket." },
+  ]}
+/>
+You've now aimed both output streams, survived the truncation trap, built the classic counting pipeline stage by stage, met its silent-undercount failure mode, and captured live evidence with tee — the complete plumbing kit.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "You appended to your evidence file all afternoon - and it now contains only the last entry.",
+      fix: "Somewhere along the way one command used > instead of >>. The single character is the whole bug: > truncates the file to zero length BEFORE writing, even if the command subsequently fails and contributes nothing. There is no recovering the overwritten content (this is rm-grade gone). Prevention: for accumulating evidence, standardise on >> or tee -a, and reserve bare > for files you actively intend to replace. Some testers set 'set -o noclobber' in their shell, which makes > refuse to overwrite existing files unless forced.",
+    },
+    {
+      symptom: "You redirected output with > file.txt (or piped to grep), but error messages still spam the terminal.",
+      fix: "Working as designed: > and | operate on stdout only, and errors travel on the separate stderr channel - deliberately, so failures cannot silently bury themselves inside your data files. To capture errors too: > file.txt 2>&1 (aim stdout at the file FIRST, then point stderr at the same place - the reversed order 2>&1 > file.txt leaves stderr on the terminal). To capture ONLY errors: 2> errors.txt. To pipe both onward: cmd 2>&1 | grep whatever.",
+    },
+    {
+      symptom: "uniq -c gives counts that are obviously too low, with the same message appearing in several rows.",
+      fix: "uniq only collapses ADJACENT identical lines - it was built to follow sort, not replace it. Unsorted input means each cluster of a repeated message counts separately: five rows of 'gateway timeout' with small counts instead of one row with the true total. No error is raised; the numbers are just wrong - which makes this the most dangerous bug on this page, because wrong counts flow straight into bug reports. The fix is mechanical: always sort | uniq -c, in that order, every time.",
+    },
+    {
+      symptom: "A script 'succeeds' but its output file is empty - and adding 2>/dev/null somewhere made the whole thing impossible to debug.",
+      fix: "Two related self-inflicted wounds. Empty file: the command upstream of the > probably failed and printed its complaint to stderr - which you never saw if stderr was discarded; remove the 2>/dev/null and re-run to hear the actual error. As a rule: /dev/null is for noise you have already read and judged irrelevant (find's Permission denied spam), never a default. A command that fails silently looks identical to one that succeeds - until you compare the evidence, which is exactly what a tester would tell developers about their error handling.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Pipes and redirection stop being syntax and start being leverage in these exact places:
+
+- **CI pipeline definitions** — nearly every step in a Jenkins/GitHub Actions job is shell:
+  `npm test 2>&1 | tee test-output.log` and friends. Reading redirections is now part of reading
+  your own build config — and a step ending in `2>/dev/null` is a step that has chosen to hide its
+  failures from you.
+- **Log triage on any server** — the `grep | sort | uniq -c | sort -rn` counting pipeline is the
+  standard first question ("what kinds of errors, how many of each?") on any log too big to read.
+- **Bug report evidence** — `command 2>&1 | tee attempt-N.log` while reproducing gives you verbatim,
+  timestamped captures instead of screenshots of terminals. Devs trust text they can grep.
+- **Test data preparation** — generating fixture files with `>` and `>>`, extracting columns and
+  samples from CSVs through pipes. Small plumbing, daily use.
+- **Other people's scripts in code review** — every `>` (should it be `>>`?), every `2>/dev/null`
+  (what error is being muted, and why?), every `uniq` (is there a `sort` in front of it?) is a
+  review checkpoint you're now qualified to hold.
+
+Tester's habit: **treat a muted stderr as a test smell.** Software that discards its own error
+channel is software that cannot tell you when it's broken — the same critique applies to a shell
+script as to an application's error handling.
+</WhereToCheck>
+
+<WorkedExample title="the flaky suite that was actually three bugs wearing a trench coat">
+1. **The situation:** the nightly API suite has been "flaky" for two weeks. The team re-runs it
+   every morning; usually it passes the second time. The ticket says, in its entirety: "nightly is
+   flaky again". Nobody has read the logs, because the combined nightly log is 900 MB and "flaky"
+   feels like a diagnosis.
+2. **The tester asks the only question that shrinks a problem:** *what kinds* of failures, and *how
+   many of each?* Not "show me the errors" — "count me the errors, by type."
+3. **One line on the runner:**
+   `grep "ERROR" nightly.log | sort | uniq -c | sort -rn | tee error-summary.txt`
+   Screen and file both say: 3,911 `gateway timeout`, 214 `connection refused to redis`, 9
+   `unique constraint violation on ba_orders`. Three distinct signatures. "Flaky" never had a
+   count; these do.
+4. **The counts drive the split.** One "flaky suite" ticket becomes three real tickets. The
+   timeout (3,911 hits) correlates with the pool-exhaustion pattern from the viewing-files note.
+   The redis refusals cluster — a `grep` for their timestamps shows all 214 within one two-minute
+   window: a restart. The 9 constraint violations turn out to be an actual product bug in order
+   deduplication — the rarest signature was the realest bug.
+5. **Evidence ships with each ticket** — the `tee`-saved summary plus per-signature excerpts pulled
+   with `grep "constraint violation" nightly.log | head -n 20 > ticket-3-evidence.txt`. Verbatim
+   text, greppable by every dev, no terminal screenshots.
+6. **The postscript that makes it this note's story:** why did two weeks of "flakiness" hide three
+   signatures? The suite's wrapper script ran the tests with `2>/dev/null` — someone, long ago,
+   muted a noisy deprecation warning and with it every stderr line since. The counting pipeline had
+   to be run against the app-side log, because the test-side log had been silenced at birth.
+7. **The team's fix list:** three tickets, one pool config, one restart policy, one product bug —
+   and one deleted `2>/dev/null` in the wrapper, replaced with `2>&1 | tee`, so the next signature
+   gets captured instead of muted.
+8. **The lesson:** "flaky" is what unexamined failure diversity looks like. A four-machine pipeline
+   turns 900 MB of vibes into three counted, separable, assignable bugs — and the muted stderr that
+   delayed it for two weeks is the cautionary tale about `/dev/null` as a habit.
+</WorkedExample>
+
+<Callout type="mistake">
+Sprinkling `2>/dev/null` around like seasoning — muting the error stream because the messages are
+"noise" — and, its equally destructive cousin, using `>` on a file you meant to *add* to. Both are
+silent-data-loss operators. The muted stderr hides tomorrow's real failure inside yesterday's
+irrelevant warning spam: a command that dies instantly with a clear complaint becomes a command that
+"succeeds" and produces a mysteriously empty file, and you get to debug it by séance. The
+truncating `>` destroys your morning's evidence with tonight's single keystroke, no undo. The
+discipline for both is the same: **make destruction explicit and deliberate**. `/dev/null` only for
+noise you have personally read and judged (and never in a script you're handing to others without a
+comment saying what's being muted and why); `>>` or `tee -a` for anything you're accumulating; bare
+`>` only when "replace this file" is the actual, intended meaning of the command.
+</Callout>
+
+<Quiz
+  question="A tester runs: grep 'ERROR' run.log | uniq -c - and gets five small counts for 'gateway timeout' scattered down the output instead of one big one. What went wrong?"
+  options={[
+    "uniq only collapses ADJACENT identical lines, so unsorted input splits one message into a separate count per cluster - the fix is grep 'ERROR' run.log | sort | uniq -c",
+    "grep matched too much - it needs the -c flag so the counting happens inside grep instead",
+    "The pipe lost some of the data between grep and uniq, which is why the counts are low",
+    "uniq -c requires root permissions to count accurately, so it fell back to partial counts"
+  ]}
+  answer={0}
+  explain="uniq was designed as sort's companion: it collapses runs of identical ADJACENT lines only. In an unsorted log the 'gateway timeout' lines are interleaved with other errors, so each contiguous cluster collapses separately - five rows with small counts instead of one row with the true total, and crucially NO error message, making this a silent wrong-answer bug that can flow straight into a bug report. Inserting sort between grep and uniq forces identical lines together first, which is the entire fix. The grep -c suggestion counts ALL matching lines as one number - useful, but it answers 'how many error lines?' not 'how many of EACH error?', which is the question here. Pipes losing data is not a thing - the pipe delivers every byte of stdout from one command to the next; if data seems missing, it went to stderr (which bypasses the pipe) or was never emitted. And uniq needing root is pure fiction - counting adjacent duplicates requires no privileges. The law worth engraving: sort | uniq -c, always in that order."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The four plumbing operators: | > >> 2>", back: "| pipes stdout into the next command's input. > writes stdout to a file, TRUNCATING it first. >> appends. 2> redirects stderr (channel 2) separately. > file 2>&1 captures both - stdout aimed first, then stderr clamped to it." },
+    { front: "stdout vs stderr - and why the split exists", back: "Every program has two output channels: stdout (1) for results, stderr (2) for complaints. Pipes and plain > move ONLY stdout; errors keep hitting the terminal so they can never silently bury themselves in your data file. That is why redirected commands still show errors on screen." },
+    { front: "Why must sort come before uniq -c?", back: "uniq collapses ADJACENT identical lines only. Unsorted input splits one repeated message into several clusters, each counted separately - a silent undercount with no error raised. sort forces identical lines together first. Law: sort | uniq -c, always." },
+    { front: "The log-summarising pipeline", back: "grep 'ERROR' log | sort | uniq -c | sort -rn - filter to error lines, group identical, collapse-and-count, rank numerically biggest-first. Millions of lines in, a ranked table of distinct errors out: the summary section of a bug report in one line." },
+    { front: "tee - what it does and the evidence idiom", back: "tee writes its input to a file AND passes it through to the screen/next command - the Y-splitter. tee -a appends. The tester's capture idiom: command 2>&1 | tee attempt-1.log - errors merged in, run watched live, verbatim copy saved for the ticket." },
+    { front: "When is 2>/dev/null okay?", back: "Only for noise you have already read and judged irrelevant - like find's Permission denied spam when searching system directories. Never as a default in scripts: a muted stderr makes real failures look like success (empty output file, no complaint) and turns debugging into guesswork." },
+  ]}
+/>
+
+<Challenge>
+Using the second playground's run.log: (1) produce a ranked count of the WARN and INFO lines
+combined — you'll need one grep flag you haven't used yet (look up `-E` or run grep twice with
+`>>`). (2) Write the one-liner that appends today's error summary to a running
+`weekly-errors.txt` WITHOUT destroying last week's — two correct answers exist (`>>` and
+`tee -a`); write both. (3) Predict, then verify: what does
+`grep 'ERROR' run.log > /dev/null && echo found || echo none` print, and what is being used as the
+signal here if not the output? (4) One-sentence code review: a teammate's CI step reads
+`./run-tests.sh > results.txt 2>/dev/null` — name both problems and rewrite it with tee.
+</Challenge>
+
+<AskCommunity prompt="Pipes/redirection issue: I ran `[exact command line]` expecting `[what]`. Instead: `[empty file / errors still on screen / wrong counts / lost data]`. Where does each part point - stdout goes to `[file / pipe / screen]`, stderr to `[default / 2> target / merged with 2>&1]`? If counting: is there a sort before the uniq? `[yes / no / what is uniq]`.">
+Plumbing bugs are nearly always one of four: > where >> was meant (truncation), stderr never
+redirected (or muted with /dev/null and now hiding the real failure), 2>&1 written on the wrong side
+of the > (order matters), or uniq fed unsorted input (silent undercount). Paste the exact one-liner
+- every character of plumbing matters - and say which stream you expected to go where.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.gnu.org/software/bash/manual/html_node/Redirections.html", title: "Bash manual - Redirections (the authoritative rules for > >> 2> 2>&1)", kind: "read" },
+    { href: "https://linuxjourney.com/lesson/stdout-standard-out-redirect", title: "Linux Journey - Text-Fu: stdout, stdin, stderr and pipes, gently", kind: "read" },
+    { href: "https://mywiki.wooledge.org/BashPitfalls", title: "Greg's Wiki - Bash pitfalls (see the redirection and 2>&1-ordering entries)", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=oyc_6UfoW3w", title: "Linux Terminal Commands: Pipes and Redirection (Gary Explains)", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=oyc_6UfoW3w" title="Linux Terminal Commands: Pipes and Redirection (Gary Explains)" minutes={13} />
+
+<Takeaways
+  points={[
+    "Every command has two output channels: stdout (1) for results, stderr (2) for errors - and pipes and plain > move only stdout, which is why errors still reach your screen after a redirect. By design.",
+    "> writes to a file after TRUNCATING it (evidence killer), >> appends, 2> captures errors separately, and > file 2>&1 captures both - stdout aimed first, stderr clamped second; the reverse order leaves errors on the terminal.",
+    "The pipe | clamps one command's stdout onto the next command's input, composing small tools into pipelines - built and debugged one machine at a time, reading the flow between every joint.",
+    "grep 'ERROR' log | sort | uniq -c | sort -rn is the log-summarising classic - and sort must precede uniq, because uniq collapses only ADJACENT duplicates and silently undercounts otherwise.",
+    "tee is the evidence Y-splitter - command 2>&1 | tee attempt-1.log watches a run live while saving a verbatim copy - and 2>/dev/null is for noise you have personally judged, never a script's default, because muted stderr turns real failures into fake successes.",
+  ]}
+/>
+
+<Complete xp={10} />

@@ -1,0 +1,331 @@
+---
+title: "The shell, properly"
+summary: "Terminal, shell, and prompt are three different things — the window, the interpreter (bash/zsh), and the 'ready' signal. Then the grammar: command -flags arguments, how the shell splits your line on spaces, why quoting exists, and exit codes — the shell's pass/fail verdict CI is built on."
+tags: ["linux-for-testers", "linux-essentials", "linux", "track-b"]
+updated: "2026-07-13"
+---
+
+<Hook>
+Most people use the command line the way tourists use a foreign language: memorised phrases,
+recited hopefully, panic when anything deviates from the phrasebook. You're going to actually
+*speak* it — because the language turns out to have a grammar so small it fits on an index card.
+First, three words everyone conflates: the **terminal** (the window), the **shell** (the program
+inside it that understands you — bash, zsh), and the **prompt** (the `$` that means "ready").
+Then the grammar itself: every command line is `command -flags arguments`, split on **spaces** —
+and that one parsing rule explains about 90% of beginner disasters, including the file you'll
+half-delete later in this note. Master this and something bigger unlocks: every CI pipeline you'll
+ever debug is just these commands in a file, run by this same shell, judged by exit codes. The
+shell isn't a tool you use *before* the real testing work. On the server side, it *is* the
+interface.
+</Hook>
+
+<Callout type="analogy">
+A drive-thru intercom. The **terminal** is the speaker post — the physical channel your voice
+travels through; it understands nothing, it just carries sound. The **shell** is the person taking
+orders on the other end, and this person is magnificently literal: they parse your order into a
+strict grammar — item, modifiers, extras: "burger, no onions, large" is *command, flags,
+arguments*. The **prompt** is them saying "go ahead, order when ready." And the literalness is the
+whole comedy: pause in the wrong place — "one... hundred nuggets" — and you've ordered two things
+you didn't mean, because they split your order on the pauses. That's *exactly* what the shell
+does with spaces: `rm test report.txt` is not "remove the file called test report.txt", it's
+"remove `test`, then remove `report.txt`" — two orders, one of them tragic. Quoting is how you
+say "no no, that whole phrase is ONE item." Same person at every drive-thru on Earth, same
+grammar: learn to order once, order anywhere.
+</Callout>
+
+## Terminal, shell, prompt: three words, three things
+
+The <Term define="The program that reads your typed line, interprets it (splitting words, expanding variables and wildcards), runs the commands it names, and reports back. Bash and zsh are shells. The terminal is merely the window the shell runs in; the prompt is the shell saying it is ready for input. When you SSH into a server you are given a shell on that machine - and shell scripts and CI pipelines are just files of shell commands run without a human present.">shell</Term>
+is the actual program you're talking to. The **terminal** (Terminal.app, Windows Terminal, the
+panel in VS Code) is just the window: it draws text and forwards your keystrokes. Inside it runs
+the shell — on servers and CI almost always **bash**; on modern Macs, **zsh** by default. The two
+are close cousins: everything in this note works identically in both, and the differences only
+bite in advanced scripting. The **prompt** is the shell's "ready" signal — typically ending in
+`$` for a normal user or `#` for root (the admin account — a `#` prompt is the shell politely
+informing you that you're holding a loaded weapon). When you SSH to a server, you get a shell
+*on that machine*: same grammar, different building. This is why the skill transfers — laptop,
+staging box, Docker container, CI runner, all the same conversation.
+
+## The grammar: command, flags, arguments
+
+Every line follows one shape: **`command -flags arguments`**. The *command* is the verb (`ls`,
+`grep`, `tail`). *Flags* (also called options or switches) are adverbs — they modify *how*:
+short form is a dash and a letter (`-l`), short flags can be bundled (`-la` means `-l -a`), and
+many have long doubles-dash synonyms (`--all` for `-a`) that make scripts self-documenting.
+*Arguments* are the nouns — *what* to act on: filenames, paths, search patterns. So
+`tail -n 50 app.log` reads: verb `tail`, adverb `-n 50` (a flag that takes its own value),
+noun `app.log`.
+
+How does the shell know which word is which? **It splits your line on spaces. That's it.** The
+first word is the command; the rest are handed to the command, which decides what's a flag and
+what's an argument. This single rule has two consequences worth their weight in salary. One: a
+filename containing a space gets split into two innocent-looking arguments — the drive-thru
+disaster. Two: quoting fixes it, and quoting has a grammar of its own: **single quotes** mean
+"completely literal, touch nothing", while **double quotes** mean "keep it as one word, but do
+expand `$VARIABLES` inside". You'll watch both behaviours side by side in the playground.
+
+One more piece completes the picture: **exit codes**. Every command, on finishing, hands the shell
+a number — `0` means success, anything else means failure. Silent, invisible, and the entire
+foundation of CI: a pipeline is a list of shell commands, and the run goes red the moment one of
+them exits non-zero. When your test job "fails", that's not a metaphor — a shell somewhere
+received a non-zero exit code from your test runner. `echo $?` shows the last command's code, and
+knowing it exists moves you from "CI is angry" to "step 3 exited 127, which means
+command-not-found".
+
+<HotspotImage
+  src="/notes/linux-for-testers/linux-essentials/drive-thru.jpg"
+  alt="A car waiting at a Culver's drive-thru ordering lane at dusk: the lit menu board with its combo offers, the metal speaker unit at the board's edge, and the building the unseen order-taker works inside"
+  credit="Photo: Car at the drive-thru order speaker, Culver's, Shakopee, Minnesota - Wikimedia Commons, CC BY 2.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Culver%27s_Drive-Thru_Restaurant_Menu.jpg"
+  pins={[
+    { x: 80, y: 40, label: "The speaker unit = the terminal", desc: "The metal box at the edge of the menu board is pure channel: it carries your voice in and plays theirs out, understanding nothing. That is the terminal - Terminal.app, Windows Terminal, the VS Code panel - a window that draws text and forwards keystrokes. Swapping terminals changes the fonts and colours, never the conversation. The intelligence is on the other end." },
+    { x: 55, y: 8, label: "The unseen order-taker inside = the shell (bash or zsh)", desc: "Notice you can't see the person on the headset - they're inside the building, parsing your sentence by fixed rules into item, modifiers, extras, then making it happen and reporting back. That is bash (servers, CI) or zsh (modern Macs): it splits your line on spaces, expands $variables and wildcards, finds the command, runs it. Same order-taker grammar at every restaurant in the chain - laptop, server, container." },
+    { x: 15, y: 72, label: "The car pulling up to an open lane = the prompt", desc: "This driver can order because the lane is open and the speaker crackled its greeting - that's the $ at the end of your prompt line saying 'go ahead'. No greeting yet (a command still running) means anything you shout is queued, not acted on. And if the greeting ends in # instead of $, you are root - the manager took the headset, and everything you order WILL be made, including the terrible ideas." },
+    { x: 45, y: 30, label: "The menu's combo grammar = command -flags arguments", desc: "Read the board: 'VALUE BASKETS - Combine and Save - Entree + Side + Drink'. An order is a base item plus modifiers plus extras, spoken in a fixed grammar - exactly command -flags arguments. And the shell splits your order on spaces with brutal literalness: rm test report.txt is two removal orders (test, and report.txt), not one file with a space in its name. Ninety percent of beginner shell disasters are that one rule; quoting is how you say 'this is ONE item'." },
+    { x: 92, y: 68, label: "The lane ahead to the pickup window = output and exit codes", desc: "Past the board, the lane leads to the unseen window where you get the food and the receipt. Commands do the same: they print output (the food - what you asked for) and hand back an invisible exit code on the receipt: 0 for success, non-zero for failure. Humans read the output; automation reads the code - CI marks your pipeline red the instant any command exits non-zero. echo $? shows the last code when you need to see what CI saw." },
+  ]}
+/>
+
+<FlowAnimation
+  title="You press Enter - what the shell does with your line. Press Play."
+  intervalMs={1800}
+  nodes={[
+    { label: "Read: the shell takes the whole line", desc: "You typed: tail -n 50 'app log.txt' and pressed Enter. The terminal forwards the keystrokes; the shell receives one string of text. Nothing has run yet - first the line must be parsed, and every rule in this animation happens BEFORE the command ever sees your input." },
+    { label: "Split: words are cut on spaces (quotes protect)", desc: "The shell slices the line on spaces into words: tail, -n, 50, and - because you quoted it - app log.txt stays ONE word. Unquoted, it would have become two: app and log.txt. This is the moment filenames-with-spaces live or die, and it happens in the shell, before tail exists as a running program." },
+    { label: "Expand: $variables and wildcards are substituted", desc: "Next the shell rewrites certain patterns: $HOME becomes /home/you, *.log becomes the actual list of matching filenames, $(date) becomes the command's output. Inside double quotes, expansion still happens; inside single quotes, nothing does. The command never sees $HOME - it sees the already-expanded text. That ordering explains most quoting puzzles." },
+    { label: "Find and run: the command is located via PATH", desc: "The first word, tail, must become a program. The shell searches the directories listed in the PATH variable (like /usr/bin) for an executable file named tail - which is why 'command not found' means 'no such file in any PATH directory': a typo, or genuinely not installed. Found, it runs with the remaining words as its flags and arguments, and its output streams to your terminal." },
+    { label: "Report: exit code, then the prompt returns", desc: "The command finishes and hands back a number: 0 for success, non-zero for failure (127 has a specific meaning: command not found). The shell stores it in $? and shows the prompt again - ready for the next order. CI is exactly this loop with no human: commands from a file, run in sequence, and one non-zero code turns the whole pipeline red." },
+  ]}
+/>
+
+Grammar drill first — one command dressed in different flags and arguments, plus the shell's
+verdict system:
+
+<CodePlayground
+  language="bash"
+  title="Run it - anatomy of a command, and exit codes"
+  code={`# One verb, increasingly specific orders:
+ls                       # bare command: list this directory
+# app.log  notes.txt  reports
+
+ls -l                    # one flag: long format (permissions, owner, size, date)
+# -rw-r--r-- 1 deploy deploy 4821 Jul 13 14:02 app.log
+# -rw-r--r-- 1 deploy deploy  112 Jul 12 09:15 notes.txt
+# drwxr-xr-x 2 deploy deploy 4096 Jul 10 16:40 reports
+
+ls -lt                   # bundled flags: -l -t (long format, newest first)
+ls -l --all              # long flag synonym: same as -la, reads better in scripts
+
+# Which shell am I talking to, and where do commands live?
+echo $SHELL
+# /bin/bash
+which ls
+# /usr/bin/ls              <- commands are just files, found via PATH
+
+# Exit codes: the shell's pass/fail verdict
+ls /var/log > /dev/null
+echo $?                  # $? holds the LAST command's exit code
+# 0                        <- zero = success
+
+ls /no/such/dir
+# ls: cannot access '/no/such/dir': No such file or directory
+echo $?
+# 2                        <- non-zero = failure. THIS is what turns CI red.`}
+/>
+
+Now the quoting lab — including the drive-thru disaster, performed safely so you never perform it
+accidentally:
+
+<CodePlayground
+  language="bash"
+  title="Run it - quoting: spaces, splitting, and the half-deleted file"
+  code={`# Create a filename WITH a space in it (quotes make it one word):
+touch 'test report.txt'
+touch test                       # and an innocent bystander named just 'test'
+ls
+# test  'test report.txt'
+
+# The classic disaster, in slow motion -- unquoted:
+rm test report.txt
+# rm: cannot remove 'report.txt': No such file or directory
+ls
+# 'test report.txt'
+# Read it carefully: rm got TWO arguments (test, report.txt). It deleted the
+# bystander file 'test' with no error, then failed on 'report.txt'.
+# Half the damage succeeded silently. Quoting is not a style preference.
+
+rm 'test report.txt'             # quoted: one word, one file, done
+ls
+# (empty)
+
+# Single vs double quotes: literal vs expanding
+echo "$USER"
+# deploy                          <- double quotes: $USER expands, stays one word
+echo '$USER'
+# $USER                           <- single quotes: completely literal
+
+# Where this matters daily -- search phrases are one argument:
+echo 'GET /checkout 500' > app.log
+echo 'GET /cart 200' >> app.log
+grep 'checkout 500' app.log      # quoted: one search pattern
+# GET /checkout 500
+grep checkout 500 app.log        # unquoted: grep thinks 500 is a FILE
+# grep: 500: No such file or directory
+# app.log:GET /checkout 500      <- partial result plus an error. Sneaky.`}
+/>
+
+<Callout type="tip">
+When any command misbehaves, debug it the way the shell reads it: mentally **split the line on
+spaces** and label every word — which is the command, which are flags, which are arguments? Then
+ask "is any of these words secretly two words, or two of them secretly one?" That five-second
+parse catches most quoting bugs before they run. For anything gnarlier, paste the command into
+**explainshell.com** — it labels every token against the real documentation, like a sentence
+diagram for shell.
+</Callout>
+
+<FirstTime title="Your mission: speak grammar, not phrasebook">
+<StepChecklist
+  steps={[
+    { text: "Identify your three layers", detail: "Name your terminal app out loud, then run echo $SHELL to name your shell (bash on most servers/CI, zsh on modern Macs), and look at your prompt's last character ($ or #). Three words, three things - you now outrank everyone who uses them interchangeably." },
+    { text: "Parse before you run", detail: "For each of these, label every word as command, flag, or argument BEFORE running it: ls -la /tmp, tail -n 20 app.log, grep -i error app.log. Then run them. The habit of parsing-first is the whole skill." },
+    { text: "Reproduce the half-delete, safely", detail: "In a scratch directory (mkdir ~/quoting-lab, cd there): touch 'test report.txt', touch test, then rm test report.txt. Watch one file die silently and the other survive. Clean up with the QUOTED version. You will never forget quoting again - lab accidents beat production ones." },
+    { text: "See both quote flavours", detail: "Run echo \"$HOME\" then echo '$HOME'. One expands, one is literal. Then the daily-driver version: grep with a multi-word pattern, quoted. Every log search you ever run will use this." },
+    { text: "Read an exit code like CI does", detail: "Run a command that works, then echo $?. Run one that fails (ls /nope), then echo $? again. Then open any CI log and find the phrase 'exited with code' - you now know exactly which conversation that number came from." },
+  ]}
+/>
+You can now parse any command into its grammar, quote like someone who's seen things, and read
+the exit codes CI lives by. That's not "knows some commands" — that's speaking the language.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "command not found - for something you're sure exists.",
+      fix: "Three suspects in order of likelihood: a typo (the shell searches PATH for EXACTLY what you typed - grpe is not grep); the tool genuinely isn't installed on THIS machine (common in minimal Docker images - check with which toolname, install with the distro's package manager); or it's installed somewhere outside PATH. In CI logs, exit code 127 is this exact error wearing a number. It is never the shell being moody - the file either exists in a PATH directory or it doesn't.",
+    },
+    {
+      symptom: "A command deleted / affected the wrong file, or errored with half a filename: cannot stat 'test'.",
+      fix: "An unquoted space split one filename into two arguments - the shell handed the command two nouns where you meant one. The scary part: the halves that match real files SUCCEED silently (as the playground's bystander file demonstrated). Fix: quote any argument containing spaces ('test report.txt'), and prefer tab-completion, which quotes or escapes for you automatically. In scripts, quote every variable that holds a filename: \"$FILE\", always.",
+    },
+    {
+      symptom: "My variable prints literally - the output says $USER instead of the username.",
+      fix: "It's inside single quotes, which mean 'touch nothing, completely literal'. Switch to double quotes (\"$USER\") to keep it one word AND expand it. The rule to keep: single quotes for fixed text (grep patterns especially - they stop the shell eating special characters), double quotes the moment a $variable needs to expand inside. If you see $ in output where a value should be, the quotes are the culprit, every time.",
+    },
+    {
+      symptom: "The command works when I type it in my terminal but fails inside a script or CI step.",
+      fix: "Your interactive shell and the script's shell are different environments. The big four differences: aliases and shell customisations from your profile do not exist in scripts; the PATH may be shorter on the runner; your terminal might be zsh while the script runs bash or plain sh (zsh-only syntax dies there); and the working directory may differ - relative paths that worked from your project folder point nowhere. Debug by running the script's exact line in a bare shell: bash -c 'the command', and check the shebang line (#!/bin/bash) says what you think it says.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Shell grammar isn't an abstract skill — here's where a tester cashes it in:
+
+- **CI pipeline definitions** — every `run:` line in `.github/workflows/*.yml` or `.gitlab-ci.yml`
+  is a shell command. Red pipeline? Read the failing step's command with your new grammar: what's
+  the verb, are the flags real, is anything unquoted that shouldn't be?
+- **Flaky-looking CI failures around filenames** — spaces in test names, report paths, or artifact
+  names splitting unquoted variables. If a step fails only when a certain test (with a space in
+  its name) runs, you already know the diagnosis.
+- **README and runbook commands** — the `npm test`, `docker compose up`, `./run-tests.sh --smoke`
+  incantations. Parsing them (instead of pasting and praying) tells you what knobs exist and what
+  to tweak when they fail.
+- **Log-digging over SSH** — every real search is a quoting exercise: `grep 'payment failed' app.log`
+  works; the unquoted version quietly searches for the wrong thing. Multi-word patterns, always
+  quoted.
+- **Exit codes in test tooling** — test runners signal pass/fail to CI via exit codes. A suite
+  that prints failures but exits 0 shows green in CI — a genuinely nasty bug class that only a
+  tester who knows exit codes will ever catch.
+
+Tester's habit: **never run a command you can't parse.** Label the verb, flags, and nouns first.
+It takes five seconds, and it converts every command from an incantation into a sentence you can
+modify, debug, and reuse.
+</WhereToCheck>
+
+<WorkedExample title="the CI job that only failed when Priya's test ran">
+1. **The report:** "The nightly regression job fails maybe one run in five, at the 'archive results' step, with: cp: cannot stat 'Checkout': No such file or directory. Re-running usually fixes it. We've labelled it flaky and moved on, but it's been three weeks - can QA take a look?"
+2. **The tester's alarm goes off at the error text itself.** The step copies test result files - but the error names a file called 'Checkout'. There IS no file called Checkout. There is, however, a test suite called 'Checkout Flow'. That looks less like a missing file and more like a filename cut in half at a space.",
+3. **Read the failing step in the pipeline YAML:** cp $RESULT_FILE archive/ - an unquoted variable. RESULT_FILE is built from the test suite's name. For most suites (Login, Search, API) that's one word and everything works. When the 'Checkout Flow' suite produces 'Checkout Flow.xml', the shell splits the unquoted expansion into two arguments: Checkout (no such file) and Flow.xml.
+4. **The 'flakiness' explains itself:** the job only fails on runs where that suite's file gets archived - which depends on test ordering and which suites produced results that night. Intermittent-looking, fully deterministic. Flaky was never the right word; conditional was.
+5. **The tester reproduces it in ten seconds, locally:** RESULT_FILE='Checkout Flow.xml'; cp $RESULT_FILE archive/ - same error, every time. Then the fix, proven in the same breath: cp \"$RESULT_FILE\" archive/ - quoted, one argument, works with any filename.
+6. **The bug report is surgical:** title 'Archive step splits filenames with spaces - unquoted $RESULT_FILE in nightly.yml line 61'. Repro: the one-line local demo. Fix: quote the variable. Also flagged: two other unquoted variables in the same file, same landmine, not yet stepped on.
+7. **The one-character-class fix ships that day,** and the team adds shellcheck (a shell linter that flags unquoted variables automatically) to the pipeline so the whole bug class dies, not just this instance.
+8. **The lesson for a tester.** 'Flaky' is a diagnosis of last resort, not first - most flakiness is a deterministic bug with a condition nobody has named yet. Shell grammar gave the tester the condition in minutes: unquoted variable + space in data = split arguments. And the error message said so all along: cannot stat 'Checkout' - half a filename, printed in quotes, begging to be read literally.
+</WorkedExample>
+
+<Callout type="mistake">
+Copy-pasting commands from tutorials, tickets, or chat *without parsing them first* — the
+phrasebook habit. It works right up until it doesn't: the paste contains someone else's paths,
+assumes flags your machine's version lacks, or — the classic — you paste a multi-word value into
+an unquoted slot and the shell splits it. Worse, when a pasted command fails, the phrasebook user
+is stranded ("the magic words broke") while the grammar user reads the error, re-parses the line,
+and fixes the word that's wrong. Five seconds of labelling — verb, flags, nouns, anything need
+quotes? — before every paste. That's the entire discipline, and it's the difference between
+operating a shell and performing rituals at it.
+</Callout>
+
+<Quiz
+  question="A directory contains a file named 'test report.txt' and another file named 'test'. You run: rm test report.txt - what happens?"
+  options={[
+    "The file 'test' is deleted silently, rm errors on 'report.txt' - and 'test report.txt' survives untouched, because the shell split the unquoted name into two arguments",
+    "The file 'test report.txt' is deleted - rm can see the space is part of the filename",
+    "Nothing is deleted - rm refuses to run when any named file is missing",
+    "Both 'test' and 'test report.txt' are deleted, since the words match both names"
+  ]}
+  answer={0}
+  explain="The shell splits the line on spaces BEFORE rm ever runs, so rm receives two separate arguments: test and report.txt. It deletes 'test' (exists - gone, silently, exit-code-successfully-for-that-part) and errors on report.txt (no such file). The file you actually meant, 'test report.txt', is never referenced at all. The 'rm can see the space' answer credits rm with information it never gets - the splitting happens in the shell, upstream, and no command can un-split its arguments. 'Refuses to run when any file is missing' describes a safety behaviour rm does not have: it processes each argument independently, succeeding where it can and complaining where it can't - which is precisely what makes the half-success so dangerous. And 'both deleted' would require the shell to fuzzy-match words against filenames, which it never does - matching is exact or (with wildcards like *) explicit, never helpful-guess. The professional habits this one question encodes: quote any filename with a space ('test report.txt'), let tab-completion do the quoting for you, and when an error prints half a filename in its message, believe it - the shell is showing you exactly how it split your line."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Terminal vs shell vs prompt", back: "Terminal: the window - draws text, forwards keystrokes, understands nothing. Shell: the program interpreting your line and running commands (bash on servers/CI, zsh on modern Macs). Prompt: the shell's ready signal - $ for normal user, # for root." },
+    { front: "The universal command grammar", back: "command -flags arguments. Verb (ls, grep, tail), adverbs (-l long; bundle as -la; long form --all; some take values like -n 50), nouns (files, paths, patterns). The shell splits the line on SPACES and hands the words over - the first word must be a findable command." },
+    { front: "Single quotes vs double quotes", back: "Single: completely literal - nothing expands ($USER stays $USER). Ideal for grep patterns. Double: stays one word but $variables DO expand inside. Rule: single for fixed text, double when a variable needs expanding. Unquoted spaces split one thing into many." },
+    { front: "Why do filenames with spaces cause disasters?", back: "The shell splits on spaces before the command runs, so 'rm test report.txt' becomes rm with TWO arguments: test and report.txt. Matching halves are processed silently, missing halves error. Fix: quote the name, use tab-completion, and in scripts always quote variables: \"$FILE\"." },
+    { front: "Exit codes", back: "Every command returns a number on finish: 0 = success, non-zero = failure (127 = command not found). Invisible unless you look: echo $? shows the last one. CI is built on them - a pipeline is shell commands in sequence, and one non-zero code turns the run red." },
+    { front: "Why does a command work in my terminal but fail in CI/scripts?", back: "Different environment: your aliases and profile customisations don't exist there, PATH may be shorter, the script may run bash/sh while you type into zsh, and the working directory may differ. Debug with bash -c 'the exact line' and check the script's #!/bin/bash shebang." },
+  ]}
+/>
+
+<Challenge>
+Three rounds. (1) *Parse*: without running it, label every word of
+`grep -rn 'connection timeout' tests/ | wc -l` — command(s), flags, arguments — and predict what
+the whole line outputs. Then run something like it and check yourself (two commands and a pipe;
+you get partial credit for spotting there are TWO verbs). (2) *Predict*: with
+`FILE='my report.txt'` set, write down what happens for `cat $FILE`, `cat "$FILE"`, and
+`cat '$FILE'` — three different outcomes — then test all three in a scratch directory. (3)
+*Apply*: write the single command that searches `app.log` for the exact phrase `payment declined`,
+case-insensitively, showing line numbers — every flag chosen on purpose. If you used quotes
+without being told to: graduation.
+</Challenge>
+
+<AskCommunity prompt="Shell question: I ran `[the exact command - paste it verbatim]` in `[bash/zsh - terminal/script/CI]` and got `[exact error or wrong behaviour]`. I expected `[what you wanted]`. My parse of the command: `[which word is the command, which are flags, which are arguments]`. Variables involved: `[values, especially any containing spaces]`.">
+Paste commands and errors *verbatim* — shell problems live in exact characters (a quote, a space,
+a stray $), and paraphrases delete the evidence. If you include your own parse of the line, better
+still: usually someone can point at the exact word where your parse and the shell's parse
+disagree, and that word is the bug.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://explainshell.com/", title: "explainshell - paste any command, get every token labelled from the real docs", kind: "read" },
+    { href: "https://www.gnu.org/software/bash/manual/bash.html", title: "GNU Bash manual - the authoritative reference (skim, don't memorise)", kind: "read" },
+    { href: "https://linuxjourney.com/lesson/the-shell", title: "Linux Journey - the shell, from zero", kind: "read" },
+    { href: "https://www.shellcheck.net/", title: "ShellCheck - paste a script, get your unquoted variables flagged automatically", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=2lr7igz90E8", title: "What's the difference between a console, a terminal and a shell? (DevInsideYou)", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=2lr7igz90E8" title="What's the difference between a console, a terminal and a shell? (DevInsideYou)" minutes={11} />
+
+<Takeaways
+  points={[
+    "Three layers, three words: the terminal is the window, the shell (bash/zsh) is the interpreter actually running your commands, and the prompt is its ready signal - $ for you, # for root. SSH gives you a shell on another machine; the grammar is identical everywhere.",
+    "Every command line is command -flags arguments, split on spaces: verb, adverbs (-l, bundled -la, long --all, value-taking -n 50), nouns. Parse before you run - never paste an incantation you can't label.",
+    "Quoting is argument-glue: single quotes are fully literal (perfect for grep patterns), double quotes keep one word while expanding $variables, and unquoted spaces split filenames into fragments that get processed half-silently.",
+    "Exit codes are the shell's verdict: 0 success, non-zero failure, visible via echo $? - and CI is nothing but shell commands judged by exit codes, so 'the pipeline is red' always traces to one command's non-zero exit.",
+    "For a tester: every CI run: line is shell, most 'flaky' filename failures are unquoted variables meeting a space, and grep-with-quoted-phrase over SSH is the daily bread of log-digging. Grammar over phrasebook, always.",
+  ]}
+/>
+
+<Complete xp={10} />

@@ -1,0 +1,368 @@
+---
+title: "Viewing files: cat, less, head, tail"
+summary: "Four ways to read a file without opening an editor: cat dumps it whole, less pages through it interactively, head shows the start, tail shows the end - plus tail -f to watch a log live, the less navigation keys, and why cat on a 2 GB CI log is a mistake you make exactly once."
+tags: ["linux-for-testers", "everyday-commands", "track-b"]
+updated: "2026-07-13"
+---
+
+<Hook>
+There's a rite of passage every tester goes through once: SSH into a CI box, type `cat run.log` on a
+two-gigabyte log file, and watch the terminal turn into a slot machine that's decided to pay out
+*everything* — text screaming past for minutes, Ctrl+C doing apparently nothing, your scroll buffer
+gone, your dignity with it. Congratulations: you've learned that **how you open a file matters as
+much as which file you open**. The command line gives you four readers, each built for a different
+question. `cat` dumps the whole file (perfect for small files, catastrophic for big ones). `head`
+answers "how does it start?". `tail` answers "how does it end?" — which, since logs are written
+top-to-bottom, means *the newest events*, which means *the error*. And `less` is the professional's
+reading room: page through gigabytes instantly, search inside, follow live — without ever loading
+the whole monster. Master these four and any log on any server opens in seconds, at exactly the part
+you need.
+</Hook>
+
+<Callout type="analogy">
+A 2 GB log file is **a 40,000-page logbook in a records room**. `cat` is a forklift that dumps all
+40,000 pages onto your desk at once — the desk (your terminal) disappears, and finding anything means
+digging through the pile that just buried you. `head` politely photocopies the first page or two:
+who opened this logbook, when, with what settings. `tail` photocopies the *last* pages — and since
+clerks write logbooks front to back, the last pages hold *what just happened*, which is usually the
+disaster you came to investigate. `less` is the reading desk with a librarian: the book stays on the
+shelf, the librarian brings one page at a time, flips forward and back on request, and — the killer
+feature — *jumps straight to any phrase you name*. Where the analogy is exact: `less` really doesn't
+load the whole file, which is why it opens a 40,000-page monster as instantly as a pamphlet.
+</Callout>
+
+## cat: the whole file, ready or not
+
+`cat` prints a file's entire contents to the terminal, top to bottom, no questions asked:
+
+```bash
+cat config.yaml
+# environment: staging
+# base_url: https://staging.example.com
+# retries: 2
+
+cat -n config.yaml        # -n adds line numbers
+#      1  environment: staging
+#      2  base_url: https://staging.example.com
+#      3  retries: 2
+```
+
+For a 3-line config, perfect. For anything big, `cat` is the forklift: it will dump every byte
+whether that takes half a second or ten minutes. The rule of thumb: **`cat` is for files you could
+read aloud without getting bored** — configs, small test-data files, short scripts. Before opening a
+mystery file, size it up: `ls -lh run.log` shows a human-readable size (`-h` turns 2147483648 into
+`2.0G`), and `wc -l run.log` counts lines. If the answer has a `G` in it — or an `M` and you only
+need the error at the end — `cat` is the wrong tool, and the terminal-flooding rite of passage is
+entirely optional. (If you do flood the terminal: Ctrl+C stops the command; if the display is left
+garbled — which happens when the file was binary, not text — type `reset` and Enter to un-garble it.)
+
+## head and tail: the first page and the last
+
+```bash
+head run.log               # first 10 lines (default)
+head -n 3 run.log          # first 3
+tail run.log               # LAST 10 lines
+tail -n 50 run.log         # last 50 -- the tester's reflex on any log
+```
+
+Logs are append-only diaries: newest entries at the bottom. So when a run just failed, **the
+evidence is at the end**, and `tail -n 50 run.log` shows the final moments — the stack trace, the
+assertion, the "connection refused" — without touching the two gigabytes of healthy noise above it.
+`head` earns its keep at the other end: startup lines record versions, environment names, config
+choices — the "was this even pointed at staging?" questions.
+
+The party trick is <Term define="Following a file live: tail -f prints the last lines and then stays attached, printing each new line the moment the program writes it - a live ticker for a growing log. Ctrl+C detaches. Capital -F additionally survives log rotation by re-attaching when the file is replaced with a fresh one.">tail -f</Term>
+— *follow* mode. Run `tail -f app.log`, then trigger the bug in another window, and watch the log
+react **live**, line by line, as it happens. No re-running commands, no guessing when to look. It's
+the closest the command line gets to a heart-rate monitor, and testers use it exactly like one:
+attach to the log, poke the app, watch what spikes. Ctrl+C detaches when you're done.
+
+## less: the reading room
+
+`less run.log` opens the file in an interactive pager — and because it reads on demand instead of
+loading everything, it opens a multi-gigabyte file instantly. You're now *in* less, steering with
+keys:
+
+- **Space** — forward one screen; **b** — back one screen
+- **Down/Up arrows** (or j/k) — one line at a time
+- **G** — jump to the END of the file (the error lives here); **g** — jump back to the top
+- **/timeout** then Enter — search *forward* for "timeout"; **?timeout** searches backward
+- **n** — next match; **N** — previous match
+- **-N** while inside less toggles line numbers; **-S** toggles line-wrapping off (long lines chop
+  instead of wrapping — bliss for logs with 2,000-character JSON lines)
+- **F** — follow mode: less becomes `tail -f` until you press Ctrl+C, and then you can scroll back
+- **q** — quit. (Write this one down. Everyone's first `less` session ends with mashing Escape.)
+
+The tester's standard log-opening move is a two-step: `less run.log`, then **G** — you're at the
+end, where the failure is, inside a tool that can search backward (`?ERROR`, then `n` to walk
+through earlier errors) with the whole file navigable and nothing flooded. That single habit
+replaces the cat-scroll-squint ritual forever.
+
+<HotspotImage
+  src="/notes/linux-for-testers/everyday-commands/reading-room.jpg"
+  alt="The Library of Congress Main Reading Room: a circular central circulation desk ringed by arcs of reading desks with lamps, and alcoves of bound volumes behind marble arches - a reading system built so nobody ever carries the whole collection to a desk"
+  credit="Photo: Library of Congress Main Reading Room, by Carol M. Highsmith - Wikimedia Commons, Public domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:LOC_Main_Reading_Room_Highsmith.jpg"
+  pins={[
+    { x: 25, y: 60, label: "The bound volumes in the alcoves = the file that stays shelved", desc: "Behind every arch: shelves of enormous bound volumes that never leave their alcove. Now imagine hauling ALL of them onto one reading desk at once - that is cat run.log on two gigabytes: every page delivered whether the desk can hold it or not. cat is only for files small enough to read aloud: configs, small fixtures, short scripts." },
+    { x: 75, y: 68, label: "The lamped reading desks = head and tail", desc: "Each desk receives only the pages requested: the first few (head - how did this logbook start: versions, environment, settings) or the last few (tail - what just happened: the newest entries, which in an append-only log means the failure). tail -n 50 on a fresh failure is the single highest-value command in log triage." },
+    { x: 50, y: 76, label: "The central circulation desk = less", desc: "The hub of the whole room: you ask, and a page comes to you while the giant volume stays shelved. That is less - the file is read on demand, never loaded whole, so a 2 GB log opens as fast as a pamphlet. Space and b flip pages, G jumps to the end, g back to the start, q leaves the room." },
+    { x: 42, y: 70, label: "The catalog at the hub = / inside less", desc: "The circulation desk does not page through volumes to find a phrase - it looks it up and jumps straight there. Inside less: /timeout searches forward, ?timeout backward, n and N hop between matches. This is what cat can never do - search WITHIN the reading experience. Standard tester move: less, G to the end, ?ERROR to walk back through the failures." },
+    { x: 55, y: 45, label: "A collection that never stops growing = tail -f", desc: "This room acquires new volumes while readers sit at the desks - and a log grows while you watch it. tail -f attaches to the growing file: trigger the bug in another window, watch the reaction land in real time. Ctrl+C detaches; tail -F additionally survives the nightly log rotation by re-attaching to the fresh file." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Triage a giant CI log in ninety seconds - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "1. Size it up before opening anything", desc: "ls -lh run.log says 1.8G. wc -l says 9 million lines. That single check just vetoed cat and picked your tools: this is tail and less territory. Ten keystrokes of reconnaissance, one terminal-flood avoided. Never open a mystery file without knowing its weight class." },
+    { label: "2. tail -n 50: read the ending first", desc: "Logs append, so the newest events - the failure - are at the bottom. tail -n 50 run.log prints the final moments: a stack trace, 'AssertionError: expected 200 got 503', timestamps. Eight times out of ten, triage effectively ends here. Cost: under a second, regardless of file size." },
+    { label: "3. less + G: enter at the crime scene", desc: "Need context around that error? less run.log opens instantly (nothing is loaded upfront), G jumps to the end. You are now standing at the failure with the entire file navigable above you - no flood, no waiting, full freedom to scroll back through what led up to it." },
+    { label: "4. Search backward: ?ERROR, then n", desc: "From the end, ?ERROR searches backward - to EARLIER occurrences. n repeats the search: each press walks you back one error. The question this answers is gold: did the 03:12 failure start at 03:12, or was the log already screaming at 02:40? First error and last error are different bugs' fingerprints." },
+    { label: "5. Live verification: tail -f while you reproduce", desc: "Fix deployed? Attach tail -f app.log, trigger the same flow in another window, and watch the lines appear as the app writes them. Clean pass scrolls by, or the same stack trace returns - either way you know in real time. Ctrl+C to detach. This is the heartbeat-monitor move of everyday testing." },
+  ]}
+/>
+
+First playground: the four readers on a small log, so the behaviour of each is visible in full:
+
+<CodePlayground
+  language="bash"
+  title="Try it - cat, head, tail on a mini log"
+  code={`printf 'line %d: all systems normal\\n' 1 2 3 4 5 6 7 8 9 10 11 12 > run.log
+echo 'line 13: ERROR connection refused to db:5432' >> run.log
+echo 'line 14: test FAILED checkout-flow' >> run.log
+
+wc -l run.log             # size up FIRST: how many lines am I dealing with?
+# 14 run.log
+
+ls -lh run.log            # and how heavy? (-h = human-readable sizes)
+# -rw-r--r-- 1 tester tester 578 Jul 13 10:02 run.log
+
+cat run.log               # small file: cat is fine -- everything at once
+# line 1: all systems normal
+# ...
+# line 14: test FAILED checkout-flow
+
+head -n 3 run.log         # the opening: setup, versions, environment
+# line 1: all systems normal
+# line 2: all systems normal
+# line 3: all systems normal
+
+tail -n 3 run.log         # the ending: where failures live
+# line 12: all systems normal
+# line 13: ERROR connection refused to db:5432
+# line 14: test FAILED checkout-flow
+
+cat -n run.log | tail -n 3    # -n numbers lines: 'the error is on line 13'
+#     12  line 12: all systems normal
+#     13  line 13: ERROR connection refused to db:5432
+#     14  line 14: test FAILED checkout-flow`}
+/>
+
+Second playground: the sizing-up ritual on a "big" file, plus the commands you'd hand to `less` and
+`tail -f` (both interactive, so their keys are shown as comments — run them in a real terminal to
+feel them):
+
+<CodePlayground
+  language="bash"
+  title="Try it - the big-file ritual"
+  code={`# fabricate a 'big' log: 50,000 lines with one buried error
+seq 1 50000 | sed 's/^/line /' > big.log
+echo 'ERROR: payment gateway timeout after 30000ms' >> big.log
+seq 50002 60000 | sed 's/^/line /' >> big.log
+
+ls -lh big.log            # step 1: weigh it
+# -rw-r--r-- 1 tester tester 704K Jul 13 10:05 big.log
+
+wc -l big.log             # step 2: count it
+# 60001 big.log
+
+# step 3: NOT cat. Read the ending:
+tail -n 5 big.log
+# line 59996
+# line 59997
+# line 59998
+# line 59999
+# line 60000
+
+# hunt the buried error without opening anything:
+grep -n ERROR big.log     # -n prints the line number too
+# 50001:ERROR: payment gateway timeout after 30000ms
+
+# read just the neighbourhood around line 50001:
+head -n 50003 big.log | tail -n 5
+# line 49999
+# line 50000
+# ERROR: payment gateway timeout after 30000ms
+# line 50002
+# line 50003
+
+# interactive tools -- run these in a real terminal:
+# less big.log      -> G (end), g (top), /ERROR (search), n (next), q (quit)
+# tail -f big.log   -> watch new lines arrive live; Ctrl+C detaches`}
+/>
+
+<Callout type="tip">
+Make the **size-up ritual** automatic: `ls -lh` then `wc -l` before opening any file you didn't
+create yourself. It costs three seconds and chooses your tool for you — kilobytes and a few hundred
+lines, `cat` away; megabytes, `tail` and `grep`; a `G` in the size, `less` only. And inside `less`,
+learn just two chords before any others: **G then ?pattern** (jump to the end, search backward) for
+post-mortem reading, and **F** (follow) for live reading. Those two cover ninety percent of real
+log work — the other thirty keybindings can wait until you're showing off.
+</Callout>
+
+<FirstTime title="Your mission: open a monster without getting buried">
+<StepChecklist
+  steps={[
+    { text: "Weigh before you open", detail: "In the second playground, run ls -lh and wc -l on big.log and say the verdict out loud: 60,001 lines, so cat is vetoed. Deciding the tool from the size - before any file is opened - is the entire discipline of this note in one habit." },
+    { text: "Read the ending first", detail: "tail -n 5 big.log, then tail -n 50 on the first playground's run.log. Notice how the failure story is always at the bottom - logs append. 'tail -n 50' should become your reflex first command on any log tied to a fresh failure." },
+    { text: "Find the needle without opening the haystack", detail: "grep -n ERROR big.log gives you the line number, and the head-pipe-tail combo shows the neighbourhood around it. You just did surgical log reading on a 60,001-line file without ever displaying more than five lines at once." },
+    { text: "Take less for a real drive", detail: "In an actual terminal, run less on any big file you own (or big.log recreated locally). Practise the sequence: G to the end, g to the top, /something, n, n, q. Then reopen and try G followed by ?line - backward search from the end. That reverse walk is the post-mortem power move." },
+    { text: "Watch a log breathe", detail: "In one terminal: tail -f /tmp/live.log (create it first with touch /tmp/live.log). In another: echo 'event' >> /tmp/live.log a few times. Watch each line appear in the follower the instant you write it. That is tail -f - attach it to an app log next time you reproduce a bug." },
+  ]}
+/>
+You've now sized up files before opening them, read endings with tail, done surgical extraction with grep and head/tail, navigated less like a local, and followed a live log — the complete reading toolkit for logs of any size.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "You cat-ed a huge file and the terminal is unusable - text still pouring, or frozen.",
+      fix: "Ctrl+C interrupts the command (it can take a moment to bite while the terminal drains its backlog). If the screen ends up garbled - random symbols, boxes, a cursor that draws nonsense - you likely dumped a BINARY file, whose bytes included terminal control codes; type reset and press Enter (blind if you must) to restore sanity. Prevention next time: file mystery.bin tells you whether something is text before you open it, and ls -lh tells you whether it is cat-sized.",
+    },
+    {
+      symptom: "tail -f shows nothing new, but you KNOW the app is logging.",
+      fix: "Two usual suspects. One: log rotation - the file you attached to got renamed and replaced by a fresh one at midnight, and your tail is faithfully watching the retired file. tail -F (capital F) re-attaches across rotations; it is the right default for long watches. Two: you are following the wrong file - apps often write several logs. Confirm with ls -lht on the log directory: the file with the newest timestamp at the top is where the writing actually goes.",
+    },
+    {
+      symptom: "Inside less, your search finds nothing - but grep finds the word just fine.",
+      fix: "Three classics in descending order of likelihood. Case: less searches are case-sensitive by default when the pattern has capitals - search /error not /ERROR, or start less with less -i for case-insensitive matching. Direction: / searches FORWARD from where you are - if you already jumped to the end with G, everything is behind you; use ? to search backward, or g to return to the top first. Position: n repeats the search in its original direction, N reverses - if n says no more matches, try N.",
+    },
+    {
+      symptom: "less shows each log line chopped mid-JSON, or wrapped into an unreadable staircase.",
+      fix: "Long lines - 2,000-character JSON blobs are standard in modern logs - wrap by default, turning one event into ten screen lines. Start less with -S (less -S app.log) to chop instead of wrap: each log line stays on one screen line, and the Left/Right arrow keys scroll horizontally into the chopped part. You can also toggle it live: type -S and Enter inside a running less session. Pair with -N for line numbers when you need to cite 'the error is on line 48,112' in a bug report.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Reading files without an editor is a daily motion everywhere testing touches a server:
+
+- **CI failure logs** — the console output the CI web UI shows you is usually truncated; the full
+  log sits on the runner or in an artifact. `tail -n 100` and `less` with `G` get you to the real
+  stack trace the web UI cut off.
+- **Application logs during reproduction** — `tail -f app.log` in one window while you click through
+  the bug in another. Watching the log *react* to your actions ties symptoms to causes in real time.
+- **Docker containers** — `docker logs -f container` is `tail -f` in a trench coat; inside a
+  container, the minimal shell usually has cat/head/tail even when less is missing.
+- **Config verification** — "is staging actually pointed at the staging DB?" is a `cat config.yaml`
+  away. Small files, instant answers; half of environment bugs die right here.
+- **Test reports and fixtures** — a quick `head -n 20` on a CSV fixture answers "what columns does
+  this have?" without downloading it or opening a spreadsheet over SSH.
+
+Tester's habit: **read the end first, then decide.** Logs append, failures are recent, and
+`tail -n 50` on the right file answers most triage questions before heavier tools ever load.
+</WhereToCheck>
+
+<WorkedExample title="the 2 GB log and the error that was not where everyone looked">
+1. **The report:** nightly API suite fails at 03:12 with `504 Gateway Timeout` on three endpoints.
+   The dev's first take: "network blip, re-run it." The re-run passes. Everyone wants to move on.
+   The tester doesn't — a passing re-run explains nothing about the original failure.
+2. **The log is on the runner:** `ls -lh api-nightly.log` says `2.1G`. `wc -l` says 14 million
+   lines. `cat` is vetoed by ritual; the terminal-flood rite of passage will not be observed today.
+3. **End first:** `tail -n 100 api-nightly.log` shows the three 504s at 03:12:40, and just before
+   them, response times climbing: 200 ms, then 900, then 8,000, then timeouts. So it wasn't a blip —
+   something *degraded*. Degradation has a beginning. Find it.
+4. **Into the reading room:** `less api-nightly.log`, then `G` to the end, then `?upstream timed out`
+   and `n`, `n`, `n` — walking *backward* through matches. The timeouts stretch back to 02:58.
+   Before 02:58: silence. The degradation has a birth time.
+5. **What happened at 02:58?** Still inside less: `?02:58:0` and a short scroll. There it is — a
+   burst of `connection pool exhausted, opening new connection` messages, then the slowdowns begin.
+   The pool ran dry fourteen minutes before anything visibly failed.
+6. **Evidence extraction, surgical:** `grep -n 'pool exhausted' api-nightly.log | head -n 5` for the
+   first occurrences with line numbers, then `head` piped to `tail` to copy the exact neighbourhood
+   into the bug report. Total lines ever displayed on screen: maybe two hundred, out of 14 million.
+7. **The bug that gets filed** is not "flaky 504s" — it's "connection pool exhausts under nightly
+   load starting 02:58, causing progressive latency and eventual 504s at 03:12", with line-numbered
+   log excerpts. The dev stops saying "network blip". The pool config gets fixed that week.
+8. **The lesson:** the visible error is the *end* of the story, and `tail` only shows endings. The
+   cause lived fourteen minutes earlier, findable only by searching backward from the failure —
+   `less`, `G`, `?pattern`, `n` — a four-keystroke investigation pattern that works on a file no
+   editor could even open.
+</WorkedExample>
+
+<Callout type="mistake">
+Treating the **last error in the log as the bug**. The final lines are just the corpse; the cause of
+death is usually pages earlier — the first timeout, the first retry, the "pool exhausted" that
+preceded fourteen minutes of visible-but-ignored degradation. Beginners `tail` a log, quote the
+final stack trace into a ticket, and file what is effectively a photo of the crash site with no
+skid marks. The professional move costs one extra minute: after reading the ending, search
+*backward* for the first occurrence — `less`, `G`, then `?ERROR` (or `grep -n` for a numbered list
+of every occurrence, reading the *earliest* one first). "When did this start?" is a different — and
+almost always more valuable — question than "how did this end?", and only one of them can be
+answered from the last fifty lines.
+</Callout>
+
+<Quiz
+  question="A test just failed and left a 2 GB run.log on the CI runner. You want the stack trace from the failure. What is the right first command, and why?"
+  options={[
+    "tail -n 50 run.log - logs append newest-last, so the failure's stack trace is in the final lines, and tail reads them in under a second regardless of file size",
+    "cat run.log - you need to see the whole file to be sure you do not miss anything",
+    "head -n 50 run.log - the important information is always at the top of a log",
+    "Download the file and open it in a text editor, since 2 GB is too big for terminal tools"
+  ]}
+  answer={0}
+  explain="tail -n 50 run.log is the move: logs are append-only, the failure just happened, so its stack trace sits in the last lines - and tail reads only the end of the file, making it as instant on 2 GB as on 2 KB. cat run.log is the classic rite-of-passage mistake: it dumps all 2 GB into your terminal, flooding it for minutes to show you content that is 99.99 percent healthy noise - 'seeing everything' sounds thorough but is actually unreadable. head -n 50 has the geography backwards: the top of a log holds the OLDEST events (startup, versions, config) - useful for 'was this pointed at staging?', useless for a fresh failure. And downloading 2 GB to open in an editor gets it exactly inverted: most editors load whole files into memory and will choke or crawl, while the terminal tools - tail, grep, less - are precisely the ones built to handle files this size, because less reads on demand and never loads the whole thing. Big files are where terminal tools are strongest, not weakest."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The four file readers - one line each", back: "cat: whole file at once (small files only). head -n K: first K lines (startup, versions, config). tail -n K: last K lines (newest events - the failure). less: interactive pager, opens any size instantly, search inside, q to quit." },
+    { front: "Why never cat a 2 GB log?", back: "cat dumps every byte to the terminal - minutes of flooding to display noise. The size-up ritual first: ls -lh (weight) and wc -l (lines). Kilobytes: cat. Megabytes: tail/grep. Gigabytes: less. And file suspicious-file first - cat on binary garbles the terminal (fix: type reset)." },
+    { front: "tail -f vs tail -F", back: "-f follows a growing file live: new lines print as the app writes them; Ctrl+C detaches. -F also survives log rotation, re-attaching when the file is replaced - the right default for long watches. Use while reproducing bugs: watch the log react to your clicks in real time." },
+    { front: "less navigation keys - the core set", back: "Space/b: screen forward/back. G: jump to END (the failure). g: top. /pat: search forward, ?pat: search backward. n/N: next/previous match. F: follow like tail -f. q: quit. Options: -i case-insensitive search, -N line numbers, -S chop long lines." },
+    { front: "The tester's log-opening sequence", back: "1) ls -lh + wc -l: size it up. 2) tail -n 50: read the ending - the fresh failure. 3) less, G, ?ERROR, n: walk BACKWARD to the first occurrence - when did it start? 4) grep -n pattern: line-numbered list for the bug report. 5) tail -f while reproducing." },
+    { front: "Why search backward from the end of a log?", back: "The last error is the corpse; the cause is earlier - the FIRST timeout or pool-exhaustion often precedes the visible failure by minutes. 'When did this start?' beats 'how did this end?'. In less: G to the end, then ?pattern and n to walk back through earlier matches." },
+  ]}
+/>
+
+<Challenge>
+Using the second playground's big.log: (1) get the exact line number of the buried ERROR two
+different ways — one with grep, one with cat -n piped through other tools. (2) Print exactly lines
+49,998 through 50,004 using only head and tail. (3) Rebuild big.log so the error appears at line 100
+AND line 50,001, then answer with commands, not scrolling: which occurrence is first, and what five
+lines precede it? (4) One-sentence finale: a teammate says 'I cat-ed the log and copied the last
+error into the ticket' — name the two distinct mistakes in that sentence and the command that fixes
+each.
+</Challenge>
+
+<AskCommunity prompt="Log/file-viewing issue: I am trying to read `[file]` (`[size from ls -lh]`, `[lines from wc -l]`) on `[laptop / CI runner / container]` to find `[what]`. I tried `[command]` and got `[flood / nothing / garbled terminal / search finds nothing]`. The failure I am investigating happened at `[time]`, and the log's last lines say `[paste a few]`.">
+Most viewing problems are tool-size mismatches (cat on gigabytes, editors on server logs) or
+direction mistakes (searching forward from the end, reading the top for a fresh failure). Include
+the file's size, what time the failure happened, and the last few lines - with those three facts,
+the right tool and the right search direction are usually obvious.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.gnu.org/software/coreutils/manual/html_node/Output-of-entire-files.html", title: "GNU Coreutils manual - cat, head, tail (including tail -f)", kind: "read" },
+    { href: "https://man7.org/linux/man-pages/man1/less.1.html", title: "less(1) man page - every key and option (skim the COMMANDS section)", kind: "read" },
+    { href: "https://linuxjourney.com/lesson/stdout-standard-out-redirect", title: "Linux Journey - Text-Fu unit (viewing and manipulating text files)", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=41_F6eqOPJY", title: "Mastering Linux Command Line: Exploring Head, Tail, and Less (Engineering Digest)", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=41_F6eqOPJY" title="Mastering Linux Command Line: Exploring Head, Tail, and Less (Engineering Digest)" minutes={10} />
+
+<Takeaways
+  points={[
+    "Four readers, four questions: cat (whole small file), head (how did it start - versions, config), tail (how did it end - the fresh failure), less (interactive reading room for anything big).",
+    "Size up before opening: ls -lh and wc -l choose your tool - and cat on a gigabyte log floods the terminal for minutes to show you noise. tail -n 50 answers most triage questions in under a second.",
+    "less opens any size instantly because it reads on demand: G to the end, g to the top, /forward and ?backward search, n/N between matches, F to follow live, q to quit - plus -i, -N, -S as quality-of-life options.",
+    "tail -f is the live ticker: attach to a log, reproduce the bug in another window, watch the reaction in real time - and tail -F survives the log rotation that silently orphans plain -f.",
+    "The last error is the corpse, not the cause: after reading the ending, search BACKWARD for the first occurrence (less, G, ?pattern, n) - 'when did this start?' is the question that turns a flaky-looking failure into a filed root cause.",
+  ]}
+/>
+
+<Complete xp={10} />

@@ -1,0 +1,317 @@
+---
+title: "from log line to bug report"
+summary: "The chapter's payoff: turn a raw ERROR line into a bug report developers respect. Correlate timestamps with your repro, chase the requestId across services, read a stack trace top-down, and paste the right evidence - exact lines, not screenshots of terminals."
+tags: ["linux-for-testers", "logs-and-investigation", "track-b"]
+updated: "2026-07-13"
+---
+
+<Hook>
+You've tailed the live feed, grepped the haystack, and counted the bodies with `sort | uniq -c`.
+Now the question that decides whether the last three notes were a party trick or a profession:
+**what do you DO with the line you found?** Because here's the uncomfortable truth about your
+beautiful ERROR line — on its own, it's gossip. "I saw an error in the log" carries exactly as much
+weight as "my cousin saw a shark at the beach." A developer can't fix gossip. What they can fix is
+*evidence*: this action, at this second, produced this line, carrying this request ID, with this
+stack trace — reproduced three times, correlation attached. This note is the difference between a
+bug report that gets fixed on Tuesday and one that comes back stamped "cannot reproduce" — the
+four saddest words in QA.
+</Hook>
+
+<Callout type="analogy">
+A log line is a **fingerprint at a crime scene**. Finding it feels like the victory — but a
+fingerprint in a bag with no notes is worthless in court. What convicts is the *chain of evidence*:
+where the print was found, when, matched against whom, corroborated by what. Your bug report is the
+case file. The timestamp is your "when", the request ID is the suspect's name that lets other
+detectives (other services' logs) pull their files on the same guy, and the stack trace is the
+confession — signed, dated, and specific about which line of code pulled the trigger. Testers who
+paste a lone error message are handing the jury a smudge. Testers who paste the line PLUS the
+timestamp correlation PLUS the request ID PLUS two reproductions are handing them a conviction.
+The exact technical version of that: a complete report pairs *your action* (with clock time) to
+*the log's reaction* (with log time), includes identifiers a developer can search other systems for,
+and quotes the log verbatim — copy-pasted text, never a photo of a screen.
+</Callout>
+
+The star witness of this note is the
+<Term define="A unique identifier (also called correlation ID or trace ID) that a system attaches to one incoming request and stamps onto EVERY log line that request produces - across functions, services, and machines. Formats vary (req-9f3a71, a UUID, a hex trace ID) but the job is constant: grep for it and you get the complete biography of one single request, with all other traffic filtered out. For a tester it converts 'checkout failed sometime around 2pm' into 'this exact request failed, here is everything the system did with it'.">request ID</Term>
+— the single most searchable thing a log line can hand you.
+
+## Step one: pin the WHEN — timestamp correlation
+
+Everything starts with the clock. When you reproduce a bug, **note the time you acted** — not
+"around 2:30" but `14:32:07`, read from the same machine's clock if possible. Then look at the log
+line's own timestamp. If your click was at `14:32:07` and the ERROR printed at `14:32:07,118`,
+you have *correlation* — the strongest cheap evidence in testing. It answers the developer's first
+silent question ("is this error even related to what you did?") before they ask it.
+
+Two honest complications, both survivable. First, **time zones**: servers usually log in UTC while
+your laptop shows local time — in Kathmandu that's a 5:45 offset waiting to make your correlation
+look insane. Check the log's timezone before you correlate (a `date` command on the server settles
+it). Second, **precision**: your click and the log line won't match to the millisecond — a match
+within a second or two, *consistently across reproductions*, is the standard. One coincidence is
+weak; three reproductions with three matching timestamps is a pattern nobody argues with.
+
+## Step two: pull the thread — the request ID
+
+Modern log lines carry an ID: `requestId=req-9f3a71`, `trace_id=4bf92f35`, some UUID soup. That ID
+is a search warrant. `grep req-9f3a71 app.log` returns the *biography of that one request* — arrival,
+processing steps, the moment it died — with every other user's noise filtered out. Better: the same
+ID appears in OTHER services' logs. The web app's timeout and the payment service's crash stop being
+two mysteries and become one story: `grep -r req-9f3a71 /var/log/services/` stitches the distributed
+system back together in one command.
+
+The discipline: **every bug report that has a request ID available should quote it.** It's the
+difference between the developer searching "checkout error july 13" (hundreds of hits) and searching
+`req-9f3a71` (one request, full history). You're not just reporting a symptom anymore — you're
+handing over the case number.
+
+## Step three: read the confession — stack trace anatomy
+
+When something truly breaks, the log doesn't print one line — it prints a **stack trace**: the
+exception name, a message, then a tower of `at ...` lines. Beginners see a wall; you should see a
+map with a *you-are-here* arrow. The reading order: **first line = what went wrong**
+(`NullPointerException`, `SocketTimeoutException` — the *what*), **message = the details**
+(`timeout after 30000 ms` — the *how*), **topmost `at` line = where it happened** (file and line
+number — the *where*). The lines below it are the call chain that led there, newest call on top,
+oldest at the bottom. And when you see `Caused by:` further down — that's the REAL root; the trace
+above it is just the wrapping paper. A tester doesn't need to *understand* the code in the trace.
+You need to quote the exception name, the message, the top `at` line, and any `Caused by:` — that's
+the 10 percent that carries 90 percent of the information.
+
+<HotspotImage
+  src="/notes/linux-for-testers/logs-and-investigation/forensics-lab.jpg"
+  alt="A digital forensics laboratory: two analysts in white clean-room suits and purple gloves, one working a bench of open computer towers and labelled hard drives beneath a monitor wall showing raw extracted data, the other at a CLEAN-CELL evidence hood, an AUTHORIZED PERSONNEL ONLY door between them"
+  credit="Photo: Digital forensics lab - Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Digital_forensics_lab.jpg"
+  pins={[
+    { x: 45, y: 31, label: "The camera over the door = timestamp correlation", desc: "Everything in this lab happens under a clock and a camera - every action timestamped. That is your first evidence layer: YOUR action at 14:32:07 paired with the log's ERROR at 14:32:07,118. One match could be luck; the same match across three reproductions is causation a developer can act on. Mind the timezone - servers log UTC, your laptop lies in local time." },
+    { x: 62, y: 82, label: "The labelled drives on the bench = the request ID", desc: "Every drive on that bench carries a case label, and every extract traces back to it. Logs work the same: grep for req-9f3a71 and every line of that one request's life - across files, even across services - joins into one story. Always quote the ID in your report: it turns 'checkout failed' into a case number any developer can pull." },
+    { x: 78, y: 22, label: "The raw data on the big screen = the stack trace", desc: "The monitor shows the extracted evidence in the raw - dense, intimidating, and readable if you know the anatomy. Read a stack trace top-down: exception name (what), message (how), first at-line (where - file and line number), and hunt for Caused by: further down, which names the true root. Quote those four parts verbatim; the rest of the wall of text is call-chain wrapping." },
+    { x: 34, y: 42, label: "AUTHORIZED PERSONNEL ONLY = the case file's standard", desc: "That door is chain-of-custody made visible: evidence only counts when a stranger can trust and audit it. Your bug report is held to the same bar: steps to reproduce with times, expected vs actual, the log lines PASTED AS TEXT (never a photo of a terminal), the request ID, the trace, and how many times out of how many tries it reproduced. If a developer has to ask 'which environment?', the file was incomplete." },
+    { x: 12, y: 45, label: "The CLEAN-CELL evidence hood = preserving before it degrades", desc: "The second analyst works the original inside a protective hood because evidence degrades the moment it's exposed. Logs rotate and vanish - yesterday's app.log is tonight's app.log.1 and next week's deleted file. The moment you find the lines, COPY them out: grep with -A/-B context into a dated bug-1234-log.txt. A report whose evidence expired with the rotation is a case with no exhibits." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One ERROR line becomes a complete bug report - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Catch the line", desc: "Live feed running (tail -F | grep -i error, exactly as note one taught), you reproduce the checkout failure at 14:32:07 by the server clock. The feed prints: 2026-07-13 14:32:07,118 ERROR [checkout] PaymentService - gateway timeout after 30000 ms (requestId=req-9f3a71). Timestamp matches your click within 200 ms. Correlation: captured." },
+    { label: "Pull the request's biography", desc: "grep req-9f3a71 logs/app.log -A 2 returns the request's whole life: arrival at 14:31:37, the payment call starting, the 30-second wait, the timeout, one retry, second failure. The story has a shape now - the request waited exactly 30000 ms, which smells like a configured timeout, not a random crash." },
+    { label: "Extract the trace's vital organs", desc: "Below the ERROR line sits a 40-line stack trace. You take its vitals: exception SocketTimeoutException, message 'Read timed out', top at-line PaymentClient.java:112, and near the bottom - Caused by: java.net.SocketTimeoutException. You quote those four parts; you do not paste all 40 lines into the summary (the full trace goes in an attachment)." },
+    { label: "Reproduce twice more", desc: "Two more attempts, feed live. 14:41:02 - same ERROR, new requestId req-c210be. 14:47:55 - checkout SUCCEEDS, and the log shows the gateway answered in 900 ms. Now you know the failure condition: it fails when the gateway is slow, succeeds when fast. Failure rate on record: 2 of 3, both at the 30-second mark." },
+    { label: "Preserve, then write", desc: "Evidence expires - logs rotate at midnight. You save the slices NOW: grep -A 40 'req-9f3a71' logs/app.log > bug-checkout-timeout-evidence.txt, same for the second ID. Then the report: title states the mechanism ('Checkout fails when payment gateway exceeds 30 s timeout'), steps with clock times, both request IDs, the trace vitals, pasted text lines, and the 2-of-3 rate. Developer's reply: a fix ticket - not 'cannot reproduce'." },
+  ]}
+/>
+
+Build the crime scene yourself, then run the correlation and the request-ID pull:
+
+<CodePlayground
+  language="bash"
+  title="Try it - correlate a repro time and pull one request's biography"
+  code={`mkdir -p logs
+cat > logs/app.log <<'EOF'
+2026-07-13 14:31:37,020 INFO  [http] POST /api/checkout accepted (requestId=req-9f3a71)
+2026-07-13 14:31:37,041 INFO  [checkout] validating cart 3 items (requestId=req-9f3a71)
+2026-07-13 14:31:37,090 INFO  [checkout] calling PaymentService (requestId=req-9f3a71)
+2026-07-13 14:31:58,300 INFO  [http] GET /api/products 200 (34 ms) (requestId=req-11aa22)
+2026-07-13 14:32:07,118 ERROR [checkout] PaymentService - gateway timeout after 30000 ms (requestId=req-9f3a71)
+2026-07-13 14:32:07,119 INFO  [checkout] retrying payment (attempt 2) (requestId=req-9f3a71)
+2026-07-13 14:32:37,200 ERROR [checkout] PaymentService - gateway timeout after 30000 ms (requestId=req-9f3a71)
+2026-07-13 14:32:37,201 WARN  [checkout] checkout failed after retries (requestId=req-9f3a71)
+EOF
+
+# You clicked Place Order at 14:31:37 - find what the log says in that minute:
+grep '14:31:37' logs/app.log
+# three lines: the request arrived, validated, and called PaymentService
+# your click and the log agree on the second -> correlation established.
+
+# Now the search warrant - one request's complete biography:
+grep 'req-9f3a71' logs/app.log
+# 6 lines: arrival 14:31:37 -> payment call -> 30 s later the timeout ->
+# retry -> second timeout -> final failure. Note what is EXCLUDED:
+# the req-11aa22 products request (someone else's traffic) never appears.
+
+# The number that becomes your headline - the wait was exactly 30 seconds:
+# 14:31:37 call -> 14:32:07 timeout. 'after 30000 ms' confirms it: a
+# configured timeout, not a random crash. That word belongs in your title.`}
+/>
+
+<CodePlayground
+  language="bash"
+  title="Try it - dissect a stack trace and preserve the evidence"
+  code={`cat > logs/trace.log <<'EOF'
+2026-07-13 14:32:07,118 ERROR [checkout] payment failed (requestId=req-9f3a71)
+java.lang.RuntimeException: payment gateway unreachable
+    at com.shop.PaymentClient.charge(PaymentClient.java:112)
+    at com.shop.CheckoutService.pay(CheckoutService.java:58)
+    at com.shop.CheckoutController.submit(CheckoutController.java:31)
+Caused by: java.net.SocketTimeoutException: Read timed out
+    at java.base/java.net.Socket.read(Socket.java:891)
+    at com.shop.PaymentClient.charge(PaymentClient.java:108)
+EOF
+
+# The four vitals a tester extracts (top-down):
+head -n 2 logs/trace.log
+# line 1: WHEN and WHO  - the ERROR line with timestamp + requestId
+# line 2: WHAT          - RuntimeException: payment gateway unreachable
+
+grep 'at com.shop' logs/trace.log | head -n 1
+#     at com.shop.PaymentClient.charge(PaymentClient.java:112)
+# WHERE - the topmost application frame: file and line number.
+
+grep 'Caused by' logs/trace.log
+# Caused by: java.net.SocketTimeoutException: Read timed out
+# THE REAL ROOT - the outer exception is wrapping paper; this is the gift.
+
+# PRESERVE before the log rotates - context lines into a dated evidence file:
+grep -B 1 -A 8 'req-9f3a71' logs/trace.log > bug-checkout-evidence.txt
+wc -l bug-checkout-evidence.txt
+# 9 bug-checkout-evidence.txt   <- the exhibit, safe from midnight logrotate.
+# Paste from THIS file into the report - as text, never as a screenshot.`}
+/>
+
+<Callout type="tip">
+Write the bug title from the *mechanism*, not the symptom. "Checkout sometimes fails" is a symptom
+title — it tells the developer nothing and ages into an unfixable backlog ghost. "Checkout fails
+when PaymentService exceeds its 30 s timeout (SocketTimeoutException, PaymentClient.java:112)" is a
+mechanism title — the log gave you every word of it. A useful self-test before you hit submit: could
+a developer who reads ONLY your title guess which file to open? If the log has already told you the
+where and the why, promoting them to the title costs one sentence and saves one full round-trip of
+"needs more info."
+</Callout>
+
+<FirstTime title="Your mission: build one complete evidence package">
+<StepChecklist
+  steps={[
+    { text: "Stage the crime", detail: "Run the first playground to create logs/app.log. Pretend the 14:31:37 checkout POST was your click - write that time down on paper, the way you would during a real repro. You are the witness; the note is your statement." },
+    { text: "Correlate", detail: "grep the log for your noted minute (grep '14:31:37' logs/app.log) and confirm the request arrived at that second. Then find the ERROR and check the gap: call at 14:31:37, timeout at 14:32:07 - exactly 30 seconds. You have just done timestamp correlation plus a first mechanism inference." },
+    { text: "Pull the biography", detail: "grep 'req-9f3a71' logs/app.log and read the request's whole life in order: arrive, validate, call, wait, die, retry, die again. Notice req-11aa22 (other traffic) is invisible in this view - that filtering is WHY request IDs exist." },
+    { text: "Take the trace's vitals", detail: "Run the second playground. Extract and write down only: exception name, message, topmost com.shop at-line, and the Caused by line. Four lines total. That is what goes in the report body; the full trace is an attachment, not the message." },
+    { text: "Preserve and draft", detail: "Save the evidence slice to a file (the grep -B/-A redirect from the playground), then draft a five-line bug report on paper: mechanism title, steps with clock times, expected vs actual, pasted log lines with requestId, reproduction rate. Read it back and ask: could a stranger act on this without messaging me? If yes - you have the skill." },
+  ]}
+/>
+You took one raw ERROR line and built the full chain: correlation, biography, trace vitals, preserved
+exhibit, actionable report. That chain is the difference between "found an error" and "filed a case."
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "My repro time and the log's timestamps are hours apart - correlation looks impossible.",
+      fix: "Timezone mismatch, almost certainly. Servers log in UTC by convention; your laptop clock shows local time (Kathmandu is UTC+5:45, so a 14:32 click shows as 08:47 in a UTC log - off by what looks like a nonsense amount). Run date on the server AND date -u on your machine to establish both clocks, then correlate in ONE timezone - convert your repro notes to UTC, or mentally shift the log. State the timezone explicitly in the bug report ('all times UTC') so the developer doesn't redo the confusion. If timestamps are still off by minutes after timezone math, suspect clock drift on a VM and lean on request IDs instead - IDs don't drift.",
+    },
+    {
+      symptom: "The error line has no request ID - just a timestamp and a message.",
+      fix: "Not every app stamps IDs (and now you know to praise the ones that do). Fall back to the timestamp plus uniqueness: grep the exact second with context (grep '14:32:07' app.log -B 5 -A 5) and look for anything semi-unique in the surrounding lines - a user ID, a session token fragment, an order number, the URL path. Any of those can play the correlation role across files. Worst case, correlate by narrative: your action at T, the only checkout-module ERROR in that second at T+0.1. Three clean reproductions of THAT pairing is still solid evidence - just say explicitly in the report that the app logs no correlation IDs (that observation is itself useful to the team).",
+    },
+    {
+      symptom: "I found the perfect error lines yesterday, but today they're gone from the log file.",
+      fix: "Rotation ate them - yesterday's app.log became app.log.1 (then .2.gz, then deleted, per the server's logrotate policy). First, check the neighbours: ls app.log* usually shows the rotated generations, and zgrep searches the gzipped ones without unzipping (zgrep 'req-9f3a71' app.log.2.gz). Second, learn the lesson permanently: evidence is preserved AT DISCOVERY TIME, not at writing time - the moment you find relevant lines, grep them with context into a dated file (bug-XXXX-evidence.txt) outside the log directory. Logs are a crime scene that cleans itself nightly; your copy is the only exhibit that survives.",
+    },
+    {
+      symptom: "I pasted the stack trace but the developer says it's 'not the real error'.",
+      fix: "You probably quoted the outer wrapper and missed the Caused by chain. Exceptions nest: frameworks catch a low-level exception and re-throw it wrapped in a friendlier one, so the trace's TOP exception is often just packaging ('RuntimeException: payment failed') while the bottom Caused by names the actual killer ('SocketTimeoutException: Read timed out'). Always scan the FULL trace for every Caused by: line - the LAST one is the root cause - and quote the top exception, the last Caused by, and each one's first application at-line (your code's package, not java.base internals). If the trace was truncated in your paste ('... 47 more'), grab the complete version from the log file, not from the console.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where the evidence lives when one log file isn't the whole story:
+
+- **The app log's rotated siblings** — `ls app.log*` shows the generations (`.1`, `.2.gz`); `zgrep` searches the compressed ones. Yesterday's bug lives one suffix over.
+- **Other services' logs, same request ID** — `grep -r req-9f3a71 /var/log/services/` (or each service's log dir). The web app says "timeout"; the payment service's log says WHY. One ID, whole story.
+- **The web server in front** — nginx/Apache `access.log` records every request's status code and duration; `error.log` records what the proxy saw fail. When the app log is silent, the front door often isn't.
+- **journald and containers** — services under systemd: `journalctl -u name --since '14:30' --until '14:35'` slices by time directly. Containers: `docker logs name --since 5m`. Same correlation, different faucets.
+- **Your own evidence file** — the dated `bug-XXXX-evidence.txt` you saved at discovery time. When the ticket reopens in three weeks and every log has rotated to oblivion, this file is the only witness left.
+
+Tester's habit: **preserve at discovery, correlate across sources, quote verbatim.** The log
+directory is the scene; your report is the case file; the case file must stand alone after the
+scene is gone.
+</WhereToCheck>
+
+<WorkedExample title="from 'payment sometimes fails' to a fixed ticket in one afternoon">
+1. **The report that lands on you:** a support forward — "customer says payment failed twice this morning, worked the third time." No times, no environment, no evidence. This is not a bug report; it's a rumour with a ticket number.
+2. **Establish the when.** Support confirms the customer's attempts were "around 9 am". You reproduce on staging at `14:31:37` server time with the live feed running (`tail -F logs/app.log | grep --line-buffered -i 'error\|checkout'`). First two attempts succeed. Third: the UI fails at `14:35:12` and the feed prints the ERROR at `14:35:12,090` — `gateway timeout after 30000 ms (requestId=req-d4e802)`.
+3. **Pull the biography.** `grep req-d4e802 logs/app.log` shows the request called PaymentService at `14:34:42` and timed out exactly 30 seconds later. Same shape as the morning's customer complaints would have — a configured timeout meeting a slow dependency.
+4. **Cross the service boundary.** Same ID, other log: `grep req-d4e802 /var/log/payment-svc/app.log` reveals the other half — the payment service RECEIVED the request and spent 31 s waiting on the card processor's sandbox, which has been degraded since a Tuesday deploy. The web app's "timeout" and the payment service's "slow upstream" are one bug now, not two.
+5. **Vitals from the trace:** `SocketTimeoutException: Read timed out`, top application frame `PaymentClient.java:112`, wrapped in a `RuntimeException` you correctly ignore in favour of the `Caused by`.
+6. **Preserve.** Both logs' slices into `bug-payment-timeout-evidence.txt` (grep with `-B 2 -A 40`), because staging rotates at midnight and this ticket will outlive tonight.
+7. **The report:** title "Checkout fails when card-processor sandbox exceeds PaymentClient's 30 s read timeout (SocketTimeoutException, PaymentClient.java:112)". Body: steps with clock times, 1-of-3 reproduction rate matching the customer's 2-of-3, both request IDs, the cross-service correlation, pasted text evidence, timezone stated. 
+8. **The developer's reply, twenty minutes later:** "The sandbox degradation is known — but the retry logic was supposed to cover it and clearly doesn't. Fixing the retry. Great evidence." **The lesson:** the same afternoon that starts with a rumour ends with a fix ticket when every claim in the report is a quoted, timestamped, ID'd line the developer can search for themselves.
+</WorkedExample>
+
+<Callout type="mistake">
+Screenshotting the terminal. It feels like evidence — it's a picture of evidence, which is a
+different thing. A screenshot can't be grepped, can't be copy-searched for the request ID, mangles
+long lines, hides everything above and below the visible window, and goes blurry exactly where the
+exception name is. Paste log lines as **text**, in a code block, verbatim — including the timestamp
+and the full request ID, with two or three lines of context around the error. Attach the complete
+trace as a text file when it's long. The same rule extends to every artefact in the report: a
+developer should be able to *search* your evidence, not squint at it. Screenshots are for UI state
+— what the user saw. Logs are text; keep them text.
+</Callout>
+
+<Quiz
+  question="Your bug report says: 'Checkout fails intermittently. Error seen in logs (screenshot attached).' The screenshot shows a RuntimeException. The developer replies 'cannot reproduce'. Which single upgrade would most improve the report's chance of being acted on?"
+  options={[
+    "Pasted text of the error WITH its timestamp and requestId, plus your repro action at the matching clock time - correlation plus a searchable case number beats any screenshot",
+    "A higher-resolution screenshot so the RuntimeException is easier to read",
+    "Marking the ticket as Critical priority so the developer has to look at it",
+    "Re-running the test 50 more times and reporting the exact failure percentage"
+  ]}
+  answer={0}
+  explain="The report's fatal gaps are searchability and correlation, and pasted text with a timestamp and requestId fixes both at once: the developer can grep the ID across every service's logs and see the request's whole biography, and the matching clock times connect YOUR action to THE error - which is precisely what 'cannot reproduce' is complaining about. A sharper screenshot is still a photo of text: unsearchable, contextless, and it still omits the requestId's role as a cross-service key. Priority inflation changes who is annoyed, not what is knowable - a Critical rumour is still a rumour, and crying Critical on thin evidence spends credibility you will want later. And while a precise failure rate is genuinely useful (the note recommends reporting 2-of-3 style rates), 50 more runs of the SAME unsearchable report just produces a better-measured mystery - the developer still cannot find the error in their own logs. Evidence quality first, then quantity."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Timestamp correlation - the technique", back: "Note your action's clock time DURING the repro (14:32:07, not 'around 2:30'). Match it to the log line's timestamp. Within a second or two, consistently across 3 reproductions = strong evidence the error is YOUR action's. Watch for UTC vs local time (Kathmandu: +5:45 offset)." },
+    { front: "Request ID / correlation ID - why it matters", back: "A unique ID stamped on every log line one request produces, across services. grep the ID = the request's complete biography with all other traffic filtered out. Quote it in every report - it turns a symptom into a searchable case number a developer can chase through any service's logs." },
+    { front: "Stack trace - the four vitals to quote", back: "1) Exception name (what broke), 2) its message (details), 3) topmost APPLICATION at-line - your code's package, with file:line (where), 4) the LAST Caused by: line (the real root; outer exceptions are wrapping). Quote these four; attach the full trace as text." },
+    { front: "Caused by: - reading nested exceptions", back: "Frameworks catch low-level exceptions and re-throw them wrapped. The trace's top exception is often packaging (RuntimeException: payment failed); the bottom-most Caused by names the killer (SocketTimeoutException). Always scan the whole trace; the LAST Caused by is the root cause." },
+    { front: "Preserving evidence before rotation", back: "Logs rotate nightly and eventually delete - evidence expires. AT DISCOVERY: grep the lines with context (-B/-A) into a dated file outside the log dir (bug-1234-evidence.txt). Rotated generations: ls app.log*, search gzipped ones with zgrep. Your copy is the exhibit that survives." },
+    { front: "Log evidence in a report - format rules", back: "Text, never screenshots: pasted verbatim in a code block, timestamp and full requestId included, 2-3 lines of context, timezone stated, full traces as text attachments. Test: can the developer SEARCH every piece of your evidence? Screenshots are for UI state only." },
+  ]}
+/>
+
+<Challenge>
+The full case-file drill. Using the two playground logs (rebuild them if needed): (1) Write the
+mechanism-title for this bug in one sentence — it must name the timeout value and the file:line.
+(2) Produce the request biography for `req-9f3a71` in one command and count its lines. (3) Extract
+exactly four lines from `trace.log` — exception, message-bearing line, top application frame,
+`Caused by` — using head/grep, no manual copying. (4) Preserve: one command that writes the ERROR
+lines with 2 lines of context each into `evidence-$(date +%F).txt`. (5) The examiner's question:
+your correlation shows your click at 14:31:37 *local* and the log ERROR at 08:47:07 — explain the
+gap in one sentence and state what you'd write in the report so nobody re-trips on it. If all five
+take you under ten minutes, you're report-ready.
+</Challenge>
+
+<AskCommunity prompt="Bug evidence question: I'm reporting [the bug in one line]. Evidence so far: [log lines found / timestamps matched / requestId or none / stack trace or none]. The developer response (if any): [cannot reproduce / needs more info / none yet]. My exact log lines (paste as text): [paste]. What I'm unsure about: [correlation / which lines to quote / cross-service search / something else].">
+Paste your actual log lines and the report text - most 'cannot reproduce' bounces are diagnosable
+on sight: a missing timestamp correlation, an unquoted request ID, a screenshot where text should
+be, or an outer exception quoted while the Caused by went unread. Include what the developer said,
+if anything - the shape of their pushback usually names the missing evidence.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://man7.org/linux/man-pages/man1/zgrep.1.html", title: "man zgrep - searching rotated, gzipped logs without unzipping", kind: "read" },
+    { href: "https://www.w3.org/TR/trace-context/", title: "W3C Trace Context - how modern request/trace IDs propagate across services", kind: "read" },
+    { href: "https://docs.oracle.com/javase/8/docs/api/java/lang/Throwable.html", title: "Java Throwable docs - the official word on Caused by chains", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=QlSJCCctsnw", title: "How to Write a Good Bug Report - Step-by-Step with Real Examples (ClickUp)", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=QlSJCCctsnw" title="How to Write a Good Bug Report - Step-by-Step with Real Examples (ClickUp)" minutes={9} />
+
+<Takeaways
+  points={[
+    "A lone error line is gossip; evidence is the chain - your timed action, the correlated log line, the request ID, the trace vitals, and a reproduction count, quoted verbatim as text.",
+    "Timestamp correlation is the cheapest strong evidence: note your action's exact clock time, match it to the log's timestamp (mind UTC vs local), and confirm the pairing across three reproductions.",
+    "The request ID is a search warrant: grep it for one request's complete biography in this log, then grep it across OTHER services' logs to stitch a distributed failure into a single story.",
+    "Read stack traces top-down for the four vitals - exception name, message, first application at-line, and the LAST Caused by (the real root) - and quote exactly those, attaching the full trace as text.",
+    "Evidence expires with log rotation: preserve the relevant slice into a dated file AT DISCOVERY, paste it as searchable text (never terminal screenshots), and title the bug by its mechanism, not its symptom.",
+  ]}
+/>
+
+<Complete xp={10} />

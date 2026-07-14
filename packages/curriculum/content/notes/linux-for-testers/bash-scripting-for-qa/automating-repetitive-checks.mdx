@@ -1,0 +1,318 @@
+---
+title: "automating repetitive checks: your manual routine, scripted"
+summary: "The module's graduation exercise: turn the smoke check you do by hand into a bash loop over a URL list, with timestamped results you can diff day against day. Plus the honest boundary - the four signs a check has outgrown bash and belongs in Python or pytest."
+tags: ["linux-for-testers", "bash-scripting-for-qa", "track-b"]
+updated: "2026-07-13"
+---
+
+<Hook>
+Count what you did by hand this week: opened staging, clicked five pages, checked the API answered,
+glanced at the error log, confirmed the login flow — every morning, the same fifteen minutes, the
+same twelve steps, in the same order. That's not testing. That's being a **very expensive for-loop**.
+Real testing — the exploratory, judgment-heavy work you're actually paid for — starts *after* the
+routine confirms the ground is solid. So this note, the module's closing move, takes everything the
+last five chapters built (commands, pipes, greps, exit codes, cron) and welds it into the thing
+professionals actually ship: a smoke-check script that loops a list of URLs, records timestamped
+verdicts, and hands you a diff-able history of your environment's health. And then — because knowing
+a tool's limits is the difference between a craftsman and a fanboy — the four honest signs your
+check has outgrown bash entirely.
+</Hook>
+
+<Callout type="analogy">
+A pilot doesn't *decide* each morning whether to inspect the flaps — they run the **pre-flight
+checklist**: same items, same order, laminated, boring, and non-negotiable, precisely so the
+pilot's brain is free for the judgment calls a checklist can't make (that cloud bank, that
+crosswind). Your manual smoke routine IS a pre-flight checklist — currently executed by the most
+distractible instrument in the cockpit: you, on a Monday. Scripting it is lamination: the loop runs
+the same items in the same order every time, never skips step 9 because Slack pinged, and writes
+its results in the logbook (timestamped, comparable, diff-able against yesterday's flight). The
+precise technical mapping: a URL list is the checklist's items, the for-loop is its laminated
+order, `curl` verdicts with exit codes are pass/fail per item, and the dated results file is the
+logbook — because a check that leaves no record is a pre-flight nobody can audit after the incident.
+</Callout>
+
+The engine of this whole note is the humble
+<Term define="A bash construct that runs the same commands once per item in a list: for url in $(cat urls.txt); do check $url; done. The list can be a file of URLs, a directory of logs, a set of environments - anything enumerable. For QA, the loop is what converts 'I checked the five main pages' (manual, skippable, unrecorded) into 'the script checked all 23 registered pages and wrote 23 verdicts' (complete, identical every run, on the record).">for loop</Term>
+— five chapters of commands finally marching in formation.
+
+## From routine to list to loop
+
+The conversion recipe has three moves. **First, externalize the routine into data**: the pages you
+click every morning become `urls.txt`, one URL per line. This is the single most important design
+decision in the note — the *checklist* now lives in a file anyone can read, extend, and code-review,
+while the *checking logic* lives in the script. Adding page 24 to the smoke check becomes a one-line
+edit, not a code change. **Second, write the check for ONE item** — you did this in
+`your-first-useful-script`: curl it, judge the response, print a verdict, set an exit code. **Third,
+wrap the loop around it** and aggregate: count failures, report a total, exit non-zero if anything
+failed (so cron, CI, or a teammate's script can react to yours — exit codes are how scripts talk).
+
+## Results that accumulate: the timestamped logbook
+
+A check that prints to a terminal and vanishes answers only "how is it *now*?" A check that appends
+one dated line per URL per run into a results file answers the far more valuable QA questions:
+*when did this page start failing?* (grep the URL, read the timestamps), *is this flaky or dead?*
+(count OK vs FAIL for that URL over the week), *what changed after Tuesday's deploy?* (diff
+Monday's results against Wednesday's). The pattern: every line the script writes carries
+`$(date '+%Y-%m-%d %H:%M')`, the URL, and the verdict — machine-parseable, grep-friendly, exactly
+the log-reading material chapter 3 trained you on. Your own tooling should produce evidence as
+good as the evidence you demand from the apps you test.
+
+## The honest boundary: when bash is the wrong tool
+
+Bash got you here and bash is the right tool for *this* job — gluing commands, looping lists,
+checking exit codes. But watch for the four signs a check has outgrown it. **(1) You're parsing
+structured data** — the moment you're extracting fields from JSON with grep and cut, stop; `jq`
+buys time, but Python reads JSON natively and won't break when the API reorders keys. **(2) The
+logic branches hard** — retries with backoff, per-URL expectations, conditional flows: bash ifs
+nest like coat hangers tangle. **(3) You need real assertions and reports** — pytest gives you
+expected-vs-actual diffs, test names, HTML reports, and CI integration for free; your hand-rolled
+PASS/FAIL counter is a rediscovery of a solved problem. **(4) Anyone else must maintain it** — a
+200-line bash script is a haunted house; a 200-line Python file is documentation. The graduation
+path is gentle and you're already on it: this module's bash loop *is* the prototype for the pytest
+suite you'll write in Track D — same URLs, same verdicts, better skeleton. Bash for glue, Python
+for logic: teams that respect that boundary have small scripts and big uptime.
+
+<HotspotImage
+  src="/notes/linux-for-testers/bash-scripting-for-qa/automating-repetitive-checks.jpg"
+  alt="Inside a tanker cockpit: the pilot's hand works a keypad while a printed checklist binder sits clipped open at his side; green status text glows on the panel and TANK 3 and TANK 4 gauges read out below"
+  credit="Pilot running the preflight checklist — U.S. Air Force, Wikimedia Commons, Public domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:Preflight_checklist_(14443492762).jpg"
+  pins={[
+    { x: 62, y: 25, label: "The printed checklist binder = urls.txt", desc: "The ideal photo shows the printed checklist itself. That is your externalized routine: one URL per line, the checklist as DATA. The script reads it fresh each run, so extending the smoke check is editing a text file - no code change, nothing to break, and the file diff in git shows exactly when page 24 joined the rounds." },
+    { x: 40, y: 40, label: "The same keys pressed every flight = the for loop", desc: "Pilots don't improvise checklist order; loops don't skip items because it's Friday. for url in $(cat urls.txt) runs the identical check against every line, every time - the property manual routines fundamentally lack. Completeness plus repeatability is the entire value proposition of automating the boring layer." },
+    { x: 28, y: 15, label: "The green status readout = curl plus a verdict", desc: "Per checklist item the pilot looks, judges, and marks. Per URL the script curls (with -s -o /dev/null -w for the status code, and --max-time so a hung server can't hang the whole patrol), compares against 200, and prints one dated OK or FAIL line. One item, one verdict, no ambiguity." },
+    { x: 18, y: 65, label: "TANK 3 / TANK 4 gauges = the timestamped results file", desc: "Flights get logged; checks should too. Appending every verdict line to results.log turns isolated snapshots into history: grep one URL to see when it started failing, count FAILs to separate flaky from dead, diff Monday against Wednesday to bracket a deploy's damage. Evidence-grade output from your own tooling." },
+    { x: 85, y: 75, label: "The pilot the checklist can't replace = bash's boundary", desc: "The checklist inspects; it doesn't pilot. Bash loops and verdicts are perfect for the inspection layer - and wrong for JSON parsing, branching retry logic, real assertions, or anything a teammate must maintain. Those are Python/pytest country (Track D). Knowing where the laminated card ends is what makes the rest of it trustworthy." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Fifteen manual minutes become a 4-second patrol - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Externalize the routine", desc: "Monday, 8:45 am, you write down what your fingers do on autopilot: home page, login page, product list, cart API, health endpoint. Five URLs into urls.txt, one per line. The invisible morning ritual is now a reviewable artifact - and your teammate immediately adds two admin pages you'd been forgetting. The checklist was incomplete for months; the FILE fixed it in a day." },
+    { label: "Write the one-URL check", desc: "The last note's skeleton, tightened: status=$(curl -s -o /dev/null -w '%%{http_code}' --max-time 10 $url) then an if comparing to 200, printing a dated OK/FAIL line either way. Ten lines, tested against one good URL and one deliberately broken one. The unit works; now mass-produce it." },
+    { label: "Wrap the loop, aggregate the verdicts", desc: "for url in $(cat urls.txt); do ... done around the check, a fails counter incrementing on each bad verdict, and a summary line at the end: 'checked 7, failed 1'. Exit 1 if fails is non-zero, exit 0 clean - so cron and CI can react to the script the way the script reacts to curl. Total runtime: 4 seconds for what took fifteen minutes." },
+    { label: "Append to the logbook", desc: "Every verdict line goes >> results.log with its timestamp. By Thursday the file tells stories the terminal never could: /api/cart has failed 3 of 4 mornings since Tuesday's deploy - not flaky, BROKEN, with an onset time. grep '/api/cart' results.log IS the bug report's evidence section, chapter 3 style." },
+    { label: "Schedule it, then go do real testing", desc: "One crontab line (previous note, full armor: absolute path, >> cron output, 2>&1) runs the patrol every 30 minutes. Your morning now starts by READING the logbook - 10 seconds - instead of performing the ritual. The freed fifteen minutes go where a script can't: exploring the new checkout flow. The robot does the rounds; you do the testing." },
+  ]}
+/>
+
+Build the loop up from one URL to the full patrol:
+
+<CodePlayground
+  language="bash"
+  title="Try it - from one check to a looped patrol with verdicts"
+  code={`mkdir -p ~/qa-checks && cd ~/qa-checks
+
+# The checklist as data - one URL per line:
+cat > urls.txt <<'EOF'
+https://example.com
+https://example.com/nonexistent-page
+https://httpbin.org/status/500
+EOF
+
+# The patrol - loop, check, verdict, count:
+cat > smoke.sh <<'EOF'
+#!/bin/bash
+fails=0
+while read -r url; do
+  status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url")
+  stamp=$(date '+%Y-%m-%d %H:%M')
+  if [ "$status" = "200" ]; then
+    echo "[$stamp] OK   $status $url"
+  else
+    echo "[$stamp] FAIL $status $url"
+    fails=$((fails + 1))
+  fi
+done < urls.txt
+echo "[$(date '+%Y-%m-%d %H:%M')] checked $(wc -l < urls.txt | tr -d ' ') urls, $fails failed"
+[ "$fails" -eq 0 ]   # script's exit code: 0 clean, 1 if anything failed
+EOF
+chmod +x smoke.sh
+
+./smoke.sh
+# [2026-07-13 16:10] OK   200 https://example.com
+# [2026-07-13 16:10] FAIL 404 https://example.com/nonexistent-page
+# [2026-07-13 16:10] FAIL 500 https://httpbin.org/status/500
+# [2026-07-13 16:10] checked 3 urls, 2 failed
+echo $?
+# 1    <- the aggregate verdict, readable by cron, CI, or another script`}
+/>
+
+<CodePlayground
+  language="bash"
+  title="Try it - the logbook: history you can interrogate"
+  code={`cd ~/qa-checks
+
+# Run the patrol INTO the logbook (append - history accumulates):
+./smoke.sh >> results.log
+./smoke.sh >> results.log     # a second 'day' for the demo
+
+# Question 1: how is /nonexistent-page doing over time?
+grep 'nonexistent-page' results.log
+# [2026-07-13 16:10] FAIL 404 https://example.com/nonexistent-page
+# [2026-07-13 16:12] FAIL 404 https://example.com/nonexistent-page
+# ...every run, FAIL 404: not flaky - consistently broken since first seen.
+
+# Question 2: failure counts per URL (chapter 3's histogram, on YOUR data):
+grep FAIL results.log | awk '{print $4}' | sort | uniq -c | sort -rn
+#    2 https://httpbin.org/status/500
+#    2 https://example.com/nonexistent-page
+
+# Question 3: what changed between two runs? Slice each run and diff:
+grep '16:10' results.log > run1.txt
+grep '16:12' results.log > run2.txt
+diff run1.txt run2.txt
+# (only timestamps differ -> environment stable between runs.
+#  A NEW FAIL line appearing here is a regression, with onset time attached.)
+
+# The full circle: chapter 2's pipes, chapter 3's log analysis, this
+# chapter's scripts - now running against evidence YOUR tool produced.`}
+/>
+
+<Callout type="tip">
+Design your script's output for its *future readers*, not tonight's terminal: one line per check,
+timestamp first, verdict second, machine-parseable always — because next month "the script" is also
+a data source you'll grep, count, and diff like any log from chapter 3. The private rule of
+professional tooling: **your check's output should be good enough evidence to paste into a bug
+report unedited.** `[2026-07-13 16:10] FAIL 500 https://staging/api/cart` already is — it has the
+when, the what, and the where in 60 characters. If your script's output needs explaining, it needs
+redesigning.
+</Callout>
+
+<FirstTime title="Your mission: retire one manual routine this week">
+<StepChecklist
+  steps={[
+    { text: "Write down your actual routine", detail: "Not the ideal one - the REAL one your hands perform on staging each morning. Every page, every endpoint, every log glance. Be honest about what you sometimes skip; the skipped items are exactly why the script will beat you at this job." },
+    { text: "Externalize it to urls.txt", detail: "Every URL from the routine, one per line, into a file. Items that aren't URLs (log greps, disk checks) go in a comment block at the bottom for now - some become script lines later, some stay human. Show the file to a teammate: watch them add the pages you both forgot existed." },
+    { text: "Build the loop from the playground", detail: "Adapt smoke.sh to your list: the curl-verdict-counter skeleton is exactly right. Test it against a URL you KNOW is broken to prove FAIL works - a check that can't fail isn't a check, it's a lullaby. Confirm exit codes: echo $? after a clean and a dirty run." },
+    { text: "Give it a logbook and three days", detail: "Append every run to results.log. After three days, interrogate the history: grep one URL's timeline, run the FAIL histogram, diff day one against day three. You are now doing chapter 3's log analysis on evidence your own tool created - the module's full circle." },
+    { text: "Schedule it and reinvest the minutes", detail: "One crontab line, full armor from the last note. Then - the actual point - spend the freed fifteen minutes on exploratory testing the script can never do. Automation that doesn't buy back human judgment time is just a hobby with extra YAML." },
+  ]}
+/>
+One routine retired, one logbook accumulating, fifteen minutes a day reinvested where judgment
+lives. That trade - robots do rounds, humans do testing - is the whole philosophy of this module.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "The loop stops dead partway through the list - one slow URL and everything after it never gets checked.",
+      fix: "Two culprits, one each for hanging and dying. Hanging: curl with no timeout will wait on a wedged server essentially forever - always ship --max-time 10 (and --connect-timeout 5 for fussier control), so a hung URL costs ten seconds, not the whole patrol. Dying: if you added set -e to the script ('fail fast' advice from the internet), a single non-zero curl exit kills the loop mid-list - which is exactly wrong for a checker, whose JOB is to survive failures and record them. A smoke script should catch each failure, log it, count it, and CONTINUE; the aggregate exit code at the end reports the damage. Fail-fast is for build scripts, not patrols.",
+    },
+    {
+      symptom: "A URL fails in the script but works fine when I curl it by hand.",
+      fix: "Diff the two requests - something differs, and it's usually one of four things. (1) Quoting: an unquoted \"$url\" with a & or ? in it gets mangled by the shell - quote every expansion. (2) Redirects: your hand-curl followed a 301 because you eyeballed it; the script saw the 301 status and judged it against 200 - decide policy: add -L to follow redirects, or accept 3xx as OK if redirects are expected. (3) Headers/auth: your browser or hand-session had a cookie or token the script doesn't send - add the header explicitly (-H 'Authorization: Bearer ...') and store the token outside the script (previous notes: environment variable, never hardcoded). (4) Environment: the script runs from cron with different proxy/env vars than your shell - the environment-variables note's dump-dump-diff applies to YOUR tooling too.",
+    },
+    {
+      symptom: "The results file is growing forever and the morning grep is getting slow.",
+      fix: "Your logbook needs the same janitor real logs have (chapter 3's rotation lesson, now aimed at yourself). Cheap-and-cheerful: date-stamped files instead of one monolith - results-$(date +%F).log gives you a file per day, trivially diffable, and old ones compress or delete on their own schedule (a weekly cron: gzip files older than 7 days, delete older than 90 - find with -mtime does both in two lines). Grown-up: a logrotate config entry for your results file, same machinery the system uses. Either way, decide retention deliberately: 90 days of smoke history is usually plenty, and 'we keep everything forever' is how a 40 MB grep becomes the slowest part of your morning.",
+    },
+    {
+      symptom: "My script has grown ifs inside ifs, retries, JSON parsing with grep - and I'm the only one who understands it.",
+      fix: "That's not a bug; that's the graduation bell. You've hit the honest boundary this note promised: bash is for glue (loop, curl, verdict, log), and your check now wants LOGIC (structured parsing, branching retries, per-URL expectations, maintainability by others). Port it to Python - requests for the HTTP, the json module for parsing, and a list of URL/expectation pairs replacing urls.txt - or jump straight to pytest, where each URL becomes a parameterized test with real assertions and HTML reports (Track D teaches exactly this). Keep the bash version as the cron-friendly wrapper if you like: bash calls the Python, Python does the thinking. Do NOT keep bolting features onto the bash - a 300-line bash checker is technical debt wearing a superhero cape.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where automated-check thinking pays off across a QA career:
+
+- **Your daily staging routine** — the subject of this note: the pages, endpoints, and log greps you repeat. First and best candidate, because you feel the fifteen minutes personally.
+- **Post-deploy smoke** — the same script, triggered after every deploy instead of by clock: the fastest possible 'did the deploy break the basics?' answer, with the results file bracketing each deploy's before/after.
+- **Test-environment health** — before a test session, one command answers 'is the environment even worth testing today?': app up, API answering, database reachable, disk not full (chapter 5's df in script form). Environments fail more often than apps.
+- **Data and fixture checks** — a loop over expected test accounts/products hitting the API and verifying they exist: the 'someone deleted the test data again' bug class, caught at 7 am instead of mid-demo.
+- **CI pipelines** — the same skills wearing CI clothes: your script IS a pipeline step (its exit code gates the build), and the five-field schedule syntax from the cron note drives scheduled CI runs. Track F builds on exactly this.
+- **The boundary cases** — anything needing JSON assertions, complex flows, or team maintenance: recognize them as pytest work (Track D) and DON'T script them in bash. Knowing where not to use this note is part of mastering it.
+
+Tester's habit: **anything you've checked the same way three times is a script asking to exist** —
+and anything your script checks is evidence accumulating for free.
+</WhereToCheck>
+
+<WorkedExample title="the Monday-morning ritual, retired in ninety minutes">
+1. **The ritual:** every morning Priya (QA on a retail platform) checks staging by hand: 6 pages in the browser, 3 API endpoints in Postman, a log glance for overnight errors. Fifteen minutes when nothing's wrong; forty-five when something is. She's skipped it twice this month under deadline pressure — both times, something was wrong.
+2. **Externalize (10 min):** the ritual becomes `urls.txt` — 9 lines. Writing it down exposes item 10: the admin dashboard she checks 'sometimes'. Sometimes is now always; the file doesn't have moods.
+3. **The one-URL check (15 min):** last note's skeleton with `--max-time 10`: curl for status, compare to 200, dated OK/FAIL line. Tested against the staging 404 page to prove FAIL fires.
+4. **Loop + aggregate (20 min):** the `while read` loop over urls.txt, a fails counter, summary line, exit code. First full run: 4 seconds. One real FAIL — the cart API returns 500. *The script finds a live bug during its own commissioning run* — the overnight error her skipped ritual would have missed.
+5. **Logbook (10 min):** all output appends to `results-$(date +%F).log`. The log glance from her ritual becomes a script line too: `grep -c ERROR /var/log/app/staging.log` since yesterday's line count, appended to the same file.
+6. **Schedule (5 min):** crontab, every 30 minutes, full armor. Morning routine is now: read the newest results file — ten seconds — then go test like a human.
+7. **The Thursday payoff (the part that converts her team):** a deploy lands at 14:00. The 14:30 patrol writes three new FAIL lines. `diff` of the 13:30 run against 14:30 brackets the regression to that deploy, with onset time, in evidence format — pasted unedited into the bug report. Developer response time: eleven minutes.
+8. **The boundary, respected (30 min, two weeks later):** the team wants response-time thresholds and JSON schema checks per endpoint. Priya doesn't grow the bash — she ports the URL list into a parameterized pytest file (Track D skills) and keeps the bash patrol as the dumb-but-reliable cron layer. Two tools, each doing what it's for. **The lesson:** ninety minutes of scripting bought back an hour a week forever, caught a live bug on day one — and knowing when to STOP bashing was the senior move in the story.
+</WorkedExample>
+
+<Callout type="mistake">
+Automating the check but not the *evidence* — a script that prints PASS/FAIL to a terminal nobody's
+watching and keeps no history. It feels automated; operationally it's a manual check with extra
+steps, because every question that matters afterwards — when did this start? flaky or dead? what did
+the 13:30 run say before the deploy? — has no answer. History is the entire return on investment:
+the timestamped results file is what turns a status light into a trend line, a hunch into a
+diff, and 'the cart's been weird lately' into 'FAIL 500 on /api/cart in 9 of 12 runs since Tuesday
+14:30, evidence attached.' Ten extra characters — `>> results.log` — are the difference between a
+toy and a tool. If your automation leaves no artifact, you've built a very fast goldfish.
+</Callout>
+
+<Quiz
+  question="A tester's smoke script loops 30 URLs with set -e at the top ('so it fails fast'). URL 7 times out. What happens, and why is fail-fast the wrong policy for this script?"
+  options={[
+    "The script dies at URL 7 - URLs 8 through 30 are never checked, so one hung page blinds the patrol to 23 pages' status; a checker should record each failure and CONTINUE, reporting the aggregate in its exit code",
+    "set -e makes the script retry URL 7 until it responds, guaranteeing complete results eventually",
+    "Nothing changes - set -e only affects syntax errors, not command failures",
+    "URLs 8-30 still run because loops are exempt from set -e in all bash versions"
+  ]}
+  answer={0}
+  explain="set -e aborts the script on the first non-zero exit status, so the timeout at URL 7 kills the whole patrol: you get no verdicts for the remaining 23 URLs and - worse - a morning report that silently covers only a quarter of the checklist while looking authoritative. The deeper point is that fail-fast is a policy for BUILD pipelines, where a broken step invalidates everything after it; a smoke checker's entire purpose is the opposite - failures are its FINDINGS, to be caught, logged, counted, and survived, with the aggregate exit code (0 clean, 1 if any failed) reporting the damage at the end. There's no retry behavior in set -e - it aborts, never loops. It applies to command failures precisely (not syntax errors specifically). And while bash has genuine set -e subtleties (failures inside if conditions don't trigger it, for instance), 'loops are exempt' is not the rule and betting a patrol's completeness on half-remembered exemption folklore is exactly the kind of cleverness this module keeps warning about. Robust loop, per-item verdicts, aggregate exit - that's the shape."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The routine-to-script recipe", back: "1) Externalize the routine as DATA (urls.txt, one target per line - the checklist anyone can review and extend). 2) Write the check for ONE item (curl, verdict, dated output line). 3) Wrap the loop, count failures, exit non-zero if any failed. Checklist in data, logic in script." },
+    { front: "The curl line for a smoke check", back: "status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \"$url\") - silent, body discarded, status code captured, and a timeout so a hung server costs 10 s, not the whole patrol. Compare against 200 (decide policy for 3xx: add -L or accept). Quote $url always." },
+    { front: "Why append results to a file", back: "History answers what a terminal can't: when did the failing start (grep the URL, read timestamps), flaky vs dead (count OK/FAIL over days), what changed after the deploy (diff run against run). Format: timestamp first, verdict, target - machine-parseable, bug-report-ready unedited." },
+    { front: "Why NOT set -e in a checker", back: "Fail-fast kills the patrol at the first bad URL - remaining targets go unchecked while the report looks complete. A checker's failures are its FINDINGS: catch each, log, count, continue; report the aggregate via exit code (0 clean, non-zero = failures). Fail-fast is for builds, not patrols." },
+    { front: "The four signs a check outgrew bash", back: "1) Parsing structured data (JSON) with grep/cut. 2) Branching logic - retries, backoff, per-item expectations. 3) Needing real assertions/reports (pytest gives them free). 4) Others must maintain it. Then: port to Python/pytest (Track D); optionally keep bash as the thin cron wrapper. Bash = glue, Python = logic." },
+    { front: "Where the pattern applies", back: "Daily staging routine, post-deploy smoke (same script, deploy-triggered), environment health before test sessions, test-data existence checks, CI pipeline steps (exit code gates the build). Rule of thumb: checked the same way three times = a script asking to exist." },
+  ]}
+/>
+
+<Challenge>
+The retirement plan, end to end: (1) Build urls.txt with five real URLs (mix in one you know 404s).
+(2) Write the patrol: loop, --max-time, dated verdicts, fail counter, aggregate exit code — prove
+both exit paths with echo $?. (3) Run it three times into a dated results file, then answer from
+the FILE alone: which URL fails consistently, and since when? (4) The regression drill: add a new
+failing URL between runs two and three, and produce the diff that shows exactly what changed and
+when. (5) The judgment question: list the first feature request that would make you port this to
+pytest rather than extend the bash — and say why in one sentence. Bonus: schedule the patrol with
+last note's full-armor crontab line. Complete this and you haven't just finished a note — you've
+finished the module with a working tool you built from its every chapter.
+</Challenge>
+
+<AskCommunity prompt="Smoke-script question: my patrol checks [N] URLs. Problem: [loop stops early / false FAILs / works by hand not in script / results file design / when to move to pytest]. My check line: [paste the curl + verdict lines]. A failing URL's behavior by hand vs in the script: [describe both]. Where it runs: [terminal / cron / CI].">
+Paste the actual loop and curl lines - most patrol bugs are visible right there: a missing
+--max-time (hangs), set -e (dies early), unquoted $url (mangles query strings), or a redirect
+policy mismatch (301 judged against 200). Say whether it runs from cron - environment differences
+between your shell and cron's account for the spookiest 'works by hand' cases.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://curl.se/docs/manpage.html", title: "man curl - -w write-out variables, --max-time, and -L explained", kind: "read" },
+    { href: "https://www.gnu.org/software/bash/manual/html_node/Looping-Constructs.html", title: "Bash manual - for and while loops, formally", kind: "read" },
+    { href: "https://docs.pytest.org/en/stable/how-to/parametrize.html", title: "pytest parametrize - what your URL loop becomes after graduation", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=I4EWvMFj37g", title: "Bash in 100 seconds — Fireship", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=I4EWvMFj37g" title="Bash in 100 seconds — Fireship" minutes={2} />
+
+<Takeaways
+  points={[
+    "Externalize the routine as data: the checklist lives in urls.txt (reviewable, extendable, diffable), the logic lives in the script - adding a check becomes a one-line file edit.",
+    "The patrol shape: loop over the list, curl each with --max-time, print one dated machine-parseable verdict per target, count failures, and report the aggregate through the exit code - never set -e in a checker, whose findings ARE failures.",
+    "Append everything to a timestamped results file: history converts snapshots into trend lines - when it started, flaky vs dead, and before/after diffs that bracket a deploy's damage in evidence-grade format.",
+    "Respect the boundary: bash is glue (loop, curl, verdict, log); JSON parsing, branching retries, real assertions, and team maintenance are Python/pytest work - port at the first sign, keep bash as the thin cron wrapper if useful.",
+    "The point of automating the boring layer is buying back human time for judgment work: robots do the rounds, the logbook keeps them honest, and you go test the things no loop can.",
+  ]}
+/>
+
+<Complete xp={10} />

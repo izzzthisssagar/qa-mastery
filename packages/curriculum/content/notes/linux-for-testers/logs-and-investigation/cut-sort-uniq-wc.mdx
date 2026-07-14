@@ -1,0 +1,336 @@
+---
+title: "cut, sort, uniq, wc: the tester's histogram"
+summary: "Four tiny tools that turn a raw log into numbers: cut slices one column out, sort orders lines, uniq -c counts duplicates, wc -l counts lines. Chained as sort | uniq -c | sort -rn they build the tester's histogram - which errors, how often, worst first - from any log in one line."
+tags: ["linux-for-testers", "logs-and-investigation", "track-b"]
+updated: "2026-07-13"
+---
+
+<Hook>
+grep found you THE line. This note answers the manager's follow-up, which arrives approximately
+eleven seconds later: **"okay, but how often? which errors? which endpoints? is it one user or
+everyone?"** Those are not search questions — they're *counting* questions, and you could answer
+them by importing the log into a spreadsheet (which will politely die at a million rows), or by
+learning four commands so small they barely count as software: `wc -l` counts lines, `cut` slices
+one column out of each line, `sort` puts lines in order, and `uniq -c` counts repeats. None of them
+is impressive alone. Chained with pipes, they're a data analysis rig: `cut ... | sort | uniq -c | sort -rn`
+takes any log and produces a ranked frequency table — every distinct value, how many times it
+occurred, worst offender first. Testers call it a lot of things. This chapter calls it what it is:
+**the tester's histogram**, and it turns "checkout seems broken" into "612 gateway timeouts since
+9 am, 94% from one endpoint."
+</Hook>
+
+<Callout type="analogy">
+You've inherited a **giant jar of mixed coins** and someone asks what it's worth. The doomed
+approach: pick up coins one at a time and keep a running total in your head — that's reading a log
+line by line, and you'll lose count by coin forty. The competent approach is what every human
+actually does: **pour the jar out, sort the coins into piles by type, then count each pile once.**
+That's the pipeline, move for move. `cut` is deciding which feature you're sorting by — the
+denomination stamped on the coin, not its year or its fingerprints (slice out just the column that
+matters). `sort` gathers the pennies with the pennies and the quarters with the quarters. `uniq -c`
+walks the sorted piles and writes down "quarters: 212, pennies: 3,410". And the final `sort -rn`
+lists the piles biggest-first, because the first question about any pile is 'which one is the
+problem?' One warning the analogy handles beautifully: `uniq` can only count coins that are
+**already piled together** — hand it an unsorted jumble and it counts each little cluster
+separately, then confidently gives you garbage. Sort first. Always sort first.
+</Callout>
+
+The whole trick rests on one idea from earlier in this module — the
+<Term define="Connecting small commands with the | symbol so the output of one becomes the input of the next: cut -d' ' -f9 access.log | sort | uniq -c. Each tool does ONE job well; the pipe chains them into an analysis no single tool provides. It's the Unix philosophy in one character - and the reason a tester with four tiny commands can answer questions that would crash a spreadsheet.">pipeline</Term>
+— because none of today's four tools is useful alone. Their power is entirely in the chaining.
+
+## wc and cut: how much, and which column
+
+`wc -l file` counts lines — one number, instantly, on any size of file. Unglamorous, constantly
+useful: a log line is an event, so `wc -l` is "how many events?", and piped after a grep
+(`grep 'ERROR' app.log | wc -l`) it's "how many of THESE events?" — same answer as `grep -c`, but
+`wc -l` works at the end of *any* pipeline, which is where you'll actually use it.
+
+`cut` slices columns. Log lines are structured — an access log line is IP, timestamp, request,
+status, size in fixed positions — and `cut -d' ' -f1` says: split each line on spaces (`-d` is the
+delimiter), give me field 1 (`-f`). Field 9 of a standard access log is the HTTP status; field 7 is
+the URL path. Why slice at all? Because **counting needs identical lines to group**. Two failing
+requests differ in timestamp and IP, so as whole lines they're unique — but cut them down to just
+their status column and they're both simply `500`, and NOW they can be grouped and counted. cut is
+the step that turns "every line is a snowflake" into "these 612 lines are the same thing." One
+honest wart before it bites you: cut's delimiter is exactly one character, and **every** space
+counts — two spaces in a row create an empty field between them, which quietly shifts your field
+numbers. Beautifully regular files like access logs: perfect for cut. Files padded with alignment
+spaces: check what you're getting before you trust the field numbers.
+
+## sort and uniq: pile up, then count the piles
+
+`sort` orders lines (alphabetically by default — hold that thought). On its own it's occasionally
+handy; in this pipeline it has ONE job: put identical lines next to each other. Because `uniq` — the
+counting engine — has a famous limitation that is also the number-one beginner bug in this entire
+note: **it only sees adjacent duplicates.** `uniq -c` walks the input once, counting runs of
+identical consecutive lines. Feed it `500, 200, 500` and it reports two separate piles of 500 —
+count fragmented, conclusion wrong, no error message anywhere. `sort | uniq -c` is therefore not a
+suggestion but a law: sort gathers, uniq counts.
+
+The output of `uniq -c` is each distinct line prefixed by its count — a frequency table. The final
+flourish sorts THAT table: `sort -rn` — numeric (`-n`), reversed (`-r`) — biggest count first.
+Why `-n` matters: plain sort is *alphabetical*, and alphabetically `9` comes after `10` (character
+'9' beats character '1'), so your top offender with 1,024 hits sorts *below* something with 9. `-n`
+compares numbers as numbers. Assemble it all: `cut -d' ' -f9 access.log | sort | uniq -c | sort -rn`
+— slice the status column, pile it, count the piles, rank the piles. One line, any log size, and
+the shape of the problem is on your screen.
+
+<HotspotImage
+  src="/notes/linux-for-testers/logs-and-investigation/coin-adjusting.jpg"
+  alt="The San Francisco Mint's Adjusting Room: long tables lined with balance scales at every station, round coin pans at each seat, a ledger desk at the side and cabinets of numbered drawers at the back - an entire room built to reduce heaps of coins to exact counts"
+  credit="Photo: San Francisco Mint Coin Adjusting Room (NARA) - Wikimedia Commons, Public domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:Photograph_of_the_San_Francisco_Mint_Coin_Adjusting_Room._Tables_have_assay_scales_at_each_station._Coin_counting..._-_NARA_-_296577.jpg"
+  pins={[
+    { x: 14, y: 80, label: "The full coin pans = the raw log", desc: "Each round pan arrives as an unsorted heap: thousands of mixed coins, valuable in aggregate, unanswerable as-is. That's the raw log - 50,000 lines where every line differs in timestamp and detail. 'What's in the pan?' can't be answered coin by coin, and 'which errors happen most?' can't be answered line by line. wc -l at least tells you how full the pan is." },
+    { x: 28, y: 70, label: "The balance scale = cut", desc: "A scale reads ONE feature of a coin - its weight - and ignores the year, the scratches, the fingerprints. cut -d' ' -f9 does exactly that to a log line: split on spaces, keep field 9 (the HTTP status), discard the rest. This is what makes counting possible: whole lines are all unique; their status column is just '500' or '200', and identical values can group." },
+    { x: 55, y: 58, label: "One denomination per station = sort", desc: "Down the long table, like goes with like - pennies with pennies, quarters with quarters. sort's job in the pipeline isn't alphabetical neatness for its own sake - it's ADJACENCY: getting every identical value next to its twins. This step looks skippable. It is not: the counter that comes next can only see neighbouring duplicates, so unsorted input means fragmented piles and silently wrong counts." },
+    { x: 6, y: 55, label: "The ledger desk = uniq -c", desc: "Count each station's pile once, write 'quarters: 212' in the book. uniq -c walks the sorted stream and emits each distinct value prefixed by how many times it ran consecutively - the frequency table. Its famous fine print: it counts RUNS, not totals. Hand it 500, 200, 500 and it honestly reports two separate piles of 500. uniq trusts you to have sorted; nothing warns you if you didn't." },
+    { x: 74, y: 38, label: "The numbered drawers, largest holdings first = sort -rn", desc: "The finished count goes into the cabinet arranged so the biggest holdings are found first - because the first question is always 'where's the bulk of the money?' or for a tester, 'which error dominates?'. -n compares numerically (plain sort is alphabetical, where 9 outranks 10 because '9' beats '1' character-wise) and -r reverses to descending. cut | sort | uniq -c | sort -rn: the tester's histogram, complete." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One line becomes a histogram - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "The raw material: 50,000 access log lines", desc: "Every line: IP, timestamp, request, status, size. Question from the standup: 'how bad are the 500s, really?' Each line is unique (timestamps see to that), so counting whole lines answers nothing. wc -l access.log gives the total event count - 50,000 - which is the denominator for everything that follows." },
+    { label: "cut: reduce each line to the answer-relevant column", desc: "cut -d' ' -f9 access.log streams out ONLY field 9 of every line: 200, 200, 500, 404, 200, 500... Fifty thousand lines become fifty thousand bare status codes. The information you didn't need is gone, and what remains can group - two different failed requests are now both just '500'." },
+    { label: "sort: make identical values adjacent", desc: "sort gathers the stream into runs: all the 200s together, then the 404s, then the 500s. Not for tidiness - for the counter's sake. uniq can only count neighbouring duplicates, so this step is what stands between you and silently fragmented counts. The pile-up before the tally." },
+    { label: "uniq -c: tally each run", desc: "uniq -c walks the sorted stream once and emits the frequency table: 48,890 200 / komma 498 404 / 612 500. Each distinct status, prefixed by its count. This is already the answer in raw form - but with dozens of distinct values (paths, IPs, error types) you'd still be hunting for the biggest number by eye." },
+    { label: "sort -rn: rank by count, worst first", desc: "The final sort orders the TABLE numerically (-n, so 612 outranks 98 despite '6' losing to '9' alphabetically) and descending (-r): 48,890 200 / 612 500 / 498 404. Read the top lines and speak in numbers: '612 server errors out of 50,000 requests since 9 am.' Swap field 9 for field 7 and the same pipeline ranks failing ENDPOINTS. One pattern, endless questions." },
+  ]}
+/>
+
+Build a small access log and meet the four tools one at a time:
+
+<CodePlayground
+  language="bash"
+  title="Try it - wc counts, cut slices, and the adjacency trap"
+  code={`mkdir -p logs
+cat > logs/access.log <<'EOF'
+203.0.113.42 - - [13/Jul/2026:14:31:58 +0000] "GET /api/products/17 HTTP/1.1" 200 4102
+198.51.100.7 - - [13/Jul/2026:14:32:05 +0000] "POST /api/checkout HTTP/1.1" 500 213
+203.0.113.42 - - [13/Jul/2026:14:32:07 +0000] "POST /api/checkout HTTP/1.1" 500 213
+192.0.2.146 - - [13/Jul/2026:14:32:11 +0000] "GET /health HTTP/1.1" 200 15
+198.51.100.7 - - [13/Jul/2026:14:33:02 +0000] "GET /api/products/9 HTTP/1.1" 404 89
+203.0.113.42 - - [13/Jul/2026:14:33:41 +0000] "POST /api/checkout HTTP/1.1" 500 213
+192.0.2.146 - - [13/Jul/2026:14:34:12 +0000] "GET /health HTTP/1.1" 200 15
+198.51.100.7 - - [13/Jul/2026:14:34:55 +0000] "POST /api/checkout HTTP/1.1" 200 1877
+EOF
+
+wc -l logs/access.log
+# 8 logs/access.log        <- 8 lines = 8 requests. The denominator.
+
+cut -d' ' -f1 logs/access.log     # field 1 = client IP
+# 203.0.113.42
+# 198.51.100.7
+# 203.0.113.42
+# ...one IP per line, everything else discarded.
+
+cut -d' ' -f9 logs/access.log     # field 9 = HTTP status
+# 200
+# 500
+# 500
+# 200
+# 404
+# 500
+# 200
+# 200
+
+# THE ADJACENCY TRAP - uniq without sort counts RUNS, not totals:
+cut -d' ' -f9 logs/access.log | uniq -c
+#       1 200
+#       2 500
+#       1 200
+#       1 404
+#       1 500
+#       2 200
+# '500' appears TWICE in the table (2+1), '200' three times. Garbage -
+# uniq only merges neighbours, and nothing warned you. Sort first.`}
+/>
+
+Now the full histogram — statuses, endpoints, and error types, each ranked worst-first:
+
+<CodePlayground
+  language="bash"
+  title="Try it - sort | uniq -c | sort -rn, the tester's histogram"
+  code={`cut -d' ' -f9 logs/access.log | sort | uniq -c | sort -rn
+#       4 200
+#       3 500
+#       1 404
+# The truth: 3 server errors in 8 requests. Compare with the trap above.
+
+cut -d' ' -f7 logs/access.log | sort | uniq -c | sort -rn
+#       3 /api/checkout        <- wait, checkout appears 4 times...
+#       2 /health
+#       2 /api/products/17     <- no: /17 and /9 are DIFFERENT values
+# (output actually: 4 /api/checkout, 2 /health, 1 each product URL -
+#  distinct paths stay distinct; run it and read your real numbers)
+
+# Which endpoints are FAILING? Filter first, then histogram:
+grep ' 500 ' logs/access.log | cut -d' ' -f7 | sort | uniq -c | sort -rn
+#       3 /api/checkout
+# Every 500 is checkout. The bug report just grew a headline.
+
+# Which CLIENT hits the failures? Same pattern, field 1:
+grep ' 500 ' logs/access.log | cut -d' ' -f1 | sort | uniq -c | sort -rn
+#       2 203.0.113.42
+#       1 198.51.100.7
+# Two clients affected - it's not one user's weird setup.
+
+# And why -n matters in that last sort: alphabetical sort would rank
+# count 9 above count 10, because the CHARACTER '9' beats '1'.
+printf '10 apples\n9 bananas\n' | sort -r     # alphabetical: wrong
+# 9 bananas
+# 10 apples
+printf '10 apples\n9 bananas\n' | sort -rn    # numeric: right
+# 10 apples
+# 9 bananas`}
+/>
+
+<Callout type="tip">
+Memorise the pipeline as a sentence, not as syntax: **"slice the column, pile it up, count the
+piles, biggest first"** — `cut | sort | uniq -c | sort -rn`. Then reuse it by changing only the
+first stage: field 9 for statuses, field 7 for endpoints, field 1 for client IPs; on an app log,
+grep the ERROR lines first and cut the message field. The pipeline never changes — only the column
+you feed it. And sanity-check every histogram with its denominator: `wc -l` on the same input.
+"612 errors" means one thing out of 700 requests and quite another out of 5 million — a count
+without a total is how testers accidentally file panic as a bug report.
+</Callout>
+
+<FirstTime title="Your mission: build three histograms from one log">
+<StepChecklist
+  steps={[
+    { text: "Count the jar before sorting it", detail: "Build the playground's logs/access.log and run wc -l on it. Eight lines, eight requests - your denominator. Every percentage you quote later comes from this number, and quoting counts without it is the classic junior move you're skipping today." },
+    { text: "Slice one column and LOOK at it", detail: "Run cut -d' ' -f9 logs/access.log alone, no pipeline. Eight bare status codes scroll past. This checkpoint matters: before ever trusting a histogram, eyeball the cut output to confirm you sliced the column you think you sliced - field miscounts are silent, and one glance catches them." },
+    { text: "Fall into the adjacency trap on purpose", detail: "Pipe the cut through uniq -c WITHOUT sorting. Read the fragmented table: 500 listed twice, 200 three times. No error, no warning - just wrong numbers delivered confidently. Now add sort before uniq -c and watch the piles merge into the truth. You'll never forget the law again: sort first." },
+    { text: "Rank it", detail: "Complete the incantation: cut -d' ' -f9 logs/access.log | sort | uniq -c | sort -rn. Read it top-down: biggest pile first. Then prove -n earns its keep: run the printf comparison from the playground and watch alphabetical sort rank 9 above 10." },
+    { text: "Ask a real question", detail: "Chain a filter in front: grep ' 500 ' logs/access.log | cut -d' ' -f7 | sort | uniq -c | sort -rn - 'which endpoints produce the 500s?' Then swap -f7 for -f1: 'which clients suffer them?' Two questions a manager actually asks, answered by editing one number in a pipeline you now own." },
+  ]}
+/>
+Three histograms from one file — status, endpoint, client — and you've stepped over the one trap that produces confident garbage. That's the whole rig.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "My uniq -c counts are absurd - the same value appears in the table three separate times.",
+      fix: "You skipped sort, or put it after uniq. uniq only merges ADJACENT identical lines - it counts runs, not totals - so any value scattered through the input shows up as multiple fragmented entries, with no warning whatsoever. The law: sort | uniq -c, in that order, every time. (sort -u exists too, but it only dedupes - it throws away the counts, and the counts are the entire point of a histogram.) If the table looks even slightly fragmented, rebuild the pipeline and check the stage order before trusting a single number.",
+    },
+    {
+      symptom: "cut gives me the wrong column - empty output, or a fragment of the timestamp instead of the field I wanted.",
+      fix: "Two culprits. Counting: fields are numbered from 1, and quoted sections count as multiple space-separated fields (in an access log, the request \"GET /path HTTP/1.1\" is fields 6, 7, and 8 - which is why status is 9, not 6). Recount by eyeballing cut -d' ' -f1,2,3,4,5,6,7 output. Delimiters: -d takes EXACTLY one character, and every occurrence splits - two consecutive spaces create an empty field between them, silently shifting all later numbers. Aligned/padded logs do this constantly; check with cut -d' ' -f1-12 and count where things land, or squeeze repeats first: tr -s ' ' turns runs of spaces into single ones.",
+    },
+    {
+      symptom: "sort -rn put my biggest count in the wrong place, or the ranking looks shuffled.",
+      fix: "Usually the flags landed on the wrong sort. The pipeline has TWO sorts with different jobs: the first is plain (its only job is adjacency for uniq), the LAST one carries -rn (rank the counts numerically, descending). Swap them - or forget -n entirely - and you get alphabetical ranking where 9 beats 887, because characters compare left to right. Check by reading the top three lines: if a small count sits above a big one, the final sort isn't numeric. And if two entries tie, their order is arbitrary - that's normal, not a bug.",
+    },
+    {
+      symptom: "The pipeline takes forever or the numbers look implausibly small on a huge log.",
+      fix: "Two different beasts. Slow: sort on a multi-gigabyte stream is real work (it may spill to temp files) - narrow EARLY by putting grep first in the pipeline, so you sort only the error lines, not all 50 million: grep ' 500 ' huge.log | cut ... | sort | uniq -c. Implausibly small: you're probably analysing ONE file of a rotated set - today's access.log, while most of the incident lives in access.log.1 or access.log.2.gz. Check with ls -lt, include rotated files (cat access.log access.log.1 | cut ...), and use zcat for the gzipped ones. The pipeline is only as complete as its input.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where the histogram habit turns vague reports into ranked lists:
+
+- **Access logs after 'the site feels broken'** — status histogram first (`cut -d' ' -f9 | sort | uniq -c | sort -rn`): the 200/500/404 ratio is the health summary. Then field 7 on the failures: which endpoints, ranked.
+- **App error logs during triage** — grep the ERROR lines, cut the message or module field, histogram it: 'which error types dominate today?' is your bug-priority list, generated in one line.
+- **Test suite output after a big run** — slice the failure names out of the runner's log and histogram them across the last N runs: the tests that top the chart repeatedly are your flaky suspects, with frequencies attached.
+- **Before/after a release** — run the same status histogram on yesterday's rotated log and today's, side by side. A new error type appearing, or an old one tripling, is regression evidence in two commands.
+- **Performance complaints** — the same pattern generalises: slice a duration column, `sort -rn | head` for the slowest requests, or histogram the URL column of slow-request lines to find WHICH endpoint drags.
+
+Tester's habit: **never report a lone anecdote when the log can give you a distribution.** 'I saw a
+timeout' invites a shrug; 'timeouts are 3% of requests since 9 am, 94% of them on /api/checkout,
+ranked list attached' invites a war room. Same log. Four small commands' difference.
+</WhereToCheck>
+
+<WorkedExample title="the 'site is slow and broken' ticket, turned into a ranked list">
+1. **The report:** "Users say the site's been erroring and slow since this morning." That's it. No endpoint, no error text, no numbers. Panic has a way of arriving without attachments.
+2. **Denominator first.** On the web server: `wc -l /var/log/nginx/access.log` — 412,608 requests today so far. Whatever you find next gets divided by that before anyone uses the word 'outage'.
+3. **Status histogram:** `cut -d' ' -f9 access.log | sort | uniq -c | sort -rn` — top of the table: 396,020 lines of 200, then **11,204 of 502**, 4,100 of 404, and a tail of others. Eleven thousand bad gateways — about 2.7% of traffic — is real, and now it's a *number* instead of a feeling. (The 404s turn out to be a bot scanning for WordPress admin pages. There's always a bot. Ranked below the fold, ignored with confidence.)
+4. **Which endpoints?** Filter, then histogram field 7: `grep ' 502 ' access.log | cut -d' ' -f7 | sort | uniq -c | sort -rn | head` — 10,981 of the 11,204 are `/api/checkout`. Ninety-eight percent, one endpoint. 'The site is broken' just became 'checkout's upstream is failing'.
+5. **Since when?** Timestamps are field 4. `grep ' 502 ' access.log | cut -d' ' -f4 | cut -c 14-16 | sort | uniq -c` — a second cut, `-c 14-16`, slices the HOUR characters out of the timestamp field, and the histogram-by-hour shows near-zero until 09:00, then a wall. Failure onset: 9 am, which — a colleague notes drily — is when the payment service deployed.
+6. **Who's affected?** `grep ' 502 ' access.log | cut -d' ' -f1 | sort | uniq -c | sort -rn | wc -l` — the ranked IP table has 3,344 lines: thousands of distinct clients, no single-user weirdness. Severity: high, breadth: wide, evidence: attached.
+7. **The report that gets a war room:** '502s began 09:00, currently 2.7% of all traffic (11,204 of 412,608); 98% on /api/checkout; 3,300+ distinct clients affected; onset coincides with the payment-service deploy. Histograms attached.' Every claim is a pipeline output, every pipeline is one line, and the whole investigation took under ten minutes.
+8. **The lesson:** the four tools didn't find the bug — grep-thinking from the last note plus the deploy timeline did that. What the histograms did was **size and shape** it: how much, which endpoint, since when, how many users. Those four answers are the difference between a ticket that says 'broken?' and one that says 'here'.
+</WorkedExample>
+
+<Callout type="mistake">
+Trusting a histogram you never sanity-checked — the counting tools fail *silently*, and confident
+garbage looks exactly like confident truth. The three classic silent failures, in the order they'll
+get you: **uniq without sort** (fragmented counts — the same value listed three times with partial
+tallies); **the wrong field number** (you histogrammed the byte-size column and wondered why statuses
+look like 4102 — quoted request strings shift access-log fields, and double spaces shift cut's
+numbering); and **alphabetical ranking** (final sort missing `-n`, so 98 proudly outranks 1,024).
+The two-glance discipline that catches all three: glance one at the *raw cut output* before piping
+further — is that actually the status column? — and glance two at the *bottom* of the finished
+table, not just the top: fragmented duplicates and absurd values hide there. Ten seconds of
+checking, or a bug report with numbers someone else disproves in one command. The tester who
+publishes wrong counts once spends a year having their counts re-checked.
+</Callout>
+
+<Quiz
+  question="You run: cut -d' ' -f9 access.log | uniq -c | sort -rn - and statuses appear multiple times in the table with split counts (two entries of 500, three of 200). What went wrong?"
+  options={[
+    "sort is missing before uniq -c: uniq only merges ADJACENT identical lines, so values scattered through the file produce fragmented partial counts - pipe cut | sort | uniq -c | sort -rn",
+    "The file is corrupted - duplicate table entries mean overlapping log writes",
+    "-c is the wrong flag on uniq; it should be uniq -d to count duplicates",
+    "sort -rn at the end broke it; removing the final sort would merge the duplicate entries"
+  ]}
+  answer={0}
+  explain="uniq's contract is narrower than its name suggests: it compares each line only to the ONE line before it, merging consecutive runs - so 500, 200, 500 yields two separate '500' entries with honest-but-useless partial counts, and no warning is ever printed. The fix is adjacency: a plain sort before uniq -c gathers every identical value into one run, and the counts become totals. That's why the canonical pipeline has two sorts doing different jobs - the first exists purely so uniq sees each value as one contiguous pile, the last (-rn) ranks the finished table numerically. The corruption option invents an exotic cause for a mundane one - fragmented uniq output is the signature of unsorted input, not damaged files. uniq -d is a different tool for a different question (it prints ONLY lines that repeat, still adjacent-only, and still doesn't fix fragmentation). And the final sort -rn only reorders the table's rows - it can neither merge entries nor split them; removing it just leaves the same fragmented table in a different order."
+/>
+
+<Flashcards
+  cards={[
+    { front: "wc -l", back: "Count lines = count events. Works on a file (wc -l app.log) or at the end of any pipeline (grep 'ERROR' app.log | wc -l). Always grab it as the DENOMINATOR: '612 errors' is meaningless without 'out of how many requests?'." },
+    { front: "cut -d' ' -f7", back: "Slice a column: split each line on the delimiter (-d, exactly one character), keep field 7 (-f, numbered from 1). Access log: f1=IP, f7=path, f9=status. Gotcha: EVERY delimiter counts - doubled spaces create empty fields and silently shift numbering. Eyeball the output before piping on." },
+    { front: "Why cut before counting?", back: "Whole log lines are all unique (timestamps guarantee it), so they can't group. Slicing down to one column makes different events comparable - two distinct failed requests both become just '500' - and identical values can pile up and be counted." },
+    { front: "The uniq adjacency law", back: "uniq -c counts RUNS of consecutive identical lines - it only ever compares neighbours. Unsorted input = fragmented partial counts, delivered with zero warnings. Therefore: sort | uniq -c, always, in that order. (sort -u dedupes but discards counts - not a substitute.)" },
+    { front: "sort vs sort -n vs sort -rn", back: "Plain sort: alphabetical - '9' outranks '10' because characters compare left to right. -n: numeric, 10 beats 9. -r: reverse (descending). The histogram's final stage is sort -rn: biggest count first. The pipeline's FIRST sort stays plain - its only job is adjacency for uniq." },
+    { front: "The tester's histogram (say it as a sentence)", back: "'Slice the column, pile it up, count the piles, biggest first': cut -d' ' -fN | sort | uniq -c | sort -rn. Change only the field: f9 = which statuses, f7 = which endpoints, f1 = which clients. Prepend a grep to histogram only the failures." },
+  ]}
+/>
+
+<Challenge>
+Histogram everything. Using the playground's access.log (or better, a real one): (1) Build the
+status histogram and write the failure percentage using the `wc -l` denominator. (2) Rank the
+endpoints that produced 500s. (3) Rank client IPs across ALL requests, then only across failures —
+do the same clients top both lists? (4) Reproduce the adjacency trap once more from memory, then
+fix it, and write the one-sentence law. (5) Boss round: histogram requests BY HOUR (field 4 holds
+the timestamp — you'll need a second cut with `-c` to slice the hour characters out of it). When
+you can do all five without looking anything up, you own the rig — and standup questions about
+'how often?' stop being scary and start being a ten-second flex.
+</Challenge>
+
+<AskCommunity prompt="Counting pipeline question: I'm analysing [access log / app log / test output] to answer [which statuses / which endpoints / how often X]. My exact pipeline: [paste it]. A sample input line (verbatim): [paste]. Expected: [what you expected]. Got: [paste the top of the actual output].">
+Paste the full pipeline AND one verbatim input line - almost every counting bug is visible in that
+pair: a field number shifted by the quoted request string, a missing sort before uniq, or a final
+sort without -n. Include the top few lines of your actual output too; fragmented duplicate entries
+in it diagnose the adjacency trap on sight.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.gnu.org/software/coreutils/manual/html_node/index.html", title: "GNU coreutils manual - cut, sort, uniq, wc: the authoritative reference", kind: "read" },
+    { href: "https://man7.org/linux/man-pages/man1/uniq.1.html", title: "man uniq - the adjacency contract, in the fine print where everyone misses it", kind: "read" },
+    { href: "https://man7.org/linux/man-pages/man1/sort.1.html", title: "man sort - numeric, reverse, key-based sorting and more", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=nLa6jAbULe8", title: "Linux Sysadmin Basics - Filtering Output and Finding Things (tutoriaLinux)", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=nLa6jAbULe8" title="Linux Sysadmin Basics - Filtering Output and Finding Things (tutoriaLinux)" minutes={10} />
+
+<Takeaways
+  points={[
+    "Four tiny tools, one job each: wc -l counts lines (always grab the denominator), cut -d' ' -fN slices one column, sort orders lines, uniq -c counts consecutive duplicates. All the power is in chaining them with pipes.",
+    "The tester's histogram is cut | sort | uniq -c | sort -rn - 'slice the column, pile it up, count the piles, biggest first'. Change only the field number to ask different questions: statuses (f9), endpoints (f7), clients (f1); prepend a grep to histogram only failures.",
+    "The adjacency law: uniq only merges NEIGHBOURING identical lines, so unsorted input yields fragmented counts with no warning. sort before uniq -c, every single time.",
+    "Two silent traps besides adjacency: field numbers shift (quoted request strings and doubled spaces fool cut - eyeball raw cut output before trusting it) and plain sort ranks alphabetically ('9' above '10') - the final sort needs -rn.",
+    "Report distributions, not anecdotes: 'timeouts are 2.7% of requests, 98% on /api/checkout, onset 09:00, 3,300 clients affected' - every clause is a one-line pipeline, and that's the difference between a shrug and a war room.",
+  ]}
+/>
+
+<Complete xp={10} />

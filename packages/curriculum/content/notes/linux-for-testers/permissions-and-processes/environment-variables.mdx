@@ -1,0 +1,310 @@
+---
+title: "environment variables: why staging behaves differently"
+summary: "Environment variables are the invisible config every process inherits: printenv reads them, export sets them, PATH explains 'command not found'. For QA they answer the eternal mystery - why the same build behaves differently on your machine, staging, and CI. Plus the secrets rule."
+tags: ["linux-for-testers", "permissions-and-processes", "track-b"]
+updated: "2026-07-13"
+---
+
+<Hook>
+Here's a bug you will meet within your first month, guaranteed: the app works on your machine,
+fails on staging, and the code is — provably, byte-for-byte — **identical**. Same build, same
+commit, same everything. A junior tester files "app broken on staging"; a senior tester asks one
+question: *"what's different about the environment?"* And nine times out of ten the answer is an
+**environment variable** — an invisible little `KEY=value` note that one machine's processes carry
+in their pockets and the other's don't. Database URL pointing at the wrong host. A feature flag set
+in CI but not locally. A `PAYMENT_MODE=sandbox` that someone set to `live` on exactly one box.
+This note makes the invisible visible: how to read a process's environment, how to set it, why
+`PATH` explains half the "command not found" errors you'll ever see — and why the same app is
+genuinely a *different app* on every machine it runs on.
+</Hook>
+
+<Callout type="analogy">
+An environment variable is the **sticky note on the office microwave**. The microwave (your app) is
+identical in every office of the company — same model, same firmware. But the note taped to it says
+different things in different offices: "power 7 only", "no fish", "broken, use 3rd floor". Staff
+(the process) read the note when they walk up and behave accordingly — so the *same microwave*
+produces different lunches in different offices, and nobody changed the microwave. The precise
+technical version: environment variables are `KEY=value` pairs that live in each process's memory,
+inherited from the process that started it (shell → app, CI runner → test job). The app reads them
+at runtime for configuration — database URLs, modes, flags, paths — so identical binaries behave
+differently wherever the notes differ. Debugging "works here, fails there" starts with reading both
+offices' sticky notes and diffing them.
+</Callout>
+
+The word doing all the work here is
+<Term define="The set of KEY=value pairs a process carries in memory, inherited from its parent process at launch. The shell is a process too, so variables you export in it are inherited by every command you run from it. Apps read these at startup for configuration: DATABASE_URL, NODE_ENV, API keys, feature flags. Unlike a config file, the environment is invisible on disk and DIFFERS per machine, per user, and per shell session - which is exactly why identical builds behave differently across your laptop, staging, and CI.">environment</Term>
+— not "the room you're in" but a precise thing: the key-value baggage every process inherits at birth.
+
+## Reading the notes: printenv and echo
+
+`printenv` dumps every variable your shell currently carries — expect a few dozen lines: `HOME`
+(your home directory), `USER`, `LANG`, `PWD`, and the star of the show, `PATH`. One variable at a
+time: `printenv HOME`, or the form you'll use daily, `echo $HOME` — the `$` prefix means *the value
+of*. No dollar sign, no dice: `echo HOME` prints the literal word HOME, a mistake everyone makes
+exactly once and then remembers forever.
+
+The tester's move is diffing environments across machines. `printenv | sort > laptop-env.txt` on
+your machine, same on staging, then compare. The variable that differs — `DATABASE_URL`, `API_BASE`,
+`FEATURE_NEW_CHECKOUT` — is very often your "works here, fails there" bug wearing its true name.
+
+## Writing the notes: assignment vs export
+
+Two-step distinction, and it's the one that bites: `MODE=test` sets a variable **in the shell
+only** — the shell knows it, but programs you launch don't inherit it. `export MODE=test` marks it
+for inheritance — now every process this shell starts carries it. That's the difference between
+writing on your own hand and taping the note to the microwave. There's also the one-command form —
+`MODE=test ./run-tests.sh` — which sets the variable for *that single command* and nothing else:
+surgically clean, leaves no residue, and it's the form test scripts love.
+
+Two more facts complete the picture. **Scope**: an exported variable dies with your shell session —
+close the terminal, note's gone. For permanence it goes in `~/.bashrc` (or `~/.zshrc`), which every
+new shell reads at startup — that's why "I set it yesterday, it's gone today" has a one-line answer.
+**Direction**: inheritance flows *down* only, parent to child. A child process can never write a
+variable back into its parent — so a script cannot "export back" to your shell, and `source script.sh`
+(run it *in* the current shell, no child) is the workaround the day you need it.
+
+## PATH: the variable that explains "command not found"
+
+When you type `grep`, the shell doesn't magically know where grep lives. It walks `PATH` — a
+colon-separated list of directories (`/usr/local/bin:/usr/bin:/bin`...) — checking each one in order
+for an executable named `grep`, and runs the **first** match it finds. That single mechanism
+explains a whole bug family: "command not found" means *no directory in PATH contains it* (the tool
+may be installed somewhere PATH doesn't cover); two versions of a tool fighting means an earlier
+PATH directory is shadowing a later one (`which java` tells you which one is winning); and CI
+failing with "command not found" on a tool that works locally means the runner's PATH differs from
+yours — same class of bug as every other env difference, just wearing a trench coat.
+
+<HotspotImage
+  src="/notes/linux-for-testers/permissions-and-processes/environment-variables.jpg"
+  alt="A wall of sticky notes: green ones carry times like 12:00, a yellow one reads CHAT WITH DESIGN over a red list of topics, an orange one says LUNCH with an arrow — instructions anyone in the room can read"
+  credit="Sticky notes on the wall, Wikimedia Hackathon Zürich — Wikimedia Commons, CC BY-SA 3.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Wikimedia_Hackathon_Z%C3%BCrich_2014_Chat_with_Design.jpg"
+  pins={[
+    { x: 55, y: 40, label: "One sticky = one KEY=value pair", desc: "The ideal photo shows a clear handwritten note taped to an appliance. That is one environment variable: DATABASE_URL=postgres://staging-db/shop. The machine is identical everywhere; the note is not - and the process reads the note, not the manufacturing spec. printenv lists every note your shell currently carries." },
+    { x: 10, y: 45, label: "The green times column = why staging differs from prod", desc: "Same appliance model in every office, different notes in each. Same app build on laptop, staging, CI - different NODE_ENV, API_BASE, feature flags. When identical code behaves differently, diff the environments first: printenv | sort on both machines, compare the files, and the culprit variable usually names itself." },
+    { x: 75, y: 32, label: "Sticking it to the wall = export", desc: "MODE=test writes on your own hand - only the shell knows. export MODE=test tapes the note where every program you launch from this shell will read it (children inherit). MODE=test ./cmd tapes it for one command only, then throws it away - the cleanest form for test runs. And notes die with the session unless written into ~/.bashrc." },
+    { x: 60, y: 55, label: "The red list of topics = PATH, read in order", desc: "One special note lists WHERE TO LOOK FOR THINGS: PATH, a colon-separated list of directories the shell searches IN ORDER when you type a bare command name. First match wins. 'command not found' = in none of the listed places. Wrong version running = earlier directory shadowing a later one; which cmdname reveals the winner." },
+    { x: 55, y: 82, label: "The LUNCH note with the arrow = secrets, handle with care", desc: "Some notes hold keys: API tokens, database passwords - the environment is where apps expect secrets, precisely BECAUSE it is not a file on disk. The tester's rules: never paste env dumps into bug reports or chat without scrubbing secret values, never commit .env files to git, and treat printenv output on a shared screen like a password on a whiteboard." },
+  ]}
+/>
+
+<FlowAnimation
+  title="'Works on my machine' solved by an environment diff - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "The impossible bug", desc: "The checkout test suite passes on your laptop and fails on staging with 'payment declined'. Same commit, same build artifact - the deploy pipeline guarantees it. A junior files 'staging is broken'. You ask the senior question instead: what does staging's process KNOW that my laptop's doesn't?" },
+    { label: "Dump both environments", desc: "On the laptop: printenv | sort > laptop.txt. On staging (via SSH, ch4 skills): printenv | sort > staging.txt. Two text files of KEY=value lines - the complete sticky-note inventory of both machines. The app read these at startup; any behavioural difference must trace back to a line that differs." },
+    { label: "Diff them", desc: "diff laptop.txt staging.txt prints three interesting lines: PAYMENT_MODE=sandbox on your laptop vs PAYMENT_MODE=live on staging, and an API_TIMEOUT=5000 that staging has but you don't. Suddenly 'payment declined' has a mechanism: staging is talking to the REAL payment gateway, which rejects the test card your suite uses." },
+    { label: "Prove it with one command", desc: "The surgical test: PAYMENT_MODE=live ./run-checkout-tests.sh on your laptop - setting the variable for that one command only. The suite now fails locally with the exact same 'payment declined'. Reproduced by changing ONE note. The variable is convicted; the code is innocent." },
+    { label: "Report the mechanism", desc: "The bug report writes itself and it is NOT 'staging is broken': 'Checkout suite uses test card 4242... which the live gateway rejects; staging runs PAYMENT_MODE=live. Either staging should be sandbox, or the suite needs live-safe fixtures.' Evidence: the diff line and the one-command repro. An env bug reported as an env bug - triaged in minutes." },
+  ]}
+/>
+
+Read, set, and scope variables — the mechanics in one sitting:
+
+<CodePlayground
+  language="bash"
+  title="Try it - read the environment, then control inheritance"
+  code={`printenv | head -n 5
+# HOME=/home/sajana
+# LANG=en_US.UTF-8
+# PWD=/home/sajana/qa
+# SHELL=/bin/bash
+# USER=sajana          <- a few of the dozens every shell carries
+
+echo $HOME
+# /home/sajana         <- $ means 'the value of'. Without it:
+echo HOME
+# HOME                 <- the literal word. Everyone does this once.
+
+MODE=test              # assignment WITHOUT export: shell-only
+echo $MODE
+# test                 <- the shell itself sees it...
+bash -c 'echo child sees: $MODE'
+# child sees:          <- ...but a child process does NOT. Empty.
+
+export MODE=test       # export: mark it for inheritance
+bash -c 'echo child sees: $MODE'
+# child sees: test     <- now children inherit the note.
+
+API_URL=http://localhost:9999 bash -c 'echo one-shot: $API_URL'
+# one-shot: http://localhost:9999
+echo $API_URL
+#                      <- one-command form left NO residue in your shell.
+# This is the form for test runs: BASE_URL=staging ./run-tests.sh`}
+/>
+
+<CodePlayground
+  language="bash"
+  title="Try it - PATH mechanics and the environment diff"
+  code={`echo $PATH
+# /usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+# colon-separated, searched LEFT TO RIGHT, first match wins.
+
+which grep
+# /usr/bin/grep        <- 'which' answers: where in PATH was it found?
+
+which definitely-not-installed
+# (nothing / 'not found')  <- and THAT is all 'command not found' means:
+# no directory in PATH contains an executable by that name.
+
+# Simulate the CI mystery - a crippled PATH:
+PATH=/tmp bash -c 'grep --version'
+# bash: grep: command not found
+# grep did not vanish - the child's PATH just does not list /usr/bin.
+# CI runners fail exactly like this when their PATH differs from yours.
+
+# The works-here-fails-there diff, end to end:
+printenv | sort > env-here.txt
+# (on the other machine)  printenv | sort > env-there.txt
+# diff env-here.txt env-there.txt
+# < PAYMENT_MODE=sandbox      <- yours
+# > PAYMENT_MODE=live         <- theirs. There is your 'impossible' bug.`}
+/>
+
+<Callout type="tip">
+When a bug smells environmental, reach for the **one-command form** before anything else:
+`SUSPECT_VAR=other-value ./reproduce.sh`. It's the cleanest experiment in this whole module — it
+changes exactly one thing, for exactly one process, and leaves your shell pristine (no cleanup, no
+forgotten exports haunting your afternoon). If flipping one variable flips the bug, you've converted
+"works on my machine" into a one-line root cause. And the reflex pairs with its mirror: when YOUR
+tests behave strangely, `printenv | grep -i 'proxy\|mode\|url\|env'` — check what notes you're
+unknowingly carrying before blaming the app.
+</Callout>
+
+<FirstTime title="Your mission: catch an environment difference red-handed">
+<StepChecklist
+  steps={[
+    { text: "Inventory your own pockets", detail: "Run printenv | sort and skim all of it once - most testers never have. Find HOME, USER, LANG, PATH. Count the lines (printenv | wc -l). Everything your commands do today happens inside this invisible baggage." },
+    { text: "Prove the export rule", detail: "Set MODE=test without export, then run bash -c 'echo $MODE' and watch the child see nothing. Export it, rerun, watch it appear. This five-second experiment is the entire parent-child inheritance model - you now know it by touch, not by rumor." },
+    { text: "Break PATH on purpose", detail: "Run PATH=/tmp bash -c 'ls' and enjoy the 'command not found' for a tool you KNOW is installed. Nothing was uninstalled - the child just could not find it. Every CI 'command not found' mystery is this experiment wearing work clothes." },
+    { text: "Run the diff drill", detail: "printenv | sort > a.txt, then export FEATURE_X=on, then printenv | sort > b.txt, then diff a.txt b.txt. One line of output: your change, isolated. This exact three-command pattern - dump, dump, diff - is how you will compare laptop vs staging for real." },
+    { text: "Do a one-shot reproduction", detail: "Pick any command and feed it a variable for one run only: GREETING=hi bash -c 'echo $GREETING', then echo $GREETING to confirm your shell stayed clean. This surgical form - change one note, one process, zero residue - is the experiment you will run the day staging 'is broken'." },
+  ]}
+/>
+You've read the invisible config, controlled what children inherit, broken and understood PATH, and
+practiced the dump-dump-diff. The next "works on my machine" you meet has nowhere to hide.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "I set a variable yesterday and today it's gone.",
+      fix: "Exported variables live exactly as long as the shell session that exported them - close the terminal, the note dies. That's a feature (no permanent residue from experiments), but for keeps you write the export line into ~/.bashrc (bash) or ~/.zshrc (zsh, the macOS default), which every NEW shell reads at startup. Two gotchas: the file only affects shells opened AFTER the edit (or run source ~/.bashrc to apply it to the current one), and GUI-launched apps on some systems don't read shell rc files at all - they get their environment from the desktop session, which is why an IDE can disagree with your terminal about the same variable.",
+    },
+    {
+      symptom: "My script sets a variable, but after it finishes my shell doesn't have it.",
+      fix: "Inheritance is a one-way street: parent to child, never back. Your script ran as a child process, exported the variable into ITS OWN environment, and took it to the grave on exit - a child cannot write notes into its parent's pockets. When you genuinely need a script's variables in your current shell, run it WITHOUT a child: source script.sh (or the shorthand . script.sh) executes the lines in your shell itself. This is exactly why activating a Python virtualenv is 'source venv/bin/activate' and not './venv/bin/activate' - the whole point is modifying YOUR shell's PATH.",
+    },
+    {
+      symptom: "CI fails with 'command not found' for a tool that works fine on my machine.",
+      fix: "The CI runner's PATH doesn't include the directory that tool lives in - PATH is just another environment variable, and the runner's environment is not your laptop's. Debug it like any env bug: add a diagnostic step to the pipeline that runs echo $PATH and which toolname (expect silence from the which), then compare against your local values. Fixes, in order of preference: install the tool via the CI config so it lands in a standard PATH directory, call it by absolute path (/opt/tool/bin/toolname), or extend PATH in the pipeline's env block. And check the tool is installed AT ALL on the runner - 'works locally' often means 'installed locally, never declared in CI'.",
+    },
+    {
+      symptom: "The app ignores the variable I set - I exported it and the behavior didn't change.",
+      fix: "Four suspects, in checking order. (1) The app was already running: processes read their environment AT LAUNCH - exporting afterwards changes nothing for a live process; restart it from the shell that has the export. (2) Different shell: you exported in terminal A, launched in terminal B - each session has its own environment. (3) Wrong name: apps are picky (API_BASE_URL vs API_URL vs BASE_URL) - check the app's docs or search its config code for the exact key, case-sensitive. (4) An override outranks you: many apps read a .env file or config file AFTER the environment and prefer it - a .env in the project directory silently winning over your export is a classic hour-loser.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where environment differences hide, per machine you'll debug:
+
+- **Your shell, right now** — `printenv | sort`; a single suspect: `echo $NAME` or `printenv NAME`. The `env` command is printenv's twin.
+- **Startup files** — `~/.bashrc`, `~/.zshrc`, `~/.profile`: where permanent exports live, and where mystery variables you never remember setting come from. `grep -n export ~/.zshrc` reads the notes taped up by past-you.
+- **A running process's ACTUAL environment** — the pro move on Linux: `cat /proc/PID/environ | tr '\0' '\n'` shows what a live process really carries (not what your shell carries now). When "I exported it!" meets "the app ignores it", this settles the argument.
+- **The project's .env file** — most modern apps read one; it commonly OVERRIDES your shell. `cat .env` in the project root before you spend an hour on anything else. (And confirm it's gitignored - see the mistake below.)
+- **CI pipeline config** — `.github/workflows/*.yml`, `.gitlab-ci.yml`: their `env:` blocks are the runner's sticky notes, in plain sight and version-controlled. Diff-able against your local `printenv` without SSH-ing anywhere.
+- **systemd services** — `systemctl show appname --property=Environment` reveals what a service was launched with; services do NOT read your shell's rc files, which is a classic works-in-terminal-fails-as-service cause.
+
+Tester's habit: when behaviour differs between two places, **diff the environments before suspecting
+the code.** The code is version-controlled and identical; the environment is neither.
+</WhereToCheck>
+
+<WorkedExample title="the test suite that only fails in CI, solved with dump-dump-diff">
+1. **The mystery:** the API test suite is green locally for every tester on the team, red in CI on every run — failures all say `connect ECONNREFUSED 127.0.0.1:5432`. The database refuses connections... but only for the robot.
+2. **Translate the symptom.** Port 5432 is Postgres. The suite is trying to reach a database at `127.0.0.1` — localhost — *inside the CI runner*, where (first hypothesis) no database lives.
+3. **Ask where the address comes from.** `grep -rn DATABASE_URL tests/` shows the suite reads `process.env.DATABASE_URL` with a fallback: `postgres://127.0.0.1:5432/qa`. So: locally, either the variable points somewhere real or a local Postgres answers; in CI, whatever that variable holds, connection refused.
+4. **Dump both environments.** Locally: `printenv | grep -i 'db\|postgres\|database'` → `DATABASE_URL=postgres://127.0.0.1:5432/qa` — and a local Postgres is running (`ps aux | grep postgres`, this chapter's earlier note). In CI: add a debug step `printenv | sort` to the workflow, rerun, read the log → **no DATABASE_URL at all**, and no Postgres process either.
+5. **The diff verdict:** locally the fallback URL *happens to work* because every tester installed Postgres months ago and forgot it. CI has neither the variable nor the database. "Works on my machine" was never about the code — the machines simply carry different notes and different neighbours.
+6. **Prove it locally in one command:** stop Postgres, run the suite → the exact CI failure appears on a laptop, `ECONNREFUSED 127.0.0.1:5432`. Reproduction complete, mechanism named.
+7. **The report** (to the team, not a bug in the app): "Suite depends on an undeclared local Postgres via DATABASE_URL fallback. CI has neither. Fix: pipeline should provide a database service and set DATABASE_URL explicitly; the silent fallback should become a loud failure — a missing DATABASE_URL should stop the suite with a clear message, not limp toward localhost."
+8. **The lesson:** the dump-dump-diff took four commands and named both the immediate cause (missing variable) and the design smell (silent fallback). Environment first, code second — the order that saves afternoons.
+</WorkedExample>
+
+<Callout type="mistake">
+Treating the environment as a safe place to *share* secrets. It's the right place for an app to
+**read** secrets — that's the convention precisely because env values don't sit in version control —
+but testers then leak them through the side doors: pasting a full `printenv` dump into a bug ticket
+(your `API_KEY` is now in Jira, forever, searchable), screensharing a terminal mid-`printenv`,
+committing the `.env` file "just this once so CI works" (git remembers; deleting it next commit
+removes nothing from history), or echoing `$DB_PASSWORD` in a CI debug step whose logs half the
+company can read. The rules: scrub values before sharing any env dump (`printenv | sed 's/=.*/=REDACTED/'`
+when in doubt), keep `.env` in `.gitignore` and verify with `git status`, and treat a leaked key as
+*rotated the moment it leaked* — not "probably fine". Security incidents love a helpful tester.
+</Callout>
+
+<Quiz
+  question="You run export API_MODE=test in your terminal, then start the app from your IDE's Run button. The app behaves as if API_MODE is unset. What's the most likely explanation?"
+  options={[
+    "The IDE was not launched from that shell, so its processes never inherited the export - inheritance flows parent to child, and your terminal is not the IDE's parent",
+    "export only works for built-in shell commands, not for applications",
+    "API_MODE is a reserved name that Linux prevents user programs from reading",
+    "The variable was set but the app's code has a bug that ignores all environment variables"
+  ]}
+  answer={0}
+  explain="Environment inheritance is strictly parent-to-child at launch time: your exported variable lives in that ONE terminal's shell, and only processes STARTED FROM that shell inherit it. The IDE was launched by the desktop session (a completely different parent), so the Run button's child processes inherit the desktop's environment - your terminal's notes never reach them. Fixes: launch the IDE from that terminal, set the variable in the IDE's run configuration, or put the export in a startup file the session reads. The 'built-ins only' option inverts reality - inheritance is precisely FOR launched programs; any process can read its environment. Nothing about the name API_MODE is reserved - Linux doesn't police user variable names. And while an app ignoring env vars is conceivable, it's the last hypothesis to reach for when a simpler, near-universal mechanism (two different parents, two different environments) fully explains the symptom - that reasoning order is the whole debugging skill this note teaches."
+/>
+
+<Flashcards
+  cards={[
+    { front: "printenv / echo $VAR - reading the environment", back: "printenv lists every KEY=value the shell carries; printenv NAME or echo $NAME reads one. $ means 'value of' - echo NAME prints the literal word. Tester's power move: printenv | sort > env.txt on two machines, then diff - the differing line is often the 'works here, fails there' bug." },
+    { front: "VAR=x vs export VAR=x vs VAR=x cmd", back: "VAR=x - shell-only, children never see it. export VAR=x - children launched from this shell inherit it (dies with the session). VAR=x cmd - set for that ONE command, zero residue: the cleanest experiment for env-suspect bugs. Permanent = write the export into ~/.bashrc / ~/.zshrc." },
+    { front: "Inheritance direction rule", back: "Parent to child, at launch, one-way. A child (script, app) can never write variables back to its parent shell - which is why ./script.sh can't modify your shell, and why virtualenv activation is 'source venv/bin/activate' (runs in YOUR shell, no child). Also: a process reads env AT START - exports after launch change nothing until restart." },
+    { front: "PATH - what it is and what it explains", back: "Colon-separated directory list the shell searches IN ORDER for bare command names; first match runs. Explains: 'command not found' (in no listed dir), wrong version running (earlier dir shadows later - check with which cmd), and CI failing on tools that 'work locally' (runner's PATH differs)." },
+    { front: "Why staging behaves differently (the QA frame)", back: "Identical builds + different environments = different behavior, by design: DATABASE_URL, modes, flags, timeouts all come from env. Debug order: diff environments BEFORE suspecting code (code is version-controlled and identical; environments aren't). One-command repro: SUSPECT_VAR=value ./repro.sh." },
+    { front: "Secrets in the environment - tester's rules", back: "Env is where apps READ secrets (keeps them out of git) - but never paste unscrubbed printenv dumps into tickets/chat, never commit .env (gitignore it; git history remembers forever), never echo secrets in CI logs. A leaked key counts as compromised immediately: rotate, don't rationalize." },
+  ]}
+/>
+
+<Challenge>
+The environment detective drill, five cases: (1) In one command each, show your PATH, count how many
+directories it contains, and find where bash itself lives. (2) Create the inheritance proof: a
+variable a child can't see, then can - two runs of `bash -c`, four commands total. (3) The residue
+test: run a command with a one-shot variable, then prove in one more command that your shell stayed
+clean. (4) Dump-dump-diff: capture your env, export two new variables, capture again, and produce a
+diff showing exactly two added lines. (5) The scenario: a teammate says "the app ignores my
+DATABASE_URL export" — write, in order, the three questions you'd ask them (hint: when was the app
+started, from where, and what might override it). Under ten minutes means the invisible layer is
+yours.
+</Challenge>
+
+<AskCommunity prompt="Environment variable question: the app/tests behave [differently between X and Y / as if my variable is unset]. Variable: [NAME]. How I set it: [export in terminal / .env file / CI env block / rc file]. How the app was launched: [from that terminal / IDE / service / CI]. printenv NAME says: [value / empty]. What I've compared so far: [env diff / .env contents / nothing yet].">
+Say HOW you set the variable and HOW the process was launched - those two facts solve most env
+mysteries on sight: a missing export, a different parent (IDE/service vs terminal), a .env file
+quietly overriding the shell, or a process started before the export existed. If it's a
+works-here-fails-there case, paste the (scrubbed!) diff of both printenv dumps.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://man7.org/linux/man-pages/man1/printenv.1.html", title: "man printenv - reading the environment", kind: "read" },
+    { href: "https://www.gnu.org/software/bash/manual/html_node/Environment.html", title: "Bash manual - how the environment and export actually work", kind: "read" },
+    { href: "https://12factor.net/config", title: "The Twelve-Factor App: config in the environment - why apps are built this way", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=ADh_OFBfdEE", title: "What are environment variables, and how do I use them? — Jacob Sorber", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=ADh_OFBfdEE" title="What are environment variables, and how do I use them? — Jacob Sorber" minutes={12} />
+
+<Takeaways
+  points={[
+    "Environment variables are per-process KEY=value config, inherited parent-to-child at launch - which is exactly why identical builds behave differently on your laptop, staging, and CI.",
+    "Read with printenv / echo $VAR; set with VAR=x (shell-only), export VAR=x (children inherit, dies with the session, ~/.bashrc for keeps), or VAR=x cmd (one command, zero residue - the perfect experiment).",
+    "Inheritance is one-way and launch-time only: children can't write back to parents (hence source for scripts that must change YOUR shell), and running processes don't see exports made after they started.",
+    "PATH is a colon-separated search list, first match wins - it explains 'command not found', shadowed versions (which reveals the winner), and CI tool failures in one mechanism.",
+    "The QA reflex: when behavior differs between machines, dump-dump-diff the environments before suspecting code - and treat env dumps as secret-bearing: scrub before sharing, gitignore .env, rotate anything leaked.",
+  ]}
+/>
+
+<Complete xp={10} />

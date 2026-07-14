@@ -1,0 +1,360 @@
+---
+title: "Your first useful script"
+summary: "Turn loose commands into a real script: the shebang line, chmod +x, and a health-check script that curls a URL, greps a log for ERROR, echoes a verdict, and returns an exit code CI can actually trust."
+tags: ["linux-for-testers", "bash-scripting-for-qa", "track-b"]
+updated: "2026-07-13"
+---
+
+<Hook>
+You've now typed enough individual bash commands to be dangerous. This note is about the moment you
+stop typing them one at a time and instead write them down, once, so a computer can run the exact
+same sequence at 3am without you awake to babysit it. That's a script — and the gap between "a file
+full of commands" and "a script CI actually trusts" is exactly three things: a **shebang** line
+telling the system which interpreter reads this file, a **permission bit** (`chmod +x`) telling the
+system you're allowed to run it as a program instead of just reading it as text, and an **exit code**
+at the end that isn't an accident. Get all three right and you've built something genuinely useful: a
+health check that curls a URL, checks a log for trouble, and hands back a single honest number CI can
+build a pass/fail decision on. Get any one wrong and you've built something worse than nothing — a
+script that LOOKS like it's checking, and isn't.
+</Hook>
+
+<Callout type="analogy">
+A script is a recipe card you mail to a kitchen you'll never visit. Three things have to be true for
+a stranger chef to actually cook it. First, the card needs to say what LANGUAGE it's written in — French
+recipe terms need a chef who reads French; that's your **shebang** line, `#!/usr/bin/env bash`, saying
+"hand this to bash, specifically." Second, the chef needs actual permission to cook, not just read —
+a card stamped "recipe only, do not prepare" is useless no matter how good the instructions are; that's
+your **execute permission**, `chmod +x`. Third — and this is the part people forget — the recipe needs
+to report back HOW it went, clearly, at the end: "dish complete" or "ran out of eggs, stopped at step
+4," not just silence. That report is your script's **exit code**. A recipe with beautiful instructions
+but no final status report leaves the next kitchen along the line — your CI pipeline — guessing whether
+dinner is actually ready. Guessing is exactly what you're trying to eliminate.
+</Callout>
+
+## The shebang: the first line that isn't a comment
+
+**A shebang** is the very first line of a script, starting with `#!`, and it tells the operating
+system which program should interpret everything below it. You'll see it written two ways: `#!/bin/bash`
+(a hardcoded, absolute path straight to bash) or `#!/usr/bin/env bash` (ask the `env` program to find
+whichever `bash` is first on your `PATH`, wherever that is). The second form is the one professionals
+default to, because bash doesn't live in the same place on every system — it's at `/bin/bash` on most
+Linux distributions, but a Homebrew install on a Mac might put it somewhere else entirely, and some
+minimal Docker images (Alpine, for instance) don't ship bash at `/bin/bash` at all. `env` looks it up
+at run time instead of assuming; a hardcoded path assumes and sometimes loses that bet.
+
+**Without a shebang**, running `./script.sh` hands the file to whatever shell you're currently sitting
+in — which might not be bash, and might interpret bash-only syntax differently or not at all. This is
+exactly the kind of "works on my machine" bug that costs an afternoon: your script runs fine because
+your default shell happens to be bash, and it breaks on a CI runner whose default shell is something
+else. One line at the top of the file removes the ambiguity permanently.
+
+## chmod +x: permission to actually run, not just read
+
+**A brand-new script file is not executable by default.** You can `cat` it, edit it, read every
+line — but typing `./script.sh` gets you `Permission denied`, because the execute bit for your tier
+(covered in the permissions note earlier in this module) simply isn't set yet. The fix is one command:
+`chmod +x script.sh`. That's it — no compiling, no installing, just flipping a permission bit so the
+kernel will let the file run as a program instead of treating it as inert text.
+
+**Two ways to actually run it**, and the difference matters. `./script.sh` uses the execute bit and
+the shebang — the kernel reads the `#!` line and hands the file to whichever interpreter it names.
+`bash script.sh` skips both of those entirely: it works even without `chmod +x`, and even without a
+shebang line at all, because you're TELLING bash directly "read this file." That second form is handy
+for a quick test, but production automation should run scripts the first way — `./script.sh` — because
+that's the path that actually proves the permission bit and the shebang are both correct, which is
+exactly what will be exercised for real in CI.
+
+## Anatomy of a real check: curl, grep, verdict, exit code
+
+**The four-part shape of almost every health-check script you'll ever write:** hit something over the
+network, inspect something for trouble, print a human-readable verdict, and return a machine-readable
+exit code. `curl -sf "$URL" > /dev/null` is the network check — `-s` for silent (no progress bar
+cluttering output), `-f` for "fail on HTTP error codes" (without `-f`, curl happily calls a 404 or 500
+page a success, because as far as curl's concerned it DID fetch something). `grep -q "ERROR" "$LOG"`
+is the log check — `-q` for quiet, meaning grep does its job and reports success or failure through its
+exit code alone, printing nothing. Then an `echo` for the humans reading the console, and finally an
+explicit `exit 0` or `exit 1` for the CI system reading nothing BUT that number. Skip that last step and
+your script's exit code becomes whatever its last command happened to return — often not what you meant
+at all, and the subject of the worked example below.
+
+<HotspotImage
+  src="/notes/linux-for-testers/bash-scripting-for-qa/your-first-useful-script.jpg"
+  alt="A 1925 pianola in a museum: behind the glass panel above the keyboard, the perforated paper roll is loaded in its spool box — a written program that replays the same performance every time"
+  credit="Pianola with its perforated roll, 1925 — Wikimedia Commons, CC BY 2.0"
+  pins={[
+    { x: 58, y: 18, label: "The perforated roll = the script; the first perforation = the shebang", desc: "The ideal photo has this exact line clearly visible and highlighted at the very top of the editor pane -- the one line that decides which interpreter reads the whole file, and the first thing a tester should check when a script behaves differently on two machines." },
+    { x: 58, y: 30, label: "Loading the roll into the spool box = chmod +x, making it playable", desc: "Shows the chmod +x script.sh command typed in the terminal pane, ideally immediately followed by an ls -l line where the x bits visibly appear -- proof, not just claim, that the permission changed." },
+    { x: 35, y: 22, label: "The holes that strike the keys = the curl line, real actions", desc: "Highlights curl -sf against a URL variable inside the script body. The ideal image makes it visually obvious this line is reaching OUTSIDE the machine running the script, which is the whole point of a health check." },
+    { x: 75, y: 25, label: "The roll's printed tempo notes = the grep line, checking as it goes", desc: "Highlights a grep -q \"ERROR\" line pointed at a log file path. Pairing this visually with the curl line above shows the script's two-part shape: check the network, THEN check the evidence left behind in logs." },
+    { x: 55, y: 88, label: "The pedals that drive it = running it, same verdict every time", desc: "Shows an explicit exit 0 or exit 1 near the bottom of the script, paired with the terminal output showing the echoed verdict text and, ideally, a follow-up echo $? proving the exit code matches what the script intended to report." },
+  ]}
+/>
+
+<FlowAnimation
+  title="From a text file to a CI verdict -- press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "1. You write health-check.sh with a shebang", desc: "Line one, #!/usr/bin/env bash, names the interpreter. Below it: variables, a curl check, a grep check, an echo, an exit. Right now it's just text -- the kernel has no idea yet that it's meant to be a program." },
+    { label: "2. chmod +x health-check.sh", desc: "You flip the execute bit for your tier. The file's CONTENT hasn't changed at all -- only its permission to be run as a program instead of merely read as text. This step is invisible in the file itself but mandatory for what comes next." },
+    { label: "3. ./health-check.sh -- the kernel reads the shebang", desc: "You invoke it directly. The kernel checks the execute bit (present, thanks to step 2), then reads the #! line and hands the ENTIRE file to that interpreter -- bash, in this case -- as if you'd typed 'bash health-check.sh' yourself." },
+    { label: "4. curl and grep run, each leaving an exit code", desc: "curl -sf hits the URL; grep -q scans the log. Each is a real command with its own exit code, exactly like every command in the previous note -- 0 for 'looks fine', non-zero for 'trouble'. The script's job is to NOTICE these and react, not just run them and move on." },
+    { label: "5. The script echoes a verdict and exits deliberately", desc: "A human-readable line ('VERDICT: ALL CLEAR' or 'VERDICT: FAILED') for whoever reads the console, and an explicit exit 0 or exit 1 for CI, which reads NOTHING else -- not the echoed text, not the log, just this one number, to decide pass or fail for the whole pipeline stage." },
+  ]}
+/>
+
+Here's the shebang and permission story end to end — write a tiny script, hit the wall, fix it two
+different ways, and watch exactly what changes:
+
+<CodePlayground
+  language="bash"
+  title="Run it — shebang, chmod +x, and the two ways to run a script"
+  code={`# Write a tiny script to a file
+cat > greet.sh << 'EOF'
+#!/usr/bin/env bash
+echo "hello from a real script"
+exit 0
+EOF
+
+# It exists, but try to run it directly:
+./greet.sh
+# bash: ./greet.sh: Permission denied
+# No execute bit yet -- the kernel refuses before reading a single line.
+
+# Two ways forward. First, skip the permission system entirely:
+bash greet.sh
+# hello from a real script
+# Works WITHOUT chmod +x, because you told bash directly to read the file.
+# Handy for a quick test -- but it never proves the shebang or the
+# permission bit are correct, which is what CI will actually rely on.
+
+# The real fix: grant execute permission, then run it properly
+chmod +x greet.sh
+ls -l greet.sh
+# -rwxr-xr-x  1 sajan  staff  47 Jul 13 10:02 greet.sh
+# (the x bits are now set -- compare to before chmod, which had none)
+
+./greet.sh
+# hello from a real script
+# Now it runs via the shebang + execute bit path -- the one CI exercises.
+
+echo "exit code was: $?"
+# exit code was: 0`}
+/>
+
+Now the real thing: a health-check script with all four parts — curl, grep, echoed verdict, and an
+exit code CI can trust. Two runs shown: one where everything's fine, one where it isn't:
+
+<CodePlayground
+  language="bash"
+  title="Run it — a real curl + grep health-check script"
+  code={`cat > health-check.sh << 'EOF'
+#!/usr/bin/env bash
+URL="https://api.example.com/health"
+LOG="/var/log/myapp/app.log"
+
+echo "Checking $URL ..."
+if curl -sf "$URL" > /dev/null; then
+  echo "  network check: OK"
+else
+  echo "  network check: FAILED"
+  echo "VERDICT: FAILED"
+  exit 1
+fi
+
+echo "Checking $LOG for ERROR ..."
+if grep -q "ERROR" "$LOG"; then
+  echo "  log check: ERRORS FOUND"
+  echo "VERDICT: FAILED"
+  exit 1
+fi
+echo "  log check: clean"
+
+echo "VERDICT: ALL CLEAR"
+exit 0
+EOF
+chmod +x health-check.sh
+
+# SCENARIO A -- everything healthy (illustrative output):
+./health-check.sh
+# Checking https://api.example.com/health ...
+#   network check: OK
+# Checking /var/log/myapp/app.log for ERROR ...
+#   log check: clean
+# VERDICT: ALL CLEAR
+echo "exit code: $?"
+# exit code: 0
+
+# SCENARIO B -- the log has an ERROR line (illustrative output):
+# Checking https://api.example.com/health ...
+#   network check: OK
+# Checking /var/log/myapp/app.log for ERROR ...
+#   log check: ERRORS FOUND
+# VERDICT: FAILED
+# exit code: 1   <- this is the number CI actually reads`}
+/>
+
+<Term define={`The #! line at the very start of a script, naming the interpreter that should run it -- for example #!/usr/bin/env bash or #!/bin/bash. When you run a script with its execute bit set (./script.sh), the kernel reads this exact first line and hands the whole file to whatever program it names, as if you'd typed that interpreter's name yourself. Without a correct shebang, ./script.sh either fails outright ('bad interpreter') or gets interpreted by the wrong shell, which can silently misread bash-only syntax. #!/usr/bin/env bash is the portable form (looks bash up on PATH at run time); #!/bin/bash is a hardcoded path that assumes bash lives at that exact location, which is not guaranteed on every system.`}>shebang</Term>
+
+<Callout type="tip">
+Two habits that turn "a script that runs" into "a script CI can trust." First: **never rely on the
+default exit code.** A bash script with no explicit `exit N` at the end returns whatever its LAST
+command returned — often an `echo`, which always succeeds, which means your script reports success
+regardless of what actually happened earlier. End every check script with a deliberate `exit 0` or
+`exit 1`. Second: **use `curl -f`, not bare `curl`.** Without `-f`, curl treats a 404 or 500 response
+as a successful fetch (it DID get a response, just an unhappy one) — so a health check without `-f`
+can report "OK" against a service that's actively broken. Both habits fix the same root problem: bash
+defaults to optimism, and a check script's whole job is to refuse to be optimistic on your behalf.
+</Callout>
+
+<FirstTime title="Your mission: build it, break it, watch it lie">
+<StepChecklist
+  steps={[
+    { text: "Write and run greet.sh yourself", detail: "Copy the first playground's script into an actual file on your own machine (not just the playground). Confirm the Permission denied error, then confirm chmod +x fixes it. Seeing the real error on your own terminal sticks better than reading about it." },
+    { text: "Break the shebang on purpose", detail: "Change #!/usr/bin/env bash to #!/bin/nonexistent-shell and re-run ./greet.sh. Read the exact error -- 'bad interpreter: No such file or directory' -- and notice it happens BEFORE any line of your script executes. This is what a typo'd or wrong shebang looks like in the wild." },
+    { text: "Run health-check.sh against a log that has no ERROR", detail: "Create a small /tmp/app.log with a couple of harmless lines (no 'ERROR' in it), point LOG at it in your own copy of the script, and confirm you get VERDICT: ALL CLEAR and exit code 0." },
+    { text: "Now add an ERROR line and re-run", detail: "Append a line containing the word ERROR to that same log file and run the script again -- watch the verdict flip to FAILED and the exit code become 1, with no code changes on your part. That's the script doing its actual job." },
+    { text: "Remove the final exit and watch it lie", detail: "Delete the exit 0 / exit 1 lines from your copy of health-check.sh (keep the echoes). Re-run both scenarios and check $? each time -- notice the exit code no longer reliably reflects what the checks found. This is the exact bug in the worked example below." },
+  ]}
+/>
+You've now run a script through Permission denied, a broken shebang, a clean pass, a real failure, and a script that lies about its own result -- the entire life cycle of a health check, end to end.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "\"bash: ./script.sh: Permission denied\" the very first time you try to run a script you just wrote.",
+      fix: "The execute bit isn't set yet -- brand-new files never start executable. Run chmod +x script.sh, then try ./script.sh again. If it's a script checked out of git, note that some workflows don't preserve the execute bit across systems, so this can recur after a fresh clone even if it worked before.",
+    },
+    {
+      symptom: "\"bash: ./script.sh: /bin/bash^M: bad interpreter: No such file or directory\"",
+      fix: "That visible ^M is a carriage return -- the script was saved or edited on Windows and has CRLF line endings instead of Unix LF. The shebang line literally reads as '/bin/bash\\r', which doesn't exist as a path, so the kernel refuses. Fix with a line-ending converter (dos2unix script.sh) or re-save the file with your editor set to LF endings.",
+    },
+    {
+      symptom: "\"bash: ./script.sh: /bin/bash: bad interpreter: No such file or directory\" with no ^M in sight.",
+      fix: "The interpreter path in the shebang genuinely doesn't exist on this machine -- common on minimal Docker images (Alpine and similar often ship only /bin/sh, no bash, unless you install it). Either install bash in the image, switch the script to a shebang that IS present (#!/bin/sh, if the script avoids bash-only syntax), or use the portable #!/usr/bin/env bash form so it finds whatever bash IS on PATH.",
+    },
+    {
+      symptom: "CI shows the health check step as green, but you can see in the log output that curl or grep actually reported a problem.",
+      fix: "The script has no explicit exit at the end (or the exit is on the wrong branch), so bash falls back to the exit code of the LAST command it ran -- frequently an echo, which always succeeds. Add a deliberate exit 0 on the success path and exit 1 (or any non-zero) on every failure path, and make sure nothing runs after that exit that could quietly override it.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+The shebang/permission/exit-code trio breaks in the same few places, over and over:
+
+- **Freshly cloned repos on a new CI runner or teammate's machine** — execute bits don't always survive every transport (a zip download, some file-share tools). If a script "always worked" and suddenly doesn't after a fresh checkout, check `ls -l` on it before anything else.
+- **Docker images, especially minimal/Alpine-based ones** — the shebang your script assumes (`#!/bin/bash`) may not exist in that image at all. Check what shells the image actually ships before blaming the script's logic.
+- **Scripts written or edited on Windows, then run on Linux/macOS/CI** — the `^M` bad-interpreter error is the signature; check line endings first, always, before doubting the shebang path itself.
+- **Any CI step that's "always green" for a check that should sometimes fail** — read the script for a missing or misplaced `exit`. A check step that has never once gone red in months of runs is itself a suspicious signal, not a reassuring one.
+
+Tester's habit: **when a script's pass/fail doesn't match what its own printed output says, the bug is
+almost always the exit code, not the check.** Read the script bottom-up: find the last line that
+actually runs, and ask what number IT returns.
+</WhereToCheck>
+
+<WorkedExample title="the health check that was always green">
+1. **The report:** "Our nightly health-check job in CI has been green for three months straight. Great
+   track record — except the service actually went down for forty minutes last Tuesday, and nobody got
+   paged, because the job that's supposed to catch exactly that stayed green the whole time."
+2. **The tester pulls the script** and finds this shape, roughly: shebang, `curl -sf "$URL" >
+   /dev/null`, an `echo` reporting the curl result, `grep -q "ERROR" "$LOG"`, another `echo` reporting
+   the grep result — and no `exit` statement anywhere in the file. The script simply ends after the
+   last `echo`.
+3. **The tester replays Tuesday's incident locally**: points the script at a URL that returns a
+   connection refused, runs it, and reads `$?` right after. It's `0`. Every single time, regardless of
+   what curl or grep actually found.
+4. **The reason is exactly the rule from this note.** A bash script with no explicit `exit N` returns
+   the exit code of its LAST command — here, always an `echo`, which cannot fail under normal
+   circumstances. The curl and grep results were being printed as text for a human to read, but nothing
+   in the script ever converted "the log said ERROR" or "curl failed" into the ONE number CI actually
+   checks.
+5. **The fix mirrors the health-check.sh in the playground above:** wrap each check in an `if`, echo
+   the verdict, and call `exit 1` immediately on any failure path, falling through to `exit 0` only if
+   every check passed. Three months of silent green becomes an honest signal from the very next run.
+6. **The regression test:** the team added a scheduled "canary" run against a deliberately-broken test
+   endpoint once a week, confirming the health check reports FAILED when it should — the automated
+   equivalent of periodically checking that your smoke detector's battery isn't dead.
+7. **The tester's angle.** The script's console OUTPUT was telling the truth the entire time — "network
+   check: FAILED" was printed, right there in the CI log, every time it happened. Nobody read it,
+   because nobody needed to: the job was GREEN, and green means "don't look here." The bug wasn't in
+   what the script said. It was in what the script never converted that message into.
+8. **The lesson for a tester.** A script's printed text and its exit code are two completely separate
+   things, and only one of them drives automation. When auditing any CI check script, find the `exit`
+   statements first — count them, trace which branch each sits on — before reading a single echo. If a
+   script has zero `exit N` lines, its "verdict" is decorative.
+</WorkedExample>
+
+<Callout type="mistake">
+Trusting a script because it printed the right-looking words. `echo "VERDICT: FAILED"` is just text on
+a screen — it has exactly zero effect on the script's exit code unless an `exit 1` sits right next to
+it on the failure path. CI, cron, and every other automation layer downstream reads ONLY the exit code;
+none of them parse your echoed sentences looking for the word "FAILED." The habit that prevents this:
+after writing any check script, deliberately force EVERY failure branch (bad URL, log with an ERROR
+line, missing file) and confirm `$?` is non-zero for each one — not just that the printed text looks
+alarming, but that the number backing it up actually changed.
+</Callout>
+
+<Quiz
+  question="A script has no exit statement anywhere, and its last line is echo 'done'. curl earlier in the script failed (bad URL). What exit code does the script return?"
+  options={[
+    "0 -- with no explicit exit, bash returns the exit code of the LAST command run, which is the echo, and echo always succeeds",
+    "The curl failure's exit code, because bash remembers the first failure in a script by default",
+    "1, because any failure anywhere in a script forces the whole script to fail unless told otherwise",
+    "It's undefined behavior and could be any number depending on the system"
+  ]}
+  answer={0}
+  explain="Correct answer: without an explicit exit N, a bash script's own exit code is simply the exit code of whatever command ran LAST -- here, echo 'done', which is essentially guaranteed to succeed. Bash does not remember or aggregate earlier failures on its own; that's a discipline YOU have to build into the script with explicit checks and exit calls (or a stricter mode like set -e, covered in a later note). Option 3 describes a real and useful bash behavior called set -e -- but it is opt-in, not the default; a plain script keeps running after a failed command and simply exits with whatever the LAST command returned. And the exit code is never 'undefined' -- it's always a specific, deterministic number (0-255); the bug in this scenario isn't randomness, it's that the deterministic number happens to be the wrong one. This exact gap -- printed truth, wrong exit code -- is precisely what makes a health check report green during a real outage."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What is a shebang, and the two common forms?", back: "The #! first line of a script naming its interpreter. #!/bin/bash is a hardcoded path; #!/usr/bin/env bash looks bash up on PATH at run time and is the more portable choice, since bash doesn't live in the same place on every system." },
+    { front: "Why does a brand-new script say Permission denied?", back: "New files aren't executable by default -- the execute bit for your tier isn't set. Fix with chmod +x script.sh, then run it with ./script.sh (which uses the execute bit and the shebang together)." },
+    { front: "./script.sh vs bash script.sh -- what's the real difference?", back: "./script.sh needs the execute bit AND reads the shebang line to pick the interpreter -- the path CI actually exercises. bash script.sh works without chmod +x or even a shebang, because you're telling bash directly to read the file -- fine for a quick test, not proof the real path works." },
+    { front: "The anatomy of a curl + grep health check", back: "curl -sf \"$URL\" checks the network (-f makes HTTP errors count as failures); grep -q \"ERROR\" \"$LOG\" checks the log quietly; echo a verdict for humans; exit 0 or exit 1 as the one number automation actually reads." },
+    { front: "A script's exit code with no explicit exit statement", back: "It's the exit code of the LAST command that ran -- often an echo, which always succeeds. This is why a script can print 'FAILED' and still return 0: the text and the exit code are two separate things unless you tie them together with exit." },
+    { front: "The ^M bad-interpreter error", back: "\"/bin/bash^M: bad interpreter\" means the script has Windows CRLF line endings -- the shebang literally reads as a path with a trailing carriage return, which doesn't exist. Fix with dos2unix or an editor set to LF line endings." },
+  ]}
+/>
+
+<Challenge>
+Take the health-check.sh from the second playground and extend it: (1) add a THIRD check — `[ -f
+"$LOG" ]` to confirm the log file exists at all before grepping it, exiting `1` with a clear message
+if it's missing (this is a real bug class: grepping a file that doesn't exist reports "not found",
+which your script might currently misread as "clean"). (2) Force each of the three failure branches
+in turn and confirm `$?` is non-zero every single time — don't trust the echoed text, check the
+number. (3) Finish with one sentence: why would a code reviewer reject a health-check script that has
+zero `exit` statements in it, even if every `echo` in the script looks correct?
+</Challenge>
+
+<AskCommunity prompt="Script issue: my script is meant to `[what it should check]`. Running ./script.sh gives: `[exact error or wrong verdict]`. ls -l on the script shows: `[paste the permission string]`. The shebang line is: `[paste line 1]`. Does the script have an explicit exit on every branch? `[yes / no / not sure]`. What does echo $? print right after a run? `[the number]`.">
+Most "my script doesn't work in CI but works for me" reports come down to one of three things: a
+missing execute bit, a shebang that doesn't resolve on the CI runner, or a missing/misplaced exit
+that lets a real failure return exit code 0. Post the permission string, the shebang line, and whether
+every branch has an exit, and the diagnosis is usually immediate.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.gnu.org/software/bash/manual/html_node/Shell-Scripts.html", title: "GNU Bash manual — Shell Scripts (shebang, execution)", kind: "read" },
+    { href: "https://curl.se/docs/manpage.html", title: "curl manpage — -s, -f, -o, and every flag used here", kind: "read" },
+    { href: "https://www.shellcheck.net/", title: "ShellCheck — catches missing exits and quoting bugs before CI does", kind: "tool" },
+    { href: "https://mywiki.wooledge.org/BashFAQ/028", title: "Greg's Wiki — why #!/usr/bin/env bash over a hardcoded path", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=e7BufAVwDiM", title: "Bash scripting full course — from first script to real checks — linuxhint", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=I4EWvMFj37g" title="Bash in 100 seconds — your first script — Fireship" minutes={2} />
+
+<Takeaways
+  points={[
+    "The shebang (#!/usr/bin/env bash) names the interpreter that runs your script -- get it wrong and ./script.sh fails BEFORE any of your own code runs, with a 'bad interpreter' error.",
+    "chmod +x grants execute permission on a brand-new file -- without it, ./script.sh returns Permission denied no matter how correct the script's contents are.",
+    "A real health check has four parts: a network check (curl -sf), a log check (grep -q), an echoed verdict for humans, and an explicit exit code for machines -- and CI reads ONLY the last one.",
+    "Without an explicit exit N, a script's exit code defaults to whatever its LAST command returned -- often an echo, which always succeeds, which is how a script can print FAILED and still report success.",
+    "Printed text and exit codes are separate: audit any check script by finding its exit statements first, forcing every failure branch, and confirming $? actually changes -- don't trust the words on screen alone.",
+  ]}
+/>
+
+<Complete xp={10} />

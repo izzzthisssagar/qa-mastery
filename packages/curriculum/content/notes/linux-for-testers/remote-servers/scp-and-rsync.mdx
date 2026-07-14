@@ -1,0 +1,296 @@
+---
+title: "scp and rsync"
+summary: "Getting a log or screenshot off a server (or a build onto one) without a shared drive. scp syntax both directions, rsync -avz's delta transfers and resume, and the rule of thumb for choosing between the two."
+tags: ["linux-for-testers", "remote-servers", "scp", "rsync", "track-b"]
+updated: "2026-07-13"
+---
+
+<Hook>
+You've SSH'd into staging, found the log line that proves the bug, and now you need that file on
+YOUR laptop — to attach to the ticket, to grep more comfortably, to screenshot the exact line
+numbers. There's no shared drive. There's no "download" button. What there is, is two small tools
+that ride on top of the same SSH connection you already trust: **`scp`**, which copies a file (or a
+folder) between two machines in one command, and **`rsync`**, which does the same job smarter —
+skipping anything already copied, resuming after a dropped connection, and moving only the BYTES
+THAT CHANGED on a second run instead of the whole file again. Neither needs a shared drive, a cloud
+bucket, or anyone's permission beyond the SSH access you already set up. This is how evidence
+actually leaves a remote server.
+</Hook>
+
+<Callout type="analogy">
+`scp` is a courier: hand it one parcel, it walks it from A to B, done — reliable, no fuss, and if
+the trip gets interrupted halfway, it starts the whole parcel over from scratch next time. `rsync`
+is a smarter courier working the SAME route repeatedly: the second time you ask it to deliver "the
+current state of this folder," it doesn't repack everything — it compares what's already on the
+other end and carries over only what's different. That comparison-and-only-the-difference trick has
+a name: a **delta transfer**. Ask it to sync a 2 GB log folder where only 4 MB changed since
+yesterday, and it moves roughly 4 MB, not 2 GB. Interrupt it mid-delivery and re-run the same
+command, and it picks up close to where it left off instead of starting over — the courier
+remembers the route, `scp` doesn't.
+</Callout>
+
+## Two tools, one underlying connection
+
+Both `scp` and `rsync` tunnel through SSH — the same encrypted, key-authenticated connection from
+the last note does the heavy lifting for both. That means anything you can `ssh` into, you can copy
+files to and from, with the exact same authentication (keys, config aliases, all of it) already
+working. Neither tool requires opening a new port or configuring anything extra on a server that
+already accepts SSH.
+
+`scp` (secure copy) syntax reads left to right, source then destination, and either side can be
+local or remote using `remote-host colon path` notation: `scp qa@staging:/var/log/app.log
+./app.log` pulls a file FROM the server TO your laptop; flip the two arguments and it pushes a file
+the other direction. Add `-r` for a whole directory. It's blunt and predictable — every run copies
+everything named, full stop, which is exactly right for a single file you need once.
+
+`rsync` speaks similar syntax (`rsync -avz source destination`, same colon notation for the remote
+side) but adds real intelligence: `-a` (archive — preserves permissions, timestamps, and recurses
+into directories, generally the flag you always want), `-v` (verbose — shows what's actually being
+transferred), `-z` (compress in transit — cheap and usually worth it over any real network). Where
+`scp` re-sends a whole 500 MB log directory every single time, `rsync -avz` sent it once and now
+sends only what changed — which is the difference between "annoying" and "instant" on a repeated
+task like pulling the latest logs every morning during an investigation.
+
+{/* IMAGE: split-screen showing a laptop terminal and a server rack, with a folder icon mid-transfer between them and a progress bar visible in the terminal window */}
+<HotspotImage
+  src="/notes/linux-for-testers/remote-servers/scp-and-rsync.jpg"
+  alt="The open back of a moving truck at a loading ramp, half filled: labelled boxes strapped in at the sides, furniture wrapped in blankets deeper in, floor space still waiting for the rest"
+  credit="Moving truck with boxes — Wikimedia Commons, CC BY 2.0"
+  pins={[
+    { x: 32, y: 75, label: "The labelled box by the door = host colon path", desc: "The syntax both tools share for naming a remote location -- username at hostname, a colon, then the path on that machine. Miss the colon and you've just named a weird local folder instead of a remote one; this is the single most common typo in both scp and rsync commands." },
+    { x: 50, y: 88, label: "The ramp into the truck = source then destination", desc: "Both tools read left to right: the FIRST path is where the file comes FROM, the SECOND is where it goes TO. Swap them by accident and you overwrite the wrong side -- always read your own command back before hitting enter on anything with -r or a remote destination." },
+    { x: 28, y: 50, label: "The straps and blankets = the -avz flags, preserve everything", desc: "Archive mode (preserve permissions and recurse), verbose (show what's moving), compress (shrink it in transit). This three-letter combo is the closest thing rsync has to a default -- most real-world rsync commands you'll ever see start with exactly these flags." },
+    { x: 60, y: 55, label: "The half-loaded truck = the progress line", desc: "rsync (with -v or --progress) prints a live line per file: bytes transferred, percentage, and speed. On a second run of the same command, watch how FEW files even appear in that output -- that's the delta transfer working, visibly." },
+    { x: 78, y: 68, label: "The space left for the rest = a resumed transfer picking back up", desc: "After a dropped connection mid-copy, re-running the same rsync command shows it skipping everything already fully transferred and continuing roughly where it stopped -- the behaviour that makes rsync the right tool for anything large enough to plausibly get interrupted." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Same folder, second sync -- why rsync moves less than scp would. Press Play."
+  intervalMs={1800}
+  nodes={[
+    { label: "Day 1: pull the whole logs folder", desc: "rsync -avz qa@staging:/var/log/app/ ./logs/ -- nothing exists locally yet, so rsync transfers everything, same as scp would. Say it's 500 MB across 40 files. Both tools do identical work on a first run." },
+    { label: "Overnight: 3 files change, 37 don't", desc: "The server keeps running; three log files get new lines appended, thirty-seven are untouched since yesterday's pull. Nothing about this is visible to you yet -- it's just the normal state of a live server between two points in time." },
+    { label: "Day 2: re-run the EXACT same rsync command", desc: "rsync compares each file's size and modification time (or checksums, with -c) between local and remote BEFORE transferring anything. Thirty-seven files match exactly -- rsync skips them entirely, transferring zero bytes for files that haven't changed." },
+    { label: "Only the delta moves", desc: "For the three changed files, rsync doesn't necessarily even re-send the whole file -- its delta algorithm can transfer just the changed BLOCKS within a file. Total data moved on day 2: a few MB, not 500. The verbose output visibly lists far fewer files than day 1." },
+    { label: "scp, for comparison, would redo all 500 MB", desc: "Run the equivalent scp -r command on day 2 and it has no memory of day 1 -- it copies all 40 files again, full size, because scp's whole design is 'copy what I was told, every time.' That's not a bug, it's the tradeoff: scp is simpler and more predictable; rsync is smarter but has more moving parts to reason about." },
+  ]}
+/>
+
+Copying a single piece of evidence off a server, one direction then the other:
+
+<CodePlayground
+  language="bash"
+  title="Try it -- scp a log down, a fixed build up"
+  code={`# Pull a single log file FROM the server TO your laptop:
+scp qa@staging.example.com:/var/log/app/error.log ./error.log
+# error.log                    100%  842KB   6.1MB/s   00:00
+
+# The reverse direction -- push a local file TO the server:
+scp ./patched-config.yaml qa@staging.example.com:/etc/app/config.yaml
+# patched-config.yaml          100%   3KB    1.2MB/s   00:00
+
+# Whole directories need -r (recursive):
+scp -r qa@staging.example.com:/var/log/app/ ./app-logs/
+# error.log                    100%  842KB   5.9MB/s   00:00
+# access.log                   100%   11MB   8.4MB/s   00:01
+# worker.log                   100%  204KB   3.1MB/s   00:00
+
+# Using a config alias (from the previous note) instead of the full login:
+scp ci07:/tmp/build-artifacts/report.xml ./report.xml
+# report.xml                   100%   56KB   4.8MB/s   00:00`}
+/>
+
+The same folder, synced twice with `rsync` — watch the second run move almost nothing:
+
+<CodePlayground
+  language="bash"
+  title="Try it -- rsync -avz, then run it again to see the delta"
+  code={`# First sync -- everything transfers, same as scp would:
+rsync -avz qa@staging.example.com:/var/log/app/ ./app-logs/
+# receiving file list ... done
+# error.log
+# access.log
+# worker.log
+# sent 1,204 bytes  received 12,450,392 bytes  1,245,678.90 bytes/sec
+# total size is 12,449,821  speedup is 1.00
+
+# Nothing changed on the server -- run the EXACT same command again:
+rsync -avz qa@staging.example.com:/var/log/app/ ./app-logs/
+# receiving file list ... done
+# sent 1,204 bytes  received 89 bytes  861.71 bytes/sec
+# total size is 12,449,821  speedup is 9,650.02
+# (no filenames printed -- nothing needed to move; a scp -r here would
+#  have re-sent all 12MB again)
+
+# Only error.log grew since the last sync -- run it a third time:
+rsync -avz qa@staging.example.com:/var/log/app/ ./app-logs/
+# receiving file list ... done
+# error.log
+# sent 1,240 bytes  received 8,912 bytes  6,768.00 bytes/sec
+# total size is 12,458,733  speedup is 1,244.31
+# (only the ONE changed file was re-sent, and often only its changed blocks)`}
+/>
+
+<Term define="An update where only the parts that CHANGED since the last sync are actually transferred, instead of re-sending everything. rsync computes this by comparing file sizes and modification times (or content checksums, with -c) on both ends BEFORE moving any data, then transfers only new or changed files -- and for files that changed in place, often only the changed blocks within them. This is why a second rsync of a mostly-unchanged folder can finish in under a second even if the folder itself is gigabytes: the tool is smart enough to notice that most of it is identical and skip it entirely, rather than trusting a naive full re-copy.">delta transfer</Term>
+
+<Callout type="tip">
+The choice between the two comes down to one question: **will you run this again?** Grabbing one
+screenshot or one log file, once, to attach to a ticket — `scp` is simpler, has fewer flags to
+remember, and the "copy everything, every time" behaviour is a feature when "everything" is small.
+Pulling the same growing log directory every hour during an incident, or mirroring a whole
+`/var/log` before a server gets decommissioned — `rsync -avz` (and its close cousin `--delete`,
+which also removes local files that vanished on the source, useful for a true mirror) pays for
+itself after the very first repeat. And on a flaky connection, `rsync` has one more advantage
+neither `scp` flag list matches: interrupt it and re-run the same command, and it resumes near
+where it stopped instead of starting the whole transfer over.
+</Callout>
+
+<FirstTime title="First time? Move a file both directions, then feel the delta">
+<StepChecklist
+  steps={[
+    { text: "scp a file down", detail: "Pick any file on a server you have SSH access to and scp it to your laptop. Confirm it landed with ls, and open it to make sure it's not truncated or corrupted." },
+    { text: "scp a file up", detail: "Reverse it: copy a small local file to the server. Notice the ONLY thing that changed in the command is which path came first vs second -- source, then destination, always." },
+    { text: "rsync a folder, twice", detail: "rsync -avz a directory from a server, then immediately run the identical command again with nothing changed on the server side. Read the output closely -- the second run should show far less (or nothing) transferred." },
+    { text: "Change one file, sync a third time", detail: "If you can, append a line to one file on the server (echo 'test line' >> somefile.log) and re-run the same rsync command. Confirm only that one file shows up in the transfer output." },
+    { text: "Time both approaches", detail: "On a folder with a handful of files, time scp -r vs rsync -avz for a REPEATED sync (second run onward). The gap is the whole reason rsync exists for anything you'll touch more than once." },
+  ]}
+/>
+You've now moved evidence both directions and watched a delta transfer skip work in front of your own eyes -- the exact behaviour that makes rsync the right default for anything recurring.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "scp says 'No such file or directory' even though the file is definitely there.",
+      fix: "Almost always a path typo, or forgetting -r on a directory. scp does not create missing parent directories on the destination side either -- if ./app-logs/ doesn't exist locally yet, create it first (mkdir -p app-logs) before copying into it.",
+    },
+    {
+      symptom: "rsync: command not found (on a fresh or minimal server).",
+      fix: "rsync isn't installed everywhere by default, unlike scp which ships with OpenSSH almost universally. Install it (apt-get install rsync / yum install rsync, depending on the distro) or fall back to scp for a one-off if you can't install anything on that box.",
+    },
+    {
+      symptom: "A transfer of a huge folder keeps dying partway through on a flaky connection.",
+      fix: "This is precisely rsync's advantage over scp -- switch to rsync -avz (or add --partial to keep partially-transferred files instead of deleting them on interruption) and simply re-run the SAME command after a drop. It picks up close to where it stopped rather than restarting the whole folder.",
+    },
+    {
+      symptom: "rsync ran but the destination doesn't match what I expected -- extra old files, or a nested folder appeared.",
+      fix: "Trailing slashes on the SOURCE path change the meaning: 'folder/' (with slash) syncs the CONTENTS of folder into the destination; 'folder' (no slash) creates a folder named folder INSIDE the destination. This trips up everyone at least once -- read the destination path after any first real rsync and confirm the structure is what you meant.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where scp and rsync earn their keep in QA work:
+
+- **Evidence off a server** — a log excerpt, a screenshot the app itself saved server-side, a crash dump. `scp` for a one-off, `rsync` if you'll be pulling updates repeatedly during an investigation.
+- **Config or fixture files onto a server** — pushing a test data file, a patched config, a certificate a staging environment needs. Same tools, other direction.
+- **Recurring log pulls during an incident** — `rsync -avz` on a timer or by hand every hour is the difference between "wait 40 seconds for a large re-copy" and "wait half a second for the new lines."
+- **Comparing local vs remote folder state** — `rsync -avzn` (the `-n`, dry-run, flag) shows exactly what WOULD transfer without actually moving anything — a fast way to answer "is staging's build folder actually in sync with what we deployed?"
+- **Any transfer over an unreliable connection** — VPN drops, flaky wifi during a remote incident call — `rsync`'s resume behaviour turns "start over" into "keep going."
+
+Tester's habit: **if you'll run the same transfer more than once, reach for rsync before you've
+copy-pasted the scp command a third time.** The delta transfer isn't just faster — it's a habit that
+scales from one server to a fleet.
+</WhereToCheck>
+
+<WorkedExample title="the incident where scp cost forty minutes nobody had">
+1. **The situation:** a production incident, logs growing fast, and the on-call tester needs the
+   latest state of a 6 GB log directory pulled to a laptop every fifteen minutes to feed into a
+   local analysis script while the team investigates.
+2. **The first attempt:** `scp -r qa@prod:/var/log/app/ ./logs-$(date +%s)/` — a fresh, fully
+   timestamped folder every time, copying the full 6 GB from scratch. On the office wifi that's
+   roughly six minutes per pull. Four pulls in, that's already 24 minutes spent waiting, not
+   investigating — during an active incident, where every minute matters.
+3. **A teammate flags it:** "why are you re-downloading six gigabytes every fifteen minutes? Almost
+   none of it changed." Fair question — most of those log files are hours old and static; only the
+   newest few files are actively growing.
+4. **The switch:** `rsync -avz qa@prod:/var/log/app/ ./logs-current/` — ONE local folder, synced
+   repeatedly instead of a fresh copy each time. First run still takes the full six minutes (nothing
+   to compare against yet). Every run after: under ten seconds, because rsync compares against what
+   already landed locally and moves only the handful of files still actively growing.
+5. **The unexpected bonus:** the office wifi drops mid-sync twice during the incident. With `scp`,
+   both drops would have meant starting a 6 GB copy over from zero. With `rsync`, re-running the
+   identical command simply resumes — the incident timeline barely notices the network hiccup.
+6. **The retro note:** the team adds a one-line standing instruction to the incident runbook —
+   "pulling logs repeatedly during an incident: rsync -avz into ONE local folder, not a fresh scp
+   -r each time" — turning a forty-minute lesson into a permanent shortcut for the next incident.
+7. **Tester's angle.** The tool choice isn't cosmetic once you're doing something MORE than once:
+   `scp`'s "redo everything" behaviour is invisible at one file, and expensive at scale — recognising
+   "I'll need this again" before the third re-run is the actual skill.
+</WorkedExample>
+
+<Callout type="mistake">
+Reaching for `scp -r` on a folder you'll need to re-sync, without noticing the pattern until you're
+five copies in and frustrated by how slow it's gotten. `scp` doesn't remember anything between runs
+by design — every invocation copies exactly what you told it to, in full, which is perfect for a
+single file and a genuine waste for anything recurring. The fix costs nothing: if there's any real
+chance you'll run a transfer again, start with `rsync -avz` instead of `scp -r` from the very first
+pull. The command isn't meaningfully harder to type, and the SECOND run rewards you immediately —
+you just won't know how much time you saved until you compare it to the `scp` alternative you didn't
+have to sit through.
+</Callout>
+
+<Quiz
+  question="You need to pull a 4 GB log directory from a server every 20 minutes during a multi-hour incident, into the same local folder each time. Which approach, and why?"
+  options={[
+    "rsync -avz into the same local destination folder each time -- after the first full pull, subsequent runs transfer only files that changed, turning a multi-minute copy into a near-instant one",
+    "scp -r into a freshly timestamped folder each time -- simpler command, and having separate timestamped copies is useful for comparison",
+    "It doesn't matter -- both tools move the same bytes over the same SSH connection, so total time is identical either way",
+    "Neither tool is appropriate for a directory this large; a shared network drive should be set up first"
+  ]}
+  answer={0}
+  explain="rsync's delta-transfer behaviour is exactly suited to this scenario: repeated syncs of a mostly-unchanged folder, where only a handful of files are actively growing between pulls. After the first full transfer, every subsequent rsync -avz run compares local vs remote and moves only what changed -- often finishing in seconds instead of minutes. scp has no memory between invocations by design, so scp -r would re-copy the full 4 GB every single time, and timestamped folders would multiply local disk usage on top of that repeated cost. The two tools do NOT move identical bytes in this scenario -- that's true only for a single one-off transfer where nothing exists locally to compare against, which is exactly the case where scp's simplicity is the better tradeoff. And standing up a shared drive mid-incident is solving a problem rsync already solves for free, using access the tester already has."
+/>
+
+<Flashcards
+  cards={[
+    { front: "scp -- when to reach for it", back: "A single file (or small folder with -r), once, in either direction: scp source destination, using host:path notation for the remote side. Simple, predictable, re-copies everything every run -- fine for a one-off, wasteful for repeats." },
+    { front: "rsync -avz -- the default flags", back: "-a (archive: preserve permissions/timestamps, recurse into folders), -v (verbose: show what's transferring), -z (compress in transit). Close to the standard way anyone runs rsync for a real transfer." },
+    { front: "Delta transfer", back: "rsync compares file size/mtime (or checksums with -c) between source and destination BEFORE transferring, and moves only new or changed data -- sometimes only changed blocks within a file. A mostly-unchanged folder re-syncs almost instantly." },
+    { front: "host:path notation", back: "The shared syntax for a remote location in both tools: user@hostname:/path/to/thing. Forgetting the colon silently names a weird local path instead of erroring -- always double-check it's there." },
+    { front: "rsync's resume advantage", back: "Interrupted transfers can be re-run with the identical command and rsync picks up close to where it stopped, skipping already-completed files. scp has no such memory -- an interrupted scp -r restarts the whole copy from nothing." },
+    { front: "Trailing slash on the source path", back: "folder/ (with slash) syncs the CONTENTS into the destination; folder (no slash) creates folder itself INSIDE the destination. A very common source of 'why is there a nested folder I didn't expect' surprises." },
+  ]}
+/>
+
+<Challenge>
+Using a practice server (or two local folders standing in for remote/local if no server is handy):
+(1) scp a file down, then scp the same file back up to a different remote path, and confirm the
+argument order matches source-then-destination both times. (2) rsync -avz a directory, then run the
+identical command a second time with nothing changed -- read the verbose output and note what's
+different from the first run. (3) Modify one file and sync a third time; confirm only that file
+moved. (4) Deliberately mismatch a trailing slash on the source path in an rsync command and observe
+the nested-folder surprise. (5) In one sentence: what question do you ask yourself before choosing
+scp vs rsync for a given transfer?
+</Challenge>
+
+<AskCommunity prompt="scp/rsync issue: transferring [what, roughly how big] between [local and remote host]. Command run: [paste exact command]. Direction: [pulling down / pushing up]. Result: [error text, or 'ran but wrong result -- describe']. Will this transfer repeat? [yes/no]. Network conditions: [stable / flaky / VPN].">
+Most transfer problems come down to argument order (source THEN destination, always), a missing
+colon in host:path notation, a missing -r on a directory, or a trailing-slash surprise on the source
+path in rsync. State the exact command and which end got the unexpected result, and the diagnosis
+is usually immediate.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://man.openbsd.org/scp", title: "scp(1) manual page -- full flag reference", kind: "read" },
+    { href: "https://download.samba.org/pub/rsync/rsync.1", title: "rsync(1) manual page -- the authoritative flag and algorithm reference", kind: "read" },
+    { href: "https://rsync.samba.org/", title: "rsync project home -- background on the delta-transfer algorithm", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=hQWRp-FdTpc", title: "SSH crash course — keys, scp and friends — Traversy Media", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=hQWRp-FdTpc" title="SSH crash course — keys, scp and friends — Traversy Media" minutes={35} />
+
+<Takeaways
+  points={[
+    "scp copies a file or folder (-r) between local and remote using host:path notation -- source then destination, simple and predictable, redoing the full copy every run.",
+    "rsync -avz does the same job smarter: it compares source and destination first and transfers only the DELTA -- new or changed data -- making repeat syncs of a mostly-unchanged folder finish in seconds instead of minutes.",
+    "Choose by repetition: a one-off file grab, scp is simplest; anything you'll sync again (recurring log pulls, a live incident, a flaky connection), rsync's delta transfer and resume behaviour pay off immediately.",
+    "Watch the syntax traps: argument order is always source-then-destination, host:path needs the colon, and a trailing slash on rsync's source path changes whether the FOLDER or its CONTENTS land at the destination.",
+    "For a tester: this is how evidence leaves a server without a shared drive -- logs, screenshots, crash dumps down; fixtures, configs, patched builds up -- and rsync -avzn (dry run) answers 'is this actually in sync' before you trust it.",
+  ]}
+/>
+
+<Complete xp={10} />

@@ -1,0 +1,317 @@
+---
+title: "tail -f: watching a live log"
+summary: "tail prints the end of a file; tail -f streams new lines as they arrive, so you watch the error appear at the exact second you reproduce the bug. Filter the stream with grep, stop with Ctrl-C, and switch to tail -F when log rotation swaps the file out from under you."
+tags: ["linux-for-testers", "logs-and-investigation", "track-b"]
+updated: "2026-07-13"
+---
+
+<Hook>
+Somewhere in your first week as a tester, you'll report a bug, and a developer will reply with four
+words that sound like a brush-off but are actually a promotion: **"did you check the logs?"** This
+chapter is your answer, and it starts with the single most-used command in it. `tail` shows you the
+*end* of a file — which matters because a log file is an append-only diary where the newest, most
+relevant events are always at the bottom, under a hundred thousand lines you don't care about.
+And `tail -f` does something better: it **keeps the file open and streams every new line to your
+screen the moment it's written**. Which means you can put the log on one half of your screen, the
+app on the other, click the button that breaks — and watch the error erupt in real time, timestamped,
+at the exact second you caused it. That's not reading logs. That's *interrogating* them. Reproduce
+on the left, confess on the right.
+</Hook>
+
+<Callout type="analogy">
+A log file is the building's **CCTV archive**; `tail -f` is the **live monitor in the security
+office**. You could investigate yesterday's incident by scrolling through hours of stored footage —
+that's opening the log file in an editor, and it's miserable. Or you could do what actual security
+guards do: watch the live feed *while the suspicious thing happens*. A tester running `tail -f`
+during a bug reproduction is the guard watching the live monitor while a colleague walks through the
+lobby wearing a fake moustache — you see the event AND its exact timestamp AND everything that
+happened in the three seconds around it, with zero searching. One fine-print clause the analogy
+carries perfectly: if someone swaps the camera cable at midnight (that's **log rotation**, and it
+really happens at midnight), the naive live feed keeps showing a dead channel and you watch
+confident, comfortable *silence* while the incident plays out unrecorded. There's a switch for that.
+It's called `-F`, and we'll get there.
+</Callout>
+
+Before the commands, thirty seconds on the star of the whole chapter — the
+<Term define="A plain-text file that a running application appends one line per event to: requests handled, warnings, errors, stack traces. New lines go at the BOTTOM, so the end of the file is the present moment. On Linux servers logs usually live under /var/log or in the app's own logs/ directory. For a tester, the log is the app's sworn testimony: the UI shows a polite 'Something went wrong', while the log records what actually went wrong, when, and with which internal error - which is why 'check the logs' is week-one QA work.">log file</Term>
+itself. The app writes it; nobody reads it — until something breaks, at which point it becomes the
+most valuable file on the server.
+
+## tail: the end of the file, on demand
+
+Plain `tail file` prints the **last 10 lines** and exits. That default is a gift: the last 10 lines
+of a log are "what just happened", which is almost always the question. Want more context?
+`tail -n 50 file` prints the last 50; ask for more lines than the file has and you politely get the
+whole file, no error, no drama. Compare that with your first instinct — opening a 900 MB log in a
+GUI editor — which is how testers discover what a frozen laptop fan sounds like at full throttle.
+`tail` reads just the end. It doesn't care if the file is 900 MB or 9 GB.
+
+## -f: the feed goes live
+
+`tail -f file` prints the last 10 lines and then — here's the part that feels like a magic trick —
+**doesn't exit**. Your prompt does not come back. The command sits there, holding the file open,
+and every line the application appends from now on is printed to your terminal the instant it lands.
+"Follow mode." The first time, most people think the terminal has crashed. It hasn't. It's *waiting*,
+which is the entire point: you've turned a dead file into a live feed. When you're done watching,
+**Ctrl-C** stops it and returns your prompt. That's not an emergency exit or a sign you did
+something wrong — Ctrl-C is simply how a `tail -f` session ends. You will type it ten thousand
+times in your career; make peace with it now.
+
+The tester's choreography, and learn it as choreography: **start `tail -f` BEFORE you reproduce.**
+Log on one side, app on the other. Click the broken thing. Watch the lines arrive. The error that
+appears *at the second you clicked* is your error — no searching, no guessing, and the timestamp
+correlation comes free. Reproduce-and-watch is the single highest-value habit in this chapter.
+
+## Filtering the stream, and the midnight betrayal
+
+A busy app logs dozens of lines per second, most of them cheerful INFO noise. You don't scroll a
+firehose — you filter it: `tail -f app.log | grep ERROR` follows the file but shows only lines
+containing ERROR (next note teaches grep properly; today it's your bouncer). One honest gotcha: in
+*longer* pipelines — `tail -f app.log | grep checkout | grep ERROR` — the middle grep's output gets
+block-buffered, so lines can sit hostage in a buffer for ages before appearing. `grep --line-buffered`
+tells grep to release each line immediately. A two-stage pipe to your terminal usually behaves; the
+moment a live pipeline "shows nothing" while you KNOW lines are flowing, buffering is the suspect.
+
+Now the betrayal. `tail -f` follows the **open file itself**, not the filename. Log rotation — the
+scheduled janitor that renames `app.log` to `app.log.1` and starts a fresh `app.log`, typically at
+midnight or at a size limit — renames the file your `tail -f` is holding. tail loyally keeps
+following the *renamed, retired* file, which will never get another line. Your feed goes silent, and
+silence looks exactly like "no errors". Overnight test run, morning conclusion: "clean!" Reality:
+you watched a dead channel for six hours. The fix is one keystroke of casing: **`tail -F`** follows
+the *name* — when the file vanishes and reappears, it reopens the fresh one and tells you so. On a
+real server, `-F` is the habit; `-f` is for files nobody rotates.
+
+<HotspotImage
+  src="/notes/linux-for-testers/logs-and-investigation/control-room.jpg"
+  alt="A small security control room: a wall of six large monitors above a bank of three desk screens, two ergonomic operator chairs at a white desk, and a red status panel mounted on the side wall - the watch station where a silent screen is either peace or a dead feed"
+  credit="Photo: Control room with monitor wall and operator stations - Wikimedia Commons, Public domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:EFTA00000016_-_Control_room_with_multiple_monitors_two_ergonomic_chairs_and_various_office_supplies_on_a_white_desk.jpg"
+  pins={[
+    { x: 70, y: 22, label: "The monitor wall = tail -f", desc: "The big screens are for live feeds, not rewinding footage. That is tail -f: the file's end streamed to your screen as it grows, each new event appearing the second it happens. The prompt does not return - the command is waiting, not frozen - and Ctrl-C is how you clock out of the shift." },
+    { x: 60, y: 60, label: "The recorder bank on the desk = the log file itself", desc: "Below the wall, the smaller units hold the recordings. That is the log file, the append-only diary the app writes whether or not anyone watches. Plain tail reads the last 10 lines of it and exits; tail -n 50 reads more. The newest events are always at the bottom, which is why tail (not head) is the tester's default." },
+    { x: 35, y: 65, label: "Two chairs at the desk = the reproduce-and-watch choreography", desc: "One seat watches the wall, one seat works the keyboard - exactly the tester's two-terminal setup: start tail -f BEFORE reproducing, then click the broken thing in the other window and watch the error line arrive in real time. The timestamp correlation between your click and the log line is free evidence - no searching through 100k lines afterwards." },
+    { x: 85, y: 45, label: "Six screens, one worth watching = grep filtering the stream", desc: "A wall of monitors is unwatchable - the operator focuses on the one feed that matters. Piping the stream through grep (tail -f app.log | grep ERROR) is exactly that: the firehose of INFO noise keeps flowing, but your screen shows only the lines that matter. In longer pipelines add --line-buffered so a middle grep does not hold lines hostage in its buffer." },
+    { x: 92, y: 36, label: "The red status panel = never trust a dark screen", desc: "Every screen in this room is dark - which is either a quiet night or a dead feed, and the wall panel exists to tell you which. Log rotation renames app.log while tail -f keeps following the old renamed file: permanent silence that looks like 'no errors'. tail -F follows the NAME instead, reopens the fresh file after rotation, and announces it. On servers, -F is the professional default - and silence is only trustworthy once you have verified the feed is alive." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Reproduce the bug while the log is live - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Set up the stakeout", desc: "Bug report says checkout fails 'sometimes'. Before touching the app, you open a terminal on the test server and run: tail -F logs/app.log | grep --line-buffered -i error. The last 10 lines print, then the feed sits waiting. Log on the left half of the screen, browser on the right. Nothing to search yet - you are watching the door." },
+    { label: "Trigger the crime", desc: "You click Place Order in the app at 14:32:07 (you glance at the clock - noting the time IS part of the technique, the final note of this chapter runs on it). The UI shows the useless part: 'Something went wrong, please try again.' Politeness for users. Useless for you. Eyes on the left half." },
+    { label: "The confession scrolls in", desc: "Same second, the feed prints: 2026-07-13 14:32:07,118 ERROR [checkout] PaymentService - gateway timeout after 30000 ms (requestId=req-9f3a71). No searching 100,000 lines. The error appeared AT the moment you caused it, timestamp matching your click - correlation is already done, and there is a requestId in it for later." },
+    { label: "Ctrl-C, then collect the evidence", desc: "Ctrl-C stops the feed and returns your prompt (normal exit, not an emergency). The line is still on screen: copy it whole. Want the seconds around it too? tail -n 30 logs/app.log shows the recent context - the retry attempt, the request that preceded it. That copied line plus its timestamp is the spine of the bug report." },
+    { label: "The midnight fine print", desc: "You leave the feed running overnight to catch a rare error. At 00:00 logrotate renames app.log to app.log.1 and creates a new app.log. Plain tail -f keeps following the RENAMED file: your feed is silent forever after, and silence reads as 'no errors overnight'. tail -F follows the name, notices the swap, reopens the new file, and announces it. This is why the -F in step one was not a typo." },
+  ]}
+/>
+
+First, tail as a reader — build a small log and take slices off the end of it:
+
+<CodePlayground
+  language="bash"
+  title="Try it - tail reads the end of a log, whatever its size"
+  code={`mkdir -p logs
+cat > logs/app.log <<'EOF'
+2026-07-13 14:29:51,204 INFO  [http] GET /api/products 200 (34 ms)
+2026-07-13 14:30:12,551 WARN  [cache] product cache miss for id=8841
+2026-07-13 14:31:02,009 INFO  [http] POST /api/cart 201 (58 ms)
+2026-07-13 14:31:44,880 INFO  [auth] login ok for user qa_sajana
+2026-07-13 14:32:07,118 ERROR [checkout] PaymentService - gateway timeout after 30000 ms (requestId=req-9f3a71)
+2026-07-13 14:32:07,119 INFO  [checkout] retrying payment (attempt 2)
+2026-07-13 14:33:40,300 INFO  [http] GET /api/orders 200 (21 ms)
+EOF
+
+tail logs/app.log
+# ...prints the LAST 10 lines. Our file only has 7, so: all 7.
+# On a real 2 GB log: still instant - tail reads the end, not the whole file.
+
+tail -n 3 logs/app.log
+# 2026-07-13 14:32:07,118 ERROR [checkout] PaymentService - gateway timeout after 30000 ms (requestId=req-9f3a71)
+# 2026-07-13 14:32:07,119 INFO  [checkout] retrying payment (attempt 2)
+# 2026-07-13 14:33:40,300 INFO  [http] GET /api/orders 200 (21 ms)
+
+tail -n 500 logs/app.log
+# asked for 500, file has 7 -> you get all 7, no error. tail never complains.
+
+head -n 2 logs/app.log
+# tail's mirror twin reads the TOP - where the oldest lines live:
+# 2026-07-13 14:29:51,204 INFO  [http] GET /api/products 200 (34 ms)
+# 2026-07-13 14:30:12,551 WARN  [cache] product cache miss for id=8841`}
+/>
+
+Now the live feed — follow mode, the grep filter, and the rotation trap with its one-letter cure:
+
+<CodePlayground
+  language="bash"
+  title="Try it - follow the log live, filter it, survive rotation"
+  code={`tail -f logs/app.log
+# ...prints the last 10 lines, then WAITS. Your prompt does NOT come back.
+# Not frozen - following. Every line the app appends now prints instantly.
+
+# (from a second terminal, or the app itself, a new line lands:)
+echo '2026-07-13 14:35:02,441 ERROR [checkout] PaymentService - gateway timeout after 30000 ms (requestId=req-c210be)' >> logs/app.log
+# ...and it appears in the tail -f terminal the same second.
+# Press Ctrl-C to stop following - normal exit, prompt returns.
+
+tail -f logs/app.log | grep ERROR
+# only the ERROR lines from the live stream; INFO noise never reaches you.
+# In LONGER pipelines, buffering can hold lines hostage - free them with:
+tail -f logs/app.log | grep --line-buffered checkout | grep ERROR
+
+# THE ROTATION TRAP - simulate what logrotate does at midnight:
+mv logs/app.log logs/app.log.1     # rename the file tail -f is following
+echo '...' >> logs/app.log         # app starts a fresh app.log
+# plain tail -f is still following the RENAMED file: silence, forever.
+
+tail -F logs/app.log
+# -F follows the NAME, not the open file. Across a rotation it prints:
+# tail: 'logs/app.log' has become inaccessible: No such file or directory
+# tail: 'logs/app.log' has appeared; following new file
+# ...and carries on with the fresh file. Use -F on any log a server rotates.`}
+/>
+
+<Callout type="tip">
+Make "logs open first" a reflex: **before** every bug reproduction on a test server, `tail -F` the
+app log in a side terminal — the ten seconds of setup buys you an exact timestamp, the error text,
+and the surrounding lines, all without a single search. Filter with `| grep -i error` when the app
+is chatty. And if you don't know *which* file to follow, ask the filesystem instead of a human:
+`ls -lt logs/` sorts by modification time, newest first — the file that's being written right now is
+the top one. The log that's growing is the log that's talking.
+</Callout>
+
+<FirstTime title="Your mission: catch one error live">
+<StepChecklist
+  steps={[
+    { text: "Slice a real log", detail: "Find any log file (the playground's logs/app.log works, or /var/log/system.log on a Mac, /var/log/syslog on Linux). Run tail on it, then tail -n 30. Notice you never opened the file, never waited, never scrolled - you took a slice off the end, where the present lives." },
+    { text: "Go live and feel the silence", detail: "Run tail -f on it. The prompt vanishes - resist the beginner panic, nothing is frozen. This is follow mode: the command is holding the file open, waiting for new lines. Sit with it for ten seconds. This 'terminal is stuck' moment confuses every newcomer exactly once." },
+    { text: "Make it speak", detail: "From a second terminal, append a line: echo 'hello from terminal two' >> logs/app.log. Watch it materialise in the first terminal the same second. That is the whole mechanism - the app appends, you see it live. Now press Ctrl-C: prompt returns, session over, nothing harmed." },
+    { text: "Filter the feed", detail: "Append a mix of lines - some containing ERROR, some not - while tail -f logs/app.log | grep ERROR runs in the first terminal. Only the ERROR lines arrive. You have built the tester's stakeout rig: a live feed showing exclusively the lines worth seeing." },
+    { text: "Betray -f, then fix it with -F", detail: "While tail -f runs, rename the file (mv logs/app.log logs/app.log.1) and create a fresh one with echo 'new file' >> logs/app.log. The -f terminal shows NOTHING - it is faithfully following the retired file. Ctrl-C, rerun with tail -F, repeat the rename: this time tail announces the swap and follows the new file. You have now seen the midnight bug in daylight." },
+  ]}
+/>
+You've watched a line arrive live, filtered a stream, and reproduced the rotation trap on purpose — which means the next time a feed goes quiet, you'll suspect the file, not the app.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "tail -f shows nothing, but I KNOW the app is running and handling requests.",
+      fix: "You're probably following the wrong file. Apps log to more places than anyone admits: a logs/ directory, /var/log, a file named by date, sometimes stdout captured by the process manager. Run ls -lt on the log directory - the file with the newest modification time is the one being written NOW; follow that. Also check the log level: if the app is configured to log only ERROR and you're waiting for INFO lines, the silence is correct. And on some systems the service logs to journald instead of a file - journalctl -u servicename -f is the tail -f equivalent there.",
+    },
+    {
+      symptom: "The feed was working, then went permanently silent partway through my test session.",
+      fix: "Classic log rotation. A scheduler renamed the file (app.log -> app.log.1) and the app began writing a fresh app.log - but plain tail -f follows the open file, so you're now attached to the retired copy, which will never get another line. Confirm with ls -lt: you'll see a fresh app.log growing while you watch the old one. Ctrl-C and restart with tail -F (capital F), which follows the NAME and reopens the new file after rotation, printing a message when it does. Rule of thumb: on any server where rotation exists - which is every server - use -F.",
+    },
+    {
+      symptom: "tail -f piped through grep prints nothing for ages, then dumps a big burst of lines at once.",
+      fix: "Pipe buffering. When grep's output feeds another pipe (tail -f log | grep checkout | grep ERROR), the middle grep block-buffers: it saves up a few kilobytes before releasing anything, so live lines arrive in delayed clumps. Add --line-buffered to the grep(s) in the middle: tail -f log | grep --line-buffered checkout | grep ERROR. The lines were always flowing - they were just sitting in a waiting room. Live monitoring needs line-buffered stages the whole way through.",
+    },
+    {
+      symptom: "My terminal is stuck - I ran tail -f and now I can't type any commands.",
+      fix: "Not stuck: following. tail -f deliberately never exits - it's holding the file open, streaming new lines as they arrive, and an idle app means a silent (but healthy) feed. Press Ctrl-C to stop following and get your prompt back; that's the intended way every tail -f session ends, not a crash or a failure. If you want a live view AND a usable prompt, open a second terminal (or a split pane) - one for watching, one for working. Every tester's screen ends up looking like that anyway.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where the live-log habit pays off, and where the logs themselves hide:
+
+- **The app's own log directory** — a `logs/` folder next to the app, or a path in its config file. `ls -lt` it and follow the newest file; that's the app's live diary.
+- **/var/log** — the system's log neighbourhood: web servers (`/var/log/nginx/error.log` and `access.log`), databases, the system itself (`syslog` / `messages`). Reading here often needs `sudo` — ask for access in week one, not mid-incident.
+- **Services under systemd** — no file to tail directly; `journalctl -u appname -f` is the same live feed through the journal. Same choreography, different faucet.
+- **Docker containers** — `docker logs -f containername` follows a container's output. If your test environment is containerised (it is), this replaces tail entirely.
+- **During EVERY reproduction on a test server** — the meta-answer: the place to check is *while it happens*. A `tail -F ... | grep -i error` running during your test session turns each bug you trigger into a timestamped, pre-correlated log line.
+
+Tester's habit: **open the feed before you touch the app.** Evidence collected live is exact;
+evidence excavated afterwards is an archaeology project. The next three notes teach the archaeology
+too — but live is always cheaper.
+</WhereToCheck>
+
+<WorkedExample title="the intermittent checkout bug, caught on the live feed">
+1. **The report:** "Checkout sometimes fails with a generic error. Can't reproduce reliably — maybe 1 in 5 attempts. Started this week." The UI message is the classic nothing-burger: 'Something went wrong, please try again.'
+2. **The rookie move** would be to attempt checkouts, get the error, then open the log file and scroll for something relevant among the day's 80,000 lines. The trained move: set up the stakeout FIRST. On the test server: `tail -F logs/app.log | grep --line-buffered -i 'error\|checkout'` — capital F because this server rotates logs nightly, line-buffered because there's a filter in the pipe.
+3. **Reproduce with the feed visible.** Checkout attempts one and two succeed — the feed shows cheerful INFO lines from the checkout module, which is itself useful: you now know what *success* looks like in this log. Attempt three fails in the UI at 14:32 — and the same second, the feed prints: `2026-07-13 14:32:07,118 ERROR [checkout] PaymentService - gateway timeout after 30000 ms (requestId=req-9f3a71)`.
+4. **The line already answers questions the bug report couldn't.** It's the *payment gateway* timing out after exactly 30 seconds — not a validation bug, not a UI bug. 'Intermittent' now has a mechanism: sometimes the gateway answers in time, sometimes it doesn't. And 30000 ms appearing verbatim smells like a configured timeout meeting a slow dependency.
+5. **Ctrl-C, collect context.** `tail -n 40 logs/app.log` shows the seconds around the error: a retry attempt logged right after, which also failed. Both lines carry `requestId=req-9f3a71` — copied for the report (the final note of this chapter turns that ID into a cross-service search warrant).
+6. **Two more reproductions** confirm the pattern: every UI failure pairs with a gateway-timeout ERROR line at the matching second, every success doesn't. Correlation observed live, three for three.
+7. **The bug report writes itself:** steps to reproduce, failure rate, and the exact log line with timestamp and requestId — plus the observation that failures are gateway timeouts at the 30-second mark. The developer's first response is not 'did you check the logs?' but 'oh, the gateway timeout — the payment sandbox has been slow since Tuesday.' Triage took minutes.
+8. **The lesson:** the live feed converted 'sometimes fails, can't say why' into 'fails when the payment gateway exceeds its 30 s timeout, evidence attached.' Same bug, same tester, same afternoon — the only difference was opening the log *before* reproducing instead of after. That ordering is the skill.
+</WorkedExample>
+
+<Callout type="mistake">
+Treating a silent feed as a clean feed. Silence in `tail -f` has four different meanings — the app
+is idle, you're following the wrong file, your grep filter is stricter than you think, or rotation
+retired your file mid-watch — and only the first one means "no errors." The overnight version is
+infamous: start `tail -f` at 6 pm, read "no errors overnight!" at 9 am, and never learn that
+logrotate cut your feed at midnight and the 2 am crash went unwatched. Verify the feed is *alive*
+before you trust its silence: `ls -lt` the directory to confirm your file is the one growing, append
+a test line yourself if you can, loosen the grep, and use `-F` anywhere rotation exists. A tester's
+"no errors found" must mean "I watched and there were none" — never "my terminal was quiet and I
+didn't ask why."
+</Callout>
+
+<Quiz
+  question="You leave tail -f app.log running overnight to catch a rare error. At midnight, logrotate renames app.log to app.log.1 and the app starts writing a fresh app.log. What does your terminal show from midnight on, and what should you have run instead?"
+  options={[
+    "Nothing ever again - tail -f follows the file it opened, which is now the retired app.log.1; tail -F follows the NAME, reopens the fresh app.log after rotation, and announces the swap",
+    "It automatically switches to the new app.log, because tail always follows the filename you typed",
+    "It crashes with 'file not found', so you'd notice immediately and could restart it",
+    "It shows the new file's lines but without timestamps, since rotation resets the log format"
+  ]}
+  answer={0}
+  explain="Plain -f attaches to the open file itself, and a rename doesn't close that file - so tail keeps faithfully following app.log.1, which the app will never write to again. Your feed goes silent forever, and silence is the worst failure mode because it impersonates 'no errors overnight'. The 'automatically switches' option describes what -F does, not -f - that one-letter difference is the entire lesson, and assuming -f behaves that way is exactly how the overnight trap catches people. The 'crashes with file not found' option would actually be KINDER than reality - a crash is visible, but tail -f fails silently, which is why it fools people (tail -F does print messages about the file becoming inaccessible and reappearing). And rotation doesn't alter log formats or strip timestamps - the app writes the new file exactly as before; the problem is purely that nobody is watching it. On any server with rotation - all of them - tail -F is the professional default."
+/>
+
+<Flashcards
+  cards={[
+    { front: "tail file vs tail -n 50 file", back: "tail prints the LAST 10 lines and exits - the newest events, since logs append at the bottom. -n 50 prints the last 50. Asking for more lines than exist returns the whole file, no error. Instant even on multi-GB files: tail reads the end, not the whole thing." },
+    { front: "tail -f - what it does and how to stop it", back: "Follow mode: prints the last 10 lines, then keeps the file open and streams every newly appended line live. The prompt does NOT return - that's waiting, not frozen. Ctrl-C stops it; that's the normal exit, not an emergency." },
+    { front: "tail -f vs tail -F (the rotation gotcha)", back: "-f follows the OPEN FILE: after rotation renames it, you're watching a retired file - permanent silence that looks like 'no errors'. -F follows the NAME: it reopens the fresh file after rotation and prints a message saying so. On servers, default to -F." },
+    { front: "Filtering a live log stream", back: "tail -f app.log | grep ERROR - follow the file, show only matching lines. In longer pipelines, middle greps block-buffer and delay lines: add --line-buffered (tail -f log | grep --line-buffered checkout | grep ERROR) so lines flow instantly." },
+    { front: "The tester's reproduce-and-watch choreography", back: "START the feed BEFORE reproducing: tail -F the app log (filtered with grep -i error if noisy), then trigger the bug and watch the error arrive at the second you caused it. Free timestamp correlation, zero searching. Then Ctrl-C and copy the line plus context." },
+    { front: "Feed is silent - the four suspects", back: "1) App genuinely idle (fine). 2) Wrong file - ls -lt the log dir, follow the newest/growing one. 3) Your grep filter is too strict. 4) Rotation retired your file (the -f trap) - restart with -F. Only suspect 1 means 'no errors'; check the others before trusting silence." },
+  ]}
+/>
+
+<Challenge>
+Build and break a live-log rig, end to end. (1) Create a fake app: in one terminal, run a loop that
+appends a timestamped line to `logs/app.log` every couple of seconds — `while true; do echo "$(date '+%H:%M:%S') INFO heartbeat"; sleep 2; done >> logs/app.log`
+— and in a second terminal, follow it live. (2) Add an occasional ERROR line by hand from a third
+terminal and confirm your `| grep ERROR` filter shows only those. (3) Simulate midnight: `mv` the
+log to `app.log.1` while plain `-f` runs, keep appending to a fresh `app.log`, and time how long you'd
+have watched silence. (4) Rerun with `-F` and watch it announce the swap and recover. (5) Finish with
+one sentence a junior could tape to their monitor: when is a silent tail feed trustworthy, and when
+is it lying?
+</Challenge>
+
+<AskCommunity prompt="Live log question: I'm following [file path] with [tail -f / tail -F / journalctl -f / docker logs -f] while reproducing [the bug]. Symptom: [no output at all / output stopped partway / lines arrive in delayed bursts / can't find which file the app writes]. The log directory shows (paste ls -lt output): [paste]. My exact command: [paste].">
+Most live-tail problems are one of four things: wrong file (ls -lt reveals which file is actually
+growing), rotation mid-watch (the -f vs -F trap), pipe buffering (add --line-buffered), or an app
+that logs somewhere unexpected (journald, container stdout). Paste your exact command AND the ls -lt
+of the log directory - between them, the diagnosis is usually visible in seconds.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://man7.org/linux/man-pages/man1/tail.1.html", title: "man tail - every flag, including -f, -F and -n", kind: "read" },
+    { href: "https://www.gnu.org/software/coreutils/manual/html_node/tail-invocation.html", title: "GNU coreutils manual - tail invocation (follow modes explained)", kind: "read" },
+    { href: "https://man7.org/linux/man-pages/man8/logrotate.8.html", title: "man logrotate - what actually happens to log files at midnight", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=tA-32BLjrFA", title: "Linux Log Monitoring - How to Do Log Analysis (M Prashant)", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=tA-32BLjrFA" title="Linux Log Monitoring - How to Do Log Analysis (M Prashant)" minutes={8} />
+
+<Takeaways
+  points={[
+    "Logs append at the bottom, so the end of the file is the present: tail prints the last 10 lines instantly (even on huge files), tail -n 50 prints more, and neither ever loads the whole file.",
+    "tail -f turns the file into a live feed: it prints the end, then streams every new line the moment the app writes it. The prompt not returning means it's working; Ctrl-C is the normal way to stop.",
+    "The tester's choreography: open the feed BEFORE reproducing, then trigger the bug and watch the error arrive at the second you caused it - timestamp correlation for free, no searching afterwards.",
+    "Filter the firehose with a pipe: tail -f app.log | grep -i error. In longer pipelines add --line-buffered to middle greps, or lines sit in a buffer and arrive in delayed clumps.",
+    "Log rotation renames the file under plain -f, leaving you following a retired file in permanent silence - which impersonates 'no errors'. tail -F follows the NAME, survives rotation, and announces the swap: make it your server default, and never trust a silent feed you haven't verified.",
+  ]}
+/>
+
+<Complete xp={10} />

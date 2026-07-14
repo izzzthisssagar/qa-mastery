@@ -1,0 +1,335 @@
+---
+title: "grep and basic regex: finding THE line"
+summary: "grep searches text for a pattern and prints matching lines - the tool that finds one error among 100,000. Flags that matter (-i, -n, -r, -c, -v, and -A/-B/-C for context), then just enough regex: anchors ^ and $, character classes, the dot, and escaping - precision without the folklore."
+tags: ["linux-for-testers", "logs-and-investigation", "track-b"]
+updated: "2026-07-13"
+---
+
+<Hook>
+Yesterday's live feed was luxury: the error appeared while you watched. Today is the other 90% of
+QA life — the bug happened *hours ago*, the log has **100,000 lines**, and somewhere in there is the
+one line that explains everything. Scrolling is not a plan. (You'd know that if you tried it. You
+will try it. Everyone tries it once.) The plan is `grep`: give it a pattern and a file, and it
+prints every line that matches — instantly, whatever the file size. Add a handful of flags and it
+answers real questions: *how many* times did this happen (`-c`), *where* exactly (`-n`), what
+happened *around* it (`-A`, `-B`, `-C`), search *everything in this directory* (`-r`). And when
+plain text isn't precise enough — when searching "error" drowns you in matches — a small dose of
+**regular expressions** turns grep from a search box into a scalpel. Not the regex folklore that
+fills 400-page books. Five ideas. That's the toolkit that finds THE line.
+</Hook>
+
+<Callout type="analogy">
+grep is the **sniffer dog at the airport**. A hundred thousand suitcases roll past on the belt — no
+human opens each one, and neither does the dog break stride: it's trained on ONE scent, and it sits
+down next to exactly the bags that carry it. Your pattern is the scent. Train the dog on `ERROR`
+and it flags every line carrying ERROR, ignoring the million lines of INFO perfume around them. The
+flags are the handler's instructions: `-i` means "the scent in any disguise" (case doesn't matter),
+`-c` means "just tell me how many bags", `-A 3` means "when you sit, show me the next three bags on
+the belt too" — because the suitcase *behind* the suspicious one (the stack trace behind the error
+line) is often the real evidence. And regex? Regex is scent-training with precision: not "anything
+smelling vaguely of error" but "exactly this molecule, at the start of the bag, followed by three
+digits." A poorly trained dog sits down at every bag containing lunch. A well-trained one finds the
+one bag in a hundred thousand. Same dog. Better scent.
+</Callout>
+
+The tool's full name explains the family it belongs to: grep comes from an old editor command,
+g/re/p — *global, regular expression, print* — and that middle part,
+<Term define="A mini-language for describing TEXT PATTERNS instead of exact text. Plain search finds the literal characters you typed; a regular expression (regex) describes a shape: 'lines starting with 2026', 'a space, then 5, then any two digits, then a space', 'timeout OR timed out'. grep speaks regex natively - which is why a handful of regex ideas (anchors, character classes, the dot, escaping) turns it from a search box into a precision instrument. For a tester, regex is how 'find the error' becomes 'find exactly THIS error and nothing else'.">regular expression</Term>,
+is what separates grep from Ctrl-F. But it works beautifully as plain search too, so that's where we
+start.
+
+## grep, plain: pattern, file, matching lines
+
+`grep 'ERROR' logs/app.log` — pattern first, file second, and out come the lines containing ERROR.
+Two habits to install immediately, both cheap insurance. **Quote your pattern** (single quotes):
+the shell has opinions about characters like `*`, spaces, and `$`, and quotes keep it from "helping"
+before grep ever sees the pattern. **Case matters by default**: `grep 'error'` will NOT find
+`ERROR` — and log files are a case-chaos crime scene ("Error", "ERROR", "error occurred") — so
+`grep -i` (insensitive) is the tester's default until precision demands otherwise.
+
+Then the everyday flags, each one answering a question you'll actually have. `-n` prefixes each
+match with its **line number** — so your bug report can say "app.log line 48,112" instead of
+"somewhere in the log". `-c` **counts** matches instead of printing them — "did this happen twice
+or two thousand times?" changes the bug's severity before you read a single line. `-v` **inverts**:
+show lines NOT matching — the classic move is `grep -v 'INFO'` to strip the cheerful noise and see
+what's left. `-r` searches **recursively** through a whole directory — when you don't know *which*
+log holds the error, `grep -r 'req-9f3a71' logs/` interrogates all of them at once, prefixing each
+match with its filename.
+
+## Context: the lines around the match
+
+An error line rarely travels alone — the stack trace below it and the request above it are the
+actual story. `-A 3` shows 3 lines **After** each match, `-B 3` shows 3 **Before**, `-C 3` shows 3
+of both (Context). `grep -B 2 -A 5 'ERROR' app.log` is the tester's standard evidence cut: what led
+in, the error, and what came out. Without context flags you'll find yourself grepping, then opening
+the file to see what was around line 48,112 — the context flags ARE that step, done properly.
+
+## Just enough regex: five ideas
+
+Here's the honest secret: most days, plain text plus `-i` gets you there. Regex earns its keep when
+plain text is too blunt — and five ideas cover the tester's cases. **Anchors:** `^` pins the
+pattern to the **start** of the line, `$` to the **end**. `grep '^2026-07-13 14:32'` finds lines
+whose *timestamp* is 14:32 — not lines that merely mention that time somewhere. **Character
+classes:** `[0-9]` matches any one digit, `[a-f0-9]` any hex character. `grep ' 50[0-9] '` finds
+HTTP status 500–509 without also matching "1509 bytes". **The dot:** `.` matches any single
+character — which is convenient right up until it isn't, because **escaping** is idea four:
+in `10.0.0.1` those dots mean *any character*, so it happily matches `10a0b0c1`. A backslash
+(`\.`) makes the dot literal again — escape the specials (`. * [ ] ^ $ \`) when you mean them as
+text. **Alternation and repetition:** `-E` switches grep to *extended* regex, where `|` means OR —
+`grep -E 'timeout|timed out'` — and `+` means "one or more of the previous thing" — `[0-9]+` is
+"a whole number". (Without `-E`, grep's older dialect makes you backslash those; just use `-E` when
+you want them and keep your sanity.) Repetition counts like `[0-9]{3}` — exactly three digits —
+also live in `-E` land. That's the whole kit. Anything fancier, you can learn the day a bug
+actually demands it.
+
+<HotspotImage
+  src="/notes/linux-for-testers/logs-and-investigation/detection-dog.jpg"
+  alt="A CBP K9 officer and her beagle in a green detection vest working the arrivals hall at Dulles airport - the dog's nose pressed to one wheeled backpack while carts of luggage and a crowd of passengers stream past"
+  credit="Photo: CBP agriculture detection beagle at Dulles airport - Wikimedia Commons, Public domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:CBP_Airport.jpg"
+  pins={[
+    { x: 60, y: 18, label: "The crowded arrivals hall = 100,000 log lines", desc: "Look past the dog: a hall full of near-identical bags, carts, and hurrying passengers - that's the log file after an incident: thousands of INFO lines, each one legitimate, none of them the answer. Nobody opens every bag; nobody reads every line. Search, don't scroll - grep processes the entire hall in milliseconds regardless of size." },
+    { x: 63, y: 73, label: "The beagle's nose on ONE bag = grep, trained on one scent", desc: "The dog doesn't examine bags; it matches ONE trained scent against everything passing - and right now it has hit. grep 'ERROR' logs/app.log is exactly that: the pattern is the scent, matching lines get flagged, everything else rolls by ignored. And like a dog, grep is literal - train it on 'error' in lowercase and it walks straight past 'ERROR', which is why -i (case-insensitive) is the tester's default." },
+    { x: 30, y: 42, label: "The handler on the leash = the flags", desc: "The officer shapes the search without changing the dog: -n reports WHERE each find was (line number, for the bug report), -c just counts finds (2 occurrences vs 2,000 changes the severity), -v flags every bag WITHOUT the scent (strip INFO noise), -r sweeps the whole terminal, not one belt (search every file in a directory when you don't know which log holds the error)." },
+    { x: 60, y: 38, label: "The loaded cart behind = -A / -B / -C context", desc: "When the dog sits, the officer inspects the neighbouring bags on the cart too - the story travels in groups. -A 3 shows 3 lines After the match (where stack traces live), -B 3 shows Before (the request that led in), -C 3 shows both. grep -B 2 -A 5 'ERROR' is the tester's standard evidence cut: lead-in, error, aftermath, one command." },
+    { x: 55, y: 64, label: "The 'Protecting American Agriculture' vest = regex precision", desc: "The vest says exactly what this dog is trained for - not 'all smells', ONE mission. A grep for 'error' matches 'error-free' and drowns you; regex is that precision training: ^ and $ anchor the pattern to the line's start or end, [0-9] means 'any digit', \\. means 'a literal dot, not any-character', and -E unlocks OR (timeout|timed out). Five ideas that turn 400 matches into the 3 that matter." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Narrowing 100,000 lines to THE one - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "The haystack", desc: "Bug report: 'checkout failed around 2:30 pm'. The log has 100,000 lines from today. Opening it in an editor means scrolling until your soul leaves your body. Instead you ask a question the file can answer: wc -l app.log confirms the size, and grep -c 'ERROR' app.log counts 214 error lines. From 100,000 candidates to 214 in one command." },
+    { label: "First cut: the right kind of line", desc: "grep -n -i 'error' app.log streams the 214, each with a line number. Still too many to read - but a scan shows most are one recurring cache warning. Add precision: grep -n 'ERROR \\[checkout\\]' app.log - anchored to the checkout module (brackets escaped, because [ ] are regex specials). Nine lines left." },
+    { label: "Second cut: the right time", desc: "The report said 'around 2:30 pm'. Timestamps start every line, so anchor to the line's beginning: grep -n '^2026-07-13 14:3' app.log narrows to the 14:30-14:39 window; combined with the checkout pattern, ONE line remains: the gateway timeout at 14:32:07. From 100,000 to 1 in three refinements - each one just a sharper scent." },
+    { label: "Context: the story around the line", desc: "One line is a fact; the story needs neighbours. grep -B 2 -A 5 'requestId=req-9f3a71' app.log shows the two lines before (the request coming in) and five after (the retry, its failure, the giving-up). That block - not the single line - is what goes in the bug report as evidence." },
+    { label: "Sweep wider: -r across every log", desc: "Did anything ELSE record this failure? grep -rn 'req-9f3a71' logs/ interrogates every file in the directory at once: hits in app.log AND payment.log, each prefixed with filename and line number. The same ID in two services' logs is correlation gold - and exactly where the last note of this chapter picks up the trail." },
+  ]}
+/>
+
+Start with the everyday flags on a small app log — count, locate, invert, and pull context:
+
+<CodePlayground
+  language="bash"
+  title="Try it - grep's everyday flags on an app log"
+  code={`mkdir -p logs
+cat > logs/app.log <<'EOF'
+2026-07-13 14:29:51,204 INFO  [http] GET /api/products 200 (34 ms)
+2026-07-13 14:30:12,551 WARN  [cache] product cache miss for id=8841
+2026-07-13 14:31:02,009 INFO  [http] POST /api/cart 201 (58 ms)
+2026-07-13 14:31:44,880 INFO  [auth] login ok for user qa_sajana
+2026-07-13 14:32:07,118 ERROR [checkout] PaymentService - gateway timeout after 30000 ms (requestId=req-9f3a71)
+2026-07-13 14:32:07,119 INFO  [checkout] retrying payment (attempt 2)
+2026-07-13 14:32:37,201 ERROR [checkout] PaymentService - retry failed, giving up (requestId=req-9f3a71)
+2026-07-13 14:33:40,300 INFO  [http] GET /api/orders 200 (21 ms)
+EOF
+
+grep 'ERROR' logs/app.log
+# 2026-07-13 14:32:07,118 ERROR [checkout] PaymentService - gateway timeout after 30000 ms (requestId=req-9f3a71)
+# 2026-07-13 14:32:37,201 ERROR [checkout] PaymentService - retry failed, giving up (requestId=req-9f3a71)
+
+grep -c 'ERROR' logs/app.log      # -c: just COUNT the matches
+# 2
+
+grep -n 'timeout' logs/app.log    # -n: show line numbers
+# 5:2026-07-13 14:32:07,118 ERROR [checkout] PaymentService - gateway timeout after 30000 ms (requestId=req-9f3a71)
+
+grep -i 'warn' logs/app.log       # -i: case-insensitive (finds WARN)
+# 2026-07-13 14:30:12,551 WARN  [cache] product cache miss for id=8841
+
+grep -v 'INFO' logs/app.log       # -v: INVERT - everything EXCEPT the noise
+# (prints only the WARN line and both ERROR lines)
+
+grep -A 2 'gateway timeout' logs/app.log   # -A 2: match plus 2 lines After
+# 2026-07-13 14:32:07,118 ERROR [checkout] PaymentService - gateway timeout after 30000 ms (requestId=req-9f3a71)
+# 2026-07-13 14:32:07,119 INFO  [checkout] retrying payment (attempt 2)
+# 2026-07-13 14:32:37,201 ERROR [checkout] PaymentService - retry failed, giving up (requestId=req-9f3a71)
+
+grep -rn 'req-9f3a71' logs/       # -r: search EVERY file under logs/
+# logs/app.log:5:...  logs/app.log:7:...  (filename:line prefix on each hit)`}
+/>
+
+Now the regex kit — anchors, classes, escaping, and `-E` — on a web server access log:
+
+<CodePlayground
+  language="bash"
+  title="Try it - just enough regex on an access log"
+  code={`cat > logs/access.log <<'EOF'
+203.0.113.42 - - [13/Jul/2026:14:31:58 +0000] "GET /api/products/17 HTTP/1.1" 200 4102
+198.51.100.7 - - [13/Jul/2026:14:32:05 +0000] "POST /api/checkout HTTP/1.1" 500 213
+203.0.113.42 - - [13/Jul/2026:14:32:07 +0000] "POST /api/checkout HTTP/1.1" 500 213
+192.0.2.146 - - [13/Jul/2026:14:32:11 +0000] "GET /health HTTP/1.1" 200 15
+198.51.100.7 - - [13/Jul/2026:14:33:02 +0000] "GET /api/products/9 HTTP/1.1" 404 89
+EOF
+
+grep ' 500 ' logs/access.log
+# both checkout lines - the spaces around 500 keep it from matching
+# '1500' or a byte count. Cheap precision before any regex at all.
+
+grep '^203\.0\.113\.42' logs/access.log     # ^ anchors to line START
+# both lines FROM that client IP. The \. escapes matter: an unescaped
+# dot means 'any character', so 203.0.113.42 would also match 203a0b113c42.
+
+grep '213$' logs/access.log                 # $ anchors to line END
+# both 500 lines - they end with response size 213.
+
+grep ' 40[0-9] ' logs/access.log            # [0-9]: any ONE digit
+# the 404 line - and this pattern would also catch 400, 401, 403...
+
+grep -E ' (500|404) ' logs/access.log       # -E unlocks | (OR)
+# all three failing requests, one pattern.
+
+grep -E 'products/[0-9]+ ' logs/access.log  # + : one or more digits
+# both product lines - /17 and /9 - whatever the id's length.
+
+grep -c '^19' logs/access.log
+# 3   (lines STARTING with 19 - two clients' IPs; anchors make it
+#      a question about the IP column, not '19 anywhere in the line')`}
+/>
+
+<Callout type="tip">
+Build patterns like a photographer focuses a lens: **start blurry, tighten in steps.** First
+`grep -c -i 'error'` — just the count, to learn the size of what you're dealing with. Then add
+precision one notch at a time — a module name, an anchored timestamp prefix, a status code with
+spaces around it — re-running each time and watching the count fall. When it reaches single digits,
+drop `-c` and read the lines with `-C 3` context. Never try to write the perfect pattern in one go;
+regex written blind is regex that's silently wrong. And when your pattern *contains* log punctuation
+— brackets, dots, dollar signs — remember those are regex specials: escape them (`\[checkout\]`) or,
+for a purely literal search, use `grep -F`, which turns regex off entirely.
+</Callout>
+
+<FirstTime title="Your mission: find THE line in a file you've never read">
+<StepChecklist
+  steps={[
+    { text: "Count before you look", detail: "Build the playground's logs/app.log, then ask for sizes, not lines: wc -l logs/app.log for the total, grep -c 'ERROR' for the error count. Two numbers, zero scrolling - and 'how many' already tells you whether this is a rare event or a flood, which is severity information." },
+    { text: "Feel case sensitivity bite", detail: "Run grep 'error' logs/app.log - zero matches, even though you can SEE errors in the file. Lowercase 'error' is not 'ERROR' to grep. Now grep -i 'error' - there they are. This one silent no-match teaches you more than any paragraph: -i until you have a reason not to." },
+    { text: "Pull context, not just matches", detail: "Run grep -A 2 'gateway timeout' logs/app.log and read the story: error, retry, retry's failure. Then grep -B 1 the same pattern to see what preceded it. The match is a fact; the context is the narrative - and the narrative is what goes in a bug report." },
+    { text: "Anchor something", detail: "On logs/access.log, compare grep '19' (matches dates, sizes, IPs - noise) with grep '^19' (matches only lines STARTING with 19 - the client IP column). Same two characters, completely different question. Anchors are the cheapest precision upgrade in the whole regex kit." },
+    { text: "Watch a dot lie, then escape it", detail: "Run grep '192.0.2.146' logs/access.log - it matches, and it feels correct. But those dots mean 'any character': echo '192a0b2c146' | grep '192.0.2.146' ALSO matches. Rerun escaped - grep '192\\.0\\.2\\.146' - and the imposter is rejected. You've now seen the most common regex bug in existence, and its cure." },
+  ]}
+/>
+Five minutes in, and you've counted, filtered, anchored, contextualised, and caught the dot lying — that's the working kit, not a toy version of it.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "grep prints nothing, but I can SEE the text in the file with my own eyes.",
+      fix: "Four usual suspects, in order of likelihood. Case: 'error' does not match 'ERROR' - add -i. Overprecision: your pattern includes a detail the line doesn't have (two spaces where the log has one, a guessed word). Retreat to the shortest fragment you're sure of and rebuild. Regex specials: if the text contains [ ] . * $ and you didn't escape them, the pattern means something else entirely - escape them or use grep -F for a literal search. Wrong file: you're grepping today's log for yesterday's bug - rotation moved it to app.log.1 (grep also accepts multiple files: grep 'x' logs/app.log*).",
+    },
+    {
+      symptom: "The opposite problem: thousands of matches, all useless.",
+      fix: "Your scent is too broad - 'error' appears in URLs, module names, and the word 'error-free'. Tighten in layers: match the log's actual severity token with spaces or brackets around it (' ERROR ' or 'ERROR \\[checkout\\]'), anchor to the timestamp prefix to bound the time window ('^2026-07-13 14:3'), or chain greps - grep 'ERROR' app.log | grep 'checkout' | grep -v 'retry' reads as: errors, in checkout, excluding retries. Watch the -c count fall as each layer lands; single digits means you're ready to read.",
+    },
+    {
+      symptom: "grep -r on a log directory hangs for ages or spews unreadable garbage from binary files.",
+      fix: "Log directories hoard surprises: gigabytes of ancient logs, .gz compressed rotations, binary files. For binary noise, GNU grep usually just says 'binary file matches' - add -I to skip binaries entirely. For compressed rotations, plain grep reads gibberish: zgrep 'pattern' logs/app.log.2.gz greps inside the compression. For the hang, narrow the target: grep -rn 'pattern' logs/ --include='*.log' limits the sweep to log files, or list the newest files first (ls -lt) and grep only the ones from the bug's time window.",
+    },
+    {
+      symptom: "My pattern works in the tutorial but errors or matches wrongly in my terminal.",
+      fix: "The shell got to it first. Unquoted patterns are shell property before they're grep property: * expands to filenames in your directory, $ starts a variable, spaces split one pattern into pattern-plus-filename. Single-quote every pattern, every time - grep 'GET /api' log - and the shell passes it through untouched. Separately, if you're using | + or {n} and getting literal-minded results: those are extended-regex features - add -E (this also varies between GNU grep on Linux and BSD grep on macOS, so -E is the portable habit).",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where the grep habit earns its salary:
+
+- **Application logs after ANY failed test** — `grep -i -C 3 'error\|exception' logs/app.log` before you write the bug up. A report with the matching log line gets triaged in minutes; one without gets 'cannot reproduce'.
+- **The whole log directory when you don't know which service failed** — `grep -rn 'the-request-id' logs/` sweeps every file and prefixes hits with filenames: instant answer to 'which component logged this?'.
+- **CI/CD build output** — pipeline logs are thousands of lines of noise around one failure: `grep -B 5 -i 'failed\|error' build.log` finds the break and its lead-in without scrolling the web console.
+- **Test runner output saved to a file** — after a big suite run, `grep -c 'FAILED'` gives the damage report and `grep -A 10 'FAILED'` pulls each failure with its assertion message.
+- **Config files when environments disagree** — 'works on staging, fails on QA': `grep -rn 'timeout\|url\|host' config/` on both environments, then compare. Config drift hides in plain text, and grep reads plain text for a living.
+
+Tester's habit: **grep before you claim.** 'No errors in the log' should mean you searched — case-insensitively, with context, in the right file including rotated ones — not that you scrolled a bit and got bored.
+</WhereToCheck>
+
+<WorkedExample title="one error among 92,000 lines, found in four commands">
+1. **The report:** "A customer says checkout failed around 2:30 pm yesterday. Order never went through, money not charged. Can you find out what happened?" No screenshot, no error text — a time, and a vibe. Support tickets are like horoscopes; the log is the telescope.
+2. **Size up the haystack first:** `wc -l logs/app.log.1` (yesterday's rotated log — the first trap avoided: yesterday's bug lives in the *rotated* file, not today's) reports 92,417 lines. `grep -c -i 'error' logs/app.log.1` counts 3,081. Too many — most will be a recurring background warning. Nobody reads 3,081 lines; refine.
+3. **Bound the time window with an anchor.** Timestamps open every line, so `grep -c '^2026-07-12 14:2' logs/app.log.1` — lines *starting* with the 14:20–14:29 prefix — then the same for `14:3`. Combining time and severity: `grep '^2026-07-12 14:3' logs/app.log.1 | grep 'ERROR'` returns **four lines**. From 92,417 to 4: one anchor, one severity token.
+4. **Read the four with context.** Three are the familiar cache warning-turned-error (background noise, logged at ERROR because someone was dramatic in 2024 — noted for a separate log-hygiene ticket, because a tester also tests the *logs*). The fourth: `2026-07-12 14:31:52,003 ERROR [checkout] CardValidator - rejected: expiry month 00 is invalid (requestId=req-4d21aa)`.
+5. **Pull the story around it:** `grep -B 3 -A 3 'req-4d21aa' logs/app.log.1` shows the request coming in, the validation rejection, and — the interesting part — the API returning HTTP 500. A validation failure should be a polite 400 with a message the UI can show; a 500 means the rejection was thrown as an unhandled exception. THAT's the bug: not 'card rejected' but 'validation failure crashes instead of explaining'.
+6. **Check the blast radius:** `grep -c 'expiry month 00' logs/app.log.1` — 17 occurrences yesterday alone, and `grep -rn 'expiry month 00' logs/` confirms it's still happening today. Frequency turns an anecdote into a priority.
+7. **The bug report** now writes itself: title 'Invalid card expiry crashes checkout with 500 instead of a validation message', the exact log line with timestamp and requestId, the -B/-A context block as evidence, 17-per-day frequency, and a repro hypothesis (enter expiry 00) for whoever picks it up. Total grep time: four commands, maybe three minutes.
+8. **The lesson:** every narrowing step was a sharper scent, not a longer stare — count, bound by time with `^`, filter by severity, expand with context. The 92,000 lines were never the problem; the problem was only ever which question to ask next.
+</WorkedExample>
+
+<Callout type="mistake">
+Grepping until *something* matches and calling it the cause. The trap has two jaws. First jaw:
+your pattern found A line, so the brain declares victory — but the log had 3,000 error lines, you
+read one, and the one you found is yesterday's unrelated cache warning wearing an ERROR badge.
+Always run `-c` first: knowing there are 3,000 matches changes how much you trust match number one.
+Second jaw: the silent no-match — `grep 'Error'` returns nothing, so you report 'no errors in the
+log' — when the file spells it `ERROR`, or the bug lives in the rotated `app.log.1`, or your pattern
+contained an unescaped `[` that turned it into different regex entirely. grep exits quietly either
+way; it never says "are you sure you meant that?". Discipline for both jaws: count before reading,
+loosen before concluding absence (`-i`, shorter fragment, `app.log*`), and treat 'zero matches' as
+a claim to verify, not a result to report.
+</Callout>
+
+<Quiz
+  question="A log has thousands of lines containing '500' - timestamps, byte counts, durations. You want only the requests whose HTTP STATUS was 500. Which pattern is the sharpest first move, and why?"
+  options={[
+    "grep ' 500 ' access.log - spaces around the number make it match 500 as a standalone field, skipping '1500', '5000' and byte counts glued to other digits",
+    "grep '500' access.log - grep is smart enough to know you mean the status code column",
+    "grep -i '500' access.log - the -i flag makes number matching more precise",
+    "You can't do this with grep; column-based questions need a spreadsheet"
+  ]}
+  answer={0}
+  explain="Surrounding the number with spaces is the humblest regex trick in existence and the most used: ' 500 ' only matches where 500 stands alone as a field, so '1500' and '15000 ms' are rejected - in those, the 500 is glued to other digits instead of standing between spaces. It's not bulletproof - a duration field of exactly ' 500 ' would sneak in - but it's the right FIRST move: cheap, readable, and it cuts thousands of false matches instantly (the next note's cut command makes it truly column-exact). The bare '500' option credits grep with mind-reading it doesn't have: grep matches characters, not meanings, and will cheerfully flag 15009-byte responses and :50:05 timestamps. The -i option is a category error - case-insensitivity affects LETTERS; numbers have no case, so -i changes nothing here. And the spreadsheet answer surrenders far too early: column questions are exactly what the cut/sort/uniq pipeline in the next note handles natively, on files too big for any spreadsheet to open."
+/>
+
+<Flashcards
+  cards={[
+    { front: "grep basics - and the two habits", back: "grep 'pattern' file prints every matching line, instantly, any file size. Habit 1: single-quote the pattern so the shell can't mangle it. Habit 2: case matters ('error' misses 'ERROR') - default to grep -i until precision demands otherwise." },
+    { front: "The everyday flags: -n, -c, -v, -r", back: "-n = line numbers with each match (for the bug report). -c = count only ('twice or 2,000 times?' = severity info). -v = invert, show NON-matching lines (strip INFO noise). -r = recurse a directory, filename-prefixed hits ('which log has it?')." },
+    { front: "Context flags: -A, -B, -C", back: "-A 3 = 3 lines After each match (stack traces live below errors). -B 3 = Before (the request that led in). -C 3 = both. grep -B 2 -A 5 'ERROR' is the standard evidence cut: lead-in, error, aftermath - the block a bug report wants." },
+    { front: "Anchors: ^ and $", back: "^ pins to line START, $ to line END. grep '^2026-07-13 14:3' = 'timestamp is 14:30-14:39', not '14:3 appears somewhere'. Anchors turn 'contains' into 'is positioned' - the cheapest precision upgrade in regex." },
+    { front: "Classes, dot, and escaping", back: "[0-9] = any one digit ([a-f0-9] = hex). Unescaped . = ANY character - '10.0.0.1' matches '10a0b0c1'! Escape specials when literal: \\. \\[ \\$ - or use grep -F to switch regex off for a fully literal search." },
+    { front: "grep -E: the extended kit", back: "-E unlocks | (OR: 'timeout|timed out'), + (one-or-more: [0-9]+ = a whole number), and repetition counts like [0-9]{3} (exactly 3 digits). Portable across GNU/BSD grep - reach for -E whenever the pattern needs OR or repetition." },
+  ]}
+/>
+
+<Challenge>
+The narrowing drill, timed. Build the playground's two logs, then answer each question in ONE
+command and note the command: (1) How many requests in access.log failed (status 4xx or 5xx)?
+(2) Which client IP sent the failing checkout requests — anchored, dots escaped? (3) Show the full
+story of requestId req-9f3a71 from app.log: matches plus one line of context each side. (4) Prove
+there are no errors mentioning 'database' in EITHER log — and say what you checked (case? both
+files?) that makes 'no matches' trustworthy. (5) The boss round: using yesterday's-log thinking,
+write the single command you'd run first if the bug happened before midnight and the logs rotate.
+If any answer took more than two tries, rerun the drill tomorrow — pattern-building is muscle
+memory, not trivia.
+</Challenge>
+
+<AskCommunity prompt="grep question: I'm searching [file/directory] for [what you're hunting]. My exact command: [paste it, quotes included]. Result: [nothing matched / too many matches / weird error]. A sample line that SHOULD match (paste it verbatim): [paste]. What I've tried: [-i / escaping / -E / other files].">
+Paste the exact command AND a verbatim line that should match - nine grep mysteries out of ten are
+visible in that pair: a case mismatch, an unescaped special character, shell quoting, or the right
+pattern aimed at the wrong file. 'It doesn't work' with no sample line is unanswerable; with one,
+it's usually solved in the first reply.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.gnu.org/software/grep/manual/grep.html", title: "GNU grep manual - flags and regex dialects, the authoritative reference", kind: "read" },
+    { href: "https://regexone.com/", title: "RegexOne - interactive regex lessons (the gentlest on-ramp)", kind: "read" },
+    { href: "https://regex101.com/", title: "regex101 - paste a pattern and a log line, see exactly why it matches or doesn't", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=Tc_jntovCM0", title: "Linux Crash Course - The grep Command (Learn Linux TV)", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=Tc_jntovCM0" title="Linux Crash Course - The grep Command (Learn Linux TV)" minutes={11} />
+
+<Takeaways
+  points={[
+    "grep 'pattern' file prints matching lines instantly at any file size - search, never scroll. Single-quote every pattern, and default to -i because logs are case-chaos ('error' does not match 'ERROR').",
+    "Five flags answer the tester's real questions: -c how many (severity!), -n where (line numbers for the report), -v everything-except (strip INFO noise), -r which file in this directory, and -A/-B/-C the story around each match.",
+    "Just-enough regex is five ideas: ^ and $ anchor to line start/end, [0-9] classes match character sets, . means ANY character (so escape literal dots: \\.), and -E unlocks | for OR and + for one-or-more.",
+    "Narrow in layers, watching -c fall: count, bound the time window with an anchored timestamp prefix, filter by severity token, then read the survivors with context. From 100,000 lines to one in three or four refinements.",
+    "Treat zero matches as a claim to verify, not a result to report: check case (-i), rotated files (app.log*), and unescaped specials before declaring 'no errors in the log' - grep never warns you that your pattern was subtly wrong.",
+  ]}
+/>
+
+<Complete xp={10} />
