@@ -706,8 +706,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         topics: [
           { slug: "inspecting-the-dom", title: "Inspecting the DOM" },
           { slug: "editing-html-css-live", title: "Editing HTML & CSS live" },
-          { slug: "finding-locators", title: "Finding locators", planned: true },
-          { slug: "debugging-layout-and-spacing", title: "Debugging layout & spacing", planned: true },
+          { slug: "finding-locators", title: "Finding locators" },
+          { slug: "debugging-layout-and-spacing", title: "Debugging layout & spacing" },
         ],
       },
       {
@@ -715,9 +715,9 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         title: "Console",
         topics: [
           { slug: "reading-js-errors", title: "Reading JS errors" },
-          { slug: "warnings-vs-errors", title: "Warnings vs errors", planned: true },
-          { slug: "filtering-the-noise", title: "Filtering the noise", planned: true },
-          { slug: "what-to-paste-into-a-bug-report", title: "What to paste into a bug report", planned: true },
+          { slug: "warnings-vs-errors", title: "Warnings vs errors" },
+          { slug: "filtering-the-noise", title: "Filtering the noise" },
+          { slug: "what-to-paste-into-a-bug-report", title: "What to paste into a bug report" },
         ],
       },
       {
@@ -726,8 +726,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         topics: [
           { slug: "anatomy-of-a-request", title: "Anatomy of a request" },
           { slug: "status-timing-and-headers", title: "Status, timing & headers" },
-          { slug: "copy-as-curl", title: "Copy as cURL", planned: true },
-          { slug: "har-export-as-bug-evidence", title: "HAR export as bug evidence", planned: true },
+          { slug: "copy-as-curl", title: "Copy as cURL" },
+          { slug: "har-export-as-bug-evidence", title: "HAR export as bug evidence" },
         ],
       },
       {
@@ -737,7 +737,7 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
           { slug: "slow-3g-and-offline-mode", title: "Slow 3G & offline mode" },
           { slug: "device-emulation", title: "Device emulation" },
           { slug: "geolocation-and-sensors", title: "Geolocation & sensors" },
-          { slug: "testing-what-users-really-feel", title: "Testing what users really feel", planned: true },
+          { slug: "testing-what-users-really-feel", title: "Testing what users really feel" },
         ],
       },
       {
@@ -746,8 +746,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         topics: [
           { slug: "cookies-and-local-storage", title: "Cookies & local storage" },
           { slug: "session-and-cache", title: "Session & cache" },
-          { slug: "clearing-state-properly", title: "Clearing state properly", planned: true },
-          { slug: "service-workers-gently", title: "Service workers, gently", planned: true },
+          { slug: "clearing-state-properly", title: "Clearing state properly" },
+          { slug: "service-workers-gently", title: "Service workers, gently" },
         ],
       },
       {
@@ -755,9 +755,9 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         title: "Audits & performance",
         topics: [
           { slug: "lighthouse-reports", title: "Lighthouse reports" },
-          { slug: "accessibility-signals", title: "Accessibility signals", planned: true },
-          { slug: "performance-recording-gently", title: "Performance recording, gently", planned: true },
-          { slug: "when-to-escalate-to-devs", title: "When to escalate to devs", planned: true },
+          { slug: "accessibility-signals", title: "Accessibility signals" },
+          { slug: "performance-recording-gently", title: "Performance recording, gently" },
+          { slug: "when-to-escalate-to-devs", title: "When to escalate to devs" },
         ],
       },
     ],

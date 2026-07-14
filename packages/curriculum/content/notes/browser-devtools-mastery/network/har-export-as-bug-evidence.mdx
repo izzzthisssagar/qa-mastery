@@ -1,0 +1,336 @@
+---
+title: "HAR export as bug evidence"
+summary: "Copy as cURL replays one request. HAR export hands over the whole session - every request, every timing, every body, in one JSON file. When a bug is about a SEQUENCE (a request storm, a race, a chain), the transcript beats the single receipt. Export, sanitize, and file it right."
+tags: ["browser-devtools-mastery", "network", "track-c"]
+updated: "2026-07-14"
+---
+
+<Hook>
+Copy as cURL answers "what happened on THIS one request?" perfectly - and falls apart the moment
+the bug isn't about one request. A checkout page that fires the same inventory check eleven times.
+A login flow where two requests race and whichever finishes last silently wins. A page that feels
+slow for reasons no single row explains, because the story is in how forty requests overlap, not
+in any one of them. For bugs shaped like that, you don't need a better receipt - you need the whole
+session's transcript. That's **HAR export**: every request the Network panel recorded, with full
+headers, bodies, and timings, saved as one file a developer can load and walk through exactly as
+you saw it.
+</Hook>
+
+<Callout type="analogy">
+A ship's deck log doesn't record one event - it records the whole watch, every four-hour block,
+every officer's entries, moorings and musters and transfers, signed and timestamped in sequence.
+A single radio message (the cURL replay) tells you what was said in ONE transmission. The deck log
+tells you the whole day: what happened before it, what happened after, and how the pieces line up
+in time - which is exactly what you need when the question isn't "what did this one message say"
+but "what actually happened, in what order, across the whole watch." A HAR file is the deck log for
+a browsing session: every request, every response, every timestamp, signed and sequential, filed as
+one record instead of scattered across a scrollback nobody can hand to someone else.
+</Callout>
+
+<Term define="HAR (HTTP Archive) is a JSON file format that captures every network request the Network panel recorded during a session: for each entry, the full request (method, URL, headers, cookies, body) and response (status, headers, cookies, body content, MIME type), plus a timing breakdown per request (blocked, DNS, connect, send, wait, receive - the same phases the timing note taught) and metadata like server IP and page markers. Exported via the Network panel's download icon or right-click -> Save all as HAR with content. Unlike a single copied cURL command, a HAR is not one replayable command - it's a dataset: a full transcript of a session that a developer can load into their own DevTools (drag the file onto an empty Network panel), inspect with a script, or diff against a working session. Use it when the bug lives in the SEQUENCE or VOLUME of requests, not in any single one.">HAR</Term>
+
+## When the receipt isn't enough
+
+The `copy-as-curl` note gave you a scalpel: one request, isolated, replayed with the browser
+removed from the room. That's exactly right when the bug is "this one endpoint returns garbage."
+It's the wrong tool the moment the bug's shape is different - when the interesting fact is that a
+request fires **eleven times** instead of once (an N+1 pattern a single replay can't show, because
+replaying it once just... works), or that two requests **race** and the outcome depends on which
+one the server finishes first (a single replay removes the race entirely), or that a page **feels**
+slow for reasons spread across forty overlapping requests rather than concentrated in one villain.
+None of those bugs live in a single row. They live in the relationships between rows - and a HAR
+file is the only export that preserves those relationships instead of flattening them into one
+command.
+
+The trade another way: cURL asks "does this ONE request, alone, reproduce the failure?" HAR asks
+"here is EVERYTHING that happened - find the pattern." Different questions, different exports,
+and a tester who reaches for the wrong one either over-simplifies a sequencing bug into a single
+request nobody can reproduce the symptom from, or drowns a simple single-request bug in forty
+irrelevant rows. Read the bug's shape first; let it choose the export.
+
+{/* IMAGE: an official WWII US Navy deck log page, time-blocked entries from 00-04 through 20-24, each block signed by a different officer, itemized personnel and event details, CONFIDENTIAL stamped at top, APPROVED/EXAMINED signatures at the bottom */}
+<HotspotImage
+  src="/notes/browser-devtools-mastery/network/har-export-as-bug-evidence.jpg"
+  alt="An official US Navy deck log remarks sheet for the destroyer USS Ringgold, divided into six four-hour watch blocks from 00-04 through 20-24, each block itemizing events and signed by a different watch officer, CONFIDENTIAL stamped at the top, and APPROVED and EXAMINED signature lines at the bottom of the page"
+  credit="Deck log, USS Ringgold (DD-500), 1 January 1945 — Wikimedia Commons, Public Domain (NARA)"
+  pins={[
+    { x: 20, y: 3, label: "'CONFIDENTIAL' stamped at the top = the sanitization warning", desc: "Before a single entry is even read, the page announces its own sensitivity - this is not a document to hand around loosely. A HAR file carries the same weight: full cookies, full auth headers, full response bodies for every request in the session. It is CONFIDENTIAL the moment it's exported, and it should be treated that way before it goes anywhere near a ticket." },
+    { x: 50, y: 49, label: "One time-block entry = one HAR entry", desc: "'08-12: Moored as before. 1030 Quarters for muster. Absentees: ...' - one watch period, one itemized record, timestamped and specific. That's exactly what one entry in a HAR's entries array is: one request, its exact timing, its exact headers and body, filed with everything a reader needs to understand that one moment - multiplied across the whole session." },
+    { x: 50, y: 39, label: "Named personnel with serial numbers = the sensitive data riding along", desc: "Real names, real service numbers, recorded because the log's job is completeness, not privacy. A HAR file is exactly this thorough about YOUR session: live cookies, live Authorization headers, and full response bodies (which can contain OTHER users' data if an endpoint returns more than it should) all ride along in the file, unless you strip them before it leaves your machine." },
+    { x: 50, y: 42, label: "Each block signed by a different officer = different requests, same continuous record", desc: "Six different signatures across one page - the watch changed hands six times, but it's still one continuous, sequential record of the same ship's day. A HAR does this for a browsing session: dozens of different requests, different endpoints, different timings, all captured into one file that preserves the ORDER and RELATIONSHIP between them - the exact thing a single cURL replay throws away." },
+    { x: 50, y: 95, label: "APPROVED / EXAMINED signatures at the bottom = the file, verified before it's filed", desc: "Nobody's watch entries went to the Bureau of Naval Personnel unreviewed - a commander approved it, a navigator examined it, THEN it was forwarded. Sanitize a HAR the same way before it leaves your machine: open it, confirm the redaction actually worked, and only then attach it to a ticket. A HAR nobody checked is a HAR that might still be carrying someone's live session." },
+  ]}
+/>
+
+<FlowAnimation
+  title="From a scrollback nobody can hand over to a filed transcript - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "The bug resists a single-row explanation", desc: "You've filtered, sorted, clicked through the Network panel and nothing single row tells the whole story - a request fires more times than it should, or two requests appear to race, or the slowness is spread across many overlapping bars in the waterfall. This is the signal to stop hunting for ONE guilty row." },
+    { label: "Reproduce with Preserve log on", desc: "The same discipline from the anatomy note: tick Preserve log before you act, so nothing gets wiped by a navigation mid-sequence. Reproduce the exact steps that trigger the pattern, watching the row count and the waterfall shape as you go." },
+    { label: "Export: Save all as HAR with content", desc: "The download icon in the Network panel's toolbar, or right-click any row -> Save all as HAR with content (the 'with content' part matters - it includes response bodies, not just headers). This captures every request currently in the panel as one .har JSON file." },
+    { label: "Inspect it locally before sharing it", desc: "Open the file in a text editor, jq, or a script - never a random third-party 'HAR viewer' website, which is uploading your live session's cookies and auth headers to a server you don't control. Confirm the pattern you saw in the panel (the repeat count, the overlapping timings, the race) is actually visible in the data." },
+    { label: "Sanitize the sensitive fields", desc: "Strip or redact cookies, Authorization headers, and any response body content that carries live tokens or other users' data. A script does this faster and more completely than eyeballing forty entries by hand - the playground below is exactly that script." },
+    { label: "File the sanitized HAR as an attachment, not a screenshot", desc: "Attach the file to the ticket with a short written summary: what pattern to look for, which entries matter, and the timestamp range. The developer drags it into their own DevTools and walks through YOUR exact session - richer than any screenshot, and unlike a live URL, it never expires." },
+  ]}
+/>
+
+Here's what actually lives inside a HAR, and a jq one-liner for the fastest possible sanity check -
+count entries, spot the repeat offender, without opening a text editor at all:
+
+<CodePlayground
+  language="bash"
+  title="Run it - a quick jq sanity check on a HAR file"
+  code={`# A HAR's shape, abridged - this is what "log.entries[]" actually contains per request:
+# {
+#   "startedDateTime": "2026-07-14T09:15:03.120Z",
+#   "time": 842.3,
+#   "request":  { "method": "GET", "url": "https://api.example.com/cart/summary",
+#                 "headers": [ {"name": "cookie", "value": "session=a1b2c3"} ] },
+#   "response": { "status": 200, "content": { "mimeType": "application/json", "text": "{...}" } },
+#   "timings":  { "blocked": 2, "dns": 0, "connect": 0, "send": 1, "wait": 830, "receive": 9 }
+# }
+
+# STEP 1 - how many requests did this session actually capture?
+cat session.har | jq '.log.entries | length'
+# 47
+
+# STEP 2 - the fastest way to spot an N+1: count requests PER URL, sorted worst-first.
+cat session.har | jq -r '.log.entries[].request.url' | sort | uniq -c | sort -rn | head -5
+#   11 https://api.example.com/cart/item-price?id=item_442
+#    1 https://api.example.com/cart/summary
+#    1 https://api.example.com/cart/checkout
+#    1 https://api.example.com/user/profile
+#    1 https://api.example.com/inventory/status
+# <- item-price fired 11 times for what should be ONE cart. That's the bug, found in one line.
+
+# STEP 3 - which single request took the longest, end to end?
+cat session.har | jq -r '.log.entries | max_by(.time) | "\\(.time)ms  \\(.request.url)"'
+# 2140.7ms  https://api.example.com/cart/checkout
+
+# STEP 4 - does anything in here still contain a live cookie or bearer token? (the check
+# you run BEFORE this file goes anywhere near a ticket)
+cat session.har | jq -r '.. | strings | select(test("Bearer [A-Za-z0-9._-]{10,}|session=[a-f0-9]{6,}"))' | head -3
+# Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.demo.token
+# cookie: session=a1b2c3d4e5
+# <- if this prints anything, sanitize before you attach the file. If it's empty, you're clear.`}
+/>
+
+And the sanitizer itself — jq is great for a quick look, but a real redaction pass belongs in a
+script you can trust to catch everything, every time:
+
+<CodePlayground
+  language="python"
+  title="Run it - parse, analyze, and sanitize a HAR (Python)"
+  code={`import json, re
+from collections import Counter
+
+# A tiny but realistic HAR, standing in for a real 47-entry export
+har = {
+    "log": {
+        "entries": [
+            {"startedDateTime": "2026-07-14T09:15:00.000Z", "time": 120.0,
+             "request": {"method": "GET", "url": "https://api.example.com/cart/summary",
+                         "headers": [{"name": "cookie", "value": "session=a1b2c3d4e5"}]},
+             "response": {"status": 200}},
+            *[{"startedDateTime": f"2026-07-14T09:15:{i:02d}.100Z", "time": 95.0 + i,
+               "request": {"method": "GET", "url": "https://api.example.com/cart/item-price?id=item_442",
+                           "headers": [{"name": "authorization", "value": "Bearer eyJhbGciOiJIUzI1NiJ9.demo.token"}]},
+               "response": {"status": 200}} for i in range(1, 12)],
+            {"startedDateTime": "2026-07-14T09:15:20.000Z", "time": 2140.7,
+             "request": {"method": "POST", "url": "https://api.example.com/cart/checkout",
+                         "headers": [{"name": "cookie", "value": "session=a1b2c3d4e5"}]},
+             "response": {"status": 500}},
+        ]
+    }
+}
+
+entries = har["log"]["entries"]
+print("Total requests captured:", len(entries))
+
+# Find the N+1 pattern: same URL, fired more than once
+url_counts = Counter(e["request"]["url"] for e in entries)
+repeats = {url: n for url, n in url_counts.items() if n > 1}
+print("\\nRepeated requests (possible N+1):")
+for url, n in sorted(repeats.items(), key=lambda kv: -kv[1]):
+    print(f"  {n}x  {url}")
+
+# Find the single slowest request
+slowest = max(entries, key=lambda e: e["time"])
+print(f"\\nSlowest single request: {slowest['time']}ms  {slowest['request']['url']}")
+
+# Sanitize: redact cookie and authorization header VALUES in place
+REDACT = [
+    (re.compile(r"^cookie$", re.I), "$COOKIES"),
+    (re.compile(r"^authorization$", re.I), "Bearer $TOKEN"),
+]
+redacted_count = 0
+for e in entries:
+    for h in e["request"].get("headers", []):
+        for name_pattern, placeholder in REDACT:
+            if name_pattern.match(h["name"]):
+                h["value"] = placeholder
+                redacted_count += 1
+
+print(f"\\nSanitized {redacted_count} sensitive header(s). Safe to attach now:")
+print(json.dumps(entries[0]["request"]["headers"], indent=2))
+
+# Total requests captured: 13
+#
+# Repeated requests (possible N+1):
+#   11x  https://api.example.com/cart/item-price?id=item_442
+#
+# Slowest single request: 2140.7ms  https://api.example.com/cart/checkout
+#
+# Sanitized 13 sensitive header(s). Safe to attach now:
+# [
+#   {
+#     "name": "cookie",
+#     "value": "$COOKIES"
+#   }
+# ]`}
+/>
+
+<Callout type="tip">
+**Never upload a HAR to a random online "HAR viewer."** The file contains your live session -
+cookies, bearer tokens, and full response bodies - and pasting it into a website you don't control
+is functionally the same mistake as pasting a live password into a form. Analyze locally: drag the
+file onto an empty tab's Network panel to browse it exactly like a live recording (Chrome will
+happily load your own exported file back in), or use `jq`/a script for anything scriptable. If a
+team-approved internal tool exists for HAR analysis, use that - the risk is specifically *public,
+unaudited, third-party* upload forms.
+</Callout>
+
+<FirstTime title="Your mission: catch a repeat offender in the wild">
+<StepChecklist
+  steps={[
+    { text: "Find a request storm", detail: "Open Network with Preserve log on, on any site with a cart, a dashboard, or a search-as-you-type field. Interact naturally and watch the row count. Search boxes and cart pages are classic homes for N+1 patterns - the same lookup fired once per item instead of once for the whole list." },
+    { text: "Export it", detail: "Click the download icon in the Network panel's toolbar (or right-click any row -> Save all as HAR with content). Save it somewhere you'll find it again - not just Downloads chaos." },
+    { text: "Inspect it locally", detail: "Open the .har file in a text editor and just look - it's readable JSON. Find one entries[] object and identify its request.url, response.status, and timings block. You are now reading the same data structure the jq playground queried." },
+    { text: "Find the repeat, or confirm there isn't one", detail: "Run (or adapt) the jq one-liner from this note: count requests per URL, sorted worst-first. Either you find a genuine repeat offender, or you confirm the session was clean - both are useful information about the page you just tested." },
+    { text: "Sanitize before you'd share it", detail: "Search the raw file for 'cookie' and 'authorization' (case-insensitive) and note how many live values you'd need to redact before this file could safely leave your machine. You don't have to actually share it anywhere - just practice recognizing what's sensitive." },
+  ]}
+/>
+You exported a full session as evidence, queried it for a pattern a single request could never show, and identified exactly what needs redacting before it's shareable. That's the HAR workflow, start to finish.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "The exported HAR file is enormous - hundreds of megabytes - and nothing will open it.",
+      fix: "Response bodies are the usual culprit, especially images, video, or large JSON payloads captured 'with content'. Reproduce the bug in the smallest possible window (clear the panel, do only the minimal steps that trigger the pattern, then export immediately) rather than exporting an hour of general browsing. If you only need headers and timings - not bodies - use plain 'Save all as HAR' without content, which is dramatically smaller.",
+    },
+    {
+      symptom: "I can see the pattern clearly in the Network panel, but it's not obviously visible when I open the HAR file.",
+      fix: "Check that you exported AFTER reproducing, not before - a HAR only contains what the panel had captured at export time, same as any other export. Also confirm Preserve log was on if the pattern spans a navigation; without it, the panel (and therefore the export) only holds the current page's requests, silently dropping everything before the last reload.",
+    },
+    {
+      symptom: "A developer says they can't reproduce the issue from my HAR file.",
+      fix: "A HAR is a recording of WHAT happened, not a live replay - unlike a cURL command, running the developer's own browser against the same URLs will hit a different server state (different cart contents, different session, different time). Point them at the SPECIFIC entries that show the pattern (timestamps, repeat counts, the timing breakdown) rather than expecting the file itself to reproduce anything by being opened. The HAR is evidence of what you saw, not a live rerun button.",
+    },
+    {
+      symptom: "I redacted the cookies and authorization headers, but I'm still nervous about sharing the file.",
+      fix: "Check response bodies too - they're the part testers forget. A user-profile endpoint's response can contain another user's email, an internal ID, or account details that have nothing to do with your bug but everything to do with someone's privacy. Grep the file's response.content.text fields for anything that looks like PII before attaching it, the same instinct as scanning for tokens.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+The full transcript, and what to do with it:
+
+- **Network panel toolbar → download icon** — or right-click any row → Save all as HAR with content. The "with content" option is what includes response bodies; without it you get headers and timings only.
+- **Preserve log, before you reproduce** — same rule as every other export in this chapter. A HAR only contains what the panel captured; a navigation that wiped the panel wipes the export too.
+- **`log.entries[]`** — one object per request: `request` (method, URL, headers, cookies, postData), `response` (status, headers, content.text), and `timings` (the same blocked/dns/connect/send/wait/receive phases the timing note taught, per request).
+- **A local tool, never a public upload form** — `jq`, a script, or dragging the file back onto an empty Network panel to browse it like a live recording. The file contains live credentials; treat it accordingly.
+- **The sanitizer pass** — cookies, Authorization headers, and response bodies that might carry other users' data. More surface area to check than a single cURL command, because a HAR is a whole session's worth of data, not one request's.
+- **The ticket** — the sanitized `.har` file attached, plus a short written pointer: which entries matter, what pattern to look for, the timestamp range. The transcript does the rest.
+
+The habit: **reach for HAR when the bug is a pattern across many requests, not a fact about one.**
+</WhereToCheck>
+
+<WorkedExample title="the cart that called the price API eleven times">
+1. **The report:** "Adding items to the cart feels sluggish, especially with more than a few items." No error, no red row, just a vague slowness complaint - the anatomy note's least useful sentence, wearing a new costume.
+2. **The tester reproduces** with Preserve log on: adds five items to a cart one at a time, watching the Network panel. No single row screams "bug" - every request returns 200, nothing is red, nothing individually looks slow in the Timing tab.
+3. **But the ROW COUNT is wrong.** Forty-plus requests for five items added. That's a shape a single-request investigation can't see - it needs the whole session at once.
+4. **Export: Save all as HAR with content**, then the jq one-liner - count requests per URL, sorted worst-first. The result names it instantly: `GET /cart/item-price?id=...` fired **eleven times**, once per item PLUS extra calls on every cart re-render, while `POST /cart/add` (the request that should matter) fired exactly five times, once per click.
+5. **The Python playground's timing pass** adds the second half: each item-price call individually looks fine (80-120ms), but eleven of them, however overlapped, add up to real, felt latency that no single Timing tab ever shows in isolation.
+6. **Sanitize and file:** cookies and the session's auth header redacted, response bodies checked for anything sensitive (none - these are just prices), the HAR attached with a one-line pointer: "search entries for item-price - fires once per item and again on every re-render, 11x for a 5-item cart, see attached timestamps."
+7. **The developer opens the file,** filters to `item-price` in their own DevTools instance, and finds it in minutes: a `useEffect` with a missing dependency array re-fetching every item's price on every render instead of once per add. Fix: batch the price lookup into the existing `/cart/add` response instead of a separate per-item call. Eleven requests become zero.
+8. **The lesson:** the bug never lived in any single request - every one of the eleven succeeded, individually indistinguishable from correct behaviour. It lived in the COUNT, which only the full-session transcript could show. A cURL replay of any one of those eleven calls would have proven precisely nothing.
+</WorkedExample>
+
+<Callout type="mistake">
+Treating a HAR export like a cURL command - expecting it to be "replayable" the way a single request
+is. It isn't, and trying to force it to be usually means pasting individual entries into a terminal
+by hand, which throws away the entire point of exporting a HAR in the first place: the RELATIONSHIPS
+between requests, not any one of them in isolation. Use cURL when the question is "does this one
+request, alone, reproduce the failure." Use HAR when the question is "what actually happened, across
+how many requests, in what order, and how long did each phase take relative to the others." Reaching
+for the wrong export doesn't just waste time - it can make a real sequencing bug look unreproducible,
+because isolating one request out of eleven is precisely how you lose the fact that there were eleven.
+</Callout>
+
+<Quiz
+  question="A checkout page feels slow. Every individual request in the Network panel returns 200 with a reasonable Timing tab (under 150ms each). What's the right move?"
+  options={[
+    "Copy as cURL on the slowest-looking single row and replay it in a terminal to prove the backend is at fault",
+    "Export the session as a HAR and check the request COUNT and pattern - a slowness with no single guilty row is often many fast requests adding up, or firing more times than they should",
+    "Conclude there is no bug, since every individual request already returns quickly with a healthy status",
+    "Clear the cache and retest, since a slow-feeling page with fast individual requests is almost always a caching issue"
+  ]}
+  answer={1}
+  explain="When no single row explains a felt slowness, the bug's shape has already told you which export to reach for: this is a HAR situation, not a cURL situation. cURL isolates and replays ONE request - exactly the wrong move when the problem might be that a request fires eleven times instead of once, or that many individually-fast requests overlap and add up. Exporting the full session and counting requests per URL (or reading the timing breakdown across all entries) surfaces patterns a single-request investigation structurally cannot see. Concluding 'no bug' ignores that users experience the SUM of everything on the page, not each request's individual scorecard - and jumping straight to 'it's caching' skips the diagnostic step entirely and might be wrong; the HAR either confirms or rules out a caching theory with actual evidence instead of a guess."
+/>
+
+<Flashcards
+  cards={[
+    { front: "HAR vs Copy as cURL - the one-line difference", back: "cURL replays ONE request in isolation, with the browser removed. HAR exports the WHOLE session - every request, header, body, and timing - as a dataset for analysis, not a single replayable command. Pick based on whether the bug is about one request or a pattern across many." },
+    { front: "How to export a HAR", back: "Network panel toolbar's download icon, or right-click any row -> Save all as HAR with content. 'With content' includes response bodies - leave it off for a smaller file when you only need headers and timings." },
+    { front: "What lives inside log.entries[]", back: "One object per captured request: request (method, URL, headers, cookies, body), response (status, headers, content.text), and timings (blocked/dns/connect/send/wait/receive per request) - the same phase breakdown the timing note taught, now available for every request at once." },
+    { front: "The rule for viewing a HAR safely", back: "Never upload it to a random third-party 'HAR viewer' - it contains live cookies and auth tokens. Drag it onto an empty Network panel to browse locally, or use jq/a script. Treat it exactly as sensitively as a live password." },
+    { front: "What's sensitive in a HAR that a cURL command doesn't have", back: "Response bodies for EVERY request in the session - which can carry other users' data (a profile endpoint's response, for instance), not just your own cookies and tokens. More surface area to sanitize than a single command." },
+    { front: "The bug shapes that call for HAR, not cURL", back: "Request storms / N+1 patterns (same URL firing far more than once), races between requests, and slowness spread across many requests rather than concentrated in one - anything where the story is in the RELATIONSHIP between requests, not any single one." },
+  ]}
+/>
+
+<Challenge>
+Find (or manufacture) a request storm: open Network with Preserve log on, visit a page with a
+cart, a filterable list, or a search-as-you-type box, and interact until the row count looks
+suspicious. Export as HAR with content, then: (1) run a request-per-URL count and name the worst
+offender; (2) find the single slowest entry by `time`; (3) write the one-sentence pointer you'd
+attach to a ticket - which entries matter, what pattern to look for; (4) sanitize the file (cookies,
+auth headers, and check at least one response body for anything sensitive) and confirm your
+redaction actually worked by re-running the sensitive-string check. Finish with one line: what did
+the HAR show you that clicking through the Network panel row by row would have taken far longer to
+notice?
+</Challenge>
+
+<AskCommunity prompt="Pattern check: on `[page]`, `[N]` requests fired for an action that should need `[expected count]`. HAR shows the repeat offender as `[url]`, `[count]`x, timings ranging `[min]-[max]ms`. Sanitized and attached. My read: `[N+1 pattern / race condition / general overlap]` - does the entries list support that, or does it point somewhere else?">
+Attach the sanitized HAR, not a description of it - the room can query the actual data instead of
+trusting a summary. The usual correction: a "repeat" that's actually legitimate (polling, a
+websocket-adjacent long-poll) versus a genuine accidental duplicate; the entries' exact URLs
+(including query strings) usually settle it in one look.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.chrome.com/docs/devtools/network/reference#save-as-har", title: "Chrome DevTools docs - saving and analyzing network activity as HAR", kind: "read" },
+    { href: "http://www.softwareishard.com/blog/har-12-spec/", title: "HAR 1.2 spec - the full file format, field by field", kind: "read" },
+    { href: "https://jqlang.org/manual/", title: "jq manual - the query language behind the bash playground above", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=ogYtlRAKgwo", title: "Tech Forum - what is a HAR file, and how to use it for debugging issues", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=ogYtlRAKgwo" title="What is a HAR file, and how to use it for debugging issues" minutes={10} />
+
+<Takeaways
+  points={[
+    "HAR export captures the WHOLE session - every request's headers, body, status, and timing breakdown - as one JSON file, versus Copy as cURL's single replayable request.",
+    "Reach for HAR when the bug is a pattern across many requests: N+1 request storms, races between requests, or slowness spread across many overlapping calls rather than concentrated in one villain row.",
+    "Export via the Network panel's download icon or Save all as HAR with content - 'with content' includes response bodies, which is usually what you want for evidence but makes the file larger.",
+    "Never upload a HAR to a random third-party viewer - it carries live cookies, auth tokens, and full response bodies. Analyze locally: jq, a script, or dragging it back onto an empty Network panel.",
+    "Sanitize more than a cURL command needs: cookies and auth headers as always, plus response bodies, which can carry OTHER users' data riding along in a session transcript nobody meant to expose.",
+  ]}
+/>
+
+<Complete xp={10} />

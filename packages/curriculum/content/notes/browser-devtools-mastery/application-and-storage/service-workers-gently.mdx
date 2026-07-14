@@ -1,0 +1,344 @@
+---
+title: "Service workers, gently"
+summary: "A service worker in one breath: a script that sits between your page and the network and can answer requests itself. Why it causes 'deployed but users see the old version' — and the two checkboxes that fix it, Update on reload and Unregister."
+tags: ["browser-devtools-mastery", "application-and-storage", "track-c"]
+updated: "2026-07-14"
+---
+
+<Hook>
+The last note left you a loose thread: "you clear the HTTP cache, hard-reload, and the site STILL
+serves old content." That thread gets pulled here. Somewhere between your page and the actual
+network there can be a small script standing guard, quietly answering requests out of its own
+private stash before they ever leave the browser. It is called a **service worker**, it is not
+scary, and you do not need to write one to test one. You need exactly two things from this note:
+what it is, in one honest breath, and where the two checkboxes live that make it stop lying to you.
+</Hook>
+
+<Callout type="analogy">
+Picture a **front-desk receptionist** who, after your first visit, starts keeping photocopies of
+every form you might ask for. Next time you ask for the intake form, she doesn't walk to the file
+room (the network) — she just hands you yesterday's photocopy from her desk drawer, instantly. Fast,
+helpful, exactly what she was told to do. The problem shows up the day the form changes upstairs and
+nobody tells the receptionist. She keeps confidently handing out the OLD version, certain she's being
+helpful, while the file room quietly holds the new one. A service worker is that receptionist. It
+isn't malfunctioning when it serves stale content — it's doing precisely what it was built to do. The
+fix isn't yelling at the receptionist; it's telling her to check the file room again.
+</Callout>
+
+<Term define="A small JavaScript file the browser runs separately from your page, in the background, that can intercept every network request the page makes and decide how to answer it - straight from the network, straight from its own Cache Storage, or a mix of both. It is installed once (usually on a user's first visit) and then keeps running across visits, even when the tab is closed, which is what lets it serve a cached app shell instantly and support offline mode and push notifications. Testers see it in Application -> Service Workers: a list of registered workers per origin, their status (activated and running, waiting, or redundant), and two controls that matter far more than the rest - Update on reload and Unregister. The one fact worth carrying past this note: a stale service worker is the single most common reason a confirmed deploy still shows old behaviour to a returning user, because the worker is answering from its own cache instead of asking the network at all.">service worker</Term>
+
+## What it actually does, without the mysticism
+
+Strip away the framework talk and a service worker does one job: it sits in the request path and
+gets to answer BEFORE the network is even asked. The page calls `fetch` for a file, and instead of
+that request sailing straight to the server, it is handed to the service worker's `fetch` event
+handler first. The worker's code decides what happens next — pass the request straight through to
+the network, answer it instantly from its own **Cache Storage** (the same named-cache pile the
+previous note pointed at), or some blend of both, like "try the network, and if that fails, fall
+back to the cache." None of this needs your permission or your notice; it is designed to be
+invisible, which is exactly why it is worth learning to see.
+
+That invisibility is also the entire reason service workers exist. A page that installs one can
+keep working with no connection at all — reopen it on a plane and the app shell, the last-viewed
+data, even a "you're offline" screen can appear instantly, served entirely from the worker's own
+cache. That is a genuinely good trick, the mechanism behind push notifications and installable
+progressive web apps, and not something to be suspicious of by default. The trouble starts when the
+same "answer from cache without asking" behaviour that makes offline mode possible also means a
+worker installed last month can keep answering with last month's files today, with no error, no
+warning, and a perfectly green deploy sitting unused on the server.
+
+Here is the shape of the whole story: **install once, then intercept forever, until told
+otherwise.** The worker installs (often silently, on a first visit), takes over intercepting
+requests, and then just keeps running that way — across reloads, across days — until something
+explicitly tells it to check again or step aside. Nothing about a normal page reload asks it to
+reconsider. That's not a bug in the service worker; it's the whole design, and the two DevTools
+controls later in this note exist specifically to interrupt it on demand.
+
+{/* IMAGE: Chrome DevTools Application panel, Service Workers section selected, showing a registered worker's status, source, and the Update on reload / Bypass for network / Unregister controls */}
+<HotspotImage
+  src="/notes/browser-devtools-mastery/application-and-storage/service-workers-gently.jpg"
+  alt="A fully stocked vending machine wall with dozens of numbered slots, each holding a pre-loaded snack, drink, or bottle behind a coiled spring dispenser, price labels under every slot, and a QR-code payment panel on the right edge"
+  credit="Vending machine, Switzerland — Wikimedia Commons, CC0 (Vux)"
+  pins={[
+    { x: 50, y: 15, label: "Every slot pre-stocked before anyone asks = Cache Storage", desc: "Nobody walks to a warehouse when they buy a chocolate bar - it's already sitting in the machine, loaded in advance. That's exactly what a service worker's Cache Storage is: files stashed ahead of time so a request can be answered instantly from what's already on hand, no trip to the actual network required." },
+    { x: 41, y: 20, label: "One numbered slot, one price label = one cache entry", desc: "Slot 23 holds exactly one product, matched to exactly one number and price. A service worker's cache works the same way: one stored response matched to one request URL, looked up by that exact match. Ask for slot 23 and you get what's IN slot 23 - not what used to be there, not what's supposed to be there now." },
+    { x: 50, y: 53, label: "The coiled spring, one turn, one item = answering without asking upstream", desc: "The coil doesn't check with a supplier before it releases a can - it just turns and delivers what's already loaded. That's a worker intercepting a request and answering from its own cache in one step, without a network round-trip. Fast and confident - and exactly as wrong as the stock behind it if nobody's refilled that slot recently." },
+    { x: 83, y: 12, label: "The small payment panel = the worker's own script file", desc: "Bolted onto the corner of this whole wall of stock is one small control panel that actually decides what happens - separate from the products themselves. That's the worker's script file: small, easy to overlook, but it's the one place that actually decides what gets served and when it checks upstream again." },
+    { x: 50, y: 68, label: "Different rows for different product types = worker scope", desc: "Snacks up top, cans in the middle, bottles at the bottom - distinct sections, not one undifferentiated pile. A worker's scope works the same way: it can be registered for the whole origin or just one section of it, and knowing which rows it actually controls is half of debugging why one part of a site updates and another doesn't." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Deployed but users see the old version - press Play"
+  intervalMs={1900}
+  nodes={[
+    { label: "First visit: the worker installs", desc: "A user loads the site. Its page registers a service worker, which installs quietly, stashes the app's core files (HTML shell, JS, CSS) into its own Cache Storage, and activates. Nothing on screen announces this happened. From now on, this worker intercepts every request from this origin, in every tab, until it is replaced or removed." },
+    { label: "The team deploys a fix", desc: "New code goes live on the server. A brand-new incognito window (no worker installed yet) shows the fix instantly, because there is nothing between it and the network. QA signs it off from that fresh window and moves on, confident the deploy worked." },
+    { label: "A returning user reloads - and gets the OLD version", desc: "The returning user's browser already has last month's worker installed and running. Their reload is intercepted before it ever reaches the network; the worker answers straight from its own cache, the same files it stashed weeks ago. The new deploy is completely bypassed - not slow, not partially applied, simply never asked for." },
+    { label: "Support gets a ticket that makes no sense", desc: "'It's deployed, QA confirmed it, but I'm still seeing the bug' - and everyone is technically correct. The server has the fix. The QA window (fresh, no worker) showed the fix. The user's browser is just being faithfully served by a worker that has no idea anything changed, because nobody told it to check." },
+    { label: "The fix: make the worker check again", desc: "Application -> Service Workers -> tick Update on reload, then reload - the browser fetches and activates the current worker script, which in turn fetches current files. Or hit Unregister for a clean slate with nothing intercepting at all. Either way, the NEXT load finally reaches the real, current server." },
+  ]}
+/>
+
+Enough theory — here is a tiny simulation of exactly that request-interception decision. Give it a
+requested file, whether a worker is installed, and whether that file is in the worker's cache, and
+it tells you where the answer actually comes from:
+
+<CodePlayground
+  language="python"
+  title="Run it - where does this request actually get answered? (Python)"
+  code={`# A stripped-down model of a service worker's fetch handler: given a request,
+# decide whether the WORKER intercepts it, and if so, where it answers from.
+
+def resolve_request(path, worker_installed, worker_cache, network_has_new_version):
+    if not worker_installed:
+        return 'NETWORK (no worker installed - nothing to intercept this request)'
+
+    if path in worker_cache:
+        served_version = worker_cache[path]
+        note = ' -- server actually has a NEWER version the worker never asked for' \\
+            if network_has_new_version else ''
+        return 'WORKER CACHE -> serving "' + served_version + '"' + note
+
+    return 'NETWORK (worker installed, but this file was never cached by it)'
+
+worker_cache = {
+    '/app.js': 'app.js (last months build)',
+    '/index.html': 'index.html (last months build)',
+}
+
+scenarios = [
+    ('/app.js',    False, worker_cache, True),   # fresh incognito window, no worker
+    ('/app.js',    True,  worker_cache, True),   # returning user, worker intercepts, server has newer
+    ('/new-page.js', True, worker_cache, True),  # a file the worker never cached
+]
+
+for path, installed, cache, newer in scenarios:
+    result = resolve_request(path, installed, cache, newer)
+    print('request:', path, '| worker installed:', installed)
+    print('  ->', result)
+    print()
+
+# request: /app.js | worker installed: False
+#   -> NETWORK (no worker installed - nothing to intercept this request)
+#
+# request: /app.js | worker installed: True
+#   -> WORKER CACHE -> serving "app.js (last months build)" -- server actually has a NEWER version the worker never asked for
+#
+# request: /new-page.js | worker installed: True
+#   -> NETWORK (worker installed, but this file was never cached by it)`}
+/>
+
+The same decision in Java, plus the two DevTools fixes modelled as state changes — watch
+`updateOnReload` and `unregister` each independently break the worker's silent grip on old files:
+
+<CodePlayground
+  language="java"
+  title="Run it - modelling Update on reload and Unregister (Java)"
+  code={`import java.util.*;
+
+class Main {
+
+    record Worker(boolean installed, Map<String, String> cache) {}
+
+    static String resolveRequest(String path, Worker worker) {
+        if (!worker.installed()) {
+            return "NETWORK (no worker installed)";
+        }
+        if (worker.cache().containsKey(path)) {
+            return "WORKER CACHE -> serving \\"" + worker.cache().get(path) + "\\"";
+        }
+        return "NETWORK (worker installed, file never cached)";
+    }
+
+    public static void main(String[] args) {
+        Map<String, String> staleCache = new HashMap<>();
+        staleCache.put("/app.js", "app.js (last months build)");
+
+        Worker returningUserWorker = new Worker(true, staleCache);
+        System.out.println("Returning user, worker still active:");
+        System.out.println("  " + resolveRequest("/app.js", returningUserWorker));
+        System.out.println();
+
+        // Update on reload: forces a fresh worker + fresh cache before this request resolves
+        System.out.println("After ticking 'Update on reload' and reloading:");
+        Map<String, String> freshCache = new HashMap<>();
+        freshCache.put("/app.js", "app.js (CURRENT build)");
+        Worker updatedWorker = new Worker(true, freshCache);
+        System.out.println("  " + resolveRequest("/app.js", updatedWorker));
+        System.out.println();
+
+        // Unregister: no worker left at all, every request falls straight through
+        System.out.println("After clicking 'Unregister':");
+        Worker noWorker = new Worker(false, Map.of());
+        System.out.println("  " + resolveRequest("/app.js", noWorker));
+    }
+}
+// Returning user, worker still active:
+//   WORKER CACHE -> serving "app.js (last months build)"
+//
+// After ticking 'Update on reload' and reloading:
+//   WORKER CACHE -> serving "app.js (CURRENT build)"
+//
+// After clicking 'Unregister':
+//   NETWORK (no worker installed)`}
+/>
+
+<Callout type="tip">
+When you're actively developing or testing a site that has a service worker, open DevTools
+**before** you start and tick **Update on reload** for the whole session. It costs you nothing (you
+lose a little offline-caching speed) and it removes an entire category of "wait, is this actually
+fixed or am I looking at the worker's old cache" confusion before it starts. Leave it off only when
+you're deliberately testing the worker's own caching and offline behaviour — that's the one time you
+WANT it behaving like a real returning user.
+</Callout>
+
+<FirstTime title="Your mission: catch a service worker in the act, then evict it">
+<StepChecklist
+  steps={[
+    { text: "Find out if one exists", detail: "On any site, press F12, open Application, click Service Workers in the left sidebar. If the list is empty, this note doesn't apply to that site - try a news site, a webmail client, or any app that works offline; most have one." },
+    { text: "Read its status", detail: "Note whether it says activated and running, waiting, or redundant. 'Waiting' means a new version installed but hasn't taken over yet - the exact state behind a lot of 'deployed but not showing' tickets." },
+    { text: "Watch it intercept a request", detail: "Open the Network tab alongside Application, reload the page, and find a request whose Size or initiator column mentions the service worker (often shown as '(ServiceWorker)' in the Size column). That's the worker answering instead of the network." },
+    { text: "Tick Update on reload and reload", detail: "Back in Application -> Service Workers, tick Update on reload, then reload the page. Watch the worker's status - it should fetch and activate a fresh copy of itself instead of trusting the one it already had." },
+    { text: "Unregister and reload again", detail: "Click Unregister. Reload once more and check the Service Workers list - empty. Reload the Network tab check from step three: nothing should show the ServiceWorker initiator anymore, because there is no worker left to intercept anything." },
+  ]}
+/>
+You've found a live service worker, read its status, watched it intercept a request, forced it to
+recheck with Update on reload, and removed it entirely with Unregister - the exact sequence for
+telling apart 'still installed' from 'actually gone'.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A deploy is confirmed live on the server, incognito shows the fix, but returning users still see the old behaviour.",
+      fix: "A service worker installed on an earlier visit is answering requests from its own Cache Storage instead of asking the network. Open Application -> Service Workers - if a worker is listed as activated, this is almost certainly it. Tick Update on reload and reload to force a fresh worker, or Unregister for a completely clean slate. This is the exact escalation the previous note pointed to when an HTTP-cache clear alone didn't fix a stale-asset bug.",
+    },
+    {
+      symptom: "You cleared the HTTP cache and did a hard reload, and the page is STILL stale.",
+      fix: "Empty Cache and Hard Reload only touches the browser's ordinary HTTP cache; it does not touch Cache Storage or unregister a service worker, which is a completely separate pile answering completely separately. Go to Application -> Service Workers and Cache Storage directly - clearing both is the actual fix when the HTTP-cache clear alone did nothing.",
+    },
+    {
+      symptom: "The service worker's status shows 'waiting' and never seems to become 'activated'.",
+      fix: "By default, a new worker version waits until every open tab of that origin is closed before it takes over, so it doesn't yank files out from under a page that's mid-use. If you need it to take over immediately for testing, tick Update on reload (forces immediate activation on the next load) or close every tab of that site and reopen one.",
+    },
+    {
+      symptom: "You Unregister a service worker, but old content still appears afterward.",
+      fix: "Unregistering removes the WORKER, not the files it already stashed in Cache Storage - that pile can outlive it. Go to Application -> Storage -> Cache Storage and delete the named caches directly (or use Clear site data, next note), then reload. Unregister plus a cache clear together is the actual clean slate; either alone is half the job.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Service workers matter to a narrow but high-impact set of testing situations:
+
+- **Any 'deployed but users see old behaviour' report** — after ruling out a simple stale HTTP cache (previous note), check Application -> Service Workers before reopening the code bug. This is the single most common second-layer culprit.
+- **Progressive web apps and anything with offline support** — the worker IS the offline mode. Test it deliberately: load once online, go offline (Network tab, Offline checkbox), and confirm the app shell still appears instead of a browser error page.
+- **Push-notification features** — service workers are also the mechanism behind push notifications; if notifications silently stop arriving, check whether the worker itself is still registered and active, not just the notification permission.
+- **Any 'works in incognito, broken for me' report** — incognito rarely carries an installed service worker from a prior visit (next note explains exactly why), so this contrast is a strong first clue pointing at a worker or its cache, not a code difference.
+- **Right after any deploy that touches the app shell** — a quick Application -> Service Workers glance, tick Update on reload if testing actively, catches stale-worker symptoms before they reach a support ticket.
+
+Tester's habit: **when 'incognito is fine, my browser isn't' shows up, suspect the worker before the
+code.** A service worker is invisible until you open this one panel — and once you know to look, a
+whole category of "impossible" deploy bugs stops being impossible.
+</WhereToCheck>
+
+<WorkedExample title="the redesign nobody could see">
+1. **The report:** "We shipped the new checkout page design three days ago. Marketing is furious —
+   half our screenshots from user calls still show the OLD design. Did the deploy actually go out?"
+2. **The tester checks the obvious things first.** The server is definitely serving the new HTML —
+   curling the URL directly shows the new markup. A brand-new incognito window shows the new design
+   perfectly. So the deploy genuinely worked. And yet real users, on calls, are seeing the old one.
+3. **The tester reproduces it properly**, not with a fresh profile but with an ALREADY-USED one that
+   visited the site last week. Sure enough: old design, every time, no matter how many normal
+   reloads happen.
+4. **They open Application -> Service Workers.** One worker, status "activated and running,"
+   installed nine days ago — before the redesign shipped. Its Cache Storage lists `index.html` and
+   `checkout.html`, both from before the change.
+5. **The mechanism is now obvious.** This site's service worker caches full HTML pages, not just
+   assets, and its update-check logic only runs occasionally in the background, not on every visit.
+   Users who already had it installed kept getting served the old page shell straight from the
+   worker's cache; new visitors, with no worker yet, got the current one from the network.
+6. **They confirm the fix**: Application -> Service Workers, Update on reload, reload — new worker,
+   new cache, new design appears. Unregister and reload gives the same result from a different
+   angle, confirming it's the worker and nothing else.
+7. **The real fix, filed separately from "is the deploy broken":** the worker's own update-check
+   interval was too long for how often this page changes, and it should treat HTML shells as
+   short-lived even if static assets stay long-cached. That's an engineering change to the worker's
+   own logic, not a re-deploy of the checkout page.
+8. **The tester's lesson.** "It's live on the server" and "every user sees it" are different claims,
+   and a service worker is exactly the kind of thing that can make the first one true and the second
+   one false for days at a time, with zero errors anywhere. The fix wasn't retesting the checkout
+   page — it was testing the THING SITTING IN FRONT OF the checkout page.
+</WorkedExample>
+
+<Callout type="mistake">
+Assuming a deploy problem is a code problem before checking what is standing between the browser
+and the network. A service worker can make a perfectly correct deploy invisible to real, returning
+users for days, with no error message anywhere, because it was explicitly built to answer requests
+without asking the server first. Before reopening a "still broken after the fix" ticket, or spending
+an hour bisecting commits, spend ten seconds in Application -> Service Workers. If one is listed and
+active, you may be debugging a receptionist with an old photocopy, not a bug in this week's code.
+</Callout>
+
+<Quiz
+  question="A confirmed deploy shows correctly in a brand-new incognito window, but returning users on their normal browser still see the old page days later. Application -> Service Workers shows one worker, status 'activated and running', registered before the deploy. What's the most direct next step?"
+  options={[
+    "Reopen the original ticket as a code bug and re-investigate the source files",
+    "Tell users to clear their entire browser history and passwords",
+    "Tick Update on reload (or Unregister) for that service worker and reload, to force it to fetch and activate the current version instead of answering from its own stale Cache Storage",
+    "Assume the deploy silently failed for some users and re-run it"
+  ]}
+  answer={2}
+  explain="The incognito-vs-normal-browser contrast is the tell: incognito has no installed service worker, so its requests go straight to the network and show the real, current deploy; the normal browser has a worker from BEFORE the deploy that keeps answering from its own cache without asking. The direct, targeted fix is exactly what the panel offers - Update on reload forces the browser to check for and activate a fresh worker, or Unregister removes it outright so nothing intercepts the next request. Reopening it as a code bug (option one) wastes time re-investigating code that is already confirmed correct. Clearing all history (option two) is a blunt, disruptive overreaction to a problem with one specific, named fix. Re-running the deploy (option four) changes nothing, since the server was never the problem - the worker never asked it a question."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Service worker - one breath", back: "A script the browser runs separately from the page that can intercept every network request and answer it from the network, from its own Cache Storage, or a mix - installed once, then keeps running across visits until told otherwise." },
+    { front: "How it intercepts requests", back: "The page's fetch calls are handed to the worker's own fetch event handler BEFORE they reach the network. The worker's code decides: pass through to the network, answer instantly from its Cache Storage, or fall back from one to the other." },
+    { front: "Why it causes 'deployed but users see the old version'", back: "A worker installed before a deploy keeps answering requests from files it cached earlier, with no automatic check against the current server. The deploy is real and live; the worker just never asks about it, so returning users stay stuck on the old files." },
+    { front: "Update on reload", back: "A DevTools checkbox (Application -> Service Workers) that forces a fresh check-and-activate of the worker on every reload instead of trusting the installed one. The fast fix while actively testing or developing a site that has a worker." },
+    { front: "Unregister", back: "Removes the service worker entirely for that origin - the cleanest 'nothing is intercepting anymore' state. Does NOT clear the files it already stashed in Cache Storage; clear that separately for a true clean slate." },
+    { front: "The diagnostic tell for a stale worker", back: "Fresh incognito shows the fix; the same user's normal, returning browser doesn't. That contrast points straight at something installed from an earlier visit - almost always a service worker or its Cache Storage - not a server-side deploy failure." },
+  ]}
+/>
+
+<Challenge>
+Find a site you use that works offline or feels app-like (webmail, a news reader, a PWA). (1) Open
+Application -> Service Workers and record its status and Cache Storage contents. (2) Go offline
+(Network tab, Offline checkbox) and reload — note what appears instead of a browser error page.
+(3) Come back online, tick Update on reload, and reload once more — note anything that changed.
+(4) Click Unregister and reload a final time. Finish with one sentence: what's the practical
+difference, for a tester, between "the HTTP cache is stale" and "a service worker is stale" — and
+which DevTools panel tells them apart?
+</Challenge>
+
+<AskCommunity prompt="Service worker question: `[which site/page]` shows `[old content / broken offline mode / no push notifications]`. Application -> Service Workers shows status `[activated / waiting / redundant / none listed]`, registered `[roughly when]`. Incognito shows `[the fix / the same problem]`. Have I tried Update on reload / Unregister yet: `[yes/no, result]`.">
+State the worker's status and whether incognito differs from the normal browser first — that single
+contrast (fresh context fine, returning context stale) is what separates a service-worker problem
+from a real server-side bug, and it's usually visible before anyone reads a line of the worker's code.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.chrome.com/docs/devtools/progressive-web-apps/", title: "Chrome DevTools — inspecting and debugging service workers", kind: "read" },
+    { href: "https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API", title: "MDN — Service Worker API overview", kind: "read" },
+    { href: "https://web.dev/articles/service-worker-lifecycle", title: "web.dev — the service worker lifecycle, install/waiting/activate explained", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=R82oVVsZ2Xs", title: "Service workers explained - the key to unlocking the offline web", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=R82oVVsZ2Xs" title="Service workers explained - the key to unlocking the offline web" minutes={5} />
+
+<Takeaways
+  points={[
+    "A service worker is a script that runs separately from the page and can intercept every network request, answering from the network, from its own Cache Storage, or a mix - installed once, then running across visits until told otherwise.",
+    "It is the single most common second-layer reason a confirmed, live deploy still shows old behaviour to returning users - it answers from files it cached earlier without automatically asking the network first.",
+    "Application -> Service Workers shows every registered worker's status (activated, waiting, redundant) and two controls that matter most: Update on reload (force a fresh check every reload) and Unregister (remove it entirely).",
+    "Unregistering removes the worker but not the files it already stashed in Cache Storage - clear both together for a genuinely clean slate, the same 'two piles' lesson the cache note ended on.",
+    "The diagnostic tell is a contrast: fresh incognito shows the fix, the same user's normal returning browser doesn't. That gap points at an installed worker (or its cache) before it points at the server.",
+  ]}
+/>
+
+<Complete xp={10} />

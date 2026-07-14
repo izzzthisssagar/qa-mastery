@@ -1,0 +1,346 @@
+---
+title: "Warnings vs errors: reading the color, not just the text"
+summary: "Red is not always urgent and yellow is not always safe. Learn to spot the benign red error and the yellow warning that predicts next month's outage - deprecations, mixed content, cookie warnings - and the severity call a tester makes alone."
+tags: ["browser-devtools-mastery", "console", "track-c"]
+updated: "2026-07-14"
+---
+
+<Hook>
+The previous note taught you to read a red entry's name, message, and file:line without flinching.
+Here's the twist nobody warns you about: **not every red entry is a fire, and not every yellow
+entry is decoration.** Load a real e-commerce site and you'll likely see a red
+`Failed to load resource: net::ERR_BLOCKED_BY_CLIENT` sitting two lines above a yellow
+`This cookie will be rejected in a future browser release`. The red one is an ad blocker eating a
+tracking pixel - genuinely nothing. The yellow one is the browser telling you, calmly, that a login
+flow will silently break on a date it will not repeat twice. Color is the fastest triage signal
+DevTools gives you, and it is also, on its own, not enough. This note is about the second read: the
+one where you check WHO logged the line and WHAT it's actually claiming before you decide how loud
+to be about it.
+</Hook>
+
+<Callout type="analogy">
+Think of the Console's colors like a car's dashboard. A red light - oil pressure, brakes - means
+STOP NOW, something has already failed and continuing risks real damage. A yellow light - check
+engine, low washer fluid - means the car still drives fine today. Ignore a check-engine light for
+six months, though, and you're the one stranded on the highway when whatever it was quietly finally
+gives out. The mistake almost everyone makes with a car (and with a Console) is treating red as the
+only light worth reading and yellow as scenery. A good mechanic - and a good tester - reads BOTH,
+because the yellow light is not weaker evidence, it's evidence with a longer fuse.
+</Callout>
+
+## Three colors, three claims
+
+`console.error()`, `console.warn()`, and `console.log()`/`console.info()` are not neutral facts
+about the universe - they are claims a specific piece of code chose to make, at the moment it wrote
+that line. An error claims "this operation just failed, provably, right now." A warning claims
+"this worked today, but something about it is fragile, malformed, or scheduled to stop working." A
+log or info line claims nothing at all - it's just narration. Crucially, the browser vendor picks
+the color for its OWN messages (deprecations, security notices, mixed content) using real judgment
+about severity, but any script on the page - your app's code, a third-party widget, a browser
+extension - can call `console.error()` on something totally harmless just to make it visually loud,
+or `console.warn()` on something that will actually break tomorrow because whoever wrote that line
+didn't think hard about which bucket it belonged in.
+
+That's the whole tension this note resolves: color is the fastest triage signal you have, correct
+roughly ninety percent of the time, and a tester who ignores it entirely is working slower than
+necessary. But the other ten percent is where testers earn their keep - reading the source of the
+message and the actual words it uses, not just the paint job. Two ideas make that judgment call
+concrete: warnings that predict breakage, and errors that are functionally benign. Both exist in
+force on nearly every real website, and mixing them up in either direction produces the same
+outcome - a ticket that either cries wolf or misses a real one.
+
+**Warnings that predict breakage** share a recognizable shape: the resource works in THIS browser,
+THIS month, and the message is telling you a clock is running. A deprecation warning
+("`localStorage` access from cross-origin iframes is deprecated") names an API scheduled for
+removal in a future release. A passive mixed-content warning (an https page loading an image over
+plain http) still renders the image today, but is one browser-policy tightening away from being
+silently blocked - the same policy that already blocks ACTIVE mixed content (scripts, stylesheets,
+fetch calls) outright, as a red error, right now. A third-party cookie warning tells you a login or
+tracking cookie doesn't meet the attribute rules the browser will soon start enforcing - it still
+sets today, and will silently stop setting on a date the warning is trying to hand you in advance.
+None of these are bugs yet. All three are risk a tester can file before they become one.
+
+{/* IMAGE: a Console panel on a real e-commerce checkout page, mixing red and yellow entries, with pins distinguishing a genuine app error from a benign third-party error and two flavors of predictive warning */}
+<HotspotImage
+  src="/notes/browser-devtools-mastery/console/warnings-vs-errors.jpg"
+  alt="A traffic light photographed from below against a clear sky, its red lens lit and glowing, the yellow and green lenses beneath it dark, all three housed in one black unit hanging from overhead wires"
+  credit="LED traffic light on red — Wikimedia Commons, CC BY-SA 4.0 (Kevin Payravi)"
+  pins={[
+    { x: 51, y: 40, label: "The lit red lens = color alone, no source attached", desc: "This light tells you STOP - and nothing else. It doesn't say whether a pedestrian is crossing, an ambulance needs the intersection, or the signal is simply cycling on schedule. That's the trap of red in the Console too: an Uncaught TypeError from the app's own checkout.js and a blocked ad-tracking pixel both print red, same urgency-color, wildly different reasons to care." },
+    { x: 51, y: 62, label: "The dark yellow lens = wired and ready, not absent", desc: "Unlit right now, but it isn't disconnected - the wiring runs to it exactly like it runs to red, waiting for its moment on a schedule this photo doesn't show. A deprecation warning works the same way: quiet today, genuinely functional today, but counting down to a date it already told you about." },
+    { x: 51, y: 83, label: "The dark green lens = further down the severity stack entirely", desc: "Below yellow sits a third lens, further still from today's problem - present, wired, simply not what this moment is about. Not every Console entry (Verbose, routine Info logging) even rises to warning-worthy; some genuinely belong at this lowest, quietest tier and a tester's judgment is knowing which tier a given line actually earned." },
+    { x: 51, y: 45, label: "One black housing, three lenses, one feed", desc: "Red, yellow, and green aren't three separate devices - they're one unit reporting different states through a shared face. That's the Console itself: one feed, one panel, and every entry regardless of color arrives through the exact same mechanism. The color changes; the source you have to go verify does not." },
+    { x: 15, y: 15, label: "The overhead wire and mount = the policy deciding which lens fires", desc: "Nothing about the lens itself decides when it lights - a controller up on that wire, running a real schedule, makes that call. Browser API deprecation timelines and mixed-content policy work the same way: invisible infrastructure deciding, in advance, exactly when today's yellow becomes tomorrow's red." },
+  ]}
+/>
+
+<FlowAnimation
+  title="From color to a severity verdict - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Read the color first", desc: "A red entry and a yellow entry sit next to each other. Color is your starting hint, correct most of the time - treat red as probably urgent and yellow as probably informational, for now, not forever." },
+    { label: "Check the source", desc: "Look at the small grey text or domain naming where the line came from. The app's own file? A third-party domain? The browser vendor itself, with no file at all? This one glance does more disambiguating work than the color did." },
+    { label: "Read the words, not the vibe", desc: "Does the message contain language like deprecated, will be removed, blocked, or a future release? That vocabulary is the browser handing you a predictive warning - treat it as risk with a deadline, not scenery to scroll past." },
+    { label: "Ask what depends on it", desc: "Trace forward: does a real user-facing flow - login, checkout, search - rely on the thing that errored or warned? A red error on an analytics beacon and a red error on a payment call look identical in the panel and are worlds apart in consequence." },
+    { label: "File the verdict, not the color", desc: "Write one sentence: this is [benign noise / active bug / predictive risk], because [source] and [what it threatens]. That sentence, not the red or yellow paint, is what goes in front of a developer." },
+  ]}
+/>
+
+Build a small triage scorer yourself - feed it a batch of raw Console entries and let rules, not
+color alone, sort them into buckets:
+
+<CodePlayground
+  language="python"
+  title="Try it - an error-vs-warning triage scorer (Python)"
+  code={`entries = [
+    {"level": "error", "source": "checkout.js", "message": "Cannot read properties of undefined (reading total)"},
+    {"level": "error", "source": "ads.trackerwidget.com", "message": "Failed to load resource: net::ERR_BLOCKED_BY_CLIENT"},
+    {"level": "warning", "source": "chrome", "message": "The unload event listener is deprecated and will be removed in a future release"},
+    {"level": "warning", "source": "chrome", "message": "Mixed Content: the page requested an insecure image, this content should also be served over HTTPS"},
+    {"level": "warning", "source": "login.js", "message": "A cookie will be rejected in a future browser release because it lacks the SameSite attribute"},
+    {"level": "info", "source": "analytics.js", "message": "page view tracked"},
+]
+
+APP_FILES_HINT = (".js",)          # crude stand-in for "is this our own file"
+THIRD_PARTY_HINTS = ("ads.", "tracker", "widget")
+PREDICTIVE_WORDS = ("deprecated", "will be removed", "future release", "should also be served")
+
+def owns(source):
+    is_app_file = source.endswith(APP_FILES_HINT)
+    is_third_party = any(hint in source for hint in THIRD_PARTY_HINTS)
+    return is_app_file and not is_third_party
+
+def triage(entry):
+    level = entry["level"]
+    source = entry["source"]
+    message = entry["message"]
+    predictive = any(word in message for word in PREDICTIVE_WORDS)
+
+    if level == "error" and owns(source):
+        return "FIX NOW - app's own code, provably broken"
+    if level == "error":
+        return "CHECK OWNERSHIP - red, but not our file; confirm no user flow depends on it"
+    if level == "warning" and predictive:
+        return "FILE AS RISK - predicts breakage on a future date, not a live bug yet"
+    if level == "warning":
+        return "READ, LOW PRIORITY - fragile but not predictive, keep an eye on it"
+    return "SKIP - informational only"
+
+for e in entries:
+    verdict = triage(e)
+    print(e["level"].upper() + " (" + e["source"] + "): " + verdict)
+
+# ERROR (checkout.js): FIX NOW - app's own code, provably broken
+# ERROR (ads.trackerwidget.com): CHECK OWNERSHIP - red, but not our file; confirm no user flow depends on it
+# WARNING (chrome): FILE AS RISK - predicts breakage on a future date, not a live bug yet
+# WARNING (chrome): FILE AS RISK - predicts breakage on a future date, not a live bug yet
+# WARNING (login.js): FILE AS RISK - predicts breakage on a future date, not a live bug yet
+# INFO (analytics.js): SKIP - informational only`}
+/>
+
+Same scorer, same verdicts, in Java:
+
+<CodePlayground
+  language="java"
+  title="Try it - an error-vs-warning triage scorer (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static final String[] THIRD_PARTY_HINTS = { "ads.", "tracker", "widget" };
+    static final String[] PREDICTIVE_WORDS = { "deprecated", "will be removed", "future release", "should also be served" };
+
+    static boolean owns(String source) {
+        boolean isAppFile = source.endsWith(".js");
+        boolean isThirdParty = false;
+        for (String hint : THIRD_PARTY_HINTS) {
+            if (source.contains(hint)) isThirdParty = true;
+        }
+        return isAppFile && !isThirdParty;
+    }
+
+    static String triage(String level, String source, String message) {
+        boolean predictive = false;
+        for (String word : PREDICTIVE_WORDS) {
+            if (message.contains(word)) predictive = true;
+        }
+        if (level.equals("error") && owns(source)) {
+            return "FIX NOW - app's own code, provably broken";
+        }
+        if (level.equals("error")) {
+            return "CHECK OWNERSHIP - red, but not our file; confirm no user flow depends on it";
+        }
+        if (level.equals("warning") && predictive) {
+            return "FILE AS RISK - predicts breakage on a future date, not a live bug yet";
+        }
+        if (level.equals("warning")) {
+            return "READ, LOW PRIORITY - fragile but not predictive, keep an eye on it";
+        }
+        return "SKIP - informational only";
+    }
+
+    public static void main(String[] args) {
+        String[][] entries = {
+            { "error", "checkout.js", "Cannot read properties of undefined (reading total)" },
+            { "error", "ads.trackerwidget.com", "Failed to load resource: net::ERR_BLOCKED_BY_CLIENT" },
+            { "warning", "chrome", "The unload event listener is deprecated and will be removed in a future release" },
+            { "warning", "chrome", "Mixed Content: the page requested an insecure image, this content should also be served over HTTPS" },
+            { "warning", "login.js", "A cookie will be rejected in a future browser release because it lacks the SameSite attribute" },
+            { "info", "analytics.js", "page view tracked" },
+        };
+
+        for (String[] e : entries) {
+            String level = e[0], source = e[1], message = e[2];
+            String verdict = triage(level, source, message);
+            System.out.println(level.toUpperCase() + " (" + source + "): " + verdict);
+        }
+    }
+}
+
+// ERROR (checkout.js): FIX NOW - app's own code, provably broken
+// ERROR (ads.trackerwidget.com): CHECK OWNERSHIP - red, but not our file; confirm no user flow depends on it
+// WARNING (chrome): FILE AS RISK - predicts breakage on a future date, not a live bug yet
+// WARNING (chrome): FILE AS RISK - predicts breakage on a future date, not a live bug yet
+// WARNING (login.js): FILE AS RISK - predicts breakage on a future date, not a live bug yet
+// INFO (analytics.js): SKIP - informational only`}
+/>
+
+<Term define="A console message, almost always yellow rather than red, telling you that an API, behavior, or pattern the page currently uses still works in this browser build but is scheduled for removal or a breaking behavior change in a future release. Chrome's own deprecation warnings typically link to a tracking page naming the milestone. The tester-relevant shape is always the same: nothing is broken yet, and something WILL be, on a clock outside your test session's control. Treat a deprecation warning as a finding with a due date rather than as noise - filing it before the removal ships is the entire value a tester adds here, because after the removal ships it isn't a warning anymore, it's an incident.">Deprecation warning</Term>
+
+<Callout type="tip">
+Before you decide severity from color alone, glance at the source column or the originating domain.
+A `console.error()` fired by a script you don't own - an ad network, a chat widget, a payment
+button's own iframe - is common on almost every commercial site and is frequently, though not
+always, irrelevant to the feature you're testing. That is NOT permission to ignore every red entry
+outside your own app's files by reflex. It's permission to spend five extra seconds checking whether
+anything your test actually depends on calls out to that same script before you file it as noise -
+because the one time it does matter, "third-party" was the whole bug.
+</Callout>
+
+<FirstTime title="Your mission: sort five real Console entries by actual severity, not color">
+<StepChecklist
+  steps={[
+    { text: "Find a genuine app error", detail: "Open DevTools on a site you know, find a red entry sourced from the site's own JS files (not a third-party domain), and confirm with the file:line link that it's inside app code." },
+    { text: "Find a benign red error", detail: "On the same site, look for a red entry from an ad, analytics, or widget domain - often a 404 or a blocked-by-client message. Check whether any feature you'd actually test depends on that specific call before calling it harmless." },
+    { text: "Find or trigger a deprecation warning", detail: "Many sites still call an old API somewhere. Browse a few pages with the Console open; deprecation warnings from the browser itself (no app file in the source column) show up more often than you'd expect." },
+    { text: "Find a mixed-content or cookie warning", detail: "Sites migrated from http to https, or ones embedding old third-party widgets, often carry at least one yellow mixed-content or cookie-attribute warning. Read the exact wording for future-tense language." },
+    { text: "Write one severity sentence for each", detail: "For all four entries: 'This is [benign / active bug / predictive risk] because [source] and [what depends on it].' Compare your four sentences - none of them should be justified purely by the color." },
+  ]}
+/>
+Four entries, four verdicts, zero of them decided by paint color alone - the exact judgment call
+this whole note is training.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "Every single entry in the Console is red, including things that obviously aren't bugs.",
+      fix: "Browser extensions and ad blockers frequently log their own internal failures using console.error, and third-party ad or tracking scripts do the same when their own requests get blocked. Check the source column or domain before reacting - if it's an extension or a domain you don't own, confirm no feature under test depends on that specific call, then move on instead of filing each one.",
+    },
+    {
+      symptom: "A yellow deprecation warning has been sitting in the Console for months and nobody treats it as urgent.",
+      fix: "That's the expected shape of a predictive warning - it costs nothing today, which is exactly why it gets ignored until the removal ships and it becomes a live incident. File it as a risk ticket now, quoting the exact API name and any removal milestone the message links to; a ticket with a concrete future date attached is much harder to deprioritize forever than a vague 'saw a warning once.'",
+    },
+    {
+      symptom: "A mixed-content warning shows up but the page looks completely fine.",
+      fix: "A warning-level (passive) mixed-content message doesn't guarantee the resource actually loaded - many browsers try to silently auto-upgrade it to https first, and that upgrade can itself fail. Check the Network tab for that specific resource's real status instead of trusting how the page renders; a broken thumbnail three rows down a product grid is easy to miss by eye.",
+    },
+    {
+      symptom: "A red, CORS-looking error is in the Console but the feature it's attached to still visibly works.",
+      fix: "Not every failed request is load-bearing - it may be a background analytics beacon, a duplicate call, or a fallback path the app already handles. Don't infer impact from color; reproduce the actual user-facing flow the request seems to belong to and confirm directly whether it degrades, rather than assuming a red entry always equals a broken feature.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where the severity clues actually live, beyond the color itself:
+
+- **The source column or domain at the left/right of each entry** - the fastest way to separate app code from third-party noise, before reading a single word of the message.
+- **The exact wording of a warning** - `deprecated`, `will be removed`, `future release`, `blocked` are the vocabulary of a predictive finding worth filing now.
+- **The Network panel, for anything mixed-content or CORS related** - a page can look fine while a specific resource silently failed; the panel shows the real request status, not the page's visual guess.
+- **DevTools Console filter checkboxes** - useful for isolating just Errors or just Warnings once you know which bucket you're hunting in; the next note in this chapter builds a full filtering workflow around exactly this.
+- **Whether a real user flow depends on the failing thing** - the single check that turns "red entry" into either "ship it as a bug" or "confirmed harmless, moving on."
+
+Tester's habit: **color first, source and wording second, impact third.** Any one of the three alone
+produces wrong verdicts on a busy real site; all three together rarely do.
+</WhereToCheck>
+
+<WorkedExample title="the login page with one loud red error and one quiet yellow one">
+1. **The setup:** a tester opens DevTools on a staging login page before a routine smoke pass, Console visible, and reloads.
+2. **Two entries appear.** A red `Failed to load resource: the server responded with a status of 404` sourced from `pixel.adtrackerco.net`, and a yellow `A cookie associated with a cross-site resource was set without the SameSite attribute. It will be rejected in a future browser release` sourced from Chrome itself, tied to the session cookie the login form sets.
+3. **Read the source first.** The red one is a third-party domain that isn't part of the app; the yellow one names the app's OWN session cookie. Already, color has pointed the tester in exactly the wrong direction for urgency.
+4. **Confirm the red one is harmless.** Nothing in the login flow calls that tracking domain directly - it's a marketing pixel. The tester logs in successfully with the network tab open; the 404 has zero effect on the actual request chain. Verdict: noise, not a ticket.
+5. **Take the yellow one seriously.** The message names the exact cookie the login flow depends on, and the future-tense language ("will be rejected in a future browser release") is textbook predictive. The tester checks the cookie's attributes in the Application panel and confirms it's missing `SameSite=None; Secure` - exactly what the warning said.
+6. **File it as risk, not noise.** The report: "Session cookie set by `/login` lacks `SameSite=None; Secure`. Browser Console currently logs this as a warning; the cookie will be rejected outright once the browser enforces the policy it names, which will silently log every user out on first request. Not reproducible as a bug today - filing now so it's fixed before it becomes one."
+7. **The outcome:** the fix ships two sprints later, quietly, in a batch of cookie-attribute updates - long before any user would have hit the future enforcement date. No incident, no fire drill, because the yellow line got read as carefully as the red one would have been.
+</WorkedExample>
+
+<Callout type="mistake">
+Triaging purely by color - treating every red entry as urgent and every yellow entry as safe to
+skip. Both halves of that habit produce real misses: a red error from a blocked ad script eats
+investigation time that a genuine app bug needed, while a yellow deprecation or cookie warning gets
+scrolled past for months until the browser actually enforces what it was warning about, and it
+becomes a production incident with no advance ticket, no owner, and no history of anyone having
+known. Color is a hint written by whoever logged the line, not a verdict written by the universe -
+read the source and the words before you decide how loudly to react.
+</Callout>
+
+<Quiz
+  question="Console shows: a red 'net::ERR_BLOCKED_BY_CLIENT' from a domain called chatwidgetcdn.com, and a yellow warning from Chrome itself reading 'localStorage access from a cross-origin iframe is deprecated and will be removed in a future release,' tied to the app's own payment iframe. Which is the correct next action?"
+  options={[
+    "File the red error as the higher-priority bug since red always outranks yellow",
+    "Ignore both - one is a third-party domain and the other is only a warning, neither is a confirmed bug today",
+    "Confirm the red error's domain has no bearing on any tested flow (likely safe to set aside), and file the yellow warning as a predictive risk ticket naming the specific API and the payment iframe it's tied to, since it threatens a feature that handles money",
+    "Screenshot the Console panel and attach it to a ticket titled 'weird stuff in console' for someone else to sort out"
+  ]}
+  answer={2}
+  explain="This is the exact judgment this note teaches: color alone gets the priority backwards here. The red error belongs to a chat widget domain unrelated to payments and is very likely noise, confirmed by checking whether the tested flow depends on it. The yellow warning, despite being 'only a warning,' is tied to the app's OWN payment iframe and uses textbook predictive language (deprecated, will be removed) - filing it now, specifically, with the API name and the affected feature, is exactly the kind of finding that prevents a future outage in the part of the app where an outage costs the most. Treating red as automatically higher priority ignores source and impact; ignoring both defers a real, findable risk; and a vague unlabeled screenshot throws away everything a developer would need to act, which the previous notes in this chapter already established is the wrong move for ANY Console evidence, warning or error."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What color actually claims", back: "Red (console.error, uncaught exceptions, blocked/failed browser actions) claims something failed provably, now. Yellow (console.warn, deprecations, mixed content, cookie notices) claims it still works today but is fragile or scheduled to change. Both are claims made by whoever logged the line, not objective verdicts - check the source before trusting the color fully." },
+    { front: "Warnings that predict breakage - the shared vocabulary", back: "deprecated, will be removed, future release, blocked, should also be served. Any of these words in a yellow message means the browser is handing you a deadline, not decoration - file it as risk before it ships as an incident." },
+    { front: "Deprecation warning", back: "A yellow message naming an API or behavior that currently works but is scheduled for removal or a breaking change in a future browser release. Nothing is broken yet; something will be, on a clock the warning names in advance." },
+    { front: "Mixed content - two severities, one policy", back: "Active mixed content (scripts, styles, fetch calls) on an https page is BLOCKED outright and logs red, right now. Passive mixed content (images, video) still loads today and logs yellow - same underlying policy, lower severity because the resource type is lower risk." },
+    { front: "Errors that are benign", back: "Red entries from domains or scripts you don't own - ad networks, chat widgets, tracking pixels - failing on their own terms without touching any flow you're testing. Confirmed by checking the source and whether anything tested actually depends on that call, not by the color alone." },
+    { front: "The triage order this note teaches", back: "Color first (fast, roughly right), source second (app code vs third-party vs browser vendor), wording third (predictive language or not), impact last (does a real flow depend on this). Skipping any step produces wrong verdicts on a genuinely busy site." },
+  ]}
+/>
+
+<Challenge>
+Open DevTools on three real, busy sites you use regularly. For each, find one red entry that turns
+out to be benign (third-party, no impact on a real flow) and one yellow entry that uses predictive
+language (deprecated, will be removed, future release, blocked). For all six entries, write the
+source (app file / third-party domain / browser vendor) and one verdict sentence each. Finish with:
+which of the six, if any, would you have mis-triaged by color alone - and what specifically in the
+source or wording corrected your first instinct?
+</Challenge>
+
+<AskCommunity prompt="Severity-judgment question: Console shows [paste the color, source, and message verbatim]. It's tied to [the feature or flow, if any, that seems related]. I currently think this is [benign noise / active bug / predictive risk] because [your reasoning]. Am I reading the source and wording correctly, or is there a signal I'm missing?">
+Bring the source column and the exact wording, not just 'I saw a red/yellow thing.' Most severity
+disagreements resolve fast once someone else checks whether the flagged resource belongs to the app
+and whether the message uses future-tense, predictive language - the two checks this note builds.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.mozilla.org/en-US/docs/Web/Security/Mixed_content", title: "MDN - mixed content, active vs passive, and why the severities differ", kind: "read" },
+    { href: "https://developer.chrome.com/blog/deps-rems", title: "Chrome Developers - deprecations and removals, how the warnings map to release milestones", kind: "read" },
+    { href: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite", title: "MDN - the SameSite cookie attribute and the warnings tied to it", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=1TbkSxQb4bI", title: "Chrome for Developers - find and fix problems with the DevTools Issues tab", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=1TbkSxQb4bI" title="Find and fix problems with the Chrome DevTools Issues tab" minutes={3} />
+
+<Takeaways
+  points={[
+    "Color is a claim made by whoever logged the line, not a verdict handed down by the universe - it's the fastest triage signal available and still needs a second check before you act on it.",
+    "Warnings that predict breakage share a vocabulary: deprecated, will be removed, future release, blocked. That language means file it as risk now, before the removal ships and it becomes an incident.",
+    "Errors can be entirely benign - a red entry from a third-party domain you don't own, confirmed harmless by checking whether any tested flow actually depends on that call.",
+    "Mixed content proves the point inside one category: active resources block outright and log red right now, passive resources still load today and log yellow - same policy, different severity by resource type.",
+    "The real triage order is color, then source, then wording, then impact - skip any step and a busy real site will hand you both false alarms and missed risks in the same ten minutes.",
+  ]}
+/>
+
+<Complete xp={10} />

@@ -1,0 +1,341 @@
+---
+title: "Finding locators"
+summary: "Right-click, Copy selector, paste, done? That selector dies on the next deploy. Learn to read ids, classes and attributes as element handles, see exactly why auto-copied nth-child chains are brittle, and craft data-testid locators that survive redeploys - the skill Track D automation is built on."
+tags: ["browser-devtools-mastery", "elements-and-styles", "track-c"]
+updated: "2026-07-14"
+---
+
+<Hook>
+Every automation script ever written begins with the same humble chore: *find the element*. Not
+"the blue button" — an exact, unambiguous address for one node in a tree of thousands. Manual
+testers need the same skill one module early: a bug report that says "the button with
+`data-testid='pay-now'`" gets fixed while "the blue button near the bottom" gets a clarifying
+question and a three-day delay. DevTools even offers to do the work for you — right-click any node,
+**Copy → Copy selector** — and what it hands you is a locator with the shelf life of unrefrigerated
+fish. This note teaches you to read what that menu produces, understand precisely why it rots, and
+craft locators that survive the next deploy. Track D will thank you. Loudly.
+</Hook>
+
+<Callout type="analogy">
+Giving someone directions to your house, two ways. Way one: "turn left at the third house after
+the mural, then it's the one behind the yellow skip." Works today — until the skip gets collected,
+a new house goes up, and your guest is knocking on a stranger's door. Way two: "14 Rowan Street."
+The address names the house *itself*, not its current neighbours. **Copy selector gives you
+skip-directions**: a path through whatever the DOM's neighbourhood looks like right now, all
+`nth-child(3)` and generated class names. **A `data-testid` is the street address**: an attribute
+developers attach to the element on purpose, for you, that stays put when the neighbourhood
+changes. The exact technical truth: positional selectors encode an element's *current ancestry and
+sibling order*; attribute locators encode its *identity* — and only identity survives a redeploy.
+</Callout>
+
+The word this note revolves around is
+<Term define="A locator is a selector with a job: identify exactly ONE element so a person or a script can act on it - click it, type into it, assert on it. Any CSS selector (or XPath) can serve as a locator, but the bar is higher than styling: a stylesheet is allowed to match twenty buttons, while a locator that matches twenty buttons, or zero, or a DIFFERENT button after a deploy, is a broken locator. Good locators are unique (match exactly one element), stable (survive redeploys, refactors and A/B tests), and readable (a human can tell what they point at). The gold standard is a dedicated test attribute like data-testid, placed by developers specifically as an automation handle - it carries no styling or behaviour, so nobody has a reason to rename it when the design changes.">locator</Term>
+— and the Elements panel is both where you mine locators and where you test them before trusting them.
+
+## Three handles, and the button that lies
+
+The raw material is Track A's `ids-classes-and-attributes` note, unchanged: **`#checkout`** matches
+the one element with that id (ids are supposed to be unique per page), **`.primary`** matches
+everything carrying that class, and **`[data-testid='pay']`** matches by any attribute and value.
+The `selectors-the-locator-superpower` note taught you to combine them — `button.primary` for AND,
+a space for descendants — and promised the same syntax works everywhere. Here's where that pays
+off: press **Cmd+F / Ctrl+F inside the Elements panel** and it accepts full CSS selectors, telling
+you exactly how many nodes match. Or flip to the Console and run `$$('button.primary')` — the
+`$$` shortcut is `querySelectorAll`, and the array it returns is your match count with receipts.
+
+Now the tempting shortcut. Right-click any node in the tree: **Copy → Copy selector** emits a CSS
+path like `#root > div:nth-child(2) > div.sc-bdVaJa.kkAuOK > button:nth-child(3)`, and **Copy
+XPath** emits the same idea in XPath clothes: `/html/body/div[1]/div/div[2]/button[3]`. Both are
+computed the same way: the browser walks *upward from the element through its current ancestors*,
+noting each step's position or classes, until it hits something with an id. It is a path through
+today's tree — mechanically correct this second, and wrong the moment the tree changes.
+
+And the tree always changes. Three rot vectors, all visible in that one copied string:
+**`nth-child(3)`** means "third child" — any new sibling (a promo banner, an A/B test variant, a
+cookie notice) silently shifts every position after it. **`.sc-bdVaJa.kkAuOK`** is a generated
+class name — CSS-in-JS build tools mint fresh hashes every release, so that class may not exist by
+Friday. And the sheer **depth of the chain** couples your locator to five ancestors, any of whom a
+developer may refactor without ever touching your button. Stable locators invert all three habits:
+prefer `[data-testid='...']`, then a human-written id, then a semantic attribute (`name`, `role`,
+`aria-label`), then a short meaningful class — and positional selectors only as a last resort with
+a comment apologising for them.
+
+{/* IMAGE: a wall of numbered brass post-office boxes, one door open, a hand reaching for a specific box */}
+<HotspotImage
+  src="/notes/browser-devtools-mastery/elements-and-styles/finding-locators.jpg"
+  alt="A wall of identical cream-colored bank lockboxes in two columns, each with a printed number label and a small circular lock, numbered 2945 through 2952 in an interleaved left-right pattern rather than simple top-to-bottom order, one lock showing a key still inserted"
+  credit="Lockboxes, Zürich, Switzerland — Wikimedia Commons, CC BY-SA 4.0 (CEphoto, Uwe Aranas)"
+  pins={[
+    { x: 34, y: 38, label: "The printed number label = an id or data-testid", desc: "Box 2948 is box 2948 no matter which row it sits in or what gets installed around it - the label is attached to the box itself, on purpose, so it can be found regardless of layout. A data-testid works exactly like this: developers attach it to the element specifically so tests and testers can find it, and no redesign has a reason to touch it." },
+    { x: 66, y: 15, label: "2945, 2946, 2947, 2948 - interleaved, not sequential top-to-bottom", desc: "Read straight down the left column and you'd guess 2946 is followed by 2947 - wrong, the real next number is across in the right column. That's exactly how :nth-child() and positional XPath break: they count VISUAL position, not actual identity, and the moment the underlying order doesn't match what your eye assumed, you silently open the wrong box with zero error." },
+    { x: 34, y: 62, label: "Every door, the exact same cream colour", desc: "Not one visual cue distinguishes box 2950 from its neighbours except the printed number - color, size, shape are all identical. That's the fate of every generated class name once build tools mint a fresh hash each deploy: sc-bdVaJa tells you as little as 'the cream-colored one' does here, because everything around it looks exactly the same." },
+    { x: 66, y: 12, label: "The key still sitting in the lock", desc: "A key currently inserted tells you which box was JUST opened - useful right now, gone the moment someone turns it and walks away. That's a locator built on transient page state (a hover class, an 'active' flag, a temporary highlight): it identifies something real in this instant, but it's not a stable address anyone should build a test around." },
+    { x: 50, y: 85, label: "Two full columns, uniform and anonymous without their labels", desc: "Strip the printed numbers off this wall and every single door becomes indistinguishable - which is exactly the state of a page full of unlabelled divs and spans. The professional move when an element has no stable handle isn't a heroic selector chain, it's asking a developer to add one: five seconds of their time buys years of a test that can actually find box 2948 again." },
+  ]}
+/>
+
+<FlowAnimation
+  title="The life and death of a copied selector - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Tuesday: you copy it", desc: "Right-click the Delete button, Copy selector: #root > div:nth-child(2) > div.sc-bdVaJa > button:nth-child(3). You test it with Cmd+F - 1 of 1. It works. Everything the panel just told you is true, for now: this is a valid path through Tuesday's tree." },
+    { label: "Wednesday: marketing ships a banner", desc: "A promo div lands at the top of the container. Your button did not change - but it is now the FOURTH child. nth-child(3) still matches happily... the Preview button. No error anywhere. A test using this locator now clicks the wrong thing and may even stay green - the most expensive kind of broken." },
+    { label: "Friday: the build repaints the classes", desc: "A routine release regenerates every CSS-in-JS hash: .sc-bdVaJa is now .sc-kQzXbn. Your selector matches zero elements. The automation report says 'element not found', the app is fine, and someone spends an hour confirming that nothing is actually broken except the locator." },
+    { label: "The postmortem: what actually failed", desc: "Not the app, not the test logic - the ADDRESS. The copied selector encoded position (sibling order) and paint (generated classes), and both are guaranteed to change. It never encoded identity, because the element had none the machine could see. This is why auto-copied selectors are scaffolding, not foundations." },
+    { label: "The rewrite: locate by identity", desc: "The button gets data-testid='delete-post' (a one-line dev change), and the locator becomes [data-testid='delete-post']. Banner added? Still matches. Classes repainted? Still matches. Redesign moves it into a dropdown? Still matches. The locator now names the thing itself, not its Tuesday coordinates." },
+    { label: "The habit: verify, then trust", desc: "Whatever locator you write, run the uniqueness ritual before shipping it in a report or a script: Cmd+F in Elements for the match count, double-dollar in the Console for the actual nodes, and re-check in a second page state (logged out, empty cart). One minute now, or one flaky test forever." },
+  ]}
+/>
+
+Here's the whole failure mode as runnable code — three locator strategies against Tuesday's DOM
+and Friday's, and only one survives:
+
+<CodePlayground
+  language="python"
+  title="Run it - which locators survive a redeploy? (Python)"
+  code={`# A toolbar, as the DOM sees it - Tuesday's build.
+tuesday = [
+    {"tag": "button", "classes": ["sc-h4x2"], "attrs": {},                          "text": "Save"},
+    {"tag": "button", "classes": ["sc-k9q1"], "attrs": {},                          "text": "Preview"},
+    {"tag": "button", "classes": ["sc-p3m8", "danger"], "attrs": {"data-testid": "delete-post"}, "text": "Delete"},
+]
+
+# Friday's build: marketing added an Export button (position shift) and the
+# CSS-in-JS build regenerated every class hash (repaint). Nobody 'touched' Delete.
+friday = [
+    {"tag": "button", "classes": ["sc-r7t2"], "attrs": {},                          "text": "Save"},
+    {"tag": "button", "classes": ["sc-w1n4"], "attrs": {},                          "text": "Export"},
+    {"tag": "button", "classes": ["sc-b8c3"], "attrs": {},                          "text": "Preview"},
+    {"tag": "button", "classes": ["sc-z5v9", "danger"], "attrs": {"data-testid": "delete-post"}, "text": "Delete"},
+]
+
+def nth_child(dom, n):                 # button:nth-child(3)
+    return [dom[n - 1]] if n <= len(dom) else []
+
+def by_class(dom, cls):                # .sc-p3m8
+    return [el for el in dom if cls in el["classes"]]
+
+def by_attr(dom, key, value):          # [data-testid='delete-post']
+    return [el for el in dom if el["attrs"].get(key) == value]
+
+locators = [
+    ("button:nth-child(3)",            lambda d: nth_child(d, 3)),
+    (".sc-p3m8",                       lambda d: by_class(d, "sc-p3m8")),
+    ("[data-testid='delete-post']",    lambda d: by_attr(d, "data-testid", "delete-post")),
+]
+
+for name, find in locators:
+    tue = find(tuesday)
+    fri = find(friday)
+    tue_hit = tue[0]["text"] if tue else "NOTHING"
+    fri_hit = fri[0]["text"] if fri else "NOTHING"
+    verdict = "SURVIVED" if fri_hit == "Delete" else "BROKE"
+    print(f"{name:<28} Tuesday -> {tue_hit:<8} Friday -> {fri_hit:<8} {verdict}")
+
+# button:nth-child(3)          Tuesday -> Delete   Friday -> Preview  BROKE
+# .sc-p3m8                     Tuesday -> Delete   Friday -> NOTHING  BROKE
+# [data-testid='delete-post']  Tuesday -> Delete   Friday -> Delete   SURVIVED
+#
+# Note the nightmare detail: nth-child did not fail loudly on Friday.
+# It found a WRONG element with a straight face. Zero matches gets noticed;
+# wrong matches ship.`}
+/>
+
+Same idea from the other direction in Java — a little auditor that reads a selector string and
+scores its stability *before* you bet a test suite on it:
+
+<CodePlayground
+  language="java"
+  title="Run it - a locator stability auditor (Java)"
+  code={`import java.util.*;
+
+class Main {
+    static void audit(String selector) {
+        int score = 0;
+        List<String> notes = new ArrayList<>();
+
+        if (selector.contains("data-testid")) {
+            score += 5; notes.add("+5 dedicated test attribute (identity, placed on purpose)");
+        }
+        if (selector.matches(".*:nth-child\\\\(\\\\d+\\\\).*") || selector.matches(".*/\\\\w+\\\\[\\\\d+\\\\].*")) {
+            score -= 4; notes.add("-4 positional step: any new sibling silently shifts the target");
+        }
+        if (selector.matches(".*\\\\.(sc|css|jss)-[A-Za-z0-9]+.*")) {
+            score -= 4; notes.add("-4 generated class hash: regenerated on every build");
+        }
+        long depth = selector.chars().filter(c -> c == '>').count()
+                   + selector.chars().filter(c -> c == '/').count();
+        if (depth > 2) {
+            score -= 2; notes.add("-2 deep ancestry chain: coupled to " + depth + " ancestors");
+        }
+        String verdict = score >= 3 ? "STABLE" : (score >= 0 ? "RISKY" : "REWRITE");
+        System.out.println(verdict + "  (score " + score + ")  " + selector);
+        for (String n : notes) System.out.println("        " + n);
+        System.out.println();
+    }
+
+    public static void main(String[] args) {
+        audit("#root > div:nth-child(2) > div.sc-bdVaJa > button:nth-child(3)");
+        audit("/html/body/div[1]/div/div[2]/button[3]");
+        audit("[data-testid='delete-post']");
+        audit("button.danger");
+    }
+}
+// REWRITE  (score -10)  #root > div:nth-child(2) > div.sc-bdVaJa > button:nth-child(3)
+//         -4 positional step: any new sibling silently shifts the target
+//         -4 generated class hash: regenerated on every build
+//         -2 deep ancestry chain: coupled to 3 ancestors
+//
+// REWRITE  (score -6)  /html/body/div[1]/div/div[2]/button[3]
+//         -4 positional step: any new sibling silently shifts the target
+//         -2 deep ancestry chain: coupled to 5 ancestors
+//
+// STABLE  (score 5)  [data-testid='delete-post']
+//         +5 dedicated test attribute (identity, placed on purpose)
+//
+// RISKY  (score 0)  button.danger
+//         (short and human-readable - but is it UNIQUE? Cmd+F and count.)`}
+/>
+
+<Callout type="tip">
+Make the **uniqueness ritual** muscle memory: before any locator goes into a bug report or a
+script, Cmd+F it in the Elements panel and demand **1 of 1**. Zero matches means wrong address;
+two means ambiguous. Then double-check with `$$('your-selector')` in the Console — hover each
+returned node and watch the page highlight, exactly the two-way highlight trick from the
+`inspecting-the-dom` note. Final boss check: repeat in a *different page state* (logged out, empty
+cart, second product). A locator that is unique in one state and matches three things in another
+is a flaky test with a waiting period.
+</Callout>
+
+<FirstTime title="Your mission: autopsy a copied selector, then beat it">
+<StepChecklist
+  steps={[
+    { text: "Copy the garbage on purpose", detail: "On any big web app, right-click a button deep in the page (not in the header) and Inspect, then right-click its node: Copy -> Copy selector. Paste it somewhere and read it aloud. Count the nth-child steps and the class names that look like keyboard mash - each one is a scheduled funeral." },
+    { text: "Verify it, then break it", detail: "Cmd+F in the Elements panel, paste the copied selector: 1 of 1, fine. Now right-click an EARLIER sibling of one of its ancestors and Delete element (your local copy only - a refresh undoes everything). Search again: zero matches or a different element. You just simulated Wednesday's banner." },
+    { text: "Hunt for real handles", detail: "Select your button and read its attributes in the tree: any data-testid, data-test, data-cy, or an id that looks human-written (checkout-form yes, :r5: or ember-472 no - those are framework-generated and change per render). Cmd+F for data-testid across the whole tree to see how seriously this app takes test hooks." },
+    { text: "Craft your own locator", detail: "Write the shortest selector that names identity: [data-testid='...'] if it exists, otherwise tag plus meaningful attribute or human class, like button[name='submit'] or button.danger. Run the uniqueness ritual: Cmd+F for 1 of 1, then double-dollar in the Console and hover the result." },
+    { text: "Stress-test in a second state", detail: "Navigate somewhere that changes the page - open a modal, log out, filter a list - and re-run your locator. Still exactly one match, still the right element? That is a locator worth writing down. Save your best one; the Track D locators note will ask you to do this in Selenium." },
+  ]}
+/>
+You copied the machine's brittle answer, watched it die from one DOM change, and replaced it with an identity-based locator you verified twice. That loop — copy, distrust, craft, verify — is the whole professional skill.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "My selector matched yesterday and matches nothing today - the app looks completely unchanged.",
+      fix: "Look at what the selector is built from. If it leans on generated class names (sc-x1y2z3, css-1a2b3c style hashes), a routine deploy regenerated them - the app IS unchanged, its paint got new codes. If it uses nth-child, some sibling was added or removed upstream. Recraft on identity: a data-testid, a stable attribute, or ask the developer to add one. Do not just re-copy a fresh selector - that resets the fuse without removing the bomb.",
+    },
+    {
+      symptom: "My locator matches 3 elements and I only want one of them.",
+      fix: "First decide whether that is YOUR bug or the page's: three matches for [data-testid='add-to-cart'] on a single-product page may mean the developers duplicated a testid - a filable finding, because it breaks every consumer of that hook. If the page is legitimately repetitive (a list of cards), scope by a stable ancestor instead of position: [data-testid='cart-row-1043'] [data-testid='remove'] - identity at both levels. Reach for :nth-child scoping only when no identity exists, and say so in a comment.",
+    },
+    {
+      symptom: "The selector works in the Elements panel search but my script (or the Console) finds nothing.",
+      fix: "You are probably searching a different tree. If the element lives inside an iframe, document.querySelectorAll from the top page cannot see it - the iframe is a separate document (same lesson as inspecting-the-dom: use the inspect cursor to click it and check which document the panel lands in). Shadow DOM is the other wall: nodes behind a #shadow-root need the component's own scope. Note which sub-tree owns your element in the bug report or the script - Track D tools have explicit iframe and shadow-piercing APIs for exactly this.",
+    },
+    {
+      symptom: "The element HAS an id, but my id-based locator dies every session anyway.",
+      fix: "Not all ids are addresses - some are serial numbers. Framework-generated ids (ember-472, react-select-3-input, :r5:, radix-:R1mcq:, or anything with an incrementing number or random segment) are minted per render and will differ between sessions, users, and deploys. Treat an id as stable only if it reads like a human named it (main-nav, billing-form). Otherwise ignore the id, locate by a real attribute, and mention in your report that the app lacks stable hooks there - that sentence often gets data-testids added within a sprint.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where locator work actually happens, tool by tool:
+
+- **Elements panel → Cmd+F / Ctrl+F** — accepts full CSS selectors (and XPath). The match counter IS the uniqueness test: demand 1 of 1.
+- **Console → `$$('selector')`** — `querySelectorAll` shorthand: returns the matched nodes so you can hover each and watch the page highlight. `$0` still means the selected node, per `inspecting-the-dom`.
+- **Elements panel → right-click a node → Copy submenu** — Copy selector / Copy XPath: read them as a *diagnosis of how locatable the element is*, never as an answer. A short copy means good hooks exist; a six-step chain means nobody added any.
+- **The element's own attributes** — scan for `data-testid` / `data-test` / `data-cy`, human-written ids, `name`, `role`, `aria-label`. Accessibility attributes double as excellent locators, and Track D's tooling prefers them.
+- **The attribute graveyard** — ids like `:r5:`, `ember-472`, `radix-:R1mcq:` are per-render serial numbers. Spotting them fast saves you from trusting them slow.
+- **Your bug reports** — every "the X button" can carry its locator: one backticked selector line turns "which button?" ping-pong into a fixed bug. Same evidence spirit as `qa-foundations`: exact and reproducible beats descriptive and vague.
+
+The habit: **locate by identity, verify by count.** Everything else in this note is commentary.
+</WhereToCheck>
+
+<WorkedExample title="the regression suite that a banner murdered">
+1. **Monday, 9 a.m.:** the nightly automation run is a sea of red - 34 of 61 checkout tests failed with 'element not found'. The release manager wants to know what broke in checkout. Panic has already started without evidence, as it does.
+2. **The tester opens checkout manually.** Everything works. Every field, every button, the whole flow - green by hand. So the app is fine and the SUITE is broken, which is a different incident with a different owner.
+3. **Autopsy on the first failing locator:** the test clicks div.sc-gsTCUz.bhdLno > button:nth-child(2). Cmd+F in Elements: zero matches. The class hashes in the live DOM are different strings entirely - Friday's release regenerated the CSS-in-JS hashes, exactly the repaint failure mode.
+4. **Second failing locator:** #checkout-form div:nth-child(3) input. It MATCHES - one of one. But hovering the match highlights the phone field, not the postcode field the test meant. Marketing's new 'free shipping' banner was injected as child two, shifting every position below it. This one is worse than the zero-match: any test that got this far was typing postcodes into the phone field.
+5. **The audit:** the tester greps the suite for the two rot patterns - nth-child( and class hashes matching sc-/css- - and finds them in 80 percent of locators. The suite was built by Copy selector, wholesale. It was always going to die on this exact Monday; the banner just picked the date.
+6. **The fix request:** a list of the 12 elements the suite touches most, each with a proposed data-testid name (checkout-postcode, checkout-submit...). The developer adds them in one pull request - attributes with no styling or behaviour, so the change is near-zero risk.
+7. **The rewrite:** locators become [data-testid='checkout-postcode'] one-liners. The tester runs the uniqueness ritual on each - 1 of 1 in Elements, double-dollar check in Console, re-check with an empty cart. The suite goes green and, more importantly, stays green through the next three releases.
+8. **The lesson:** the suite did not fail because automation is flaky - it failed because every locator encoded Tuesday's coordinates instead of identity. Copy selector wrote checks the DOM was always going to bounce. Identity attributes plus a verification ritual is the entire cure, and you can apply it before ever writing a line of Selenium.
+</WorkedExample>
+
+<Callout type="mistake">
+Treating **Copy selector as the answer instead of a diagnostic**. The menu item is honest about
+what it does — it computes *a* path that matches *right now* — but testers read it as "the
+browser's official locator for this element," paste it into scripts and bug reports, and inherit
+a locator that breaks (or worse, silently retargets) on the next deploy. Use the copied string as
+a *reading* of the element's locatability: short and id-anchored means good hooks exist; a
+six-step chain of hashes and positions means the element has no identity and your next move is to
+ask for a `data-testid`, not to ship the chain. The machine gives you coordinates; your job is to
+find (or request) an address.
+</Callout>
+
+<Quiz
+  question="Which locator is most likely to still find the same 'Delete post' button after next week's redeploy?"
+  options={[
+    "[data-testid='delete-post'] - a dedicated test attribute names the element itself, carries no styling or position, and nobody has a reason to change it in a redesign",
+    "#root > div:nth-child(2) > div.sc-bdVaJa > button:nth-child(3) - it is the most precise, so it is the most reliable",
+    "/html/body/div[1]/div/div[2]/button[3] - absolute XPath is exact from the root, so it cannot drift",
+    ".sc-bdVaJa - shorter selectors are always more stable than long ones"
+  ]}
+  answer={0}
+  explain="Stability comes from what a locator ENCODES, not how precise or short it is. The data-testid names the element's identity: an attribute placed on purpose as a test hook, unaffected by new siblings, redesigns, or build output - the street address. The long copied CSS chain encodes two guaranteed-to-change facts: sibling positions (any injected banner shifts every nth-child after it, silently retargeting the locator at the WRONG element) and generated class hashes (regenerated on every CSS-in-JS build, producing zero matches). The absolute XPath is the same positional bet with even more steps - every div between body and the button is now a dependency. And while shorter is often better, .sc-bdVaJa is short AND a build-minted hash, which makes it precisely a one-release locator. Precision and stability are different axes: the copied chain is maximally precise about a tree that is about to stop existing."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The three qualities of a good locator", back: "Unique (matches exactly one element), stable (survives redeploys, refactors, A/B variants), readable (a human can tell what it targets). Any CSS selector can be a locator - few selectors meet the bar." },
+    { front: "Why Copy selector output is brittle - the two rot vectors", back: "1) Positional steps (nth-child, div[3]): any new sibling silently shifts the target. 2) Generated class hashes (sc-/css- keyboard mash): rebuilt every release, so matches drop to zero. Plus deep chains couple you to every ancestor." },
+    { front: "The locator preference ladder", back: "data-testid (or data-test/data-cy) first; human-written id; semantic attribute (name, role, aria-label); short meaningful class; positional selectors last, with an apology. Identity before coordinates, always." },
+    { front: "The uniqueness ritual", back: "Cmd+F in the Elements panel with the selector - demand '1 of 1'; then double-dollar in the Console and hover the returned nodes to confirm the highlight; then re-check in a second page state. One minute per locator." },
+    { front: "How to spot a fake (generated) id", back: "Serial-number smell: ember-472, react-select-3-input, :r5:, radix-:R1mcq:, incrementing digits, random segments. Human-named ids (main-nav, billing-form) are locators; generated ids are per-render timestamps." },
+    { front: "Worse than zero matches", back: "A positional locator that silently RETARGETS: after a sibling is inserted, nth-child(3) happily returns a different element. Tests can stay green while clicking the wrong thing - verify by hovering matches, not just counting them." },
+  ]}
+/>
+
+<Challenge>
+Run a locator audit on a site you use daily. Pick five interactive elements (two buttons, an
+input, a link, something in a list). For each: (1) Copy selector and score it with the Java
+auditor's rules — positional steps, hash classes, chain depth; (2) craft your own best locator
+and run the full uniqueness ritual; (3) note whether the app offers `data-testid`-style hooks at
+all. Then the real deliverable: write the one-paragraph request you'd send a developer asking for
+test attributes on the two worst elements, including your proposed attribute names. If the
+request is specific enough to be a five-minute pull request, you've done QA collaboration, not
+just inspection.
+</Challenge>
+
+<AskCommunity prompt="Locator review: element is [description] on [site/app]. Copy selector gave me [paste it]. My crafted locator is [selector] - uniqueness check says [n of n] and it survives [which state changes I tested]. Available hooks on the node: [ids/attributes/classes you found]. Is my locator the strongest available, or am I missing a better handle?">
+Paste the copied selector AND your crafted one — the gap between them is where the feedback
+lives. The usual corrections from the room: an aria-label or name attribute you overlooked, a
+testid on a nearby ancestor worth scoping through, and the reminder that a locator no one
+verified in a second page state is a rumour with syntax.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.chrome.com/docs/devtools/dom#search", title: "Chrome DevTools docs - search the DOM tree by selector", kind: "read" },
+    { href: "https://developer.mozilla.org/en-US/docs/Web/CSS/Attribute_selectors", title: "MDN - attribute selectors, the syntax behind [data-testid='...']", kind: "read" },
+    { href: "https://playwright.dev/docs/locators", title: "Playwright docs - locator best practices (the Track D perspective on this exact skill)", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=9RJMNU4eNEc", title: "Checkly - make your end-to-end tests more stable with user-first selectors", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=9RJMNU4eNEc" title="Make your end-to-end tests more stable with user-first selectors" minutes={10} />
+
+<Takeaways
+  points={[
+    "A locator is a selector with a job - match exactly one element, survive deploys, stay readable - and the Elements panel is where you both mine locators (the node's attributes) and test them (Cmd+F match count, double-dollar in the Console).",
+    "Copy selector and Copy XPath compute a path through TODAY'S tree: positional steps and generated class hashes. Read them as a diagnosis of how locatable the element is, never as the answer.",
+    "The two rot vectors are position (nth-child shifts when any sibling is added - and can silently retarget the WRONG element) and paint (sc-/css- hash classes are regenerated every build - matches drop to zero).",
+    "Locate by identity, in ladder order: data-testid, human-written id, semantic attribute (name/role/aria-label), short meaningful class - and when no identity exists, request a data-testid instead of shipping a six-step chain.",
+    "Verify before trusting: 1-of-1 in the Elements search, hover the double-dollar matches to confirm the highlight, and re-check in a second page state. Track D automation inherits exactly the locators you learn to craft here.",
+  ]}
+/>
+
+<Complete xp={10} />

@@ -1,0 +1,328 @@
+---
+title: "Copy as cURL"
+summary: "Right-click a failing request, Copy as cURL, replay it in a terminal - browser and frontend out of the loop. Strip the command to the minimal failing case, prove the bug is backend not frontend, and sanitize auth tokens before the command goes anywhere near a ticket."
+tags: ["browser-devtools-mastery", "network", "track-c"]
+updated: "2026-07-14"
+---
+
+<Hook>
+Every tester eventually referees the oldest fight in software: frontend says "the API returns
+garbage," backend says "your app sends garbage," and both dashboards are green. The anatomy note
+told you the Network panel's right-click menu had two exports waiting — this is the first one.
+**Copy as cURL** takes any request the browser made and hands you a terminal command that replays
+it *exactly* — same method, same headers, same cookies, same body — with no browser, no
+JavaScript, no frontend anywhere in the room. If the replay fails the same way, the frontend is
+formally innocent and you can prove it. You already speak curl from the Linux module; this note
+turns that vocabulary into a courtroom procedure: replay, strip to the minimal failing case,
+sanitize the secrets, file the command itself as evidence.
+</Hook>
+
+<Callout type="analogy">
+The restaurant again, one table over from the timing note. A customer's dish keeps coming out
+wrong, and the kitchen blames the waiter: "he's writing the tickets wrong." So the manager takes
+the *actual ticket* off the rail — not a description of it, the ticket itself — walks to the pass,
+and hands it straight to the kitchen. No waiter involved. Dish comes out wrong again? The kitchen
+just lost its alibi. That's Copy as cURL: the browser's request, byte for byte, re-submitted with
+the waiter (the frontend, the browser, all its JavaScript) taken out of the loop. The exact
+technical version: the command reproduces the request's method, URL, headers, cookies and body
+verbatim, so an identical failure from a terminal proves the *request itself* triggers the bug
+server-side — and a different result means the difference lives in what the browser adds around it.
+</Callout>
+
+The menu item, formally:
+<Term define="Copy as cURL is a right-click option on any Network panel row (Copy submenu) that generates a complete, runnable curl command reproducing that request byte-for-byte: the method (-X or implied), the full URL, every request header via -H (including Cookie and Authorization), and the body via --data-raw for POSTs. Paste it into a terminal and you re-send exactly what the browser sent - minus the browser. It is the bridge between 'I saw it fail in the panel' and 'here is a command anyone can run to make it fail': developers can replay it on their machines, in staging, or in a debugger, without your laptop, your login clicks, or your reproduction steps. One warning tattooed on it: the copied command CONTAINS your live session - sanitize before sharing.">Copy as cURL</Term>
+— and everything you know from `linux-for-testers` applies to what comes out of it: `--max-time`,
+`-s -o /dev/null -w`, exit codes, the lot.
+
+## Replay, bisect, sanitize
+
+The replay is the experiment. Find the failing row (the Fetch/XHR filter from the anatomy note
+narrows the field), right-click → **Copy → Copy as cURL**, paste into a terminal, add `-i` so the
+status line and headers print, and run. Two outcomes, two verdicts. **Same failure** — the 500,
+the wrong JSON, the empty array — means the request alone reproduces the bug: backend, proven,
+because there is no frontend left to blame. **Different result** — works in curl, fails in the
+browser — is just as valuable: the bug lives in the difference, which is whatever the browser
+layers on top (CORS enforcement, a service worker, request timing, something JavaScript mangles
+*after* a healthy response).
+
+Raw copied commands are monsters — fifteen `-H` flags of browser fingerprinting (`user-agent`,
+`sec-ch-ua`, `accept-language`...) wrapping the two lines that matter. So you **bisect**: delete
+one header, re-run, check the failure is still there; repeat until removing anything more changes
+the outcome. What remains — often just the URL, one auth header, and the body — is the **minimal
+failing case**, and it's the difference between a bug report and a gift-wrapped bug report. A
+developer handed a two-line repro starts debugging in minute one; a developer handed fifteen
+headers starts by doing your bisection for you, slower and grumpier.
+
+Then the step that keeps you employed: **sanitize**. The copied command contains your live
+session — `Cookie:` and `Authorization: Bearer eyJ...` headers are *you*, and anyone who pastes
+them is you too, no password required. The `from-log-line-to-bug-report` rule was paste text, not
+screenshots; the corollary here is paste text, *never live credentials*. Before the command
+touches a ticket, Slack, or a community post, replace token values with a placeholder — write
+`Authorization: Bearer $TOKEN` and let the developer supply their own — and if a real token ever
+does escape, treat it as an incident: revoke or log out that session immediately, not at end of
+day.
+
+{/* IMAGE: a chef at a kitchen pass reading a paper order ticket, re-firing a dish with the dining room out of frame */}
+<HotspotImage
+  src="/notes/browser-devtools-mastery/network/copy-as-curl.jpg"
+  alt="A restaurant Kitchen Order Ticket clipped to a spike holder against a plain background: KOT number, date, time, steward and pax, an itemized description with quantities, a written order instruction to send cutlery, a total, an order ID, and a scannable barcode"
+  credit="Kitchen order ticket on a spike clip — Wikimedia Commons, CC BY-SA 3.0 (Mallikarjunasj)"
+  pins={[
+    { x: 50, y: 49, label: "KOT No, Dated, Time, steward, Pax = the request's identity, copied verbatim", desc: "Not a waiter's memory of the order - a printed number, date and time nobody has to trust on faith. Copy as cURL reproduces a request with the exact same fidelity: method, URL, every header, the cookies, the body, character for character. Any difference between what you replay and what the browser actually sent would poison the whole experiment." },
+    { x: 45, y: 58, label: "The itemized description, line by line = bisecting to the minimal case", desc: "Two dishes listed separately, each nameable and removable on its own. That's exactly how you strip a copied curl command down: delete one -H header, one query param, re-run, still failing? Delete another. The shortest command that still reproduces the bug is the minimal failing case - the single most developer-loved artifact a tester can hand over." },
+    { x: 45, y: 60, label: "'Order Ins: Send cutlery' = the one instruction that must survive intact", desc: "Miss this line and the kitchen sends a perfectly correct dish with no fork - technically right, practically wrong. A curl replay that drops even one header can do the same: look identical, behave differently, because the one instruction that mattered got trimmed along with the noise." },
+    { x: 50, y: 68, label: "OrderID and the barcode = your session token, handle with care", desc: "A number that identifies THIS specific order, scannable and traceable back to an account. Cookie and Authorization headers in a copied curl command are exactly this kind of identifier live in your terminal: whoever runs the command is logged in as you. Redact it - Bearer $TOKEN as a placeholder - before the command goes anywhere near a ticket." },
+    { x: 50, y: 15, label: "Nothing else in frame but the ticket itself", desc: "No dining room, no waiter, no menu - just the raw paper record, isolated. That's the entire point of running a curl replay: no browser, no JavaScript, no rendering, no frontend anywhere in the room. Same failure with nothing but the raw request and the server means the backend just lost its alibi." },
+  ]}
+/>
+
+<FlowAnimation
+  title="From failing row to gift-wrapped repro - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Find the failing request", desc: "Fetch/XHR filter on, reproduce the bug, spot the row - red status, wrong body, or the suspicious 200 whose response is an HTML login page (the timing note's Content-Type lie). Click it and confirm in the Response tab that THIS request carries the failure before you export anything." },
+    { label: "Copy as cURL", desc: "Right-click the row -> Copy -> Copy as cURL (choose the bash variant on Windows and run it in Git Bash or WSL - the cmd variant quotes differently). You now hold the request byte-for-byte: method, URL, all headers, cookies, body. Paste it into a scratch file, not straight into history oblivion - you are about to edit it repeatedly." },
+    { label: "Replay and read the verdict", desc: "Add -i for the status line and --max-time 10 per the Linux module's rule, and run it. Same failure = the request alone triggers the bug: backend, proven - no JavaScript in the room. Works fine = the bug lives in what the browser adds: timing, CORS, service worker, or frontend handling of a healthy response. Both verdicts are progress." },
+    { label: "Bisect to the minimal failing case", desc: "Delete one -H line, re-run, confirm the failure persists; repeat. The fingerprint headers (user-agent, sec-ch-ua, accept-language) almost always go first; auth usually has to stay. What remains - typically URL + one or two headers + body - is the smallest command that still fails, and every deleted line is a suspect eliminated." },
+    { label: "Sanitize the secrets", desc: "Replace Cookie and Authorization values with placeholders (Bearer $TOKEN), plus any api keys or tokens hiding in the URL's query string. The command must stay runnable in SHAPE - a developer pastes their own credentials into the placeholder. Grep your final text for eyJ (the JWT giveaway prefix) as a last check before it leaves your machine." },
+    { label: "File the command as evidence", desc: "Paste the sanitized minimal command into the ticket as text (never a screenshot - the whole point is that it can be re-run), with the observed status and body, timestamp, and environment. You have shipped a repro, a verdict on frontend-vs-backend, and an eliminated-suspects list in about ten lines." },
+  ]}
+/>
+
+Here's the full procedure on one bug — monster command in, minimal sanitized evidence out:
+
+<CodePlayground
+  language="bash"
+  title="Run it - replay, bisect, sanitize: the whole procedure"
+  code={`# STEP 1 - what Copy as cURL actually gives you (abridged - real ones are longer):
+curl 'https://api.example.com/orders?filter=archived' \\
+  -H 'accept: application/json' \\
+  -H 'accept-language: en-GB,en;q=0.9' \\
+  -H 'authorization: Bearer eyJhbGciOiJIUzI1NiJ9.demo.token' \\
+  -H 'cookie: session=a1b2c3d4; theme=dark' \\
+  -H 'referer: https://app.example.com/orders' \\
+  -H 'sec-ch-ua-platform: "macOS"' \\
+  -H 'user-agent: Mozilla/5.0 (Macintosh) Chrome/138.0'
+# {"error":"internal_server_error","requestId":"req_8842"}   <- HTTP 500
+
+# STEP 2 - replay with the status visible and a timeout (linux module rules):
+#   add -i and --max-time 10, run again -> still 500. Backend bug, proven:
+#   no browser, no JavaScript, same failure.
+
+# STEP 3 - bisect: delete headers one at a time, re-run each time.
+#   Dropped accept-language: still 500. Dropped referer, sec-ch-ua, user-agent,
+#   cookie: still 500. Dropped authorization: 401 (different failure - put it back).
+# The minimal failing case:
+curl -i --max-time 10 'https://api.example.com/orders?filter=archived' \\
+  -H 'authorization: Bearer eyJhbGciOiJIUzI1NiJ9.demo.token'
+# HTTP/2 500
+# {"error":"internal_server_error","requestId":"req_8851"}
+
+# Bonus fact from the bisection: filter=archived is load-bearing -
+curl -s -o /dev/null -w '%{http_code}\\n' --max-time 10 \\
+  'https://api.example.com/orders' -H 'authorization: Bearer eyJhbGciOiJIUzI1NiJ9.demo.token'
+# 200        <- no filter, no crash. The bug lives on the archived path.
+
+# STEP 4 - sanitize before it goes in the ticket (never ship a live token):
+# what you PASTE into the ticket:
+#   curl -i 'https://api.example.com/orders?filter=archived' \\
+#     -H "authorization: Bearer $TOKEN"
+# runnable in shape - the developer supplies their own token.`}
+/>
+
+And because sanitizing by eye misses things at 5 p.m., here's a sanitizer you can actually run —
+paste any copied command in and it redacts the classics:
+
+<CodePlayground
+  language="python"
+  title="Run it - a curl-command sanitizer for tickets (Python)"
+  code={`import re
+
+copied = """curl 'https://api.example.com/orders?filter=archived&api_key=sk_live_51abc' \\\\
+  -H 'authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature' \\\\
+  -H 'cookie: session=a1b2c3d4e5; theme=dark' \\\\
+  -H 'x-api-key: 9f8e7d6c5b4a' \\\\
+  -H 'user-agent: Mozilla/5.0'"""
+
+RULES = [
+    (r"(authorization: Bearer )[A-Za-z0-9._-]+",    r"\\1$TOKEN",        "Authorization header"),
+    (r"(cookie: )[^']+",                            r"\\1$COOKIES",      "Cookie header"),
+    (r"(x-api-key: )[A-Za-z0-9._-]+",               r"\\1$API_KEY",      "API key header"),
+    (r"([?&](?:api_key|token|key)=)[^&' ]+",        r"\\1$URL_TOKEN",    "token in URL query"),
+]
+
+clean = copied
+found = []
+for pattern, repl, label in RULES:
+    clean, n = re.subn(pattern, repl, clean, flags=re.IGNORECASE)
+    if n:
+        found.append(f"  redacted {n} x {label}")
+
+print("SECRETS FOUND:")
+print("\\n".join(found))
+print()
+print("SANITIZED COMMAND (safe for the ticket):")
+print(clean)
+print()
+leaks = re.findall(r"eyJ[A-Za-z0-9_-]+", clean)  # JWT prefix check, per the evidence rules
+print("final leak check (JWT prefix eyJ):", "CLEAN" if not leaks else f"STILL LEAKING: {leaks}")
+
+# SECRETS FOUND:
+#   redacted 1 x Authorization header
+#   redacted 1 x Cookie header
+#   redacted 1 x API key header
+#   redacted 1 x token in URL query
+#
+# SANITIZED COMMAND (safe for the ticket):
+# curl 'https://api.example.com/orders?filter=archived&api_key=$URL_TOKEN' \\
+#   -H 'authorization: Bearer $TOKEN' \\
+#   -H 'cookie: $COOKIES' \\
+#   -H 'x-api-key: $API_KEY' \\
+#   -H 'user-agent: Mozilla/5.0'
+#
+# final leak check (JWT prefix eyJ): CLEAN`}
+/>
+
+<Callout type="tip">
+Keep a **replay scratch file** per bug — `bug-1234-replay.sh` with the original monster at the
+top (commented out), the current minimal case below it, and the observed output pasted as
+comments after each run. It's the `collecting-evidence-remotely` evidence-bundle habit applied to
+requests: when the developer asks "did you try it without the cookie?" three days later, your
+answer is in the file, dated, instead of in your memory. Two flags to add by reflex: `-i` (status
+and headers visible — half the diagnosis) and `--max-time 10` (a hung endpoint should cost you
+ten seconds, not a coffee break).
+</Callout>
+
+<FirstTime title="Your mission: exonerate (or convict) a backend">
+<StepChecklist
+  steps={[
+    { text: "Copy a real request", detail: "On any site, open Network with the Fetch/XHR filter, click around until an API call appears, right-click it -> Copy -> Copy as cURL. Paste it into a scratch file and just READ it first: find the method, the URL, the auth (cookie or authorization header), and count the headers that are pure browser fingerprint." },
+    { text: "Replay it faithfully", detail: "Run it in a terminal with -i added. Compare the status and body against the panel's Response tab - they should match. You have just reproduced a browser request with zero browser, which is the whole trick; everything else in this note is refinement." },
+    { text: "Bisect it to minimal", detail: "Delete one -H line at a time, re-running after each deletion. Watch which headers matter (auth, sometimes accept) and which never did (user-agent, sec-ch-ua, accept-language). Write down the minimal command - it is usually embarrassingly short compared to the monster you started with." },
+    { text: "Sanitize it", detail: "Replace the cookie and authorization values with $COOKIES and $TOKEN placeholders, check the URL query string for keys, then run the leak check: search your final text for eyJ and for any string that looks like a live key. Only now is the command allowed near a ticket or a chat." },
+    { text: "Practice the verdict sentence", detail: "Write the one-liner you would file: 'GET /api/[endpoint] returns [status] via curl with only [headers kept] - reproduces outside the browser, so server-side; minimal command attached (sanitized).' That sentence structure is reusable for every backend bug you will ever prove." },
+  ]}
+/>
+You replayed a browser request from a bare terminal, shrank it to the lines that matter, and made it safe to share. That's the full chain of custody: from panel row to evidence a developer can run.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "The replay returns 401 or a login page, but the same request works fine in the browser.",
+      fix: "Your credentials died in transit. Session cookies expire, tokens rotate, and some APIs use one-time CSRF tokens that the browser refreshes per request - your copied command holds yesterday's key. Re-copy fresh from a live session and replay within minutes, not hours. Also check your bisection history: if you deleted the cookie header while the API authenticates by cookie (not authorization), you removed the auth without noticing - a 401 after a deletion means put that header back, it was load-bearing.",
+    },
+    {
+      symptom: "The request succeeds in curl but fails in the browser - so is the backend innocent?",
+      fix: "Innocent of THIS charge, and the acquittal is information: the bug lives in the layer curl does not have. The usual suspects, in order: CORS (the browser blocks cross-origin responses JavaScript is not allowed to read - curl has no such rule, so it 'works'); a service worker intercepting or caching the request; request timing or ordering (the browser fires it before some prerequisite completes); or frontend code mishandling a perfectly healthy response. Check the Console for CORS errors first, then compare the browser's request headers against your replay for anything the page added dynamically. File it as a frontend/browser-layer bug WITH both observations - works via curl, fails in situ - because that pair is the diagnosis.",
+    },
+    {
+      symptom: "I pasted the copied command into my terminal and it exploded into quoting errors.",
+      fix: "Shell mismatch. DevTools offers Copy as cURL in bash and cmd flavours - the bash variant uses single quotes and backslash line-continuations that Windows cmd and PowerShell mangle (PowerShell also aliases curl to Invoke-WebRequest, which is a different program wearing a trench coat). On Windows: copy the bash variant and run it in Git Bash or WSL, or copy the cmd variant for native shells. On Mac/Linux, if it still breaks, a stray unescaped quote inside a header value is the usual culprit - paste into an editor and eyeball the quote pairing before blaming curl.",
+    },
+    {
+      symptom: "My minimal replay reproduces the bug, but the developer runs the same command and gets a 200.",
+      fix: "The command is identical; the CONTEXT is not. Same request, different verdicts usually means different environment (you hit production, they hit staging - compare the exact host), different account state (the bug needs YOUR user's data - offer a sanitized replay against a test account that reproduces), different geography or VPN (edge servers, geo-gated features), or a feature-flag cookie you sanitized away that was quietly load-bearing - re-run your own minimal case after sanitizing to confirm it STILL fails with placeholders resolved. State the environment, account type, and timestamp alongside the command; a repro without its context is a recipe missing the oven temperature.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+The chain of custody, step by step:
+
+- **Network panel → right-click row → Copy submenu** — Copy as cURL (bash / cmd variants). Also there: Copy URL, Copy response — smaller tools for smaller jobs.
+- **The Response tab before you copy** — confirm this row actually carries the failure (the anatomy note's discipline: read the letter, not just the row).
+- **Your terminal + a scratch file** — the replay lab: `-i` for status and headers, `--max-time 10` always, one command per bisection step with its output pasted as a comment.
+- **The bisection log** — which headers were deleted and survived; a 401-after-deletion means a header was load-bearing auth. The survivors ARE your findings.
+- **The sanitizer pass** — `Authorization`, `Cookie`, `x-api-key`, tokens in query strings; final grep for `eyJ`. Per the `from-log-line-to-bug-report` rules: searchable text in the ticket, zero live credentials.
+- **The ticket** — sanitized minimal command as text (runnable in shape), observed status + body, timestamp, environment, and the verdict sentence: reproduces outside the browser, or does not — and therefore whose bug it is.
+
+The habit: **when frontend and backend point at each other, remove one of them from the room.**
+</WhereToCheck>
+
+<WorkedExample title="the 500 that two teams ping-ponged for two days">
+1. **The ticket, day one:** "Orders page shows 'something went wrong' for some users." Frontend triages: "our code just displays what the API returns - backend issue." Backend triages: "endpoint is green on our dashboard - frontend must be calling it wrong." Status: ping-pong, rally two.
+2. **The tester reproduces** with the affected account type: Network panel, Fetch/XHR filter, and there it is - GET /api/orders?filter=archived returning 500, while plain /api/orders returns 200 elsewhere on the page. Response tab: an internal_server_error body with a requestId (hello, log-correlation chapter).
+3. **Copy as cURL, replay:** pasted into a terminal with -i and --max-time 10 - HTTP/2 500, same body, fresh requestId. First verdict in ninety seconds: the request ALONE triggers it. No browser, no JavaScript, no 'calling it wrong'. The frontend just left the suspect list.",
+4. **Bisect:** fifteen headers shrink to one. Fingerprint headers deleted with no effect; cookie deleted, still 500; authorization deleted - 401, put it back. Minimal failing case: the URL plus one auth header. Two lines.
+5. **Bonus finding from the bisection habit:** the tester tries the URL without filter=archived - 200. With filter=pending - 200. Only archived dies. The minimal case now includes the load-bearing parameter, which is halfway to the root cause.
+6. **Sanitize and file:** Bearer token swapped for $TOKEN, leak-check grep for eyJ comes back clean. The ticket gets: the two-line command, '500 for any account with archived orders, reproducible via curl - server-side, proven', two requestIds with timestamps for log correlation, and the pending-vs-archived comparison.
+7. **Backend runs the command,** reproduces in one paste, greps the requestId, and finds it in minutes: the archived-orders query path dereferences a shipped_at field that archived legacy orders never had. Null pointer, wearing a 500. Fix ships same day; the tester re-runs the SAME minimal command as the verification - 200.
+8. **The lesson:** two days of ping-pong ended in under an hour once somebody removed the frontend from the room. The replay assigned jurisdiction, the bisection found the load-bearing parameter, and the sanitized command became both the repro AND the retest script. That is Copy as cURL used completely.
+</WorkedExample>
+
+<Callout type="mistake">
+Pasting the raw copied command — cookies, Bearer token and all — into Jira, Slack, or a community
+thread. That command **is your logged-in session**: anyone who runs it inherits your access, no
+password prompt, no MFA, nothing; and tickets get read by more people, for more years, than
+anyone expects. The discipline is mechanical, not heroic: placeholders before pasting
+(`Bearer $TOKEN`), a final search for `eyJ` and anything key-shaped, and if a live credential
+does slip out, revoke that session or key *immediately* and say so — a rotated token is a
+non-event, a quietly leaked one is an incident with your name in the audit trail. Evidence rules
+from the logs chapter apply verbatim: searchable text, yes; live secrets, never.
+</Callout>
+
+<Quiz
+  question="A checkout request fails with a 500 in the browser. You Copy as cURL and replay it from a terminal: same 500, same error body. What has this proven?"
+  options={[
+    "The bug is server-side: the request alone triggers the failure with no browser or JavaScript involved, so the frontend cannot be the cause of THIS error",
+    "Nothing - curl and browsers speak different HTTP, so replay results never transfer",
+    "The bug is in the frontend, since the request it constructed fails everywhere it is sent",
+    "The network is at fault, because the failure follows the request across two different programs"
+  ]}
+  answer={0}
+  explain="The copied command reproduces the browser's request byte-for-byte - method, URL, headers, cookies, body - so a replay from a bare terminal isolates exactly one variable: the browser and everything it layers on top (JavaScript, CORS, service workers, rendering). Same request, same failure, no browser present means the SERVER's handling of that request is the problem - jurisdiction assigned, with a repro any developer can run. The 'different HTTP' option is false: curl speaks the same HTTP; identical bytes in, and the server cannot tell the difference. The frontend option inverts the logic - the request being processed server-side into a 500 is the server failing, not the client 'constructing' a failure (a malformed request would typically draw a 4xx, the client-fault family from the internet module). And 'the network' would show as timeouts or connection errors, not a consistent 500 with a coherent error body. Next steps, in order: bisect to the minimal failing case, sanitize the credentials, file the command as searchable text with timestamps for log correlation."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What Copy as cURL captures", back: "The complete request, byte-for-byte: method, full URL, every header (-H) including Cookie and Authorization, and the body (--data-raw) for POSTs. A runnable terminal command that re-sends exactly what the browser sent - minus the browser." },
+    { front: "The two replay verdicts", back: "Same failure in curl = backend, proven (no browser or JS in the room). Works in curl but fails in the browser = the bug lives in what the browser adds: CORS, service worker, timing, or frontend handling of a healthy response. Both are findings." },
+    { front: "The minimal failing case", back: "Delete headers one at a time, re-running after each: keep only what the failure needs (usually URL + auth + body). Shortest command that still fails = the gift-wrapped repro; every deleted line is an eliminated suspect. A 401 after a deletion means that header was load-bearing - restore it." },
+    { front: "What to sanitize before sharing", back: "Authorization (Bearer tokens), Cookie headers, x-api-key, and tokens/keys in URL query strings - replace with placeholders like Bearer $TOKEN so the command stays runnable in shape. Final check: grep for eyJ (JWT prefix). Leaked live token = revoke NOW." },
+    { front: "The two reflex flags on every replay", back: "-i (print status line and response headers - half the diagnosis) and --max-time 10 (a hung endpoint costs ten seconds, not a coffee break) - both straight from the linux-for-testers curl habits." },
+    { front: "Windows quoting trap", back: "The bash-flavoured copy breaks in cmd/PowerShell (and PowerShell's curl is an alias for a different tool). Use Copy as cURL (cmd) for native Windows shells, or run the bash variant in Git Bash / WSL." },
+  ]}
+/>
+
+<Challenge>
+Full chain of custody on a real request: pick any API call from a site you use (Fetch/XHR
+filter), Copy as cURL, and produce four artifacts: (1) the faithful replay output with `-i`;
+(2) the minimal case — record how many headers you deleted and which one, if any, turned out to
+be load-bearing; (3) the sanitized version, passed through your own leak check; (4) the verdict
+sentence you would file. Then the twist: deliberately expire your session (log out) and run the
+minimal case again — watch the failure mode change, and write one line on why "replay soon after
+copying" is part of the procedure. Bonus: run your copied command through the Python sanitizer
+playground and see if it catches anything your eyes missed.
+</Challenge>
+
+<AskCommunity prompt="Replay verdict check: [method] [endpoint] fails with [status/body] in the browser. Copied as cURL and replayed: [same failure / works fine / different error]. Minimal failing case keeps [headers/params kept], eliminated [count] headers. Environment: [prod/staging], account type: [type], sanitized command attached. My verdict: [backend / browser-layer / context-dependent] - am I assigning this to the right side?">
+Paste the sanitized minimal command, never the raw copy — the room will check your redaction
+before your logic. The usual verdict corrections: a works-in-curl case that is really CORS (check
+the Console, not the panel), a 401-after-sanitizing that means a placeholder was load-bearing,
+and an environment mismatch hiding in the hostname. State where you replayed FROM; geography and
+VPNs referee more of these disputes than anyone expects.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.chrome.com/docs/devtools/network/reference#copy", title: "Chrome DevTools docs - the Network panel's copy options, Copy as cURL included", kind: "read" },
+    { href: "https://curl.se/docs/manpage.html", title: "man curl - every flag the copied command uses (-H, --data-raw, -i, --max-time)", kind: "read" },
+    { href: "https://everything.curl.dev/", title: "Everything curl - the free book, for when replays become a habit", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=mMjzEI27xDI", title: "Swimburger - copy HTTP requests from Chrome/Edge DevTools to PowerShell/cURL/Fetch", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=mMjzEI27xDI" title="Copy HTTP requests from Chrome/Edge DevTools to PowerShell/cURL/Fetch" minutes={3} />
+
+<Takeaways
+  points={[
+    "Copy as cURL turns any Network row into a runnable terminal command that re-sends the request byte-for-byte - method, URL, headers, cookies, body - with the browser and all its JavaScript removed from the experiment.",
+    "The replay assigns jurisdiction: same failure from a bare terminal proves the bug is server-side; works-in-curl-fails-in-browser means the bug lives in the browser layer (CORS, service worker, timing, or frontend handling) - both verdicts are evidence.",
+    "Bisect to the minimal failing case: delete headers one at a time and re-run until only the load-bearing lines remain. A two-line repro gets debugged in minute one; fifteen headers get debugged eventually.",
+    "Sanitize before sharing, mechanically: Authorization, Cookie, API keys, and URL tokens become placeholders (Bearer $TOKEN); grep for eyJ as the final check; a leaked live token means revoke the session immediately - the copied command IS your logged-in identity.",
+    "File the sanitized minimal command as searchable text with status, body, timestamp and environment - it doubles as the developer's repro and your own retest script, and it ends frontend-vs-backend ping-pong by removing one of them from the room.",
+  ]}
+/>
+
+<Complete xp={10} />

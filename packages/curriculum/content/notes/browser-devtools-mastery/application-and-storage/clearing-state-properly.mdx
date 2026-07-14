@@ -1,0 +1,377 @@
+---
+title: "Clearing state properly"
+summary: "Clear site data — what it actually wipes (cookies, storage, caches, service workers) versus what survives it. Incognito's real semantics, reproducing a genuine first visit, per-origin clearing, and building test-state hygiene you can trust."
+tags: ["browser-devtools-mastery", "application-and-storage", "track-c"]
+updated: "2026-07-14"
+---
+
+<Hook>
+Four notes back you deleted one cookie to prove a logout worked. Two notes back you cleared the
+HTTP cache to prove a deploy landed. Last note you unregistered a service worker to prove it wasn't
+lying to you. Each of those was a scalpel — one precise cut, one specific pile, one specific claim
+tested. This note hands you the sledgehammer, and more importantly teaches you exactly what the
+sledgehammer does and doesn't hit, because "I cleared everything and it's still broken" is only
+useful information if you actually know what "everything" meant.
+</Hook>
+
+<Callout type="analogy">
+Think of an origin's storage as a **rented apartment** you've been living in for months: furniture
+you bought (cookies, storage), a fridge stocked from years of grocery runs (the cache), and a
+subletter's spare key hidden under the mat that lets someone let themselves in and rearrange things
+whenever they like (a service worker). "Clear site data" is the landlord doing a full **move-out
+clean**: every stick of furniture gone, the fridge emptied, the spare key confiscated. Incognito is
+not that. Incognito is renting a **different, identical-looking apartment down the hall** for one
+night — brand new, nothing in it, and torn down completely when you check out — while your OLD
+apartment, furniture and all, sits untouched exactly where you left it. Confusing "moved to a new
+apartment" with "cleaned out the old one" is where most bad first-visit repro comes from.
+</Callout>
+
+<Term define="A DevTools and browser-settings action (Application -> Storage -> Clear site data, or the equivalent in a site's padlock/permissions menu) that deletes ALL client-side state a browser holds for one origin in one shot: cookies, localStorage, sessionStorage, IndexedDB, Cache Storage, and any registered service workers for that origin. It is scoped per-origin - clearing example.com does not touch other-site.com - and it is a genuine, permanent deletion, not a simulation. It is the closest single action to 'this browser has never visited this site,' and it is DIFFERENT from Incognito/private browsing, which does not touch your normal profile's stored state at all; it opens a separate, temporary storage area that is thrown away when the private window closes, while your regular profile's cookies, storage, caches and service workers sit completely untouched the whole time.">Clear site data</Term>
+
+## What actually gets wiped, and what quietly survives
+
+Open **Application → Storage** and near the top, above the individual Cookies / Local Storage /
+Cache Storage sections you already know from earlier notes, sits a **Clear site data** button
+(sometimes with a "Clear storage" heading above a checklist of exactly what it will hit). Tick every
+box and press it, and for the current origin you get: cookies gone — the session note's wristband,
+cut. localStorage and sessionStorage gone — every saved draft, cart, theme choice, wiped.
+**IndexedDB** gone too, a bigger structured-storage cousin of localStorage most apps use for larger
+data sets, which you haven't met by name yet but which lives in this same drawer. Cache Storage
+gone — the service worker's stash from the last two notes, emptied. And any **service worker**
+itself, unregistered — not just paused, gone, so nothing is left standing at the door to answer for
+this origin at all.
+
+That is a genuinely complete client-side wipe, and it is exactly the tool for "I need to reproduce
+this as an honest first-time visitor" without touching a fresh machine. But **per-origin** is doing
+real work in that sentence, and testers trip on it constantly: clearing `app.example.com` does
+nothing to `example.com` or `cdn.example.com` — different origins, different storage buckets,
+cleared separately or not at all. A bug that "won't go away" after a clear is very often a bug
+living on a *different* origin than the one you cleared — a CDN subdomain still serving a cached
+asset, or an auth subdomain still holding its own cookie. Read the URL bar, not just the page,
+before declaring a clear complete.
+
+What survives a Clear site data that catches people off guard: it does **not** touch browser-level
+settings that aren't scoped to the site's own storage — saved passwords in the browser's own
+password manager, browser extensions and their own storage, bookmarks, and (this one bites testers
+specifically) **HTTP authentication credentials cached at the browser level** in some setups. It
+also, obviously, does nothing to the **server**. If a bug is server-side state — an account flag, a
+database row, a feature flag tied to your user ID — no amount of client-side clearing will touch it,
+because the bug was never sitting in the apartment you just emptied.
+
+{/* IMAGE: Chrome DevTools Application panel, Storage overview page, showing the Clear site data button with the itemized checklist of what will be cleared (cookies, local/session storage, IndexedDB, Cache Storage, service workers) */}
+<HotspotImage
+  src="/notes/browser-devtools-mastery/application-and-storage/clearing-state-properly.jpg"
+  alt="A pile of taped, labelled cardboard moving boxes stacked in front of a set of emptied bookshelf carcasses - bare wood frames with every shelf item removed - on a bare floor mid-move"
+  credit="Move-out day, boxes and emptied shelving — Wikimedia Commons, CC BY-SA 4.0 (Someone Not Awful)"
+  pins={[
+    { x: 37, y: 69, label: "The whole stack of boxes = the Clear site data sledgehammer", desc: "Not one drawer emptied at a time - everything from the apartment, packed and gone in one operation. That's Clear site data: one click, one origin, and cookies, localStorage, sessionStorage, IndexedDB, Cache Storage, and every registered service worker are ALL gone together, not one pile at a time like the scalpel moves from the last three notes." },
+    { x: 32, y: 38, label: "The label printed on each box = the itemized checklist", desc: "Every box carries its own printed label listing what's inside before anyone opens it. Chrome does the same thing before you click Clear site data: an itemized list of exactly what's about to be removed, category by category. Read the label before it leaves the truck - it's the fastest way to confirm your mental model matches what's actually about to happen." },
+    { x: 43, y: 27, label: "The emptied bookshelf frames = the origin after clearing", desc: "Structure still standing, completely bare inside - every book, every item that used to sit on these shelves is gone. That's what an origin's storage looks like the moment after a genuine clear: the mechanisms (cookies, storage, caches) still exist as concepts, but nothing is stored in any of them anymore." },
+    { x: 61, y: 84, label: "One cluster of boxes, not the whole room", desc: "These boxes belong to ONE move, packed for ONE destination - not every box in the building. Clear site data is scoped exactly the same way: per-origin. A subdomain running what looks like the same site - a CDN, an auth server, a widget - is a separate stack of boxes entirely, cleared separately or not at all." },
+    { x: 87, y: 88, label: "The bare floor at the edge of frame = what this move does NOT reach", desc: "Whatever's outside this room - the building's shared hallway, the landlord's own filing cabinet - isn't touched by this move at all. Passwords in the browser's own password manager, extensions and their storage, bookmarks, and some cached HTTP-auth credentials live in exactly that kind of space: outside per-site storage, untouched by even a complete Clear site data." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Clear site data vs Incognito - two different tools, watch what each actually touches - press Play"
+  intervalMs={1900}
+  nodes={[
+    { label: "Your normal profile, mid-session", desc: "Cookies set, localStorage full of drafts, Cache Storage stocked, a service worker installed and running - the full apartment, lived-in for months. This is the state most 'looks broken for me' reports actually start from, whether the tester realizes it or not." },
+    { label: "Path A: Clear site data", desc: "You click Clear site data for this origin. Every item on the checklist is deleted, permanently, in this same profile. Reload the page RIGHT NOW in this same window and it behaves like a genuine first visit - no cookie, no storage, no cache, no worker - because there is nothing left for any of them to answer with." },
+    { label: "Path B: open Incognito instead", desc: "You open a private window instead of clearing anything. It gets its OWN separate, temporary storage area - empty, because it has never been used. But back in your ORIGINAL window, nothing changed: the cookie, the storage, the cache, the service worker are all still sitting there exactly as they were. Two different windows, two different truths, at the same moment." },
+    { label: "The trap: closing Incognito feels like cleanup, but isn't", desc: "Close the private window and its temporary storage is thrown away - true. But that only ever affected the temporary area IT created. It never touched, and never could touch, your normal profile's state. If the bug lived in your normal profile's storage, it is exactly as present after closing Incognito as it was before you opened it." },
+    { label: "Why the distinction matters for a bug report", desc: "'Works in Incognito, broken in my normal browser' proves the bug lives in stored client state SOMEWHERE in your normal profile - it does not prove which pile, and it does not clean anything up. Clear site data is the tool that actually removes the culprit; Incognito is the tool that only tells you one exists." },
+  ]}
+/>
+
+Time to make the distinction concrete. Here is a tiny state-inventory checker — hand it a browser
+profile's storage snapshot and it reports, item by item, what a Clear-site-data pass removes versus
+what a fresh Incognito window starts with versus what neither one touches:
+
+<CodePlayground
+  language="python"
+  title="Run it - a state-inventory checker: what survives which action (Python)"
+  code={`# Model of one origin's client-side state, and what three different actions
+# do to it: Clear site data (this profile), opening Incognito (a new,
+# separate profile), and doing nothing at all.
+
+profile_state = {
+    'cookies':            {'value': 'sessionid=abc123', 'scope': 'client, per-origin'},
+    'localStorage':       {'value': 'cart:[3 items]',   'scope': 'client, per-origin'},
+    'sessionStorage':     {'value': 'formDraft:{...}',  'scope': 'client, per-origin, per-tab'},
+    'IndexedDB':          {'value': 'offlineRecords:120','scope': 'client, per-origin'},
+    'CacheStorage':       {'value': 'app-shell-v3',     'scope': 'client, per-origin'},
+    'serviceWorker':      {'value': 'sw.js (activated)','scope': 'client, per-origin'},
+    'browserPasswords':   {'value': 'saved login',      'scope': 'browser-level, not per-site storage'},
+    'serverAccountFlag':  {'value': 'beta_enrolled=true','scope': 'SERVER, not client at all'},
+}
+
+def clear_site_data(state):
+    cleared = {}
+    for key, info in state.items():
+        if info['scope'].startswith('client'):
+            cleared[key] = None   # removed
+        else:
+            cleared[key] = info['value']  # untouched
+    return cleared
+
+def open_incognito(state):
+    # Incognito never reads or writes the EXISTING profile at all - it starts
+    # from a totally separate, empty area. The original profile is unaffected.
+    fresh = {k: (None if info['scope'].startswith('client') else info['value'])
+             for k, info in state.items()}
+    return fresh, state   # (what incognito sees, what the original profile still has)
+
+print('--- Clear site data (same profile) ---')
+after_clear = clear_site_data(profile_state)
+for k, v in after_clear.items():
+    print(' ', k, '->', ('REMOVED' if v is None else 'still present: ' + str(v)))
+
+print()
+print('--- Opening Incognito instead ---')
+incognito_view, original_still = open_incognito(profile_state)
+for k in profile_state:
+    print(' ', k, '| incognito sees:', incognito_view[k] or 'nothing (fresh)',
+          '| original profile still has:', original_still[k]['value'])
+
+# --- Clear site data (same profile) ---
+#   cookies -> REMOVED
+#   localStorage -> REMOVED
+#   sessionStorage -> REMOVED
+#   IndexedDB -> REMOVED
+#   CacheStorage -> REMOVED
+#   serviceWorker -> REMOVED
+#   browserPasswords -> still present: saved login
+#   serverAccountFlag -> still present: beta_enrolled=true
+#
+# --- Opening Incognito instead ---
+#   cookies | incognito sees: nothing (fresh) | original profile still has: sessionid=abc123
+#   localStorage | incognito sees: nothing (fresh) | original profile still has: cart:[3 items]
+#   sessionStorage | incognito sees: nothing (fresh) | original profile still has: formDraft:{...}
+#   IndexedDB | incognito sees: nothing (fresh) | original profile still has: offlineRecords:120
+#   CacheStorage | incognito sees: nothing (fresh) | original profile still has: app-shell-v3
+#   serviceWorker | incognito sees: nothing (fresh) | original profile still has: sw.js (activated)
+#   browserPasswords | incognito sees: saved login | original profile still has: saved login
+#   serverAccountFlag | incognito sees: beta_enrolled=true | original profile still has: beta_enrolled=true`}
+/>
+
+The same inventory logic in Java, with one addition: a per-origin check, so you can see exactly why
+clearing one subdomain leaves a sibling subdomain's state completely untouched:
+
+<CodePlayground
+  language="java"
+  title="Run it - state inventory plus a per-origin scoping check (Java)"
+  code={`import java.util.*;
+
+class Main {
+
+    record Item(String value, boolean clientPerOrigin) {}
+
+    public static void main(String[] args) {
+        Map<String, Item> appOrigin = new LinkedHashMap<>();
+        appOrigin.put("cookies", new Item("sessionid=abc123", true));
+        appOrigin.put("localStorage", new Item("cart:[3 items]", true));
+        appOrigin.put("CacheStorage", new Item("app-shell-v3", true));
+        appOrigin.put("serviceWorker", new Item("sw.js (activated)", true));
+        appOrigin.put("browserPasswords", new Item("saved login", false));
+        appOrigin.put("serverAccountFlag", new Item("beta_enrolled=true", false));
+
+        Map<String, Item> cdnOrigin = new LinkedHashMap<>();
+        cdnOrigin.put("CacheStorage", new Item("cdn-assets-v9", true));
+
+        System.out.println("Clearing site data for app.example.com:");
+        for (Map.Entry<String, Item> e : appOrigin.entrySet()) {
+            String status = e.getValue().clientPerOrigin() ? "REMOVED" : "still present: " + e.getValue().value();
+            System.out.println("  " + e.getKey() + " -> " + status);
+        }
+
+        System.out.println();
+        System.out.println("Meanwhile, cdn.example.com (a DIFFERENT origin) was never touched:");
+        for (Map.Entry<String, Item> e : cdnOrigin.entrySet()) {
+            System.out.println("  " + e.getKey() + " -> still present: " + e.getValue().value());
+        }
+        System.out.println();
+        System.out.println("Lesson: clearing app.example.com does nothing to cdn.example.com.");
+        System.out.println("A stale asset served from the CDN origin will still be stale after the clear.");
+    }
+}
+// Clearing site data for app.example.com:
+//   cookies -> REMOVED
+//   localStorage -> REMOVED
+//   CacheStorage -> REMOVED
+//   serviceWorker -> REMOVED
+//   browserPasswords -> still present: saved login
+//   serverAccountFlag -> still present: beta_enrolled=true
+//
+// Meanwhile, cdn.example.com (a DIFFERENT origin) was never touched:
+//   CacheStorage -> still present: cdn-assets-v9
+//
+// Lesson: clearing app.example.com does nothing to cdn.example.com.
+// A stale asset served from the CDN origin will still be stale after the clear.`}
+/>
+
+<Callout type="tip">
+When a bug report says "reproduce as a new user," don't reach for Incognito by reflex — reach for
+whichever tool actually matches what you're proving. Need to confirm the CURRENT profile no longer
+carries a specific piece of state (did logout really clear the cookie, did unregistering really
+remove the worker)? Clear site data, in this window, so you can inspect the empty result yourself.
+Need a throwaway session to test alongside your existing logged-in one (two accounts, side by side)
+without touching your main state at all? Incognito. They answer different questions, and using the
+wrong one is how "I tested this as a new user" quietly becomes untrue.
+</Callout>
+
+<FirstTime title="Your mission: prove the difference to yourself, on a real site">
+<StepChecklist
+  steps={[
+    { text: "Build up some state", detail: "On a site you use, log in, add something to a cart or draft, and browse a couple of pages so a cache and maybe a service worker populate. Open Application -> Storage and glance at Cookies, Local Storage, and Cache Storage - confirm there's something in each." },
+    { text: "Open Incognito alongside it, not instead of it", detail: "Keep your normal window open. Open a private window to the same site. Confirm it shows a logged-out, empty state. Now switch BACK to your normal window (don't close it) and confirm your login and cart are still exactly there. Two windows, two truths, at once." },
+    { text: "Close Incognito and check your normal window again", detail: "Close the private window entirely. Reload your normal window. Nothing changed - your session, cart, and cache are untouched, because Incognito closing never had access to them in the first place." },
+    { text: "Now actually clear it", detail: "In your NORMAL window, Application -> Storage -> Clear site data. Reload. You should be logged out, cart gone, cache empty - a real first-visit state, in the same window you were just using." },
+    { text: "Check a sibling origin", detail: "If the site loads anything from a different subdomain (open the Network tab and look at request domains), open Application -> Storage for THAT origin specifically. Confirm its storage is untouched by the clear you just did on the main origin - the per-origin boundary, proven, not assumed." },
+  ]}
+/>
+You've now watched Incognito's isolation and Clear site data's deletion happen side by side in the
+same session, and confirmed with your own eyes that a clear on one origin leaves a sibling origin
+completely alone.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "'I tested this in Incognito as a new user' but the bug the ticket describes was actually about your normal, logged-in browser.",
+      fix: "Incognito answers 'what does a brand-new visitor see', not 'is my normal profile's state actually clean.' If the report is about stale state IN your existing profile, Incognito tells you nothing about it - it never reads your profile's storage at all. Use Clear site data on the profile in question, or explicitly note that Incognito and 'my normal browser, cleaned' are two different repro environments with different guarantees.",
+    },
+    {
+      symptom: "You ran Clear site data, reloaded, and the bug is still there.",
+      fix: "Check three things in order: (1) is this actually the same ORIGIN the bug lives on, or a sibling subdomain that was never cleared - read the URL bar and any cross-origin requests in the Network tab; (2) is the bug server-side state (an account flag, a database row) that no client-side clear could ever touch; (3) did a browser extension or the browser's own password manager reintroduce something the checklist doesn't cover. Most 'clear didn't work' reports are one of these three, not a broken clear.",
+    },
+    {
+      symptom: "A 'reproduce as first-time user' test still shows onboarding as skipped, or a banner as already dismissed.",
+      fix: "Some 'seen it before' flags are stored server-side against your account, not client-side against your browser - clearing the browser (or even a new Incognito window, if you're still logged in via some other mechanism) won't touch a flag tied to your user ID on the server. Confirm whether the flag is client (localStorage key like onboarding_seen) or server (an account field) before assuming the clear failed.",
+    },
+    {
+      symptom: "Two testers get different results running the 'same' first-visit test, one clean and one still showing old state.",
+      fix: "One of them likely cleared (or used Incognito for) the WRONG origin, or cleared only cookies without ticking Cache Storage and service workers in the checklist. Standardize the repro: always use the full Clear site data checklist with every box ticked, and always confirm the origin in the URL bar matches the one being tested, especially on sites with an app subdomain separate from a marketing or CDN subdomain.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Clearing state properly matters most in exactly these situations:
+
+- **Any 'reproduce as a brand-new user' request** — Clear site data in your current window, not just a fresh Incognito tab, if you also need to confirm the state is genuinely gone (not just hidden in a separate area).
+- **Onboarding flows, first-visit banners, 'what's new' modals** — these live or die on whether your test environment can honestly claim to be a first visit. Know whether the 'seen it' flag is client-side (clear it) or server-side (a different reset entirely).
+- **Multi-origin sites (app + CDN + auth subdomains)** — a clear on one origin, tested as if it covered the whole site, is a common source of 'I cleared everything and it's still broken.' Check the URL bar and the Network tab's request origins before trusting a clear was complete.
+- **Test-account hygiene between test runs** — reusing the same browser profile across many test passes without clearing between them lets state leak between tests (a cart from test three affecting test four). Clear site data between independent test runs the way you'd reset a database between test suites.
+- **Distinguishing a client bug from a server bug** — if state survives a full, verified Clear site data, the bug isn't sitting in the browser at all; stop looking in Application panel and start looking at the account or database.
+
+Tester's habit: **before trusting any "clean slate," name exactly which pile you cleared and which
+origin you cleared it on.** "I cleared everything" is a claim, same as "logged out" or "cached" were
+in earlier notes — and the itemized checklist in the Clear site data dialog is the receipt that
+proves it, or the clue that tells you what you missed.
+</WhereToCheck>
+
+<WorkedExample title="the onboarding tour that only new users could skip">
+1. **The report:** "QA says the first-time onboarding tour works fine — shows up for new users,
+   dismisses correctly. But we're getting complaints that some brand-new signups never see it at
+   all, and others see it every single time they log in, forever."
+2. **The tester starts by trying to reproduce 'new user' honestly.** They open Incognito, sign up
+   with a fresh test account, and the tour appears and dismisses correctly on the first try — matches
+   what QA reported. So the *happy path* genuinely works.
+3. **They dig into the two complaint patterns separately.** For "tour never appears": they create
+   another fresh Incognito account, but this time on a machine that had ALREADY visited the
+   marketing site (a different origin, `www.example.com` vs the app at `app.example.com`) and had a
+   stray `onboarding_seen=true` flag sitting in that OTHER origin's localStorage from an earlier,
+   unrelated preview page. Incognito being new didn't matter — the flag they hit lived on a
+   different subdomain's storage, one their test hadn't cleared or isolated at all.
+4. **For "tour appears every time":** they check Application → Local Storage on the app origin for
+   an affected account and find `onboarding_seen` is simply never being written — the dismiss button
+   fires an animation but never persists the flag. This one has nothing to do with clearing at all;
+   it's a straightforward bug in the dismiss handler.
+5. **The first bug's real shape:** the onboarding flag check reads from the WRONG origin's storage
+   under specific navigation paths (arriving via the marketing site first), so a value that should
+   never have been consulted cross-contaminates the app's own first-visit logic. It's an origin-
+   scoping bug in the code, not a testing artefact — but it took understanding per-origin storage
+   precisely to see it.
+6. **The fix:** correct the onboarding check to read only from the app's own origin, never a
+   marketing subdomain's storage, and fix the dismiss handler to actually persist the flag.
+7. **The regression tests that get added:** one using Clear site data on BOTH origins before
+   asserting the tour shows for a true first visit, and one asserting `onboarding_seen` is present in
+   the app origin's localStorage immediately after dismissal — a state check, not just a visual one.
+8. **The tester's lesson.** "New user" isn't one condition — it's a claim about several separate
+   storage piles across potentially several origins, and a bug that only shows up in a subset of
+   real first-time journeys is often hiding in exactly the gap between "cleared the origin I was
+   looking at" and "cleared every origin actually involved."
+</WorkedExample>
+
+<Callout type="mistake">
+Treating Incognito and Clear site data as interchangeable ways to say "fresh." They answer different
+questions: Incognito shows you a brand-new, isolated storage area while your existing profile's
+state sits completely untouched beside it; Clear site data actually deletes your existing profile's
+state, in place. Using Incognito when you needed to *prove your normal profile is clean* — or
+clearing state when you actually needed a *second, parallel identity to test alongside your first* —
+produces a test that looks rigorous and proves the wrong thing. Name which one you need before you
+reach for either.
+</Callout>
+
+<Quiz
+  question="A tester opens Incognito, confirms a bug does NOT reproduce there, and writes 'confirmed fixed by clearing site data.' What's wrong with that conclusion?"
+  options={[
+    "Nothing is wrong - Incognito and Clear site data produce identical results, so the conclusion is accurate either way",
+    "Incognito opens a separate, temporary storage area and never touches or clears the original profile's cookies, storage, cache, or service worker at all - so the bug not appearing there proves the bug is client-state-related, but says nothing about whether the ORIGINAL profile's state was actually cleared",
+    "Incognito is slower than a normal window, which is the real reason results differ",
+    "Clear site data only removes cookies, so the comparison is meaningless regardless"
+  ]}
+  answer={1}
+  explain="Incognito's isolation and Clear site data's deletion are genuinely different mechanisms with different guarantees. A bug not reproducing in Incognito is real evidence that the bug lives in some piece of CLIENT-SIDE state carried by the original profile (not a server-side or universal bug) - but it is evidence about DIAGNOSIS, not about CLEANUP. The original profile's cookies, storage, cache, and service worker were never touched by opening or closing that private window, so writing 'confirmed fixed by clearing site data' misdescribes what actually happened; nothing was cleared. Option one collapses a real distinction the whole note is built on. Option three is an irrelevant, made-up mechanism. Option four is factually wrong about scope - Clear site data (this note's Term) explicitly covers cookies, localStorage, sessionStorage, IndexedDB, Cache Storage, and service workers, not cookies alone."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Clear site data - what it removes", back: "For one origin, in the CURRENT profile: cookies, localStorage, sessionStorage, IndexedDB, Cache Storage, and any registered service workers - all deleted, permanently, in place. The closest single action to 'this browser has never visited this site.'" },
+    { front: "Clear site data - what survives it", back: "Browser-level things not scoped to that site's own storage: saved passwords in the browser's password manager, extensions and their storage, bookmarks, some cached HTTP-auth credentials - plus, always, anything stored SERVER-side (account flags, database rows)." },
+    { front: "Incognito's real semantics", back: "Opens a separate, temporary storage area for that window only. It does NOT read or clear your existing profile's cookies, storage, cache, or service workers - they sit completely untouched the whole time. Closing the private window discards only what IT created." },
+    { front: "Per-origin scoping - the trap", back: "Clearing app.example.com does nothing to cdn.example.com or auth.example.com - different origins, separate storage. A bug that 'survives a full clear' is very often living on a sibling origin that was never touched. Check the URL bar and cross-origin requests before trusting a clear was complete." },
+    { front: "Incognito vs Clear site data - which tool for which question", back: "Need to prove your CURRENT profile's state is gone (or to genuinely reproduce a first visit in place)? Clear site data. Need a throwaway second identity to test alongside your existing logged-in session, without touching it? Incognito. They answer different questions - don't swap them." },
+    { front: "Client-side clear vs server-side state", back: "Every item Clear site data removes is client-side. An account flag, a feature-flag enrollment, or any database row tied to your user ID survives every possible client-side clear, because it was never stored in the browser. If a bug survives a verified, complete clear, stop looking in Application and look at the server." },
+  ]}
+/>
+
+<Challenge>
+On a site with an account: (1) build up state (log in, add to cart, browse a few pages), then open
+Incognito alongside it and confirm your normal window's state is UNCHANGED after closing the private
+window. (2) In your normal window, run Clear site data with every box ticked, reload, and list
+exactly what came back empty. (3) If the site loads anything from a second subdomain, check whether
+that origin's storage was also cleared or left alone. Finish with one sentence: what's the single
+question you'd ask yourself to decide whether a "reproduce as new user" ticket needs Incognito or
+Clear site data?
+</Challenge>
+
+<AskCommunity prompt="State-clearing question: I need to `[reproduce a first visit / prove a bug is fixed / reset between test runs]` for `[which flow]`. I used `[Incognito / Clear site data / both]` on origin `[which URL]`. Result: `[what I saw]`. Expected: `[what should have happened]`. Is there a second origin (CDN/auth/marketing subdomain) involved: `[yes/no/not sure]`.">
+State which tool you used and on which exact origin — most 'clear didn't work' reports turn out to
+be a sibling origin that was never touched, or server-side state that no client-side clear could
+ever reach. Naming the origin usually settles it before anyone digs further.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.chrome.com/docs/devtools/storage/clear/", title: "Chrome DevTools — Clear site data and the Storage panel", kind: "read" },
+    { href: "https://developer.mozilla.org/en-US/docs/Web/Privacy/Guides/Storage_access_and_private_browsing", title: "MDN — storage access and private browsing semantics", kind: "read" },
+    { href: "https://developer.mozilla.org/en-US/docs/Glossary/Origin", title: "MDN — what an origin is, and why storage is scoped to it", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=mSMb-aH6sUw", title: "Chrome for Developers - Caching demystified: inspect, clear, and disable caches", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=mSMb-aH6sUw" title="Caching demystified: inspect, clear, and disable caches" minutes={7} />
+
+<Takeaways
+  points={[
+    "Clear site data deletes, in place, everything client-side an origin holds: cookies, localStorage, sessionStorage, IndexedDB, Cache Storage, and registered service workers. It's the closest single action to a genuine first visit.",
+    "Incognito does not clear anything - it opens a separate, temporary storage area while your original profile's state sits completely untouched beside it, discarded only when the private window itself closes.",
+    "Clearing is scoped per-origin. A sibling subdomain (CDN, auth, marketing site) is a different origin with separate storage, cleared separately or not at all - the top cause of 'I cleared everything and it's still broken.'",
+    "Saved passwords, extensions, and anything server-side (account flags, database rows) survive every client-side clear, because they were never stored in the browser to begin with.",
+    "Name the exact question before picking a tool: proving your CURRENT profile is clean needs Clear site data; testing a second identity alongside your existing session needs Incognito. They are not interchangeable ways to say 'fresh.'",
+  ]}
+/>
+
+<Complete xp={10} />

@@ -1,0 +1,400 @@
+---
+title: "Testing what users really feel"
+summary: "Combine network throttling, device emulation, and CPU slowdown into one honest simulation of a real user's phone. 'Works on office wifi' as a named bug class, and how to write test charters from empathy instead of a checklist."
+tags: ["browser-devtools-mastery", "throttling-and-emulation", "track-c"]
+updated: "2026-07-14"
+---
+
+<Hook>
+Two chapters ago you throttled the network and watched a checkout button double-charge a customer.
+Last chapter you shrank the viewport and caught a menu that silently overflows at 420 pixels. Both
+were true, both were useful, and both were still lying to you a little — because a real user on a
+train isn't experiencing ONE variable at a time. They have a mid-range phone with a modest chip, on
+a shaky connection, in bad lighting, with a notification banner stealing a slice of their attention.
+This chapter stops testing variables one at a time and starts testing a *person*. Three dials, one
+honest simulation, and a bug class with a name: **works on office wifi**.
+</Hook>
+
+<Callout type="analogy">
+A single-variable test is like judging a coat by holding it up to a lamp indoors: yes, it's warm,
+yes, it's the right size. A real winter doesn't test one variable — it's cold AND windy AND you're
+also carrying two bags AND your hands are numb, all at once, and THAT combination is what decides if
+the coat actually works. Throttling alone is the lamp test for network. Emulation alone is the lamp
+test for screen size. Neither tells you what happens to a person juggling a spotty signal, a small
+screen, AND a phone whose chip is busy warming a pocket, simultaneously, while they're trying to pay
+before their train reaches a tunnel. You don't get real weather from one open window. You get it by
+turning on the wind, the cold, and the extra bags together, on purpose, before winter does it for you.
+</Callout>
+
+<Term define="A composite testing technique that layers Chrome DevTools' network throttling, device emulation, and CPU throttling (Performance panel, the throttling dropdown offering 4x slowdown, 6x slowdown, and similar multipliers that slow down JavaScript execution to approximate a weaker processor) together in one session, instead of testing each in isolation. The goal is not any single number - it is reproducing the combined, compounding experience of a real user on unremarkable hardware and an unremarkable connection, because failures often only appear when SEVERAL constraints stack: a slow network delays a response AND a slow CPU delays rendering it AND a small viewport hides the feedback that would have reassured the user during both delays. Testing each dial alone catches the bugs each dial causes on its own; testing them together catches the bugs that only exist in the gap where they overlap - which is where most real users actually live.">Combined real-conditions testing</Term>
+
+## The third dial you haven't turned yet: CPU
+
+The last two chapters gave you network and screen. There's a third constraint that's been sitting
+quietly in the Performance panel the whole time: **CPU throttling**. Open DevTools' Performance
+panel, find the throttling dropdown near the record button, and pick a multiplier — commonly
+labelled something like "4x slowdown" or "6x slowdown." This does something genuinely different from
+network throttling: it doesn't touch requests at all, it makes your machine's JavaScript execution,
+layout, and paint work run slower, approximating a phone whose chip is a fraction of your laptop's.
+An animation that's silky on your desktop can visibly stutter, a "lightweight" client-side filter
+that felt instant can take a full second, and — the one that matters most for testers — a button's
+click handler can take long enough to register that the visual feedback (a spinner, a disabled
+state) arrives noticeably *after* the tap, not instantly with it.
+
+Here's why combining matters more than any single dial: network delay and CPU delay **add up**, and
+they add up in a place users actually feel — the gap between action and visible response. Throttle
+the network alone and a slow response arrives late, but at least the button disabled itself
+instantly. Throttle the CPU alone and the button feels sluggish, but at least the server answered
+fast. Throttle *both together*, the way a real budget phone on a real crowded network actually
+experiences a tap, and that gap stretches enough for an impatient thumb to tap again before either
+system has had a chance to say "I heard you" — exactly the double-submit bug from the network
+chapter, except this time you didn't need a broken code path to trigger it. You needed the honest
+combination of conditions a huge share of real users are in *by default*, on an ordinary Tuesday.
+
+This is also where **device emulation** stops being "just" a viewport trick. Layer it in and the
+small screen hides things: a loading indicator that's visible on your wide monitor can scroll
+off-screen on a 375-pixel phone, so the same slow response that was merely annoying at full width
+becomes *invisible* at phone width — the user isn't just waiting longer, they have no idea anything
+is happening at all. None of these three facts is new information from earlier chapters. What's new
+is watching them compound, on purpose, in one session, the way they actually do to one real thumb
+on one real train.
+
+{/* IMAGE: Chrome DevTools with three panels visible at once - Network throttling set to Slow 4G, device toolbar active on a phone preset, and the Performance panel's CPU throttling dropdown set to 4x slowdown, all layered on the same page */}
+<HotspotImage
+  src="/notes/browser-devtools-mastery/throttling-and-emulation/testing-what-users-really-feel.jpg"
+  alt="An aircraft engine nacelle and wing section mounted on a strut deep inside NACA's Altitude Wind Tunnel, a massive circular concrete duct built to simulate cold, thin air and high-speed wind on a real engine all at the same time"
+  credit="First test program in NACA's Altitude Wind Tunnel, 1944 — Wikimedia Commons, Public Domain (NASA Glenn Research Center)"
+  pins={[
+    { x: 47, y: 75, label: "The dark duct behind the engine = network throttling, still running", desc: "Air keeps moving through this facility the entire test, unchanged from any single-variable run - it governs one thing, airflow, and says nothing on its own about the engine's temperature or the airframe's stress. That's Slow 4G in this combined test: still doing exactly its one job, unbothered by the other two dials now running alongside it." },
+    { x: 24, y: 51, label: "One wing, mounted at real scale = the device toolbar's real viewport", desc: "Not a scale model - a real wing, sized exactly like the aircraft it belongs to, because a wind tunnel test on a toy-sized wing tells you nothing true about the real one. The device toolbar's phone preset does the same job: real viewport dimensions decide whether a loading indicator stays visible during the combined delay, or scrolls out of view and turns a slow response into an invisible one." },
+    { x: 54, y: 44, label: "The engine nacelle = CPU throttling, the chip doing the work", desc: "This is what actually converts fuel into thrust under load - the part with a real physical limit on how fast it can work, tested here under conditions designed to find that limit. CPU throttling is the same idea applied to a device: a 4x or 6x slowdown multiplier on JavaScript execution, layout, and paint, approximating a chip that's already working harder than your desktop's ever will." },
+    { x: 27, y: 8, label: "One facility, every condition running together", desc: "NACA didn't test cold, then wind, then altitude separately and hope the combination behaved predictably - they built ONE tunnel that runs all three at once, because that's the only way to find the failure that only shows up under load, at altitude, in the cold, together. That's this whole chapter: network, device, and CPU throttling layered on the SAME reload, not three separate passes." },
+    { x: 81, y: 51, label: "What an engineer here is actually watching for", desc: "Not a single gauge reading in isolation - whether the WHOLE assembly holds together under everything at once: does the engine still respond, does the wing still perform, does anything fail that wouldn't have failed alone? That's the empathy this chapter is named for: does a tap still get acknowledged, does a loading state survive, before the real user's patience runs out." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One tap, three dials, and where a bug hides that no single dial finds alone - press Play"
+  intervalMs={1900}
+  nodes={[
+    { label: "Baseline: your desk, no throttling at all", desc: "Fibre connection, fast CPU, giant monitor. You tap Buy now and everything - network round trip, click-handler execution, spinner appearing - happens in well under 100 milliseconds combined. This is the environment every demo, every quick smoke test, and most CI runs happen in by default." },
+    { label: "Add network throttling alone", desc: "Slow 4G. The request now takes noticeably longer to complete, but the click handler still disables the button INSTANTLY, because CPU work is still fast. The user sees immediate feedback, then a wait. Annoying, survivable, and NOT the double-submit bug on its own." },
+    { label: "Add CPU throttling on top", desc: "4x slowdown, network still throttled. Now the click handler's own work - the code that disables the button - takes a beat to actually run. There's a real, human-perceptible gap between the tap and ANY visible acknowledgment, on top of the network wait that follows it." },
+    { label: "Add device emulation on top of both", desc: "Phone viewport. Whatever loading state does eventually appear may now render below the fold, or get squeezed by a smaller layout that wasn't designed for this exact combination of states rendering slowly. The user isn't just waiting through two stacked delays - the thing that would tell them to wait might not even be visible." },
+    { label: "The bug that only exists at the intersection", desc: "A real, ordinary user - budget phone, patchy signal, standing on a platform - taps twice, because nothing visible happened in the combined gap, and the second tap's request races the first. No single dial reproduced this. It took the combination, on purpose, in one session, to make the invisible visible." },
+  ]}
+/>
+
+Numbers first. Here's a Python simulator that adds all three delays honestly — network transfer
+time, added network latency, and CPU-throttled processing time — and shows exactly how a
+"works on office wifi" pass turns into a "fails on a real phone" result with no code change at all:
+
+<CodePlayground
+  language="python"
+  title="Run it - the combined latency a tap actually experiences (Python)"
+  code={`# Three independent delays that stack on a single tap-to-feedback moment:
+# network transfer, network latency, and CPU-throttled processing time for
+# the click handler itself (disabling the button, rendering a spinner).
+
+NETWORK_PROFILES = {
+    "Office wifi (no throttling)": (999999, 2),    # (kbps, latency_ms)
+    "Slow 4G":                     (1600,   150),
+    "Slow 3G":                     (400,    400),
+}
+
+# CPU slowdown multiplier -> how much longer the SAME handler code takes to run
+CPU_PROFILES = {
+    "No throttling (fast desktop)": 1,
+    "4x slowdown (mid-range phone)": 4,
+    "6x slowdown (budget phone)":    6,
+}
+
+REQUEST_SIZE_KB = 6          # a small "process payment" POST
+BASE_HANDLER_MS = 12         # how long disabling the button + rendering a spinner takes, unthrottled
+HUMAN_IMPATIENCE_THRESHOLD_MS = 300   # roughly how long before an unacknowledged tap gets a second tap
+
+def combined_delay(network_profile, cpu_profile):
+    kbps, latency_ms = NETWORK_PROFILES[network_profile]
+    transfer_ms = (REQUEST_SIZE_KB / kbps) * 1000
+    network_ms = latency_ms + transfer_ms
+
+    cpu_multiplier = CPU_PROFILES[cpu_profile]
+    handler_ms = BASE_HANDLER_MS * cpu_multiplier
+
+    # The feedback the user actually watches for (button disables / spinner
+    # shows) only appears once the handler has finished running.
+    return handler_ms, network_ms
+
+print(f"{'network':>28} | {'cpu':>28} | {'feedback ms':>11} | {'total ms':>9} | double-tap risk")
+for net in NETWORK_PROFILES:
+    for cpu in CPU_PROFILES:
+        handler_ms, network_ms = combined_delay(net, cpu)
+        total_ms = handler_ms + network_ms
+        risk = "HIGH" if handler_ms > HUMAN_IMPATIENCE_THRESHOLD_MS else "low"
+        print(f"{net:>28} | {cpu:>28} | {handler_ms:>11.0f} | {total_ms:>9.0f} | {risk}")
+
+# network                      |                          cpu | feedback ms |  total ms | double-tap risk
+# Office wifi (no throttling)  | No throttling (fast desktop) |          12 |        14 | low
+# Office wifi (no throttling)  | 4x slowdown (mid-range phone)|          48 |        50 | low
+# Office wifi (no throttling)  | 6x slowdown (budget phone)   |          72 |        74 | low
+#                     Slow 4G  | No throttling (fast desktop) |          12 |       166 | low
+#                     Slow 4G  | 4x slowdown (mid-range phone)|          48 |       202 | low
+#                     Slow 4G  | 6x slowdown (budget phone)   |          72 |       226 | low
+#                     Slow 3G  | No throttling (fast desktop) |          12 |       415 | low
+#                     Slow 3G  | 4x slowdown (mid-range phone)|          48 |       451 | low
+#                     Slow 3G  | 6x slowdown (budget phone)   |          72 |       475 | HIGH
+#
+# Only the FULL combination - slow network AND slow CPU - pushes the feedback
+# gap (not even the total!) past the point a real thumb stops waiting.`}
+/>
+
+That was the tax on a single tap. Here's the empathy-driven test charter this whole chapter is
+named for — a small Java tool that turns "go test the checkout flow" into a specific, combined,
+written mission instead of a vague vibe:
+
+<CodePlayground
+  language="java"
+  title="Run it - generating an empathy-driven test charter (Java)"
+  code={`import java.util.*;
+
+class Main {
+
+    record Persona(String name, String network, String cpu, String device, String context) {}
+
+    static String buildCharter(Persona p, String flow) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("CHARTER: ").append(flow).append(" as ").append(p.name()).append("\\n");
+        sb.append("  Network:  ").append(p.network()).append("\\n");
+        sb.append("  CPU:      ").append(p.cpu()).append("\\n");
+        sb.append("  Device:   ").append(p.device()).append("\\n");
+        sb.append("  Context:  ").append(p.context()).append("\\n");
+        sb.append("  Mission:  complete ").append(flow)
+          .append(" the way this specific person actually would - notice every")
+          .append(" moment nothing visible happens, and try the impatient thing a real")
+          .append(" person would try (tap again, scroll away, hit back).");
+        return sb.toString();
+    }
+
+    public static void main(String[] args) {
+        List<Persona> personas = List.of(
+            new Persona(
+                "the commuter on a packed train",
+                "Slow 3G",
+                "6x slowdown (budget phone)",
+                "a common mid-range phone preset, portrait",
+                "one hand free, holding a rail with the other, glancing up every few seconds"
+            ),
+            new Persona(
+                "the parent with a toddler mid-tantrum",
+                "Slow 4G",
+                "4x slowdown (mid-range phone)",
+                "a common mid-range phone preset, portrait",
+                "one eye on the screen, one eye elsewhere, will absolutely tap twice"
+            ),
+            new Persona(
+                "the office tester, for comparison",
+                "Office wifi (no throttling)",
+                "No throttling (fast desktop)",
+                "a wide desktop viewport",
+                "full attention, fast machine, the environment almost every bug ships from"
+            )
+        );
+
+        for (Persona p : personas) {
+            System.out.println(buildCharter(p, "the checkout flow"));
+            System.out.println();
+        }
+    }
+}
+// CHARTER: the checkout flow as the commuter on a packed train
+//   Network:  Slow 3G
+//   CPU:      6x slowdown (budget phone)
+//   Device:   a common mid-range phone preset, portrait
+//   Context:  one hand free, holding a rail with the other, glancing up every few seconds
+//   Mission:  complete the checkout flow the way this specific person actually would - notice every
+//   moment nothing visible happens, and try the impatient thing a real person would try (tap again,
+//   scroll away, hit back).
+//
+// CHARTER: the checkout flow as the parent with a toddler mid-tantrum
+//   Network:  Slow 4G
+//   CPU:      4x slowdown (mid-range phone)
+//   Device:   a common mid-range phone preset, portrait
+//   Context:  one eye on the screen, one eye elsewhere, will absolutely tap twice
+//   Mission:  ...
+//
+// CHARTER: the checkout flow as the office tester, for comparison
+//   Network:  Office wifi (no throttling)
+//   CPU:      No throttling (fast desktop)
+//   Device:   a wide desktop viewport
+//   Context:  full attention, fast machine, the environment almost every bug ships from
+//   Mission:  ...`}
+/>
+
+<Callout type="tip">
+Name the persona before you touch a single dial. "Test on Slow 3G" is a task; "test as the commuter
+who has one hand free and glances up every few seconds" is a mission, and the second one changes
+what you actually try — you'll attempt the impatient re-tap, the scroll-away, the "did that even
+work" back-button, because that's what the person you're imagining would do. The three dials
+(network, CPU, device) are how you manufacture the conditions; the persona is what makes you
+actually behave like someone who'd hit the bug instead of someone patiently watching a spinner.
+</Callout>
+
+<FirstTime title="Your mission: run one flow as three different people">
+<StepChecklist
+  steps={[
+    { text: "Pick one real flow", detail: "Choose something that submits data - checkout, sign-up, posting a comment. Not a static page; you need a tap-and-wait moment for this to bite." },
+    { text: "Run it as yourself first, honestly", detail: "No throttling, desktop viewport, full attention - the 'office wifi' baseline. Note how it feels. This is your control, and very likely your team's actual daily test environment." },
+    { text: "Layer all three dials at once", detail: "Network panel: Slow 3G or Slow 4G. Performance panel: CPU throttling, 4x or 6x slowdown. Device toolbar: a real phone preset, portrait. All three, together, on the same reload - not one at a time." },
+    { text: "Run the SAME flow as a named persona", detail: "Before you tap anything, say out loud (or write down) who you're testing as and what they're distracted by. Then actually try to complete the flow the way that person would - including the impatient re-tap, the early navigate-away, the 'did anything happen' scroll." },
+    { text: "Write down the gap, not just the bug", detail: "If you found a defect, note the exact moment the feedback gap opened - between which tap and which visible response - not just 'double-submit happened.' That gap is the reusable diagnostic; the specific bug is just today's symptom of it." },
+  ]}
+/>
+You've run one real flow twice - once in the environment your team tests in by default, once as a
+specific, distracted, real person under all three constraints at once - and felt exactly where the
+two experiences diverge.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A flow passes clean under network throttling alone AND under CPU throttling alone, but fails when both are on together.",
+      fix: "This is the entire point of this chapter: some gaps only open wide enough to matter when delays STACK. Neither dial alone pushed the tap-to-feedback gap past the point a real thumb gives up waiting; combined, it did. Fix the underlying issue (usually a missing immediate, synchronous feedback state that doesn't wait on either network or heavy rendering), then re-test with all three dials on together, not separately, to confirm the fix actually closes the compounded gap.",
+    },
+    {
+      symptom: "CPU throttling makes an animation stutter, but the team says 'nobody's device is really that slow.'",
+      fix: "Check real analytics for device tier and network quality before dismissing it - a surprising share of real users are on multi-year-old mid-range phones, not this year's flagship, and 4x/6x slowdown approximates that gap, not an extreme outlier. If analytics genuinely show an all-flagship, all-fibre user base, that's a legitimate reason to test lighter - but that's a decision made from data, not from what the office's own devices happen to be.",
+    },
+    {
+      symptom: "A loading indicator is visible and correct on desktop emulation but never seen during manual testing on an actual throttled phone preset.",
+      fix: "Combine device emulation with the other two dials before concluding the indicator is broken - it may simply be rendering below the fold on a small viewport during a delay long enough that a user would have scrolled by the time it appeared, or removed by a layout shift once the slow response lands. Check its actual on-screen position under all three constraints together, not just its presence in the DOM.",
+    },
+    {
+      symptom: "Testers report 'it feels fine' after individually toggling each dial once, but real-world bug reports keep describing a sluggish, unresponsive flow.",
+      fix: "Toggling each dial once, briefly, and moving on tests the EXISTENCE of throttled conditions, not the combined, sustained EXPERIENCE of them - the empathy this chapter is about requires actually attempting the flow, with real taps and real waiting, under all three at once, as a specific imagined person, not a quick glance at a slowed-down page.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where combined-conditions testing earns its keep, above and beyond what single-dial throttling or
+emulation chapters already covered:
+
+- **Any flow with a tap-to-feedback moment under real time pressure** — checkout, sign-up, posting, sending. The compounded gap between action and acknowledgment is exactly what single-dial testing under-measures.
+- **Loading states and their actual on-screen position** — combine device emulation with the delay dials to confirm a spinner or banner is genuinely visible, not just present in the DOM, during the full combined wait.
+- **Anything your analytics say a real chunk of users experience** — check actual device-tier and network-quality data before picking dial settings; "works on office wifi" is a blind spot precisely because it's the one environment analytics never describe your real audience as being in.
+- **Pre-launch sign-off on anything customer-facing** — a "works on office wifi" pass is real evidence for the office-wifi environment and nothing else; treat it as a first pass, not a launch gate, for anything a real distracted person will use on a real phone.
+- **Regression coverage for previously-fixed timing bugs** — once a double-submit or race condition is fixed under one dial, re-verify it under all three combined; a fix tuned to pass a single-dial test can still fail the compounded case.
+
+Tester's habit: **"works on office wifi" is a bug class, not a compliment.** Treat any sign-off that
+never left the office's network, the team's fast machines, and a wide monitor as untested for the
+conditions most real users are actually in — because on those three axes, the office is the least
+representative environment in the building.
+</WhereToCheck>
+
+<WorkedExample title="the reviews launch that worked for everyone in the room">
+1. **The report:** a new product-review submission feature, demoed flawlessly in three sprint
+   reviews, on the big screen in the conference room, over the office's excellent wifi. Two weeks
+   after launch: a support queue full of duplicate reviews, users reporting "the submit button
+   didn't work so I clicked it a few more times," and one user swearing they submitted the same
+   review "like six times."
+2. **The tester's first instinct is exactly the earlier chapters**: throttle the network alone.
+   Slow 4G, submit a review. The button DOES disable instantly on tap - client-side guard exists,
+   feedback is immediate, the request just takes longer to complete underneath it. Clean pass. No
+   repro yet, and a slightly puzzling one, because the guard clearly exists.
+3. **They try CPU throttling alone next.** 6x slowdown, no network throttling. The button feels a
+   little sluggish to disable, maybe 60-70 milliseconds of lag, but it's well within what anyone
+   would tolerate without a second tap. Also a clean pass, also puzzling.
+4. **Only combining all three dials reproduces it.** Slow 4G, 6x CPU slowdown, a mid-range phone
+   preset, portrait. The button's disable logic turns out to be gated behind a state update that
+   itself waits on a layout recalculation - fast and invisible on a desktop CPU, but under 6x
+   slowdown that recalculation genuinely takes over 300 milliseconds, and on the network-throttled
+   connection, THAT delay lands right in the same window as the network round trip, stacking instead
+   of overlapping cleanly. The visible "did anything happen" gap stretches past half a second -
+   comfortably long enough for a real, distracted thumb to tap two, three, sometimes more times.
+5. **The server side compounds it.** Like the network-only chapter's checkout bug, there's no
+   idempotency check, so every one of those taps becomes a separate stored review.
+6. **The fix has two parts**: disable the button synchronously, on the tap event itself, before any
+   state update or layout work runs at all (removing the CPU-dependent gap entirely), and add a
+   server-side check that rejects a duplicate review submission from the same user within a short
+   window (removing the consequence even if a client guard is ever bypassed again).
+7. **What changes about how the team tests going forward:** the review flow's regression suite adds
+   a combined-conditions pass - Slow 4G, 6x CPU, phone viewport, together - specifically because two
+   individually-clean single-dial tests had both missed the exact same real bug.
+8. **The tester's lesson.** Three separate honest passes - office wifi, network-only throttling, and
+   CPU-only throttling - all genuinely passed, and the bug still shipped, because the failure lived
+   in the overlap between two delays, not in either one alone. "I tested the network AND I tested the
+   CPU, separately" sounds thorough and isn't the same claim as "I tested them together" - and only
+   one of those two claims is what a real distracted user on a real phone actually experiences.
+</WorkedExample>
+
+<Callout type="mistake">
+Testing network, device, and CPU conditions one at a time and treating three individually-clean
+passes as equivalent to one combined pass. They are not the same test. A feedback gap that's too
+small to matter under any single constraint can grow past a real person's patience once two or three
+delays stack in the same window - and that stacking is exactly what real, ordinary users experience
+by default, not an edge case you're manufacturing for fun. "Works on office wifi" was never really a
+claim about wifi; it's a claim about an environment where the network is fast, the CPU is fast, and
+the screen is huge, all three, at once - which describes almost nobody your product actually ships to.
+</Callout>
+
+<Quiz
+  question="A checkout flow passes cleanly when tested with network throttling alone, and separately passes when tested with CPU throttling alone. What should a tester conclude before signing it off?"
+  options={[
+    "Both individual conditions passed, so the combination is guaranteed to pass too, since throttling effects don't interact",
+    "Two clean single-dial passes are real evidence for each condition in isolation, but say nothing about the COMBINED case - delays from both sources can stack in the same tap-to-feedback window and open a gap neither one alone was long enough to create; a genuinely representative sign-off needs a pass with network throttling, CPU throttling, and device emulation active together",
+    "CPU throttling is unnecessary if network throttling already passed, since network delay is always the dominant factor",
+    "The flow should be signed off, since testing both conditions separately is more thorough than testing neither at all"
+  ]}
+  answer={1}
+  explain="This is the chapter's central claim: delays compound. Testing network and CPU separately genuinely proves something - each condition alone does not break the flow - but it structurally cannot prove anything about what happens when both delays land in the same window, because that's a different, third scenario neither single-dial test exercises. Option one assumes independence that the FlowAnimation and both CodePlaygrounds directly demonstrate is false. Option three privileges network delay for no stated reason - the worked example's actual bug was CPU-dominant, triggered by a slow layout recalculation, not the network. Option four is true as far as it goes (two passes beats zero) but stops short of the actual standard: a sign-off on a real, distracted, real-phone user needs the combined test, not two separate reassurances that don't add up to it."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Combined real-conditions testing - what it actually is", back: "Running network throttling, device emulation, and CPU throttling together in one session, instead of testing each dial in isolation - because some bugs only appear in the overlap where delays from multiple sources stack in the same tap-to-feedback window." },
+    { front: "CPU throttling - what it's for", back: "DevTools Performance panel, a slowdown multiplier (commonly 4x or 6x) applied to JavaScript execution, layout, and paint - approximating a weaker phone chip. Unlike network throttling, it doesn't touch requests; it slows down the code that runs once a response (or a tap) needs handling." },
+    { front: "Why combining matters more than any one dial", back: "Network delay and CPU delay both eat into the same real-world resource: how long before a user sees ANY acknowledgment of their tap. Each alone can stay under a real person's patience threshold; stacked together, on ordinary hardware and an ordinary connection, the combined gap can exceed it - which no single-dial test can catch." },
+    { front: "'Works on office wifi' - as a bug class", back: "A sign-off that only ever ran on a fast network, a fast CPU, and a large screen - three axes where the office is often the LEAST representative environment for real users. Passing there is real evidence for that environment and near-zero evidence for anyone else's." },
+    { front: "Empathy-driven test charter", back: "A test mission written around a specific, named, distracted persona (network, CPU, device, and context all specified) rather than a checklist of settings - because naming who you're testing as changes what you actually try: the impatient re-tap, the early navigate-away, the 'did that even work' scroll." },
+    { front: "The diagnostic habit this chapter teaches", back: "When a bug only reproduces under a combination of conditions, don't just note the bug - note the exact moment the feedback gap opened and which delays were stacked to create it. That gap, not today's specific symptom, is the reusable thing worth writing a regression test for." },
+  ]}
+/>
+
+<Challenge>
+Pick one real, data-submitting flow. (1) Test it exactly as your team normally does (office network,
+fast machine, wide screen) and note how it feels. (2) Layer network throttling, CPU throttling (4x
+or 6x), and a phone device preset together, all at once, and name a specific distracted persona
+before you start. (3) Attempt the flow as that person, including at least one impatient re-tap or
+early navigate-away. (4) Write one sentence naming the exact tap-to-feedback gap you observed (or
+confirmed was safely short), and one sentence on what "works on office wifi" would have missed here.
+</Challenge>
+
+<AskCommunity prompt="Combined-conditions question: `[flow name]` passes under `[network throttling alone / CPU throttling alone / both separately]` but I'm seeing `[symptom]` when I combine network `[profile]`, CPU `[4x/6x]`, and device `[preset]` together. The gap seems to open between `[which tap/action]` and `[which expected feedback]`. Is this a real compounding bug or expected slowdown?">
+State which dials you combined and where exactly the gap opened, between which action and which
+expected feedback - most combined-conditions reports resolve to a missing SYNCHRONOUS feedback step
+(one that doesn't wait on network or heavy rendering to appear), and naming the exact gap usually
+points straight at it.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.chrome.com/docs/devtools/performance/reference/#cpu-throttling", title: "Chrome DevTools — CPU throttling in the Performance panel", kind: "read" },
+    { href: "https://developer.chrome.com/docs/devtools/network/#throttle", title: "Chrome DevTools — network throttling, revisited from the earlier chapter", kind: "read" },
+    { href: "https://web.dev/articles/rail", title: "web.dev — the RAIL model and human perception thresholds for response, animation, and load", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=93HI4dnGjMk", title: "DebugBear - how does Chrome DevTools network throttling actually work?", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=93HI4dnGjMk" title="How does Chrome DevTools network throttling actually work?" minutes={3} />
+
+<Takeaways
+  points={[
+    "CPU throttling (Performance panel, 4x/6x slowdown) slows JavaScript execution, layout, and paint to approximate a weaker chip - a third dial alongside network throttling and device emulation, and the one most testers skip.",
+    "The bugs worth hunting live in the OVERLAP: delays from network and CPU stack in the same tap-to-feedback window, and a gap too short to matter under either dial alone can exceed a real person's patience once both are active together.",
+    "'Works on office wifi' is a named bug class, not a compliment - fast network, fast CPU, and a wide screen are three axes where the office is often the least representative environment for a real, distracted user on an ordinary phone.",
+    "An empathy-driven test charter names a specific persona (network, CPU, device, context) before testing starts, because naming who you're testing as changes what you actually attempt - the re-tap, the early navigate-away, the impatient scroll.",
+    "Three individually-clean single-dial passes are not the same claim as one combined pass. When a flow only breaks under all three conditions together, the fix and the regression test both need to target the combined case, not any one dial in isolation.",
+  ]}
+/>
+
+<Complete xp={10} />
