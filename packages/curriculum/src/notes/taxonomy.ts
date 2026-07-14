@@ -763,6 +763,183 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
     ],
   },
   // END browser-devtools-mastery
+  // BEGIN test-design-techniques
+  {
+    slug: "test-design-techniques",
+    title: "Test design techniques",
+    summary: "The five techniques that turn 'test everything' into a manageable, defensible set of cases — equivalence partitioning, boundary value analysis, decision tables, state transition testing, and error guessing, each with a worked example you can reuse verbatim.",
+    chapters: [
+      {
+        slug: "equivalence-partitioning",
+        title: "Equivalence partitioning",
+        topics: [
+          { slug: "valid-and-invalid-classes", title: "Valid & invalid classes" },
+          { slug: "picking-representatives", title: "Picking representatives" },
+          { slug: "ep-worked-example", title: "Worked example" },
+          { slug: "ep-pitfalls", title: "Pitfalls" },
+        ],
+      },
+      {
+        slug: "boundary-value-analysis",
+        title: "Boundary value analysis",
+        topics: [
+          { slug: "why-edges-fail", title: "Why edges fail" },
+          { slug: "two-and-three-value-bva", title: "2- & 3-value BVA" },
+          { slug: "bva-worked-example", title: "Worked example" },
+          { slug: "combining-bva-with-ep", title: "Combining with EP" },
+        ],
+      },
+      {
+        slug: "decision-tables",
+        title: "Decision tables",
+        topics: [
+          { slug: "conditions-and-actions", title: "Conditions & actions" },
+          { slug: "building-a-decision-table", title: "Building a table" },
+          { slug: "collapsing-rules", title: "Collapsing rules" },
+          { slug: "decision-table-worked-example", title: "Worked example" },
+        ],
+      },
+      {
+        slug: "state-transition",
+        title: "State transition",
+        topics: [
+          { slug: "states-and-events", title: "States & events" },
+          { slug: "diagrams-and-tables", title: "Diagrams & tables" },
+          { slug: "valid-vs-invalid-transitions", title: "Valid vs invalid" },
+          { slug: "state-transition-worked-example", title: "Worked example" },
+        ],
+      },
+      {
+        slug: "error-guessing-and-use-cases",
+        title: "Error guessing & use cases",
+        topics: [
+          { slug: "error-guessing-technique", title: "Error guessing" },
+          { slug: "experience-based-testing", title: "Experience-based" },
+          { slug: "use-case-testing-technique", title: "Use-case testing" },
+          { slug: "exploratory-link", title: "Exploratory link" },
+        ],
+      },
+    ],
+  },
+  // END test-design-techniques
+  // BEGIN test-artifacts
+  {
+    slug: "test-artifacts",
+    title: "Test artifacts",
+    summary: "The documents a professional tester actually produces — scenarios and cases, plans and strategy, a traceability matrix, managed test data, and the discipline of turning an ambiguous requirement into something testable before you write a single case.",
+    chapters: [
+      {
+        slug: "scenarios-and-cases",
+        title: "Scenarios & cases",
+        topics: [
+          { slug: "scenarios-vs-cases", title: "Scenarios vs cases" },
+          { slug: "anatomy-of-a-case", title: "Anatomy of a case" },
+          { slug: "writing-good-cases", title: "Writing good cases" },
+          { slug: "positive-and-negative-cases", title: "Positive & negative" },
+        ],
+      },
+      {
+        slug: "test-plans-and-strategy",
+        title: "Test plans & strategy",
+        topics: [
+          { slug: "whats-in-a-plan", title: "What's in a plan", planned: true },
+          { slug: "test-strategy", title: "Test strategy", planned: true },
+          { slug: "plan-entry-and-exit-criteria", title: "Entry / exit criteria", planned: true },
+          { slug: "lightweight-plans", title: "Lightweight plans", planned: true },
+        ],
+      },
+      {
+        slug: "traceability",
+        title: "Traceability",
+        topics: [
+          { slug: "the-rtm", title: "The RTM", planned: true },
+          { slug: "traceability-coverage", title: "Coverage", planned: true },
+          { slug: "linking-to-requirements", title: "Linking to requirements", planned: true },
+          { slug: "finding-coverage-gaps", title: "Finding gaps", planned: true },
+        ],
+      },
+      {
+        slug: "test-data",
+        title: "Test data",
+        topics: [
+          { slug: "what-test-data-is", title: "What test data is", planned: true },
+          { slug: "preparing-test-data", title: "Preparing data", planned: true },
+          { slug: "data-driven-thinking", title: "Data-driven thinking", planned: true },
+          { slug: "managing-test-data", title: "Managing data", planned: true },
+        ],
+      },
+      {
+        slug: "requirements-and-user-stories",
+        title: "Testing requirements & user stories",
+        topics: [
+          { slug: "spotting-ambiguous-requirements", title: "Spotting ambiguous requirements", planned: true },
+          { slug: "testable-acceptance-criteria", title: "Testable acceptance criteria", planned: true },
+          { slug: "questioning-requirements-early", title: "Questioning requirements early", planned: true },
+          { slug: "user-stories-and-three-amigos", title: "User stories & the three amigos", planned: true },
+        ],
+      },
+    ],
+  },
+  // END test-artifacts
+  // BEGIN levels-and-types-of-testing
+  {
+    slug: "levels-and-types-of-testing",
+    title: "Levels & types of testing",
+    summary: "The vocabulary that sorts every test you'll ever run — unit through acceptance, functional and regression, smoke and sanity, black-box through gray-box, and the static techniques that find defects before any code runs at all.",
+    chapters: [
+      {
+        slug: "test-levels",
+        title: "Test levels",
+        topics: [
+          { slug: "unit", title: "Unit" },
+          { slug: "integration", title: "Integration" },
+          { slug: "system", title: "System" },
+          { slug: "acceptance-uat", title: "Acceptance (UAT)" },
+        ],
+      },
+      {
+        slug: "functional-and-regression",
+        title: "Functional & regression",
+        topics: [
+          { slug: "functional-testing", title: "Functional testing" },
+          { slug: "regression", title: "Regression" },
+          { slug: "retest-vs-regression", title: "Retest vs regression" },
+          { slug: "impact-analysis", title: "Impact analysis" },
+        ],
+      },
+      {
+        slug: "smoke-and-sanity",
+        title: "Smoke & sanity",
+        topics: [
+          { slug: "smoke-testing", title: "Smoke testing" },
+          { slug: "sanity-testing", title: "Sanity testing" },
+          { slug: "when-to-run-each", title: "When to run each" },
+          { slug: "build-acceptance", title: "Build acceptance" },
+        ],
+      },
+      {
+        slug: "box-and-approach",
+        title: "Box & approach",
+        topics: [
+          { slug: "black-vs-white-box", title: "Black vs white box" },
+          { slug: "gray-box", title: "Gray box" },
+          { slug: "static-vs-dynamic", title: "Static vs dynamic" },
+          { slug: "positive-and-negative", title: "Positive / negative" },
+        ],
+      },
+      {
+        slug: "static-testing-and-reviews",
+        title: "Static testing & reviews",
+        topics: [
+          { slug: "static-vs-dynamic-properly", title: "Static vs dynamic, properly" },
+          { slug: "reviews-informal-to-walkthrough-to-inspection", title: "Reviews: informal → walkthrough → inspection" },
+          { slug: "static-analysis-tools", title: "Static analysis tools" },
+          { slug: "review-checklists-that-work", title: "Review checklists that work" },
+        ],
+      },
+    ],
+  },
+  // END levels-and-types-of-testing
   {
     slug: "foundations",
     title: "QA Foundations",
@@ -776,16 +953,6 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
           { slug: "seven-principles", title: "The seven testing principles" },
           { slug: "verification-vs-validation", title: "Verification vs validation" },
           { slug: "sdlc-and-stlc", title: "SDLC & STLC" },
-        ],
-      },
-      {
-        slug: "test-design",
-        title: "Test design techniques",
-        topics: [
-          { slug: "equivalence-partitioning", title: "Equivalence partitioning" },
-          { slug: "boundary-value-analysis", title: "Boundary value analysis" },
-          { slug: "decision-tables", title: "Decision tables" },
-          { slug: "state-transition", title: "State transition testing" },
         ],
       },
     ],

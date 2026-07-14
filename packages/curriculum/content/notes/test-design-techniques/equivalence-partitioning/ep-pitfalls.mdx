@@ -1,0 +1,317 @@
+---
+title: "Pitfalls"
+summary: "Equivalence partitioning sounds simple enough to apply without thinking hard about it - which is exactly how overlapping classes, silent gaps, over-partitioning, and combined-invalid tests slip into a test suite unnoticed."
+tags: ["test-design-techniques", "equivalence-partitioning", "track-a"]
+updated: "2026-07-14"
+---
+
+<Hook>
+Equivalence partitioning has a two-sentence definition, and that brevity is deceptive - it makes the
+technique feel too simple to get wrong. In practice, four specific mistakes account for almost every
+weak EP-based test suite: classes that secretly overlap, classes that leave a silent gap between them,
+partitioning so finely that the effort cancels out the technique's own efficiency, and cramming several
+invalid conditions into one test case so a failure can't say which one actually broke. None of these
+require inexperience to produce - they happen to careful testers moving quickly, which is exactly why
+they're worth naming explicitly.
+</Hook>
+
+<Callout type="analogy">
+A stack of laboratory test sieves, each with a different mesh size, is supposed to sort particles
+cleanly into size bands - but only if the sieves are chosen and stacked correctly. Pick two sieves with
+mesh sizes too close together and a huge range of particles gets caught by both, unable to tell you
+which one actually stopped them - an overlap. Skip a mesh size in the sequence and a whole band of
+particle sizes falls straight through everything, uncaught by any sieve at all - a gap. Use ten sieves
+where three would do and you spend the whole afternoon re-sorting the same handful of particles into
+finer and finer bands nobody asked for. The mesh doesn't fail - the CHOICE of which meshes to stack,
+and how carefully their edges were checked against each other, is where the real work lives.
+</Callout>
+
+<Term define="A partitioning pitfall is a structural flaw in a set of equivalence classes - not a mistake in picking a representative, but a mistake in the classes themselves. The four covered in this note are: OVERLAP (a value belongs to more than one class, so a failure can't say which rule broke), a GAP (a value belongs to no class at all, so it's silently untested), OVER-PARTITIONING (classes split more finely than any actual behavioral difference justifies, burning effort for no new coverage), and COMBINED INVALID TESTING (stuffing multiple invalid conditions into one test case, so a failure can't isolate which condition actually caused it).">Partitioning pitfall</Term>
+
+## Pitfall one: overlapping classes
+
+Two classes overlap when some value could plausibly belong to either one. This usually creeps in
+through an inclusive/exclusive mixup: a "too short" class defined as `0-8` and a "valid" class defined
+as `8-16` both claim the value `8`. It looks like a rounding error, not a real problem - until a test
+on `8` fails, and nobody can say whether the too-short logic or the valid-range logic is the one that's
+actually broken.
+
+## Pitfall two: silent gaps
+
+The mirror image of overlap: a value that belongs to NO class. If "too short" stops at `16` and "too
+long" starts at `18`, the value `17` is untested by design flaw, not by choice - nobody decided it
+didn't matter, it just fell through a seam nobody checked. Gaps are more dangerous than overlaps in one
+specific way: an overlap usually gets caught the first time it fails ambiguously, but a gap can sit
+untested indefinitely, because nothing ever calls attention to it.
+
+## Pitfall three: over-partitioning
+
+Splitting "too short" into "too short by 1 character," "too short by 2 characters," and so on treats
+depth as if it were a new class every time, when equivalence partitioning is about BREADTH - genuinely
+different behaviors, not gradations of the same one. If every value in that split range hits the exact
+same validation branch and produces the exact same error, it was one class all along, and testing all
+of them cancels out the whole reason equivalence partitioning exists: doing less work for the same
+coverage, not more work for a false sense of thoroughness.
+
+## Pitfall four: combining invalid conditions in one test
+
+A test case with `email = "not-an-email"` AND `password = ""` AND `age = -5` all at once might feel
+efficient - one test, three invalid conditions covered. It's the opposite: if the test fails, there's
+no way to know which of the three invalid inputs actually triggered the failure, or whether all three
+validations are even running. Test one invalid condition at a time, with every other field holding a
+valid representative, so a failure points at exactly one cause.
+
+{/* IMAGE: three stainless-steel laboratory test sieves with visible wire mesh screens of decreasing mesh size, overlapping each other on a white surface */}
+<HotspotImage
+  src="/notes/test-design-techniques/equivalence-partitioning/ep-pitfalls.jpg"
+  alt="Three stainless-steel laboratory test sieves with visible wire mesh of different sizes, partially overlapping each other on a white reflective surface"
+  credit="Laboratory sieves — Wikimedia Commons, CC BY-SA 3.0 (BMK)"
+  pins={[
+    { x: 29, y: 48, label: "Where the coarse and medium sieves overlap = classes that aren't actually separate", desc: "A particle small enough for the medium mesh but still caught by the coarse one sits in exactly this overlap. When a test suite's classes overlap the same way, a single input can satisfy two of them at once, and a failure can't say which rule actually broke." },
+    { x: 61, y: 48, label: "Where the medium and fine sieves overlap = the same mistake, easy to miss twice", desc: "This seam looks identical to the last one but is a completely separate overlap. Fixing one overlapping pair in a real class list doesn't guarantee the rest is clean - every boundary between classes needs its own check." },
+    { x: 15, y: 48, label: "The widest mesh (left) = a class drawn too coarsely", desc: "Loose enough that meaningfully different sizes all fall through together, uninspected. A class this broad hides real behavioral differences - the same mistake as merging 'too short' and 'wrong format' into one lazy 'invalid' bucket." },
+    { x: 77, y: 48, label: "The finest mesh (right) = the opposite mistake, a class drawn too narrowly", desc: "Split finely enough, and you're soon maintaining a representative for a distinction the system never actually treats differently - burning test time on classes that don't correspond to any real behavioral difference." },
+    { x: 38, y: 72, label: "The label stamped on the rim = the one detail a rushed partitioning skips", desc: "Each sieve carries its exact mesh spec - the number that actually defines the class, not a guess. Skipping this label and eyeballing 'looks about medium' is exactly how a class's real boundary drifts from what the spec actually says." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Auditing a class list for the four pitfalls - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Sort the classes by their lower bound", desc: "Line them up in order. Overlaps and gaps are only visible once the classes are laid out next to their actual neighbors, not read one at a time in isolation." },
+    { label: "Check every shared edge for overlap", desc: "Does one class's upper bound reach into or past the next class's lower bound? That shared value belongs to both - an overlap, however small it looks." },
+    { label: "Check every shared edge for a gap", desc: "Is there a value between one class's upper bound and the next class's lower bound that belongs to neither? That value is silently untested." },
+    { label: "Ask whether any two classes hit the identical code path", desc: "If two 'different' classes produce the exact same behavior for the exact same reason, they're over-partitioned - merge them and keep one representative, not two." },
+    { label: "Check invalid-side test cases for stacked conditions", desc: "Does any single test case set MORE than one field to an invalid value at once? Split it - one invalid condition per test, everything else held at a valid representative." },
+  ]}
+/>
+
+Here's an automated overlap-and-gap checker running against a deliberately buggy class list - the kind
+of off-by-one that looks harmless until you actually check it programmatically:
+
+<CodePlayground
+  language="python"
+  title="Run it - an equivalence-class overlap and gap detector (Python)"
+  code={`# A deliberately-buggy class list - the kind of copy-paste boundary mistake
+# that creeps into a real partitioning exercise
+CLASSES = [
+    ("too short", 0, 8),
+    ("valid", 8, 16),
+    ("too long", 18, 100),
+]
+
+def find_overlaps_and_gaps(classes):
+    ordered = sorted(classes, key=lambda c: c[1])
+    issues = []
+    for i in range(len(ordered) - 1):
+        name_a, _, high_a = ordered[i]
+        name_b, low_b, _ = ordered[i + 1]
+        if high_a >= low_b:
+            issues.append(f"OVERLAP: value {low_b} belongs to both '{name_a}' and '{name_b}'")
+        elif high_a + 1 < low_b:
+            gap_start, gap_end = high_a + 1, low_b - 1
+            gap = str(gap_start) if gap_start == gap_end else f"{gap_start}..{gap_end}"
+            issues.append(f"GAP: no class covers {gap}")
+    return issues
+
+issues = find_overlaps_and_gaps(CLASSES)
+if issues:
+    print(f"Found {len(issues)} problem(s) in this class list:")
+    for issue in issues:
+        print(f"  - {issue}")
+else:
+    print("No overlaps or gaps found - class list is clean.")
+
+# Found 2 problem(s) in this class list:
+#   - OVERLAP: value 8 belongs to both 'too short' and 'valid'
+#   - GAP: no class covers 17`}
+/>
+
+Same checker in Java - a shape that could plausibly run as a CI lint step over a team's documented
+class lists before they ever become test cases:
+
+<CodePlayground
+  language="java"
+  title="Run it - the overlap and gap detector (Java)"
+  code={`import java.util.*;
+
+public class Main {
+
+    record ClassRange(String name, int low, int high) {}
+
+    static final List<ClassRange> CLASSES = List.of(
+        new ClassRange("too short", 0, 8),
+        new ClassRange("valid", 8, 16),
+        new ClassRange("too long", 18, 100)
+    );
+
+    static List<String> findOverlapsAndGaps(List<ClassRange> classes) {
+        List<ClassRange> ordered = new ArrayList<>(classes);
+        ordered.sort(Comparator.comparingInt(ClassRange::low));
+        List<String> issues = new ArrayList<>();
+        for (int i = 0; i < ordered.size() - 1; i++) {
+            ClassRange a = ordered.get(i);
+            ClassRange b = ordered.get(i + 1);
+            if (a.high() >= b.low()) {
+                issues.add(String.format("OVERLAP: value %d belongs to both '%s' and '%s'", b.low(), a.name(), b.name()));
+            } else if (a.high() + 1 < b.low()) {
+                int gapStart = a.high() + 1, gapEnd = b.low() - 1;
+                String gap = gapStart == gapEnd ? String.valueOf(gapStart) : gapStart + ".." + gapEnd;
+                issues.add("GAP: no class covers " + gap);
+            }
+        }
+        return issues;
+    }
+
+    public static void main(String[] args) {
+        List<String> issues = findOverlapsAndGaps(CLASSES);
+        if (!issues.isEmpty()) {
+            System.out.println("Found " + issues.size() + " problem(s) in this class list:");
+            for (String issue : issues) {
+                System.out.println("  - " + issue);
+            }
+        } else {
+            System.out.println("No overlaps or gaps found - class list is clean.");
+        }
+    }
+}
+
+/* Output:
+Found 2 problem(s) in this class list:
+  - OVERLAP: value 8 belongs to both 'too short' and 'valid'
+  - GAP: no class covers 17
+*/`}
+/>
+
+<Callout type="tip">
+This overlap-and-gap checker is a genuinely useful pattern to keep, not just a teaching device. Any
+time a class list has more than three or four entries, run it (or a version of it) against your own
+class list before writing test cases - it catches the exact off-by-one mistakes this note describes in
+seconds, far faster than eyeballing a table of ranges.
+</Callout>
+
+<FirstTime title="Your mission: audit a class list you already wrote for these four pitfalls">
+<StepChecklist
+  steps={[
+    { text: "Pull up a class list from an earlier mission in this module", detail: "Or write a fresh one for any field with 3+ classes. You need something with real boundaries to check, not just a conceptual list." },
+    { text: "Sort it and check every shared edge for overlap", detail: "Line the classes up by their lower bound. For each pair of neighbors, does the upper class's lower bound get reached or passed by the lower class's upper bound?" },
+    { text: "Check every shared edge for a gap", detail: "Same lineup - is there a value between neighbors that belongs to neither class? Write it down explicitly even if it seems like a minor value." },
+    { text: "Look for over-partitioning", detail: "Pick any two of your classes and ask: do they actually hit different code paths, or would they produce the identical result and error message? If identical, merge them." },
+    { text: "Check your invalid-side test cases specifically", detail: "Does any single test case set more than one field to an invalid value simultaneously? If so, split it into one test per invalid condition, everything else held valid." },
+  ]}
+/>
+You ran a structured pitfall audit on your own work instead of assuming a class list was clean just because it looked reasonable at a glance.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "My overlap-and-gap checker found nothing, but I'm still not confident my class list is complete.",
+      fix: "The checker only verifies structural cleanliness (no overlaps, no gaps) between the classes you already wrote - it can't tell you if you're MISSING an entire class the spec implies but you didn't write down. Go back to the spec sentence and re-run the 'count the distinct behaviors' step from the earlier notes in this module; a clean checker result and a complete class list are two different questions.",
+    },
+    {
+      symptom: "I found an overlap, but fixing the boundary broke a test that used to pass.",
+      fix: "This is useful information, not a regression to panic over - the test that 'used to pass' was exercising an ambiguous value that happened to land on the class you assumed, purely by luck of which branch the code checked first. Re-pick a genuinely unambiguous representative for whichever class that test was meant to cover, and treat the old test value as retired, not as a baseline to preserve.",
+    },
+    {
+      symptom: "I keep finding 'gaps' that turn out to be genuinely impossible values (like a negative array length).",
+      fix: "Not every gap needs its own test - a value the system can never actually produce doesn't need a representative, but it's still worth a one-line note explaining why it's excluded ('array length cannot be negative in this language, no test needed') so the next person auditing this list doesn't waste time rediscovering the same gap and wondering if it was missed.",
+    },
+    {
+      symptom: "I combined two invalid conditions in one test on purpose, because testing them separately felt redundant.",
+      fix: "If the two invalid conditions are checked by genuinely independent validation logic, separate tests are the correct call even though it feels repetitive - the whole value of doing it right is that a future failure on ONE of them points precisely at itself. If they truly are checked by the same shared logic (rare, but it happens - a single generic 'field required' check covering several fields), that's worth confirming by reading the code, not assuming from the outside.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where these four pitfalls actually show up:
+
+- **Any class list with 3 or more entries** — the more classes, the more shared edges, and the higher the chance one of them has an off-by-one overlap or gap that eyeballing alone won't catch.
+- **Test suites inherited from someone else** — a class list you didn't write yourself is exactly where an old over-partitioning habit or a stacked-invalid test case tends to hide, unquestioned because "it's always been that way."
+- **Anywhere validation logic changed recently** — a boundary that used to be correct can silently develop a gap or overlap after a code change shifts one class's actual behavior without anyone updating the corresponding test's stated range.
+- **Bug reports that say 'multiple things are wrong' from one test run** — often a symptom of pitfall four: a combined-invalid test case that can't isolate which specific condition actually failed.
+- **Any test suite that's grown organically over time** — over-partitioning accumulates gradually, one "just to be safe" extra test case at a time, until a class that needed one representative has five nearly-identical ones.
+
+The habit: **run the sort-and-check-edges audit on any class list with more than a couple of entries, every time - not just when something already looks wrong.**
+</WhereToCheck>
+
+<WorkedExample title="finding all four pitfalls in one real (bad) test suite">
+1. **The suite, as inherited:** a "coupon code length" field's existing tests: `too_short (0-6 chars)`, `valid (6-15 chars)`, `too_long (15-30 chars)`, plus one test case `code="", user_id=null, cart_total=-5` labeled "invalid input test."
+2. **Sort by lower bound and check edges.** `too_short (0-6)` and `valid (6-15)` share the value `6` - OVERLAP. `valid (6-15)` and `too_long (15-30)` share the value `15` - a second OVERLAP, in the exact same list.
+3. **Fix the overlaps by making the boundaries exclusive on one side, consistently.** `too_short: 0-5`, `valid: 6-14`, `too_long: 15-30`. Re-run the sort-and-check: no shared values remain, no gaps introduced by the fix either.
+4. **Look for over-partitioning next.** The suite also has `too_short_by_1 (5 chars)` and `too_short_by_3 (3 chars)` as two SEPARATE listed test cases. Reading the actual validation code shows both hit the identical `len(code) < 6` check with the identical error message - over-partitioned. Merge into one `too_short` representative.
+5. **Now the combined-invalid test case:** `code="", user_id=null, cart_total=-5` in one test. If this fails, there's no way to know whether the code-emptiness check, the missing-user check, or the negative-total check is the one that's actually broken - or whether all three are even wired up.
+6. **Split it into three separate, single-condition tests:** `code="" (all else valid)`, `user_id=null (all else valid)`, `cart_total=-5 (all else valid)` - three focused tests replacing one ambiguous one.
+7. **Re-run the full checklist against the corrected suite:** no overlaps, no gaps, no redundant same-behavior classes, and every invalid test isolates exactly one condition. Four pitfalls found, four pitfalls fixed, in one pass.
+8. **The count went DOWN, not up** - from roughly seven original test cases (with three of them actively harmful in different ways) to six clean ones, each defensible on its own. Fixing pitfalls usually shrinks a bloated suite rather than growing it.
+</WorkedExample>
+
+<Callout type="mistake">
+Assuming a class list is fine because each individual class, read in isolation, looks reasonable.
+Overlaps and gaps are relationship problems between NEIGHBORING classes - they're invisible if you only
+ever review one class definition at a time. Always sort the full list and check every shared edge
+together, the way the checker in this note's playground does programmatically, before trusting a class
+list is actually clean.
+</Callout>
+
+<Quiz
+  question="A test suite has three separate test cases: 'username too short,' 'username has 2 special characters,' and 'username has 5 special characters.' A reviewer flags the second and third as a problem. Which pitfall from this note applies, and why?"
+  options={[
+    "Over-partitioning - if both 'special characters' tests hit the identical validation branch and produce the identical error, they're the same class tested twice, wasting effort the technique is meant to save",
+    "A gap - the reviewer is pointing out that a username with exactly 3 or 4 special characters was never tested and needs its own class",
+    "Overlapping classes - '2 special characters' and '5 special characters' describe values that could both belong to the same class simultaneously",
+    "Combined invalid testing - each of the two flagged tests secretly checks more than one invalid condition in a single test case"
+  ]}
+  answer={0}
+  explain="If a system's validation simply checks 'does this contain any special character' and rejects with the same message regardless of how many, then '2 special characters' and '5 special characters' are the same equivalence class described twice with different specific counts - that's over-partitioning, splitting by DEPTH (how many) rather than by BREADTH (a genuinely different behavior). It's not a gap, since nothing here suggests 3 or 4 characters would behave differently and therefore need its own class. It's not overlapping classes either - these are two separate test cases with distinct values, not one ambiguous value claimed by two classes. And it's not combined invalid testing, since each test case only exercises one condition (special-character count) at a time; the problem is that the two tests are redundant with each other, not that either one is internally ambiguous."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The four partitioning pitfalls, in one line each", back: "Overlap: a value belongs to 2+ classes. Gap: a value belongs to none. Over-partitioning: splitting by depth instead of behavioral difference. Combined invalid testing: stacking multiple invalid conditions in one test case." },
+    { front: "Why is a gap more dangerous than an overlap?", back: "An overlap usually surfaces the first time a test on the shared value fails ambiguously. A gap can sit completely untested indefinitely, since nothing calls attention to the value nobody's class covers." },
+    { front: "The fix for over-partitioning", back: "Ask whether two 'different' classes actually hit the same code path and produce the same result. If yes, merge them into one class with one representative - splitting by depth doesn't add real coverage." },
+    { front: "Why not combine several invalid conditions into one test case?", back: "If the test fails, there's no way to tell which of the stacked invalid conditions actually caused it. Test one invalid condition at a time, with every other field held at a valid representative." },
+    { front: "How to audit a class list for overlaps and gaps", back: "Sort classes by lower bound, then check every pair of NEIGHBORING classes' shared edge - overlaps and gaps are relationship problems invisible when reviewing one class in isolation." },
+    { front: "What a clean overlap-and-gap check does NOT guarantee", back: "That the class list is COMPLETE. A checker only confirms the classes you wrote don't conflict - it can't tell you if an entire class the spec implies is missing altogether." },
+  ]}
+/>
+
+<Challenge>
+Take a class list from any earlier note's mission in this module, or write a fresh one for a field with
+at least four classes. Run the full four-pitfall audit by hand: (1) sort and check every shared edge for
+overlap; (2) sort and check every shared edge for a gap; (3) for any two classes that look similar, read
+or reason through whether they truly hit different logic, or are secretly the same class split twice;
+(4) check whether any of your invalid-side tests stack more than one invalid condition at once. Report
+which pitfalls (if any) you found, and for at least one of them, write the corrected version.
+</Challenge>
+
+<AskCommunity prompt="Pitfall-audit check on this class list for `[field name]`: `[list your classes with boundaries]`. I checked for overlaps/gaps and found `[none / describe them]`. Does anything here look over-partitioned, or does the invalid-side testing stack more than one condition per test?">
+The most useful replies point at a SPECIFIC pair of classes or a specific test case, not a general
+"looks fine" - a concrete "these two overlap at X" is what actually improves the list.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://glossary.istqb.org/en_US/term/equivalence-partitioning", title: "ISTQB Glossary — equivalence partitioning, the standard testing-certification definition", kind: "read" },
+    { href: "https://www.softwaretestinghelp.com/istqb-exam-questions-equivalence-partitioning-boundary-value-analysis/", title: "Software Testing Help — ISTQB exam questions on equivalence partitioning and BVA, including common mistakes", kind: "read" },
+    { href: "https://www.geeksforgeeks.org/software-engineering/equivalence-partitioning-method/", title: "GeeksforGeeks — Equivalence Partitioning Method, with pitfalls and examples", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=gXZgInvjaqc", title: "Software Testing Mentor — Equivalence Partitioning in Testing, tutorial #34", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=gXZgInvjaqc" title="Software Testing Tutorial #34 — Equivalence Partitioning in Testing" minutes={13} />
+
+<Takeaways
+  points={[
+    "Overlapping classes let one value satisfy two rules at once - a failure can't say which rule actually broke. Check every shared edge between neighboring classes explicitly.",
+    "A gap leaves a value covered by no class at all - more dangerous than an overlap because nothing calls attention to it, so it can stay untested indefinitely.",
+    "Over-partitioning splits by DEPTH (how far past a threshold) instead of BREADTH (a genuinely different behavior) - if two classes hit the same code path, merge them.",
+    "Never stack multiple invalid conditions into one test case - test one invalid condition at a time, with every other field held at a valid representative, so a failure isolates its cause.",
+    "A clean overlap-and-gap check only proves the classes you wrote don't conflict with each other - it can't catch an entire missing class the spec implies but nobody wrote down.",
+  ]}
+/>
+
+<Complete xp={10} />

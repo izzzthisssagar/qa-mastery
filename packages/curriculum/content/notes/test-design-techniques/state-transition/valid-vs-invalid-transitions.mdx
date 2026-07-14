@@ -1,0 +1,322 @@
+---
+title: "Valid vs invalid"
+summary: "Confirming an allowed transition works is half the job. Confirming a disallowed one is genuinely REFUSED - not just discouraged - is the half that catches real defects, and the half most testers skip."
+tags: ["test-design-techniques", "state-transition", "track-a"]
+updated: "2026-07-14"
+---
+
+<Hook>
+A state table (from the previous note) makes something visible that's easy to test around: most of its
+cells are marked invalid, not valid. Testing only the valid cells - confirming the happy paths work -
+covers a small fraction of what the table actually says about the system. The real defects in a state
+machine live disproportionately in the invalid cells: the transitions that should be refused, and
+sometimes silently aren't.
+</Hook>
+
+<Callout type="analogy">
+A full-height subway turnstile doesn't just discourage someone from entering without paying - it
+physically cannot rotate for them. That's a meaningfully higher bar than a waist-high gate someone could
+step over: the invalid transition (enter without a valid tap) isn't just unlikely, it's actually,
+completely impossible. Testing a state machine properly means holding every invalid transition to that
+same standard - not "does the interface discourage this," but "is it truly, verifiably impossible" - the
+same way a tester would actually walk up to the turnstile without tapping and confirm, physically, that
+it doesn't turn.
+</Callout>
+
+<Term define="A valid transition is a (state, event) pair the system is SUPPOSED to accept, moving to a defined next state. An invalid transition is a (state, event) pair the system is supposed to REFUSE - the event either has no effect, produces an explicit error, or is otherwise blocked, but critically does NOT silently succeed as if it were valid. Testing valid transitions confirms the system does what it should; testing invalid transitions confirms it does NOT do what it shouldn't - and a system that lets an invalid transition through unnoticed is a real defect, often a serious one (a payment confirmed twice, a shipped order cancelled after the fact), even though nothing about the attempt looked unusual to whoever triggered it.">Valid / invalid transition</Term>
+
+## Testing valid transitions
+
+For every filled cell in the state table, confirm the system actually moves to the stated next state
+when that event fires from that state - the straightforward part, directly provable by running the
+transition and checking the resulting state matches what the table says.
+
+## Testing invalid transitions
+
+For every cell marked invalid, confirm the system genuinely REFUSES the event from that state - not
+silently ignoring the check, not accepting it "just this once," not producing a confusing partial
+result. The refusal itself needs to be correct too: a clear error, no side effects, and the state
+staying exactly where it was before the invalid attempt.
+
+## Why the invalid half is where real bugs hide
+
+Developers naturally write and test the code paths for valid transitions first, because that's the
+feature being built. The code path that's SUPPOSED to reject an invalid transition is often an
+afterthought, or missing entirely - a state check that got forgotten, an event handler that doesn't
+verify the current state before acting. This asymmetry in how the code gets written is exactly why the
+asymmetry in testing effort needs to run the other way: the invalid transitions deserve at least as much
+deliberate attention as the valid ones, not less.
+
+{/* IMAGE: a full-height rotating cage turnstile at a NYC subway entrance with a "MetroCard Entry" sign and an illuminated OMNY contactless payment reader */}
+<HotspotImage
+  src="/notes/test-design-techniques/state-transition/valid-vs-invalid-transitions.jpg"
+  alt="A full-height stainless steel rotating cage turnstile at a NYC subway station entrance, with a curved 'MetroCard Entry' sign above it and an illuminated blue OMNY contactless payment reader mounted beside the cage, stairs visible through the bars leading down to the platform"
+  credit="NYC Subway turnstile equipped with OMNY — Wikimedia Commons, CC BY-SA 4.0 (GK tramrunner RU)"
+  pins={[
+    { x: 25, y: 46, label: "The rotating cage bars = the mechanism that only turns for a valid transition", desc: "This cage doesn't rotate on its own, and it doesn't rotate for just any push - it turns specifically when the system confirms a valid transition should happen. Test both directions: does it turn when it should, and does it genuinely refuse to turn when it shouldn't?" },
+    { x: 58, y: 58, label: "The OMNY reader = the event, the exact moment a transition gets attempted", desc: "Tapping here is the single, momentary trigger the system evaluates against the current state (has this rider paid, is this entry open) before deciding whether the cage turns." },
+    { x: 29, y: 18, label: "'MetroCard Entry' = the documented, expected valid path, labeled clearly", desc: "This is the transition the system is designed to allow - the equivalent of an arrow drawn on a state diagram. But a label describing the intended valid path is not the same as proof the invalid paths are actually blocked." },
+    { x: 6, y: 50, label: "The floor-to-ceiling cage = what makes an invalid attempt truly impossible, not just discouraged", desc: "A waist-high turnstile can be jumped; this full cage physically cannot be forced. That's the real bar for testing an invalid transition properly - not 'does the interface discourage this,' but 'is it actually, completely impossible.'" },
+    { x: 32, y: 38, label: "The stairs beyond = the destination state, visible but unreachable without a valid transition first", desc: "You can see exactly where a valid transition leads - but seeing it changes nothing about whether you're allowed there yet. The destination state existing doesn't grant access to it; only a correctly-fired valid transition does." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Testing both halves of a state table - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Take the full state table from the previous note", desc: "Every cell already marked valid or invalid - the complete map of what should and shouldn't be allowed." },
+    { label: "Test every valid cell: does it move to the stated state?", desc: "Run the transition, check the resulting state matches the table exactly - the straightforward, expected-to-pass half." },
+    { label: "Test every invalid cell: is it genuinely refused?", desc: "Run the SAME event from the SAME state the table marks invalid - confirm it's actually blocked, not silently accepted." },
+    { label: "Check the refusal is clean, not just present", desc: "A clear error, no unintended side effect, and the state unchanged - a messy or partial refusal is its own kind of defect." },
+    { label: "Confirm state coverage separately from transition coverage", desc: "Was every STATE reached at least once across all this testing? That's a real but WEAKER guarantee than testing every transition - don't mistake one for the other." },
+  ]}
+/>
+
+Here's a call state machine tested on both halves - valid transitions confirmed working, and invalid
+ones checked for genuine refusal, exposing a real bug in exactly the invalid half:
+
+<CodePlayground
+  language="python"
+  title="Run it - testing valid AND invalid transitions, catching a real refusal bug (Python)"
+  code={`class CallSystem:
+    def __init__(self):
+        self.state = "Idle"
+
+    def handle(self, event):
+        transitions = {
+            ("Idle", "incoming_call"): "Ringing",
+            ("Ringing", "answer"): "Connected",
+            ("Ringing", "hang_up"): "Ended",
+            ("Connected", "hang_up"): "Ended",
+            ("Ended", "reset"): "Idle",
+        }
+        key = (self.state, event)
+        if key in transitions:
+            self.state = transitions[key]
+            return "ACCEPTED"
+        # BUG: falls through to accepting hang_up from ANY state, even ones where it's not defined
+        if event == "hang_up":
+            self.state = "Ended"
+            return "ACCEPTED (BUG: should have been refused)"
+        return "REFUSED (correct)"
+
+TESTS = [
+    ("Idle", "incoming_call", "valid"),
+    ("Ringing", "answer", "valid"),
+    ("Connected", "hang_up", "valid"),
+    ("Ended", "reset", "valid"),
+    ("Idle", "answer", "invalid"),
+    ("Idle", "hang_up", "invalid"),
+]
+
+print(f"{'Start state':12} {'Event':14} {'Kind':9} Result")
+for start_state, event, kind in TESTS:
+    system = CallSystem()
+    system.state = start_state
+    result = system.handle(event)
+    print(f"{start_state:12} {event:14} {kind:9} {result}")
+
+# Start state  Event          Kind      Result
+# Idle         incoming_call  valid     ACCEPTED
+# Ringing      answer         valid     ACCEPTED
+# Connected    hang_up        valid     ACCEPTED
+# Ended        reset          valid     ACCEPTED
+# Idle         answer         invalid   REFUSED (correct)
+# Idle         hang_up        invalid   ACCEPTED (BUG: should have been refused)`}
+/>
+
+Same test set in Java - the shape a real telephony service's state handler might take:
+
+<CodePlayground
+  language="java"
+  title="Run it - valid and invalid transition testing (Java)"
+  code={`import java.util.*;
+
+public class Main {
+
+    static class CallSystem {
+        String state = "Idle";
+        Map<String, String> transitions = new HashMap<>();
+
+        CallSystem() {
+            transitions.put("Idle:incoming_call", "Ringing");
+            transitions.put("Ringing:answer", "Connected");
+            transitions.put("Ringing:hang_up", "Ended");
+            transitions.put("Connected:hang_up", "Ended");
+            transitions.put("Ended:reset", "Idle");
+        }
+
+        String handle(String event) {
+            String key = state + ":" + event;
+            if (transitions.containsKey(key)) {
+                state = transitions.get(key);
+                return "ACCEPTED";
+            }
+            // BUG: falls through to accepting hang_up from ANY state, even ones where it's not defined
+            if (event.equals("hang_up")) {
+                state = "Ended";
+                return "ACCEPTED (BUG: should have been refused)";
+            }
+            return "REFUSED (correct)";
+        }
+    }
+
+    record TestCase(String startState, String event, String kind) {}
+
+    public static void main(String[] args) {
+        List<TestCase> tests = List.of(
+            new TestCase("Idle", "incoming_call", "valid"),
+            new TestCase("Ringing", "answer", "valid"),
+            new TestCase("Connected", "hang_up", "valid"),
+            new TestCase("Ended", "reset", "valid"),
+            new TestCase("Idle", "answer", "invalid"),
+            new TestCase("Idle", "hang_up", "invalid")
+        );
+
+        System.out.printf("%-12s %-14s %-9s %s%n", "Start state", "Event", "Kind", "Result");
+        for (TestCase t : tests) {
+            CallSystem system = new CallSystem();
+            system.state = t.startState();
+            String result = system.handle(t.event());
+            System.out.printf("%-12s %-14s %-9s %s%n", t.startState(), t.event(), t.kind(), result);
+        }
+    }
+}
+
+/* Output matches the Python run exactly - same caught bug on Idle + hang_up. */`}
+/>
+
+<Callout type="tip">
+Notice the bug specifically affects `hang_up` from an unexpected state, not `answer` - the developer
+clearly handled ONE invalid case correctly (Idle+answer is properly refused) while missing another
+(Idle+hang_up). This is realistic and common: invalid-transition handling is often implemented
+inconsistently, event by event, rather than as one uniform check - which is exactly why every invalid
+cell needs its own explicit test, not just a sample.
+</Callout>
+
+<FirstTime title="Your mission: test both halves of a real state table">
+<StepChecklist
+  steps={[
+    { text: "Use the state table from the previous note's mission", detail: "Or build a fresh one for a state machine you have access to test (a login flow, a cart, any multi-state feature)." },
+    { text: "Test every valid cell first", detail: "Confirm each one moves to the exact stated next state - record the actual result next to what the table predicted." },
+    { text: "Test every invalid cell, one at a time", detail: "Attempt the exact event from the exact state the table marks invalid. Don't skip any - sampling a few is exactly how a bug like this note's example gets missed." },
+    { text: "Check each refusal's quality, not just its presence", detail: "Is the error message clear? Did the state actually stay unchanged? A technically-refused-but-messy result is still worth flagging." },
+    { text: "Confirm state coverage as a separate check", detail: "Across everything you just tested, was every single state visited at least once? Note this separately from transition coverage - they're different guarantees." },
+  ]}
+/>
+You tested the half of a state table that usually gets skipped - and if this note's example is any indication, that's exactly where a real defect was most likely to be hiding.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "I found an invalid transition that got silently accepted instead of refused.",
+      fix: "Treat this as a real, often serious defect, not a minor inconsistency - report the exact starting state, the event, and what SHOULD have happened per the table, plus what actually happened (including any resulting state corruption). An invalid transition slipping through is frequently how a system ends up in a state it was never designed to handle correctly downstream.",
+    },
+    {
+      symptom: "An invalid transition got refused, but with a confusing or generic error message.",
+      fix: "This is still worth flagging, even though the core refusal worked correctly - a user or a calling system hitting a confusing error has no way to know what actually went wrong or how to proceed. Report it as a real, if lower-severity, usability defect, distinct from a transition that was silently accepted.",
+    },
+    {
+      symptom: "I tested every transition and every one passed - was there any point testing the invalid ones given the valid ones all worked?",
+      fix: "Yes, and report the clean invalid-transition results explicitly rather than treating them as an afterthought - a system that correctly refuses everything it should is real, valuable, separately-earned evidence, not something implied for free by the valid transitions working.",
+    },
+    {
+      symptom: "My state machine has a LOT of invalid cells (most real ones do) - testing every single one feels excessive.",
+      fix: "Prioritize by consequence, the same way earlier notes in this module suggested scaling BVA and decision-table effort: invalid transitions touching money, security, or data integrity get full individual testing; low-consequence ones can reasonably get sampled. But default to full coverage first, and only scale down deliberately, not by skipping the ones that felt tedious.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where invalid-transition testing matters most:
+
+- **Payment and order-processing flows** — an invalid transition slipping through here (paying twice, shipping a cancelled order) has direct financial consequences.
+- **Authentication and session state** — can a locked account still log in? Can an expired session still perform an action? These are exactly the invalid cells most worth deliberate testing.
+- **Any state machine driven by external or automated events** — webhooks, timers, and background jobs firing events don't have a human double-checking context first, making invalid-transition bugs both more likely and more likely to go unnoticed.
+- **APIs called directly, bypassing a UI that normally prevents invalid actions** — the same UI-bypass concern from earlier notes in this module applies here: a UI hiding an invalid button doesn't prove the backend actually refuses the transition.
+- **Systems with a history of "stuck" or "corrupted" state reports** — these are frequently caused by exactly this defect class: an invalid transition that was silently accepted, leaving the system in a state its own logic was never designed to handle.
+
+The habit: **test every invalid cell explicitly, not as an afterthought to the valid ones - and treat 'silently accepted' as the specific defect shape to hunt for.**
+</WhereToCheck>
+
+<WorkedExample title="catching a silent invalid-transition bug in a real subscription flow">
+1. **The state table** (built using the previous note's technique) for a subscription: states Trial, Active, Cancelled, Expired; events upgrade, cancel, trial_expires, reactivate.
+2. **Test the valid cells first.** Trial+upgrade->Active: works. Active+cancel->Cancelled: works. Trial+trial_expires->Expired: works. Three valid transitions confirmed correctly.
+3. **Now test an invalid cell deliberately: Expired+upgrade.** Per the table, this should be refused - an expired trial with no payment method on file shouldn't be upgradeable directly. Attempt it anyway, on purpose.
+4. **The system accepts it.** No error, no refusal - the account silently moves to Active, bypassing the payment step entirely. This is exactly the "silently accepted" defect shape this note warns about, and it would never have been found by testing valid transitions alone.
+5. **Confirm the pattern isn't isolated - test nearby invalid cells too.** Cancelled+upgrade: also silently accepted, same bug. Trial+cancel (already trial, not yet active) tested separately: correctly refused. The bug is specific to `upgrade` from post-Trial states, not a blanket failure.
+6. **Check the resulting state's integrity, not just that a refusal was missing.** The silently-upgraded account now shows "Active" with a billing history that has no corresponding payment - a data-integrity problem downstream of the original invalid transition, exactly the kind of secondary damage an unrefused invalid transition tends to cause.
+7. **File the defect precisely**: "upgrade event is incorrectly accepted from Expired and Cancelled states (should be refused per the state table); results in an Active subscription with no associated payment. Confirmed refused correctly from Trial+cancel as a contrast case, so this is specific to the upgrade handler's state check, not a system-wide gap."
+8. **The lesson:** every valid transition in this flow worked perfectly, and a tester who only tested the valid half would have shipped this bug with full confidence - the entire defect lived in cells the happy-path testing never touched.
+</WorkedExample>
+
+<Callout type="mistake">
+Treating "all the valid transitions work" as evidence the state machine is solid. This note's worked
+example is built around a system where every valid transition passed cleanly while two invalid ones
+were silently letting real, consequential defects through. Valid-transition testing and
+invalid-transition testing answer completely different questions - passing one proves nothing about the
+other, and a state machine isn't actually trustworthy until both have been explicitly tested.
+</Callout>
+
+<Quiz
+  question="A tester confirms all 5 valid transitions in a state machine work correctly, and reports the feature as fully tested. The state table also has 15 cells marked invalid. What does this note say about that report?"
+  options={[
+    "It's incomplete - none of the 15 invalid cells were tested, meaning there's no evidence any of them are actually refused rather than silently accepted, which is exactly the defect shape this note's worked example demonstrates hiding behind a fully-passing set of valid transitions",
+    "The report is complete - once every valid transition is confirmed working, invalid transitions are refused by default in any correctly-built system and don't need separate testing",
+    "The report only needs one additional test - a single invalid transition tested and confirmed refused is sufficient to extend that confidence to the other 14 untested invalid cells",
+    "The 15 invalid cells don't need testing at all, since a cell marked invalid in the table has already been proven refused by the act of building the table itself"
+  ]}
+  answer={0}
+  explain="This note's central claim, demonstrated in its worked example, is that valid-transition success provides zero evidence about invalid-transition behavior - the subscription system in the worked example passed every valid transition cleanly while two separate invalid transitions were silently accepted, each hiding a real, consequential defect. There's no engineering guarantee that a correctly-built valid path implies correctly-refused invalid paths; they're typically implemented by different code, often inconsistently, as the note's tip callout points out (one invalid case handled correctly, a similar one missed). A single tested invalid cell also doesn't generalize to the rest - the worked example specifically shows the bug affecting some invalid cells (upgrade from Expired, Cancelled) while a nearby one (cancel from Trial) was handled correctly, meaning sampling one cell could easily miss the real gap. And marking a cell 'invalid' in the table only records an intention - it's a design specification, not proof of the running system's actual behavior, which is exactly why this note argues the invalid cells need to be run against real code, not just labeled correctly on paper."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Valid transition testing vs invalid transition testing", back: "Valid: confirm the system DOES move to the stated next state when it should. Invalid: confirm the system does NOT accept an event it should refuse - two different questions, neither implies the other." },
+    { front: "Why invalid transitions are where real bugs concentrate", back: "Code for valid paths gets written and tested first, as the actual feature. Code that refuses invalid transitions is often an afterthought - an asymmetry in how bugs get introduced that testing effort needs to mirror." },
+    { front: "The two things to check about a refusal", back: "That it happens at all (not silently accepted), AND that it's clean - a clear error, no side effects, state genuinely unchanged. A messy refusal is its own smaller defect." },
+    { front: "State coverage vs transition coverage", back: "State coverage: every STATE visited at least once - a weaker guarantee. Transition coverage: every (state, event) pair tested - stronger. Don't mistake one for satisfying the other." },
+    { front: "Why 'silently accepted' is the specific defect shape to hunt for", back: "An invalid transition that succeeds without any error often causes secondary damage downstream (data integrity, billing mismatches) - worse than an obviously broken feature because nothing LOOKS wrong at the moment it happens." },
+    { front: "What passing all valid transitions actually proves", back: "Only that the happy paths work - nothing about whether the system correctly refuses what it shouldn't accept. Both halves need independent, explicit testing." },
+  ]}
+/>
+
+<Challenge>
+Take the state table from the previous note's mission (or a fresh one for a real feature you can test).
+Test every valid cell and record the results. Then test EVERY invalid cell individually - not a sample -
+attempting the exact event from the exact state the table marks invalid. For each, record whether it was
+genuinely refused, and if refused, whether the refusal was clean (clear error, no side effects, state
+unchanged). Report any cell where an invalid transition was accepted, partially accepted, or refused in
+a confusing way.
+</Challenge>
+
+<AskCommunity prompt="Valid/invalid transition check on `[state machine]`: valid transitions all passed. Testing invalid cells, I found `[list any accepted-when-shouldn't-be, or 'all correctly refused']`. Does anything here suggest a state-check gap similar to an inconsistent invalid-transition handler?">
+The most useful replies point at a SPECIFIC (state, event) pairing and ask whether it was actually
+tested, not just assumed refused - a general "sounds thorough" doesn't verify the invalid half this note
+is about.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://glossary.istqb.org/en_US/term/state-transition-testing", title: "ISTQB Glossary — state transition testing, the standard testing-certification definition", kind: "read" },
+    { href: "https://www.geeksforgeeks.org/software-engineering/state-transition-testing/", title: "GeeksforGeeks — State Transition Testing, valid and invalid transitions", kind: "read" },
+    { href: "https://tudip.com/blog_post/state-transition-testing-and-its-cases/", title: "Tudip Technologies — State Transition Testing and its Cases", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=jDPad8KgG-4", title: "TM SQUARE — ISTQB Foundation Tutorial 33: State Transition Testing", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=jDPad8KgG-4" title="ISTQB Foundation 4.0 — State Transition Testing, Test Case Design Techniques" minutes={12} />
+
+<Takeaways
+  points={[
+    "Valid transition testing confirms the system does what it should. Invalid transition testing confirms it does NOT do what it shouldn't - two separate questions, neither implies the other.",
+    "Code refusing invalid transitions is often an afterthought compared to code implementing valid ones - testing effort needs to mirror that asymmetry, not skip it.",
+    "A refusal needs to be checked for quality, not just presence - a clear error and an unchanged state, not just 'technically not accepted.'",
+    "'Silently accepted' is the specific, dangerous defect shape - an invalid transition that succeeds with no visible error often causes real downstream damage.",
+    "State coverage (every state visited) and transition coverage (every state-event pair tested) are different guarantees - passing one doesn't satisfy the other.",
+  ]}
+/>
+
+<Complete xp={10} />

@@ -1,0 +1,308 @@
+---
+title: "Valid & invalid classes"
+summary: "You can never test every possible input - but you can group inputs the system is expected to treat identically, test one representative from each group, and get the same confidence for a fraction of the effort. This is where equivalence partitioning starts."
+tags: ["test-design-techniques", "equivalence-partitioning", "track-a"]
+updated: "2026-07-14"
+---
+
+<Hook>
+A signup form's username field technically accepts an infinite number of possible strings - every
+letter combination, every length, every symbol a keyboard can produce. Nobody tests infinity. What
+separates a tester who covers the field properly from one who "tested it a bit" isn't luck or extra
+hours - it's a method for turning that infinite space into a short, defensible list of values that
+still catches the real bugs. That method is **equivalence partitioning**, and it starts with a single
+question this note answers: which inputs does the system actually treat the *same way*?
+</Hook>
+
+<Callout type="analogy">
+A mail-sorting facility never inspects every letter individually to decide what happens to it. A
+sorter glances at an address, matches it to the one bin that address belongs in, and drops it in -
+done. Nobody re-checks that letter against every OTHER bin first; if it belongs in the yellow-tagged
+bin, it does not also need testing against the blue-tagged one. Equivalence partitioning is that same
+move applied to test inputs: don't inspect every possible value, sort the whole input space into a
+small number of bins the system is expected to treat identically, then test one representative from
+each bin and trust the rest of that bin behaves the same way.
+</Callout>
+
+<Term define="An equivalence class (or equivalence partition) is a subset of an input domain that the system under test is expected to handle IDENTICALLY - if one member of the class reveals a defect, every other member is assumed to reveal the same defect, and if one member passes, every other member is assumed to pass too. Classes come in two flavors that both matter: VALID classes hold input the system should accept and process normally; INVALID classes hold input the system should reject or handle as an error. A common mistake is treating 'invalid' as a single catch-all bin - in practice, different invalid classes (empty, too short, wrong format, wrong type) often trigger different code paths and different error messages, so each one deserves its own representative, the same way each valid class does.">Equivalence class</Term>
+
+## Grouping by behavior, not by value
+
+The instinct when a field is described as "accepts ages 18-65" is to start listing numbers: 18, 19,
+20, 21... The equivalence-partitioning instinct is different: stop listing values and start asking
+**how many distinctly different ways can this system behave for this field?** For an age field with
+that one rule, there are exactly three: reject (too young), accept (in range), reject (too old). Three
+behaviors, three classes, three representative tests - not three thousand.
+
+| Partition | Example value | Expected behavior |
+|-----------|---------------|--------------------|
+| Below range (`< 18`) | `10` | rejected |
+| Valid range (`18-65`) | `40` | accepted |
+| Above range (`> 65`) | `80` | rejected |
+
+Notice what makes this a legitimate partition and not just "some numbers I picked": every value inside
+a row is interchangeable for testing purposes. `10` and `2` are both "below range" and the system has
+no reason to treat them differently - so testing both would spend two tests to learn the same one
+fact.
+
+## Valid classes are the easy half
+
+A valid class is any input the system is supposed to accept and process successfully. Most fields have
+more than one - a "phone number" field might have separate valid classes for a 10-digit domestic
+number and an 11-digit number with a country code, if the system is meant to accept both and route
+them differently internally. The test to write for each valid class is straightforward: pick a
+representative, confirm the system accepts it and does the right thing with it.
+
+## Invalid classes are where testers get lazy
+
+This is the half worth slowing down on, because it's where thin test coverage actually lives. It's
+common to see a single test case labeled "invalid input" standing in for every possible way an input
+could be wrong - one empty-string test, ship it. But **empty**, **too short**, **wrong format**, and
+**wrong data type** are four different invalid classes, and a system frequently handles them through
+four different branches of code, with four different (or four accidentally-identical, which is itself
+worth catching) error messages. One test can only prove one of those branches works. The username
+field in this note's playground below has exactly this shape: four distinct invalid classes, not one.
+
+{/* IMAGE: two US Marines at a military postal sorting facility, one holding a labeled USPS box, sorting mail into a row of gray plastic bins tagged with colored labels */}
+<HotspotImage
+  src="/notes/test-design-techniques/equivalence-partitioning/valid-and-invalid-classes.jpg"
+  alt="Two U.S. Marines at a postal sorting facility; one holds a large USPS-labeled cardboard box while leaning over a row of gray plastic sorting bins, several tagged with colored labels, at Al Asad Air Base, Iraq"
+  credit="USMC-090425-M-0735M-003 — Wikimedia Commons, Public Domain (U.S. Marine Corps, Master Sgt. Kevin McCants)"
+  pins={[
+    { x: 48, y: 42, label: "The box, still in hand = an unclassified input", desc: "Every piece of mail arrives looking like this: one item among millions, indistinguishable until someone decides which bin it belongs to. That's any input before you've partitioned it - a raw value with no test significance yet, on its own." },
+    { x: 72, y: 68, label: "The bin it's headed for = the one class it actually belongs to", desc: "Nobody checks this box against every bin in the room - one glance at the label matches it to exactly one. That's the point of a class: once you know which one an input belongs to, you don't separately re-verify it against every other class's rules." },
+    { x: 80, y: 74, label: "The yellow tag = a label that names the class without opening it", desc: "The tag exists so nobody has to dump out the bin's contents to know what belongs there. A well-named equivalence class in a test plan does the same job - 'valid range', 'too short', 'wrong format' - readable at a glance, no re-deriving the boundary each time." },
+    { x: 94, y: 78, label: "The blue-tagged bin, further off = a different valid class entirely", desc: "Mail correctly sorted into the yellow bin does not also belong in the blue one, and testing the blue bin's representative proves nothing about the yellow bin. Classes are mutually exclusive - every input belongs to exactly one, never several." },
+    { x: 16, y: 80, label: "The empty bin in front = an invalid class, easy to forget", desc: "This is the bin equivalence partitioning most often skips: the one for input that should be rejected. It looks empty because well-formed mail never lands here on its own - but it still needs a representative tested on purpose, or the system's rejection path never actually gets exercised." },
+  ]}
+/>
+
+<FlowAnimation
+  title="From a field's rules to a short list of representatives - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Read the field's actual rules", desc: "Not the happy-path description - the full spec. Length limits, allowed characters, required format, data type. Every rule you find is a potential source of a new class." },
+    { label: "List every distinctly different way the system could behave", desc: "Not every value - every BEHAVIOR. 'Accept and save', 'reject as too short', 'reject as wrong format' are three behaviors; the specific values that produce them come next." },
+    { label: "Split invalid into its own sub-classes, not one bucket", desc: "Empty, too short, too long, wrong type, wrong format are usually separate classes, each likely hitting different validation code. Resist the urge to collapse them into one 'bad input' test." },
+    { label: "Confirm classes don't overlap and don't leave gaps", desc: "Every possible input should land in exactly one class. If a value could plausibly belong to two classes, or to none, the partitioning itself is wrong - fix that before writing tests." },
+    { label: "Pick ONE representative per class", desc: "Any member of the class will do - the class is only valid if every member truly is interchangeable, so the specific value you pick barely matters. Write it down with the reason it represents that class." },
+    { label: "Test only those representatives", desc: "One test per class, not one test per value you could imagine. A five-class field gets five tests - deliberately, not because you ran out of time to write more." },
+  ]}
+/>
+
+Here's a username field with exactly the shape described above - one valid class and four distinct
+invalid classes, each worth its own representative:
+
+<CodePlayground
+  language="python"
+  title="Run it - classifying a signup username into its equivalence classes (Python)"
+  code={`import re
+
+def classify_username(username):
+    if username == "":
+        return "invalid: empty"
+    if len(username) < 3:
+        return "invalid: too short"
+    if len(username) > 20:
+        return "invalid: too long"
+    if not re.fullmatch(r"[A-Za-z0-9_]+", username):
+        return "invalid: bad characters"
+    return "valid"
+
+# One representative per class - not every possible username
+samples = {
+    "": "empty string",
+    "ab": "2 chars, below minimum",
+    "sajan_qa": "9 chars, ordinary valid case",
+    "a" * 21: "21 chars, over maximum",
+    "sajan qa!": "contains a space and '!'",
+}
+
+for value, note in samples.items():
+    label = repr(value) if value else "''"
+    print(f"{label:24} ({note:28}) -> {classify_username(value)}")
+
+# ''                       (empty string                ) -> invalid: empty
+# 'ab'                     (2 chars, below minimum      ) -> invalid: too short
+# 'sajan_qa'               (9 chars, ordinary valid case) -> valid
+# 'aaaaaaaaaaaaaaaaaaaaa'  (21 chars, over maximum      ) -> invalid: too long
+# 'sajan qa!'              (contains a space and '!'    ) -> invalid: bad characters`}
+/>
+
+Same classifier in Java - the shape a signup form's backend validation might actually take:
+
+<CodePlayground
+  language="java"
+  title="Run it - the username classifier (Java)"
+  code={`import java.util.*;
+import java.util.regex.*;
+
+public class Main {
+
+    static String classifyUsername(String username) {
+        if (username.isEmpty()) return "invalid: empty";
+        if (username.length() < 3) return "invalid: too short";
+        if (username.length() > 20) return "invalid: too long";
+        if (!Pattern.matches("[A-Za-z0-9_]+", username)) return "invalid: bad characters";
+        return "valid";
+    }
+
+    public static void main(String[] args) {
+        LinkedHashMap<String, String> samples = new LinkedHashMap<>();
+        samples.put("", "empty string");
+        samples.put("ab", "2 chars, below minimum");
+        samples.put("sajan_qa", "9 chars, ordinary valid case");
+        samples.put("a".repeat(21), "21 chars, over maximum");
+        samples.put("sajan qa!", "contains a space and '!'");
+
+        for (Map.Entry<String, String> e : samples.entrySet()) {
+            String label = e.getKey().isEmpty() ? "''" : "'" + e.getKey() + "'";
+            System.out.printf("%-24s (%-28s) -> %s%n", label, e.getValue(), classifyUsername(e.getKey()));
+        }
+    }
+}
+
+/* Output:
+''                       (empty string                ) -> invalid: empty
+'ab'                     (2 chars, below minimum      ) -> invalid: too short
+'sajan_qa'               (9 chars, ordinary valid case) -> valid
+'aaaaaaaaaaaaaaaaaaaaa'  (21 chars, over maximum      ) -> invalid: too long
+'sajan qa!'              (contains a space and '!'    ) -> invalid: bad characters
+*/`}
+/>
+
+<Callout type="tip">
+When you're not sure whether two values belong in the same class, ask: **would a defect in one
+necessarily show up in the other?** If a bug in how the system handles `"ab"` (too short) tells you
+nothing about how it handles `"a"*21` (too long), they're different classes even though both are
+"invalid" - they're failing for unrelated reasons, probably in unrelated code.
+</Callout>
+
+<FirstTime title="Your mission: partition a real field on a site you're testing">
+<StepChecklist
+  steps={[
+    { text: "Pick one input field", detail: "A signup field, a search box, a quantity selector on any site - BuggyShop's own forms work well for this. Read every rule you can find for it: length, format, required-ness, allowed characters." },
+    { text: "List every distinct behavior the system could show", detail: "Not values - behaviors. 'Accepts and saves', 'rejects as too short', 'rejects as wrong format' are behaviors. Write down as many as the rules imply, including ones you'd only find by trying to break it." },
+    { text: "Sort invalid into separate classes, not one bucket", detail: "If you only wrote one 'invalid' behavior, go back and ask what SPECIFIC ways this field could be wrong. Empty and too-long are almost never the same class." },
+    { text: "Pick one representative value per class", detail: "Write the actual value next to each class name. If you can't pick one confidently, the class boundary itself might be unclear - that's useful information too." },
+    { text: "Test every representative, and only those", detail: "Enter each one into the real field and record what actually happened next to what you expected. A mismatch here is a real defect - or a class you defined wrong. Both are worth knowing." },
+  ]}
+/>
+You turned a field's rules into a short, deliberate list of tests instead of a pile of random values - and you can defend every single one of them if asked why it's there.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "I tested three different 'invalid' values and they all failed the same way - was that a waste?",
+      fix: "Not necessarily a waste, but it's a signal to check WHY they failed the same way. If all three genuinely trigger the identical code path (say, one shared 'reject anything under minimum length' check), they were the same equivalence class all along and you only needed one of them. If they failed for different underlying reasons but happened to show the same generic error message, that's a real finding: the system is masking distinct failure modes behind one message, which is worth its own bug report.",
+    },
+    {
+      symptom: "I can't tell if two valid values are really in the same class or if I'm missing a hidden rule.",
+      fix: "Test both anyway, once, specifically to find out - this is one of the few times testing 'redundant-looking' values is worth it, because you're not confirming coverage, you're investigating whether a partition boundary you assumed exists is actually there. If both pass identically, merge them into one class going forward and drop the redundant test. If they diverge, you just found an undocumented class the spec didn't mention.",
+    },
+    {
+      symptom: "My invalid classes keep growing every time I look closer at the field - where do I stop?",
+      fix: "Stop when adding another class stops changing which CODE PATH gets exercised. If 'too short by 1 character' and 'too short by 10 characters' hit the identical length-check branch, they're one class - depth isn't a new class, breadth (a genuinely different reason for rejection) is. This is also where boundary value analysis, covered next in this module, takes over from equivalence partitioning: BVA is specifically about testing the EDGES within a class you've already defined.",
+    },
+    {
+      symptom: "A field has no documented validation rules at all - how do I partition something undocumented?",
+      fix: "Partition by what you can observe, then verify by testing: try an empty value, a very long value, a wrong-type value (letters in a numeric field), and a plausible normal value, and watch how the system actually responds. The system's real behavior IS the spec when the documented one is missing - just flag clearly in your test notes that these classes came from observed behavior, not a written requirement, so nobody mistakes your guess for a confirmed rule.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where equivalence partitioning actually earns its keep:
+
+- **Signup and profile forms** — username, email, password, phone number fields almost always have multiple invalid classes (empty, too short, wrong format, wrong type) hiding behind what looks like one "required field" rule.
+- **Search and filter inputs** — a search box has valid classes (real matching terms), a "no results" class, and often a distinct "special characters / injection-looking input" class worth its own security-flavored test.
+- **Quantity and pricing fields** — a cart quantity selector typically has "zero", "negative", "non-numeric", and "absurdly large" as separate invalid classes, each plausibly handled by different validation code.
+- **API request bodies** — a JSON field's type, presence, and format are three separate axes to partition; a missing field and a wrong-type field are different classes even if the API happens to return the same status code for both.
+- **The written spec or ticket, first** — before touching the UI, read what the field is SUPPOSED to accept; the classes come from the rules, and testing without reading them first produces classes you invented rather than ones the system was actually built against.
+
+The habit: **before typing a single test value, write down the classes on paper (or in the ticket) and defend why each one is distinct.**
+</WhereToCheck>
+
+<WorkedExample title="partitioning a coupon-code field from scratch">
+1. **The field:** BuggyShop's checkout has a "Coupon code" text input. The ticket says: "Accepts alphanumeric codes, 6-12 characters, case-insensitive, must match an active coupon."
+2. **Read the rules before touching the UI.** Three separate rules are buried in that one sentence: a length rule (6-12), a character-type rule (alphanumeric only), and a business rule (must exist and be active in the system).
+3. **List distinct behaviors, not values.** Accept-and-apply-discount. Reject-too-short. Reject-too-long. Reject-bad-characters. Reject-well-formed-but-unknown-code. Reject-well-formed-but-expired-code. Six behaviors already, and no value has been picked yet.
+4. **Notice two invalid classes look similar but aren't.** "SAVE5" (5 chars, fails the length rule before the system even checks if it's a real code) and "ZZZZZZ" (6 chars, valid length and characters, but not a real coupon) both get rejected - but by completely different logic. Collapsing them into one "bad coupon" test would hide whichever one is actually broken.
+5. **Spot a class the ticket didn't explicitly mention.** "Save5" versus "SAVE5" - is the field really case-insensitive? That's its own valid-class question, not an edge case to skip: pick a representative in mixed case specifically to confirm the stated rule holds.
+6. **Assemble the representative list:** `SAVE10` (valid, real active code) / `SA5` (too short) / `SAVE5DOLLARSOFF` (too long) / `SAVE-5!` (bad characters) / `ZZZZZZ` (valid shape, unknown code) / `EXPIRED1` (valid shape, real but expired code) / `save10` (valid, testing case-insensitivity). Seven tests, each defending a distinct class - not seven random codes.
+7. **Run each one and record actual vs expected**, exactly like the playground above does programmatically. A mismatch on `save10` specifically - discount not applied when the ticket promised case-insensitivity - is a real, well-isolated defect: you know precisely which rule broke, because you tested that rule in isolation.
+8. **The payoff:** seven deliberate tests instead of either two lazy ones (miss most invalid classes) or fifty random ones (waste time re-testing the same class repeatedly) - and every one of the seven has a one-sentence justification for why it exists, ready if a lead asks "why THIS test case?"
+</WorkedExample>
+
+<Callout type="mistake">
+Writing one test case labeled "invalid input" and calling the invalid side of a field covered. Invalid
+is almost never a single class - empty, too short, too long, wrong type, and wrong format are
+frequently four or five separate code paths, and a single generic test proves exactly one of them
+works while silently leaving the rest completely unverified. The fix costs almost nothing: for every
+field, explicitly ask "in how many DIFFERENT ways can this be invalid?" before writing the invalid-side
+tests, and write one representative per answer.
+</Callout>
+
+<Quiz
+  question="A 'quantity' field on a checkout page accepts whole numbers from 1 to 99. A tester writes exactly two test cases: quantity = 50 (valid) and quantity = -1 (invalid). What's missing from this partitioning?"
+  options={[
+    "At least one more invalid class - '-1' only tests 'negative number'; 'non-numeric input' (like letters) and 'zero' are plausibly separate invalid classes hitting different validation logic, and neither is represented",
+    "Nothing - one valid representative and one invalid representative is sufficient for any field regardless of how many rules it has",
+    "The valid representative should be replaced with the number 1, since only boundary values count as valid representatives",
+    "More valid-class tests are needed, since 50 alone can't confirm the field works correctly across its whole valid range"
+  ]}
+  answer={0}
+  explain="Equivalence partitioning asks 'how many DISTINCT ways can this behave', not 'did I test one good value and one bad value.' A number field commonly has several separate invalid classes: negative, zero (often a special case - is it invalid, or valid-but-meaningless?), non-numeric, and over-maximum are all plausible separate rejection paths, and this test set only exercises one of them. The valid side genuinely is fine with one representative (50 stands in for the whole 1-99 range equally well as any other value in it, since equivalence partitioning assumes interchangeability within a class) - the gap here is specifically on the invalid side, which is exactly the half of partitioning that gets shortchanged in practice. Boundary values like 1 and 99 aren't required for equivalence partitioning itself - that's the next technique in this module, boundary value analysis, layered on top of these same classes."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Equivalence class, in one sentence", back: "A subset of an input domain the system is expected to handle IDENTICALLY - if one member reveals a defect (or passes cleanly), every other member is assumed to do the same." },
+    { front: "Why test only one representative per class?", back: "Because class members are assumed interchangeable for testing purposes - testing a second member of the same class spends effort re-confirming a fact you already know instead of learning something new." },
+    { front: "The most common equivalence-partitioning mistake", back: "Treating 'invalid' as one bucket. Empty, too short, too long, wrong type, and wrong format are usually SEPARATE classes hitting different code paths - one generic 'invalid' test only proves one of them works." },
+    { front: "How to tell if two values are really the same class", back: "Ask: would a defect in one necessarily show up in the other? If they'd fail for unrelated reasons (different validation branch), they're different classes even if both get labeled 'invalid.'" },
+    { front: "Valid classes vs invalid classes", back: "Valid = input the system should accept and process normally. Invalid = input the system should reject or error on. Both need explicit representatives - a field is only properly partitioned when both sides are covered." },
+    { front: "What equivalence partitioning does NOT tell you", back: "WHICH specific value within a class is riskiest to pick - that's boundary value analysis, the next technique in this module. EP finds the classes; BVA finds the sharpest edges inside them." },
+  ]}
+/>
+
+<Challenge>
+Pick any input field on a site you have access to (BuggyShop, or any real site you use). Without
+touching the UI yet: (1) write down every rule you can find or infer for that field; (2) list every
+distinct BEHAVIOR the system could plausibly show, separating invalid into as many distinct classes as
+the rules justify - don't stop at one; (3) pick exactly one representative value per class and write
+one sentence defending why that value represents its class; (4) THEN test each representative against
+the real field and record actual vs expected. Finish with one line: did testing reveal a class you
+didn't think of beforehand, or a class you thought was distinct that turned out to behave identically
+to another one?
+</Challenge>
+
+<AskCommunity prompt="Partitioning check on `[field name]` on `[site/page]`: rules I found were `[list them]`. I split it into these classes: `[valid: ...]` `[invalid: ...]`. Does this miss a distinct invalid class, or did I split something that's actually the same class twice?">
+The most useful replies name a SPECIFIC missing or merged class, not just "looks thin" - if someone
+points out you're missing a "wrong data type" class, or that two of your "invalid" classes actually
+hit the same validation branch, that's the exact kind of feedback that sharpens this skill fastest.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://glossary.istqb.org/en_US/term/equivalence-partitioning", title: "ISTQB Glossary — equivalence partitioning, the standard testing-certification definition", kind: "read" },
+    { href: "https://www.guru99.com/equivalence-partitioning-boundary-value-analysis.html", title: "Guru99 — Equivalence Partitioning and Boundary Value Analysis with worked examples", kind: "read" },
+    { href: "https://www.geeksforgeeks.org/software-testing/software-testing-boundary-value-analysis-vs-equivalence-partitioning/", title: "GeeksforGeeks — Boundary Value Analysis vs Equivalence Partitioning, side by side", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=PJMI_6zhkiM", title: "Automation Hangout — Equivalence Partitioning in Testing, ISTQB tutorial for beginners", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=PJMI_6zhkiM" title="Equivalence Partitioning in Testing — ISTQB Tutorial For Beginners" minutes={13} />
+
+<Takeaways
+  points={[
+    "An equivalence class is a group of inputs the system is expected to treat IDENTICALLY - test one representative per class instead of every possible value.",
+    "Invalid input is almost never one class. Empty, too short, too long, wrong type, and wrong format usually hit different code paths and each deserve their own representative.",
+    "Test whether two values are the same class by asking: would a defect in one necessarily show up in the other? Different failure reasons mean different classes, even under the same 'invalid' label.",
+    "Classes must be mutually exclusive and exhaustive - every possible input belongs to exactly one class, never zero, never several.",
+    "Equivalence partitioning finds WHICH classes to test; it doesn't tell you which value within a class is riskiest - that's boundary value analysis, next in this module.",
+  ]}
+/>
+
+<Complete xp={10} />

@@ -1,0 +1,321 @@
+---
+title: "Worked example"
+summary: "Every piece of this chapter - identifying conditions and actions, building the full table, collapsing it safely - applied start to finish against one real rule, catching a genuine bug the collapsed version alone would have hidden."
+tags: ["test-design-techniques", "decision-tables", "track-a"]
+updated: "2026-07-14"
+---
+
+<Hook>
+Reading conditions-and-actions, building-a-decision-table, and collapsing-rules as three separate notes
+can make decision-table testing feel like three disconnected skills. This note is the proof they're
+one continuous process: read a real rule, sort it correctly, build every combination, collapse what's
+genuinely safe to collapse, and run the FULL table - not just the collapsed one - against a real
+implementation. The bug this note catches is only visible because the full table got run, not the
+simplified version.
+</Hook>
+
+<Callout type="analogy">
+Military in-processing runs the identical rule against every single person in a long line, one at a
+time, no exceptions and no shortcuts - each service member's specific paperwork gets checked, matched
+against the standing rule, and stamped with whatever the rule actually says for THEIR facts. Nobody in
+that line gets waved through because "people like them are usually fine" - every single case runs the
+full rule, completely, before the stamp comes down. That discipline - run the whole rule, for every
+case, every time - is exactly what separates a decision table that actually proves something from one
+that only looks thorough.
+</Callout>
+
+<Term define="A decision-table worked example, done properly, chains all three of this chapter's techniques in sequence: identify the real conditions and actions from a plain-language rule (avoiding the disguised-action trap), build the complete, mechanically-generated table with every combination filled in, and only THEN collapse rows that pass the strict identical-action test. Critically, verification against a real implementation should use the FULL table, not just the collapsed one - collapsing is for making a table reviewable by a human, not for reducing how many test cases actually get run against real code.">Decision-table worked example</Term>
+
+## The rule, as given
+
+A base's leave policy, as written in a real memo: "Officers may self-approve leave requests without
+command sign-off. Enlisted personnel need commanding officer sign-off if they've already taken leave
+this quarter. Any leave request longer than 14 days always requires commanding officer sign-off,
+regardless of rank or prior leave this quarter." One paragraph, three conditions hiding inside it.
+
+## Step one: identify conditions and actions correctly
+
+Applying the first note in this chapter's test - "could this exist before any decision is made?" -
+three genuine conditions emerge: `is_officer` (Y/N), `over_14_days` (Y/N), `taken_leave_this_quarter`
+(Y/N). The action is a single output: `approval_status` (auto-approved / CO sign-off required). Nothing
+in this rule hides a disguised action - each of the three conditions is a real, independent fact about
+the request, not the result of an earlier decision.
+
+## Step two: build the complete table
+
+Three conditions, two values each: 2³ = 8 rows, generated mechanically exactly as the second note in
+this chapter describes - no combination skipped, including the ones that feel unlikely (an officer
+requesting more than 14 days off is rare, but the rule explicitly addresses it, so it gets a row).
+
+## Step three: collapse only what genuinely passes the test
+
+Once the full eight-row table is built, some rows share an identical action and differ in exactly one
+condition - real candidates for the collapsing technique from this chapter's third note. But this
+worked example deliberately keeps the FULL table for the verification step that follows, because
+collapsing is for human readability, and the bug this note is about to catch lives specifically in a row
+a hastily-collapsed or hand-picked test set would have skipped.
+
+{/* IMAGE: a U.S. Marine officer stamping paperwork for another Marine during in-processing, with a long line of Marines waiting behind them in the same hallway */}
+<HotspotImage
+  src="/notes/test-design-techniques/decision-tables/decision-table-worked-example.jpg"
+  alt="A U.S. Marine officer presses a rubber stamp onto paperwork held by another Marine during in-processing, with a long line of Marines waiting their turn behind them in a sunlit hallway"
+  credit="A U.S. Marine gets his orders stamped during in-processing, Exercise African Lion 2012 — Wikimedia Commons, Public Domain (Cpl. Tyler Main, USMC)"
+  pins={[
+    { x: 49, y: 78, label: "The stamp, mid-press = the ACTION, applied only after the paperwork is checked", desc: "This stamp doesn't come down until the officer has actually looked at what's on the page - the action is a direct consequence of evaluating the conditions in front of him, not something applied first and justified after." },
+    { x: 47, y: 88, label: "The paperwork itself, being read = the CONDITIONS, checked before any action happens", desc: "Whatever's written on these orders is exactly what determines what happens next - real, specific facts, matched against what the rule actually requires, not a guess." },
+    { x: 63, y: 45, label: "The Marine standing ready, next in line = the next rule about to be evaluated", desc: "This individual case doesn't get special treatment - the same process that just ran for the Marine being stamped now runs again, with his own specific facts plugged into the identical rule." },
+    { x: 85, y: 30, label: "The long line stretching back = every rule in the table, waiting its turn", desc: "A decision table isn't proven by running it once - it's proven by running EVERY row, the same way this line only finishes once every single Marine has been processed against the same consistent rule." },
+    { x: 20, y: 45, label: "The officer's full attention on one case at a time = one rule, evaluated completely, before the next", desc: "He isn't skimming several sets of orders at once - each Marine gets the full rule applied to his specific facts. A worked example runs a decision table's rules with exactly this same one-at-a-time discipline." },
+  ]}
+/>
+
+<FlowAnimation
+  title="From a memo to a caught defect - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Read the rule and sort conditions from actions", desc: "Three genuine conditions (officer status, leave length, quarterly history), one action (approval status) - no disguised outputs hiding among them." },
+    { label: "Build the full 8-row table mechanically", desc: "2^3, every combination generated with no exceptions, including the rare officer-requesting-long-leave case the memo explicitly addresses." },
+    { label: "Implement the rule - or receive an existing implementation to test", desc: "The 'real system' this worked example verifies against, written from the same memo, by someone who may have introduced a subtle ordering mistake." },
+    { label: "Run the FULL table against the implementation, row by row", desc: "Not a hand-picked sample, not the collapsed version - every one of the eight rows, compared against what the memo actually says should happen." },
+    { label: "Isolate exactly which rows disagree, and name the pattern", desc: "A mismatch confined to specific rows usually reveals the exact shape of the implementation mistake - which condition got checked in the wrong order." },
+  ]}
+/>
+
+Here's the full table run against a real (buggy) implementation - and the exact two rows that expose an
+ordering mistake a smaller test set would have missed entirely:
+
+<CodePlayground
+  language="python"
+  title="Run it - the full 8-row table catching a real ordering bug (Python)"
+  code={`import itertools
+
+def correct_approval(is_officer, over_14_days, taken_this_quarter):
+    if over_14_days == "Y":
+        return "CO sign-off required"
+    if is_officer == "Y":
+        return "auto-approved"
+    if taken_this_quarter == "Y":
+        return "CO sign-off required"
+    return "auto-approved"
+
+def buggy_approval(is_officer, over_14_days, taken_this_quarter):
+    # BUG: checks is_officer BEFORE the over-14-days override, skipping it for officers
+    if is_officer == "Y":
+        return "auto-approved"
+    if over_14_days == "Y":
+        return "CO sign-off required"
+    if taken_this_quarter == "Y":
+        return "CO sign-off required"
+    return "auto-approved"
+
+VALUES = ["Y", "N"]
+
+print(f"{'Rule':5} {'is_officer':11} {'over_14_days':13} {'taken_qtr':10} {'Expected':22} {'Actual':22}")
+mismatches = 0
+for i, combo in enumerate(itertools.product(VALUES, repeat=3), 1):
+    expected = correct_approval(*combo)
+    actual = buggy_approval(*combo)
+    flag = "" if expected == actual else "  <-- MISMATCH"
+    if expected != actual:
+        mismatches += 1
+    print(f"R{i:<4} {combo[0]:11} {combo[1]:13} {combo[2]:10} {expected:22} {actual:22}{flag}")
+
+print(f"\\n{mismatches} of 8 rules exposed a real defect in the implementation.")
+
+# Rule  is_officer  over_14_days  taken_qtr  Expected               Actual
+# R1    Y           Y             Y          CO sign-off required   auto-approved           <-- MISMATCH
+# R2    Y           Y             N          CO sign-off required   auto-approved           <-- MISMATCH
+# R3    Y           N             Y          auto-approved          auto-approved
+# R4    Y           N             N          auto-approved          auto-approved
+# R5    N           Y             Y          CO sign-off required   CO sign-off required
+# R6    N           Y             N          CO sign-off required   CO sign-off required
+# R7    N           N             Y          CO sign-off required   CO sign-off required
+# R8    N           N             N          auto-approved          auto-approved
+#
+# 2 of 8 rules exposed a real defect in the implementation.`}
+/>
+
+Same table and the same caught bug in Java - the shape a real leave-management service's approval logic
+might take:
+
+<CodePlayground
+  language="java"
+  title="Run it - the full table verification (Java)"
+  code={`import java.util.*;
+
+public class Main {
+
+    static String correctApproval(String isOfficer, String over14Days, String takenThisQuarter) {
+        if (over14Days.equals("Y")) return "CO sign-off required";
+        if (isOfficer.equals("Y")) return "auto-approved";
+        if (takenThisQuarter.equals("Y")) return "CO sign-off required";
+        return "auto-approved";
+    }
+
+    static String buggyApproval(String isOfficer, String over14Days, String takenThisQuarter) {
+        // BUG: checks isOfficer BEFORE the over-14-days override, skipping it for officers
+        if (isOfficer.equals("Y")) return "auto-approved";
+        if (over14Days.equals("Y")) return "CO sign-off required";
+        if (takenThisQuarter.equals("Y")) return "CO sign-off required";
+        return "auto-approved";
+    }
+
+    public static void main(String[] args) {
+        String[] values = {"Y", "N"};
+        System.out.printf("%-5s %-11s %-13s %-10s %-22s %-22s%n", "Rule", "is_officer", "over_14_days", "taken_qtr", "Expected", "Actual");
+
+        int ruleNum = 1;
+        int mismatches = 0;
+        for (String a : values) {
+            for (String b : values) {
+                for (String c : values) {
+                    String expected = correctApproval(a, b, c);
+                    String actual = buggyApproval(a, b, c);
+                    String flag = expected.equals(actual) ? "" : "  <-- MISMATCH";
+                    if (!expected.equals(actual)) mismatches++;
+                    System.out.printf("R%-4d %-11s %-13s %-10s %-22s %-22s%s%n", ruleNum, a, b, c, expected, actual, flag);
+                    ruleNum++;
+                }
+            }
+        }
+        System.out.println();
+        System.out.println(mismatches + " of 8 rules exposed a real defect in the implementation.");
+    }
+}
+
+/* Output matches the Python run exactly - same two MISMATCH rows, R1 and R2. */`}
+/>
+
+<Callout type="tip">
+Notice the bug lives specifically in the two rows where `is_officer=Y` AND `over_14_days=Y` - exactly
+the "rare" combination it would have been tempting to skip when hand-picking test cases ("officers
+rarely request that much leave, probably fine"). This is the whole argument for running the FULL table
+against real code, not a hand-selected subset: the defect hides precisely in the combination intuition
+says to deprioritize.
+</Callout>
+
+<FirstTime title="Your mission: run this exact chained process on a rule of your own">
+<StepChecklist
+  steps={[
+    { text: "Find a real rule with 3 conditions, ideally with a real system to test", detail: "A policy page, a ticket, or a feature on BuggyShop with multi-factor logic. Real code to test against makes this mission far more valuable, but reasoning through expected behavior works too." },
+    { text: "Identify conditions and actions correctly", detail: "Apply the 'could this exist before any decision' test from this chapter's first note - watch for a disguised action." },
+    { text: "Build the full table mechanically", detail: "Every combination, no skipped rows, calculated V^N confirmed against your actual row count." },
+    { text: "Run the FULL table against the real system (or your best reasoning about it)", detail: "Not a sample - every row. Record every result next to what the rule says it should be." },
+    { text: "If you find a mismatch, isolate the pattern", detail: "Which specific condition combination fails? Does it suggest a specific ordering or logic mistake, the way this note's example did?" },
+  ]}
+/>
+You ran the complete chain this chapter built note by note - and specifically avoided the shortcut of testing only the combinations that felt likely to matter.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "I ran the full table and everything matched - was building all 8 rows worth it, or would a smaller sample have been fine?",
+      fix: "A fully clean full-table run is strong evidence, and worth reporting plainly as such - but you can't know IN ADVANCE that a smaller sample would have been fine, which is exactly this note's point. The bug in this note's example hid in a combination that felt unlikely; there's no reliable way to guess which combination will hide a real defect before actually running all of them.",
+    },
+    {
+      symptom: "I found a mismatch, but I can't tell if it's the SPEC that's wrong or the IMPLEMENTATION.",
+      fix: "Treat this the same way earlier notes in this module handled ambiguity: don't assume either side is right. Report the exact mismatch (which combination, expected vs actual) and let whoever owns the requirement confirm which one needs to change - your job is surfacing the precise discrepancy, not resolving it unilaterally.",
+    },
+    {
+      symptom: "My table's mismatches don't form an obvious pattern the way this note's example did.",
+      fix: "Not every real bug has a clean, nameable pattern - some are genuinely one-off mistakes affecting a single combination with no broader shape. Report each mismatched row individually and precisely; a pattern is a bonus insight when it exists, not a requirement for the finding to be valid.",
+    },
+    {
+      symptom: "I don't have access to a real implementation to test against - only the written rule.",
+      fix: "You can still run this whole process by reasoning through each row against the rule's exact wording, the same way earlier notes in this module handled black-box, code-unavailable situations. The value is lower without a real system to catch a genuine implementation bug, but building the complete table and confirming your own understanding is internally consistent is still real, useful work.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where this full chained process earns its keep:
+
+- **Any business rule with 3+ genuinely independent conditions and real consequences** — exactly this note's shape: enough complexity that intuition-based testing plausibly misses a combination.
+- **Newly implemented or recently modified rule logic** — fresh code is exactly where an ordering mistake like this note's example (checking one condition before another that should take precedence) gets introduced.
+- **Any rule involving an override or exception clause** — "always requires X regardless of Y" is a strong signal an implementation might accidentally let Y short-circuit before the override gets checked, precisely this note's bug shape.
+- **Regression testing after a rule change** — re-running the FULL table, not just the rows that changed, after ANY modification to catch a new bug introduced in a row that looks unrelated to the change.
+- **Code review of conditional logic implementing a known rule** — walk the reviewer through the full table row by row against the actual code, not just the happy-path rows.
+
+The habit: **verify against the full table, not a hand-picked or collapsed subset - the bug that matters most is often the one intuition would have skipped.**
+</WhereToCheck>
+
+<WorkedExample title="a second pass: using the COLLAPSED table to explain the bug, after the full table found it">
+1. **The full table already found the bug** (R1 and R2 mismatch, both `is_officer=Y, over_14_days=Y`). The next useful step is explaining it clearly to whoever fixes it - and the collapsing technique from earlier in this chapter helps here.
+2. **Collapse the full table's CORRECT version** (the spec's intended behavior, not the buggy code) to see the rule's real shape. R1 and R2 differ only in `taken_this_quarter` and share the action "CO sign-off required" - safe to collapse to `(Y, Y, -)` -> CO sign-off required.
+3. **This collapsed view makes the bug's shape obvious in one line**: the rule says `(is_officer=Y, over_14_days=Y, -)` should ALWAYS require sign-off, but the buggy code's first check (`if is_officer: return auto-approved`) never even reaches the `over_14_days` condition for officers.
+4. **Write the bug report using the collapsed insight, not just the raw mismatch rows**: "The over-14-days override doesn't apply to officers - confirmed via decision table rows (Y,Y,Y) and (Y,Y,N), both incorrectly auto-approved. Root cause: implementation checks is_officer before over_14_days, letting the officer branch return early. Fix: check over_14_days first, as a true override, before any rank-based branching."
+5. **Note explicitly which rows were NOT affected**, scoping the bug precisely: "(Y,N,-) and (N,-,-) both behave correctly - this is specifically an ordering issue affecting only officers requesting more than 14 days."
+6. **This is the payoff of running the full table first, then using collapsing second**: the full table found the exact defect; the collapsed view explained it precisely and quickly to a developer, in one sentence, instead of them having to re-derive the pattern from eight raw rows themselves.
+7. **The corrected implementation** simply reorders the checks - `over_14_days` first, as the rule's own wording ("always... regardless of rank") already implied it should be.
+8. **Re-run the full table against the fix** - all eight rows now match, confirmed the same rigorous way the bug was originally found: every row, not a spot check on just the two that previously failed.
+</WorkedExample>
+
+<Callout type="mistake">
+Testing only a hand-picked subset of a decision table's rows because "the rest seem obviously fine."
+This note's entire worked example is built around a defect that lives exactly in the combination most
+testers would have deprioritized as unlikely (an officer requesting more than 14 days). A decision
+table's whole value comes from running EVERY row against the real system - skipping rows because they
+feel low-risk reintroduces the exact gap the technique exists to close.
+</Callout>
+
+<Quiz
+  question="A tester builds a full 8-row decision table for a 3-condition rule, but only tests the 4 rows they consider 'most realistic,' skipping the other 4 as unlikely edge cases. What does this note's worked example suggest about that approach?"
+  options={[
+    "It defeats the core value of the technique - this note's own bug was found specifically in a combination (officer requesting over 14 days) that intuition would flag as unlikely and skip, meaning a hand-picked subset could easily have missed the exact same real defect",
+    "This is a reasonable and standard way to apply decision table testing, since testing every row is only necessary when the total row count exceeds 16",
+    "It's fine as long as the 4 skipped rows all produce the same action, since identical actions mean those rows are already effectively covered by the tested ones",
+    "The approach is correct, but only the COLLAPSED table's rows need to be tested, not the full table's rows"
+  ]}
+  answer={0}
+  explain="This note's whole worked example demonstrates the exact failure mode of hand-picking 'realistic' rows: the real defect lived specifically in a combination (officer + over-14-days leave) that intuition would call unlikely and skip, and a subset chosen that way would have missed it entirely - the officer never gets the sign-off requirement in the buggy code, and nobody ever noticed because that combination 'seemed fine.' There's no row-count threshold below which skipping rows becomes safe - the risk is about WHICH combination hides a defect, not how many total rows exist. Skipped rows sharing an action with tested rows doesn't help either unless that sharing was actually VERIFIED (the collapsing technique's own strict rule) rather than assumed. And testing only the collapsed table's rows specifically skips checking that the collapse itself was safe against the real implementation - this note's second WorkedExample shows collapsing is for explaining a finding clearly, not a substitute for the full table's verification role."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The full chained process this note demonstrates", back: "Identify conditions/actions correctly -> build the full mechanical table -> run the FULL table (not the collapsed one) against a real implementation -> use collapsing afterward to explain any finding clearly." },
+    { front: "Why verify against the full table, not the collapsed one?", back: "Collapsing is for human readability - it doesn't reduce how many real test cases should run against actual code. A real defect can hide in a row a collapsed or hand-picked subset would have skipped." },
+    { front: "Why did this note's bug hide specifically in the 'unlikely' rows?", back: "Because intuition-based test selection deprioritizes exactly the combinations that feel rare - which is precisely where an untested code path is most likely to have a real, unnoticed defect." },
+    { front: "How collapsing helps AFTER a bug is found, not just before testing", back: "Collapsing the CORRECT (intended) table's shape around a found defect often reveals the pattern in one clear line, making the bug report sharper and faster for a developer to act on." },
+    { front: "What to include in a bug report from a full-table finding", back: "The exact mismatched rows, the specific pattern if one exists, AND which rows were NOT affected - scoping the defect precisely instead of leaving a developer to guess how far it reaches." },
+    { front: "The one sentence this whole chapter builds toward", back: "Run every row, verify against a real system, and never assume a combination is safe to skip just because it feels unlikely - that's exactly where the real defects tend to hide." },
+  ]}
+/>
+
+<Challenge>
+Find (or write, if none exists) a real 3-condition business rule with actual code or a clearly
+documented expected behavior to test against. Run the full chained process: identify conditions and
+actions, build the complete table, run every row against the real system, and report every result. If
+you find a mismatch, use the collapsing technique on the CORRECT version of the table to describe the
+bug's pattern in one clear sentence, and explicitly state which rows were unaffected. If everything
+matches, report that plainly too, and reflect in one sentence on whether a smaller, hand-picked test set
+would have given you the same confidence.
+</Challenge>
+
+<AskCommunity prompt="Full decision-table verification on `[rule]`: built `[N]` rows, ran all of them against `[system/reasoning]`, found `[list mismatches or 'none']`. Does this pattern (if any) suggest a specific implementation mistake, or does anything here look like it needs a wider table than I built?">
+The most useful replies engage with the SPECIFIC mismatched rows and propose a concrete root-cause
+pattern - a general "sounds thorough" doesn't test the actual finding.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://glossary.istqb.org/en_US/term/decision-table-testing", title: "ISTQB Glossary — decision table testing, the standard testing-certification definition", kind: "read" },
+    { href: "https://www.guru99.com/decision-table-testing.html", title: "Guru99 — Decision Table Testing (Example)", kind: "read" },
+    { href: "https://testgrid.io/blog/decision-table-testing/", title: "TestGrid — Decision Table Testing: Types, Examples & Best Practices", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=ED2iJXkdhCQ", title: "Software and Testing Training — Decision Table Testing in Software Engineering", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=ED2iJXkdhCQ" title="Decision Table Testing — Decision Table In Software Engineering" minutes={15} />
+
+<Takeaways
+  points={[
+    "This chapter's three techniques are one continuous process: identify conditions/actions correctly, build the full table mechanically, then collapse only what genuinely passes the identical-action test.",
+    "Verify against the FULL table, not the collapsed version or a hand-picked subset - collapsing is for human readability, not for reducing how many cases actually run against real code.",
+    "A real defect often hides exactly in the combination intuition flags as unlikely and skips - this note's bug lived precisely there.",
+    "Collapsing is useful a second time, AFTER finding a bug: collapsing the correct table's shape around a mismatch often reveals the defect's pattern in one clear sentence.",
+    "A complete bug report from a decision-table finding names the exact mismatched rows, the pattern if one exists, and which rows were unaffected - scoping the defect precisely.",
+  ]}
+/>
+
+<Complete xp={10} />

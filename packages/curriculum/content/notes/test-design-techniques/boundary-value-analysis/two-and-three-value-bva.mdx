@@ -1,0 +1,321 @@
+---
+title: "2- & 3-value BVA"
+summary: "The previous note established WHY boundaries deserve deliberate testing. This one gets specific: exactly which values to test around a boundary, and the real coverage gap the lighter two-value approach leaves open."
+tags: ["test-design-techniques", "boundary-value-analysis", "track-a"]
+updated: "2026-07-14"
+---
+
+<Hook>
+"Test the boundary" is easy to say and surprisingly ambiguous to actually do. Test the boundary value
+alone? The boundary plus the value just outside it? Both of those, plus the value just INSIDE it too?
+Each answer catches a different, real category of bug - and picking too light a version isn't a
+shortcut, it's a specific, nameable gap in what gets tested. This note draws the exact line between
+the two standard versions of boundary value analysis, and shows a real bug that only the more thorough
+one catches.
+</Hook>
+
+<Callout type="analogy">
+A digital caliper doesn't measure "about 11 millimeters" - it reads exactly `11.58 mm`, to the
+hundredth of a millimeter, because the whole point of the tool is precision at a specific point, not a
+vague neighborhood around one. Boundary value analysis borrows that same precision. "Test near the
+boundary" is the caliper's owner squinting at the part and guessing; "test 0, 1, 2, 99, 100, and 101"
+is actually reading the display. The technique only works if the values tested are as exact and
+deliberate as a caliper's readout - which specific ticks on the scale, not an approximate region of it.
+</Callout>
+
+<Term define="Two-value boundary value analysis tests exactly two values per edge of a class: the boundary value itself, and the value immediately outside the valid range (for a lower bound of 1: test 0 and 1; for an upper bound of 100: test 100 and 101). Three-value boundary value analysis adds a third value per edge: the value immediately INSIDE the valid range as well (0, 1, 2 for the lower bound; 99, 100, 101 for the upper bound). The extra inside value is not redundant - it catches a specific class of defect (a stray carve-out, an off-by-one that only misfires one step past the boundary) that two-value testing structurally cannot see, because two-value testing never touches that value at all.">Two-value / three-value BVA</Term>
+
+## Two-value: the boundary and its outside neighbor
+
+For a valid range of 1-100, two-value BVA tests four values total: `0` and `1` for the lower edge,
+`100` and `101` for the upper edge. This catches the most common boundary mistake - a comparison
+operator drawn one step off from the spec (covered in the previous note) - because the boundary value
+and its immediate outside neighbor are exactly the pair that exposes a `<` vs `<=` mixup. It's
+efficient: four tests instead of testing the whole range.
+
+## Three-value: adding the inside neighbor
+
+Three-value BVA adds `2` (lower) and `99` (upper) to the same example - six values instead of four.
+The addition isn't about extra caution for its own sake: it specifically targets a defect two-value
+testing structurally cannot reach, because two-value testing never generates a test for that exact
+value. A stray, leftover carve-out - a rule that mistakenly excludes one specific value just inside a
+range - is invisible to two-value BVA by construction, no matter how carefully the two-value tests are
+run.
+
+## Which one to use
+
+Two-value BVA is the right default for most boundaries: it's cheaper, and it catches the
+overwhelmingly common comparison-operator mistake. Reach for three-value specifically when a boundary
+sits on business logic that's been patched or special-cased over time (pricing tiers, promotional
+carve-outs, legacy compatibility rules) - exactly the kind of code where a stray, forgotten condition
+is more likely to be hiding one step inside the edge, not just at it.
+
+{/* IMAGE: a stainless-steel digital caliper with jaws open, showing a "11.58 mm" LCD readout, ON/OFF/ZERO buttons, and a yellow millimeter scale from 0 to 150mm, on a white background */}
+<HotspotImage
+  src="/notes/test-design-techniques/boundary-value-analysis/two-and-three-value-bva.jpg"
+  alt="A stainless-steel digital caliper with its jaws open, displaying a precise '11.58 mm' reading on its LCD screen, with ON, OFF, and ZERO buttons and a yellow millimeter scale marked from 0 to 150mm"
+  credit="Digital caliper (Suwmiarka cyfrowa) — Wikimedia Commons, CC BY-SA 4.0 (Jacek Halicki)"
+  pins={[
+    { x: 25, y: 35, label: "The digital readout = one exact value, read precisely", desc: "\"11.58 mm\" isn't 'about 11 or 12' - it's one specific number, to the hundredth of a millimeter. Boundary value analysis works the same way: not 'test somewhere near the edge,' but specific, named values - the boundary itself and its exact neighbor, chosen deliberately, not approximated." },
+    { x: 11, y: 42, label: "The jaws = the two surfaces that actually do the measuring", desc: "Only these two edges make contact with whatever's being measured - not the whole tool. Two-value BVA works the same way: exactly two values per boundary, the edge and the value immediately outside it, nothing in between required." },
+    { x: 55, y: 52, label: "The millimeter scale = a reminder every value has a neighbor one step away", desc: "Each tick here is one discrete unit from the next. This is the intuition behind BVA: a boundary and the value one tick beside it are the minimum pair needed to expose whether a comparison operator drew the line in the right place." },
+    { x: 28, y: 47, label: "ZERO = establishing a clean reference before measuring the edge", desc: "Zeroing resets the baseline so every reading afterward is trustworthy relative to a known-correct start. Confirming the surrounding classes behave normally, before testing a boundary specifically, serves the same purpose." },
+    { x: 80, y: 56, label: "The fixed steel beam, marked 'STAINLESS HARDENED' = the stable reference the whole reading depends on", desc: "The jaw slides, but this beam doesn't - every measurement is only as reliable as this fixed point. In testing, that fixed reference is the spec's stated boundary number itself, the one fixed value every test result gets measured against." },
+  ]}
+/>
+
+<FlowAnimation
+  title="From a stated range to a two-value or three-value test set - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Start from a range with a clear low and high bound", desc: "A field, spec, or policy stating something like '1 to 100' - the two numbers that define where a class begins and ends." },
+    { label: "Build the two-value set: boundary + outside neighbor, per edge", desc: "Lower edge: the boundary (1) and one step below it (0). Upper edge: the boundary (100) and one step above it (101). Four values total for a simple range." },
+    { label: "Decide if the boundary's code is a comparison operator, or something messier", desc: "A simple numeric range check (age >= 18) usually only needs two-value. Pricing tiers, promo rules, or anything patched over time deserve the extra scrutiny of three-value." },
+    { label: "If warranted, add the inside neighbor per edge", desc: "Lower edge gains one step inside (2). Upper edge gains one step inside (99). Six values total - specifically targeting a stray carve-out two-value testing would never generate a test for." },
+    { label: "Run both sets and compare what each one actually catches", desc: "A defect exactly at the inside-neighbor value will pass every two-value test cleanly and only show up once the three-value set is run - the gap made concrete, not just theoretical." },
+  ]}
+/>
+
+Here's exactly that gap, made concrete: a stray, leftover carve-out sitting one step inside the upper
+boundary, invisible to two-value testing and caught immediately by three-value:
+
+<CodePlayground
+  language="python"
+  title="Run it - two-value vs three-value BVA against a real leftover bug (Python)"
+  code={`def classify_percentage(value):
+    if value < 1:
+        return "invalid: below range"
+    if value == 99:
+        return "invalid: blocked"  # BUG: a stale carve-out that should've been removed
+    if value > 100:
+        return "invalid: above range"
+    return "valid"
+
+def two_value_tests(low, high):
+    # boundary + just outside, per edge - 4 values total
+    return [low - 1, low, high, high + 1]
+
+def three_value_tests(low, high):
+    # just outside, boundary, just inside - 6 values total
+    return [low - 1, low, low + 1, high - 1, high, high + 1]
+
+LOW, HIGH = 1, 100
+
+print("Two-value test set:", two_value_tests(LOW, HIGH))
+for v in two_value_tests(LOW, HIGH):
+    print(f"  {v}: {classify_percentage(v)}")
+
+print()
+print("Three-value test set:", three_value_tests(LOW, HIGH))
+for v in three_value_tests(LOW, HIGH):
+    flag = "  <-- bug only visible here" if v == 99 else ""
+    print(f"  {v}: {classify_percentage(v)}{flag}")
+
+# Two-value test set: [0, 1, 100, 101]
+#   0: invalid: below range
+#   1: valid
+#   100: valid
+#   101: invalid: above range
+#
+# Three-value test set: [0, 1, 2, 99, 100, 101]
+#   0: invalid: below range
+#   1: valid
+#   2: valid
+#   99: invalid: blocked  <-- bug only visible here
+#   100: valid
+#   101: invalid: above range`}
+/>
+
+Same comparison in Java - the shape a data-driven boundary test generator might actually take:
+
+<CodePlayground
+  language="java"
+  title="Run it - two-value vs three-value BVA (Java)"
+  code={`import java.util.*;
+
+public class Main {
+
+    static String classifyPercentage(int value) {
+        if (value < 1) return "invalid: below range";
+        if (value == 99) return "invalid: blocked"; // BUG: a stale carve-out that should've been removed
+        if (value > 100) return "invalid: above range";
+        return "valid";
+    }
+
+    static List<Integer> twoValueTests(int low, int high) {
+        return List.of(low - 1, low, high, high + 1);
+    }
+
+    static List<Integer> threeValueTests(int low, int high) {
+        return List.of(low - 1, low, low + 1, high - 1, high, high + 1);
+    }
+
+    public static void main(String[] args) {
+        int low = 1, high = 100;
+
+        System.out.println("Two-value test set: " + twoValueTests(low, high));
+        for (int v : twoValueTests(low, high)) {
+            System.out.printf("  %d: %s%n", v, classifyPercentage(v));
+        }
+
+        System.out.println();
+        System.out.println("Three-value test set: " + threeValueTests(low, high));
+        for (int v : threeValueTests(low, high)) {
+            String flag = v == 99 ? "  <-- bug only visible here" : "";
+            System.out.printf("  %d: %s%s%n", v, classifyPercentage(v), flag);
+        }
+    }
+}
+
+/* Output:
+Two-value test set: [0, 1, 100, 101]
+  0: invalid: below range
+  1: valid
+  100: valid
+  101: invalid: above range
+
+Three-value test set: [0, 1, 2, 99, 100, 101]
+  0: invalid: below range
+  1: valid
+  2: valid
+  99: invalid: blocked  <-- bug only visible here
+  100: valid
+  101: invalid: above range
+*/`}
+/>
+
+<Callout type="tip">
+Notice the two-value test set genuinely passes ALL FOUR of its tests cleanly - there's no hint from
+those results alone that anything is wrong. This is worth sitting with: a fully green two-value BVA
+run is real evidence the primary boundary mistake isn't present, but it says nothing whatsoever about a
+defect that only lives at the inside-neighbor value. Choosing two-value over three-value is a genuine
+coverage trade-off, not a strictly lesser version of the same test.
+</Callout>
+
+<FirstTime title="Your mission: build and run both test sets against a real boundary">
+<StepChecklist
+  steps={[
+    { text: "Pick a numeric range from a real field or spec", detail: "Reuse one from an earlier note's mission, or find a fresh one - a price threshold, an age range, a length limit, anything with a clear low and high bound." },
+    { text: "Build the two-value set and run it", detail: "Boundary and outside-neighbor, per edge - four values for a simple range. Record each result next to what the spec says it should be." },
+    { text: "Build the three-value set and run it", detail: "Add the inside-neighbor per edge - six values total. Record these results too, paying particular attention to the two new inside values." },
+    { text: "Compare the two result sets directly", detail: "Did the three-value set surface anything the two-value set didn't? Even a clean result here is worth recording - it's real evidence, not a wasted step." },
+    { text: "Decide, in one sentence, which level this field actually warranted", detail: "Was two-value clearly sufficient, or did the field's complexity (patched logic, business rules, legacy carve-outs) justify going to three-value? Write down your reasoning, not just your choice." },
+  ]}
+/>
+You didn't just apply BVA - you deliberately compared what two levels of the same technique each catch, on a real boundary, and can now defend which one a given field actually needs.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "I ran two-value BVA, everything passed, and I'm not sure if I need to bother with three-value too.",
+      fix: "Ask what KIND of logic sits behind this boundary. A straightforward numeric comparison (age >= 18) rarely benefits from the extra two tests - two-value is proportionate. Business rules, pricing tiers, or anything that's been patched, special-cased, or touched by more than one past bug fix are exactly where a stray inside-value carve-out tends to hide - that's when the extra tests earn their cost.",
+    },
+    {
+      symptom: "My three-value test found a failure at the inside-neighbor value, but I can't tell if it's really a bug or intentional.",
+      fix: "Treat it as a genuine open question, not an assumed defect - the same way an unexplained boundary discrepancy got handled in the previous notes. Report the exact value, the exact unexpected result, and ask whoever owns the logic whether the carve-out is deliberate. If it IS intentional, that's still valuable: it means the class boundaries themselves need updating to reflect a reality the original spec didn't capture.",
+    },
+    {
+      symptom: "A boundary in my system is on a non-numeric field (a date, an enum) - do two-value and three-value still apply?",
+      fix: "Yes, with 'neighbor' redefined for the domain. For a date boundary, 'one step outside' is the previous or next calendar day (or second, if time matters); for an ordered enum, it's the adjacent value in the defined order. The same two-value/three-value logic transfers - only the definition of 'one step' changes.",
+    },
+    {
+      symptom: "I don't have time to run three-value BVA on every boundary in a large feature - how do I prioritize?",
+      fix: "Prioritize by consequence and code history, not by trying to cover everything equally. Boundaries tied to money (pricing, fees, refund thresholds), boundaries in code that's changed recently, and boundaries flagged in past bug reports are the highest-value places to spend the extra three-value tests; simple, stable, low-consequence range checks can usually stay at two-value.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where the choice between two-value and three-value actually matters:
+
+- **Simple range validations** — age limits, basic length checks, straightforward numeric minimums and maximums: two-value is almost always proportionate here.
+- **Pricing and fee tiers, especially ones with a history of tweaks** — exactly the kind of logic where a forgotten carve-out or a leftover special case tends to sit one step inside a boundary, invisible to two-value testing.
+- **Anything with a documented promo, discount, or exception rule layered on top of a range** — the layering itself is a signal that the boundary's logic is more complex than a single clean comparison.
+- **Code with prior boundary-related bug reports** — a history of off-by-one defects in one area is a strong, concrete reason to spend the extra three-value tests there specifically, rather than everywhere uniformly.
+- **Enum and date-range boundaries in state-sensitive flows** — subscription renewals, access-expiry dates, tier-transition logic - the "one step inside" value here is often where a transition condition was implemented slightly wrong.
+
+The habit: **default to two-value for straightforward boundaries; escalate to three-value specifically where the code's history or complexity suggests a stray carve-out could be hiding.**
+</WhereToCheck>
+
+<WorkedExample title="deciding, then verifying, the right level for a real subscription-tier boundary">
+1. **The field:** a subscription plan's "team size" limit. Current tier boundary: 1-10 members on the Starter plan, 11+ requires upgrading to Team.
+2. **First pass: is this a simple comparison, or something with history?** A quick check of the codebase's commit history on this file shows three past changes: an initial `<= 10` check, a later patch adding "unless grandfathered before March 2025," and a further patch excluding a specific enterprise pilot account by ID. This is NOT simple - three separate carve-outs layered on one boundary.
+3. **Decision: three-value BVA is clearly warranted here**, precisely because of the pattern this note describes - patched, special-cased logic is where a stray exception hides one step inside an edge.
+4. **Two-value set first, to confirm the baseline:** 9 members (should stay Starter), 10 members (boundary, should stay Starter), 11 members (should require Team), plus one below-zero sanity check. All four pass as expected.
+5. **Three-value set adds the inside neighbors:** 9 already covered; add specifically 9 is inside-lower... reconsidering the edge: the relevant edge here is the upper one (10/11), so the inside neighbor is 9 (already tested) - the useful addition is testing exactly 10 members on a GRANDFATHERED account, since that's where the layered exception logic actually lives, not just the raw number.
+6. **This 10-member grandfathered-account test reveals the real finding:** a grandfathered account with exactly 10 members is correctly kept on Starter - but a grandfathered account with exactly 11 members is ALSO incorrectly kept on Starter, when the grandfather clause was only ever supposed to cover the original size, not future growth.
+7. **This is a genuine three-value-style catch, even though the "11" value looks identical to a value the two-value set already tested** - the two-value test of "11 members, ungrachered" passed correctly; the missed case was specifically "11 members, WITH the grandfather flag," a dimension two-value testing never considered because it only varied the number, not the account's history.
+8. **The real lesson:** three-value BVA's principle - test the value that's one step INSIDE the edge, where a special case is most likely to hide - sometimes means testing an extra DIMENSION (the grandfather flag) at a boundary value, not just an extra raw number. The technique's spirit (test at the edge of complexity, not just the edge of a number line) matters more than mechanically listing six values.
+</WorkedExample>
+
+<Callout type="mistake">
+Applying three-value BVA everywhere out of general caution, without asking whether the extra tests are
+actually likely to catch anything a two-value pass wouldn't. Three-value testing is a deliberate,
+targeted response to boundaries with layered or patched logic - applying it uniformly to every simple
+range check in a codebase burns real test-writing and test-running time for defects that structurally
+can't exist in a straightforward `value >= min` comparison. Match the technique's depth to the code's
+actual complexity, not to a blanket policy.
+</Callout>
+
+<Quiz
+  question="A tester runs two-value BVA on a field (0, 1, 100, 101 for a 1-100 range) and every test passes. They conclude the field has no boundary defects. What's wrong with that conclusion, per this note?"
+  options={[
+    "Two-value testing structurally never generates a test for the inside-neighbor values (2 and 99) - a defect that only exists at exactly one of those values would pass every two-value test cleanly and remain completely undetected",
+    "Nothing is wrong - a clean two-value BVA pass is definitive proof the field has no boundary-related defects of any kind",
+    "The tester should have tested 50 (the midpoint) as a fifth value, since boundary value analysis requires at least one interior value to be considered complete",
+    "The two-value results can't be trusted unless the field is also tested with random values across the full 1-100 range first"
+  ]}
+  answer={0}
+  explain="Two-value BVA by definition only ever generates the boundary value and its immediate OUTSIDE neighbor - it never constructs a test for the value immediately inside the edge, which is exactly where a stray carve-out or special case tends to hide in patched business logic. A clean run proves the most common defect (a misplaced comparison operator) isn't present, but it says nothing about that specific class of inside-boundary defect, because the test that would catch it was never run. Adding a midpoint value is an equivalence-partitioning move, not a boundary one, and doesn't address the gap. Random testing across the range might eventually stumble onto the specific inside value by chance, but that's not a substitute for the deliberate, targeted three-value set this note describes."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Two-value BVA, exactly", back: "Two values per edge: the boundary itself, and the value immediately OUTSIDE the valid range. Four values total for a simple range with a low and high bound." },
+    { front: "Three-value BVA, exactly", back: "Three values per edge: outside-neighbor, boundary, and INSIDE-neighbor. Six values total - the inside value specifically targets stray carve-outs two-value testing can't reach." },
+    { front: "Why can two-value BVA fully pass and still miss a real bug?", back: "It never constructs a test for the inside-neighbor value at all. A defect that only exists exactly one step inside a boundary is invisible to two-value testing by construction, not by bad luck." },
+    { front: "When to escalate from two-value to three-value", back: "When the boundary's logic has history - patches, special cases, promo carve-outs, prior boundary-related bug reports. Simple, stable numeric comparisons rarely need the extra two tests." },
+    { front: "What a clean two-value BVA pass actually proves", back: "That the most common boundary mistake (a misplaced comparison operator) isn't present. It proves nothing about a defect specifically at the inside-neighbor value - that's a different, real gap, not paranoia." },
+    { front: "The non-numeric version of 'one step outside/inside'", back: "For dates: the adjacent calendar day (or second). For ordered enums: the adjacent value in the defined order. The two-value/three-value logic transfers - only the definition of 'one step' changes." },
+  ]}
+/>
+
+<Challenge>
+Take a numeric boundary from any earlier note's mission, or find a fresh one - ideally something with
+signs of layered logic (a promo rule, a grandfather clause, an exception you've heard about anecdotally).
+Run the two-value set first and record all four results. Then run the three-value set and specifically
+compare the two new inside-neighbor results against what a two-value-only tester would have concluded.
+If nothing new surfaces, that's a valid finding too - report it as "checked, three-value added no new
+information beyond two-value" and explain in one sentence why you'd still recommend two-value going
+forward for this specific field.
+</Challenge>
+
+<AskCommunity prompt="Two-value vs three-value check on `[field/boundary]`: two-value results were `[list]`. I'm deciding whether the extra inside-neighbor tests are worth running given `[reason: patched logic / simple check / etc]`. Does this boundary's history suggest a stray carve-out could be hiding, or is two-value proportionate here?">
+The most useful replies point at something SPECIFIC about the boundary's history (a past bug, a known
+promo rule) that argues for or against the extra tests - a general "always do three-value to be safe"
+doesn't help calibrate the actual trade-off.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://glossary.istqb.org/en_US/term/boundary-value-analysis", title: "ISTQB Glossary — boundary value analysis, the standard testing-certification definition", kind: "read" },
+    { href: "https://williamboles.com/boundary-value-analysis-and-equivalence-partitioning-partnership/", title: "William Boles — Equivalence Partitioning and Boundary Value Analysis for Designing Test Cases", kind: "read" },
+    { href: "https://medium.com/@giorgos.valamats/3-value-boundary-value-analysis-misconception-and-reality-25a008739660", title: "Giorgos Valamatsas — 3-value Boundary Value Analysis: Misconception and Reality", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=GdFUU-AicM4", title: "TM SQUARE — ISTQB Foundation: 3 Point Analysis, Boundary Value Analysis sample questions", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=GdFUU-AicM4" title="ISTQB Foundation — 3 Point Analysis, Boundary Value Analysis" minutes={7} />
+
+<Takeaways
+  points={[
+    "Two-value BVA tests the boundary and its outside neighbor only - four values for a simple range. It catches the common comparison-operator mistake efficiently.",
+    "Three-value BVA adds the inside neighbor - six values total - specifically to catch a stray carve-out or special case that two-value testing structurally cannot generate a test for.",
+    "A clean two-value BVA pass is real evidence, not proof of a clean boundary - it says nothing about a defect that lives exactly at the inside-neighbor value.",
+    "Escalate to three-value where a boundary's logic has history: patches, promo rules, grandfather clauses, or prior boundary-related bug reports - not as a blanket default everywhere.",
+    "The 'one step' in two-value/three-value transfers to non-numeric domains too: the adjacent date, or the adjacent value in an ordered enum.",
+  ]}
+/>
+
+<Complete xp={10} />

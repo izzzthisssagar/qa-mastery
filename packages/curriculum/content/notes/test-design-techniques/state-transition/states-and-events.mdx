@@ -1,0 +1,306 @@
+---
+title: "States & events"
+summary: "Every technique in this module so far tested one input in isolation. This chapter tests something different: systems where the same input produces different results depending on what happened before it - starting with the two ingredients that make that possible."
+tags: ["test-design-techniques", "state-transition", "track-a"]
+updated: "2026-07-14"
+---
+
+<Hook>
+Equivalence partitioning, boundary value analysis, and decision tables all share an assumption: feed
+the system a specific input, and it responds the same way every time. That assumption breaks completely
+the moment HISTORY matters - a login form that behaves differently on a fifth failed attempt than on a
+first, a video call that treats "hang up" differently depending on whether it was ringing or already
+connected. This chapter's whole technique exists for systems like that, and it starts with naming the
+two things that make history matter: states and events.
+</Hook>
+
+<Callout type="analogy">
+A washing machine's program dial has real, distinct positions - 1 through 11, A through E - and each
+one is a genuinely different mode with its own complete behavior, not just a cosmetic label. Selecting
+a position does nothing on its own, though; the machine sits idle until the Start/Pause button actually
+fires, and only THEN does it move from "a program is selected" into "that program is running." The dial
+position is a STATE - a mode the machine persists in until something changes it. The button press is an
+EVENT - the trigger that actually causes a change. Confusing the two, or treating one as if it were the
+other, is exactly the mistake this note is about avoiding before this chapter goes any further.
+</Callout>
+
+<Term define="A state is a distinct mode a system can be in, with behavior that persists until something explicitly changes it - not a momentary condition, but a lasting one (Draft, Placed, Shipped for an order; Idle, Ringing, Connected for a call). An event is a trigger that causes a transition from one state to another (submit, pay, cancel; answer, hang up). The test that separates them: a state is something the system IS, continuously, until changed; an event is something that HAPPENS, once, at a single moment, and causes that change. A system's behavior depending on which state it's currently in - not just on the current input alone - is the exact signal that state transition testing is the right technique to reach for.">State / event</Term>
+
+## What actually makes something a state
+
+A state has to be genuinely distinct in BEHAVIOR, not just in label - "Placed" and "Shipped" are real
+states because an order behaves differently in each one (a Placed order can still be cancelled; a
+Shipped one typically can't). A cosmetic status label that doesn't change what the system actually does
+isn't a real state for testing purposes, even if it has its own name in a database column.
+
+## What actually makes something an event
+
+An event is a single, momentary trigger - not a condition that's continuously true, but something that
+HAPPENS at one point in time and causes a state to change. "The user clicks submit" is an event.
+"The user is logged in" is not an event - it's closer to a state itself, or a precondition, since it
+persists rather than firing once.
+
+## Finding states and events in a real system
+
+Look for behavior that depends on history, not just on the current input alone - if the identical input
+("attempt to check out") produces different results depending on what happened earlier in the session
+(cart is empty vs cart has items vs already checked out), that's the signature of a real state machine
+hiding in the feature. Login flows, order lifecycles, media players, and subscription management are
+classic examples precisely because their behavior is history-dependent in this way.
+
+{/* IMAGE: a close-up of a real washing machine's control panel, showing a large numbered program-selector dial, temperature and spin-speed dials, a row of mode-indicator icons, an On/Off button, and a Start/Pause button */}
+<HotspotImage
+  src="/notes/test-design-techniques/state-transition/states-and-events.jpg"
+  alt="A close-up of an Ariston washing machine's control panel, showing a large program-selector dial numbered 1 through 11 and A through E, two smaller dials for temperature (30-90 degrees) and spin speed (400-800), a row of mode icons, an On/Off button, a Start/Pause button, and status lights labeled 3h, 6h, 9h, 12h, and End"
+  credit="Ariston washing machine control panel — Wikimedia Commons, CC BY-SA 3.0 (Belchers Albert)"
+  pins={[
+    { x: 19, y: 37, label: "The big numbered dial = the actual states, each position a genuinely distinct mode", desc: "Turning this to '3' or 'B' isn't a cosmetic choice - each position is a real, distinct mode with its own complete behavior (wash time, agitation pattern, rinse cycles). That's exactly what a state is: a mode a system persists in, with behavior that continues until something explicitly changes it." },
+    { x: 90, y: 54, label: "Start/Pause = the EVENT that actually triggers a transition", desc: "Selecting a dial position alone does nothing - the machine sits idle until this button fires the trigger that moves it from 'selected but not running' into 'actively running that program.' A state never changes itself; an event is always what causes the move." },
+    { x: 8, y: 56, label: "On/Off = a different kind of event, one that exits the whole machine entirely", desc: "Not every event moves between two ordinary states - some, like this one, forcibly return the system to a true starting point, abandoning whatever state it was in. Modeling this kind of reset event explicitly matters just as much as the ordinary ones." },
+    { x: 95, y: 23, label: "The '3h/6h/9h/12h/End' lights = a visible read-out of which state the machine is actually in", desc: "At any moment, exactly one of these should be lit - showing the current state from the outside, without needing to guess. A well-modeled state machine should always let you name, unambiguously, which single state the system currently occupies." },
+    { x: 47, y: 32, label: "The temperature and spin dials = parameters within a state, not the state itself", desc: "Changing from 40 degrees to 60 degrees doesn't create a new state - it's a detail belonging to whichever program state is currently selected. Not everything adjustable on a system is a state or an event; some things are just configuration carried along for the ride." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Spotting a real state machine hiding in a feature - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Notice the same input producing different results", desc: "The identical action ('submit') behaves differently depending on when it's tried - the first sign that history, not just current input, is driving the behavior." },
+    { label: "List the distinct MODES the system can persist in", desc: "Not momentary conditions - lasting ones. Each mode should have genuinely different behavior, not just a different label." },
+    { label: "List the single, momentary TRIGGERS that cause a mode change", desc: "Each one should happen at a point in time and cause a move from one mode to another - not a condition that's just continuously true." },
+    { label: "Apply the persistence test to every candidate", desc: "Does this last over time (state) or happen once at a moment (event)? A candidate that fails this test has been misclassified." },
+    { label: "Confirm every state has clearly different behavior", desc: "If two 'states' behave completely identically in every way that matters, they may really be one state with two names - a distinction worth resolving before the next note builds a table from this list." },
+  ]}
+/>
+
+Here's a small state machine modeling exactly the washing-machine flow from the photo - states, events,
+and the transitions between them, running for real:
+
+<CodePlayground
+  language="python"
+  title="Run it - a real state machine, states and events in action (Python)"
+  code={`class WashingMachine:
+    def __init__(self):
+        self.state = "Off"
+
+    def handle(self, event):
+        transitions = {
+            ("Off", "power_on"): "Ready",
+            ("Ready", "start"): "Running",
+            ("Running", "pause"): "Paused",
+            ("Paused", "resume"): "Running",
+            ("Running", "cycle_complete"): "Done",
+            ("Done", "power_off"): "Off",
+        }
+        key = (self.state, event)
+        if key in transitions:
+            old = self.state
+            self.state = transitions[key]
+            print(f"{old} --{event}--> {self.state}")
+        else:
+            print(f"{self.state} --{event}--> REJECTED (no such transition)")
+
+machine = WashingMachine()
+for event in ["power_on", "start", "pause", "resume", "cycle_complete", "power_off"]:
+    machine.handle(event)
+
+print()
+print("Now trying an event the current state doesn't allow:")
+machine.handle("start")
+
+# Off --power_on--> Ready
+# Ready --start--> Running
+# Running --pause--> Paused
+# Paused --resume--> Running
+# Running --cycle_complete--> Done
+# Done --power_off--> Off
+#
+# Now trying an event the current state doesn't allow:
+# Off --start--> REJECTED (no such transition)`}
+/>
+
+Same state machine in Java - the shape a real appliance's control firmware (or an order-lifecycle
+service) might actually take:
+
+<CodePlayground
+  language="java"
+  title="Run it - the state machine (Java)"
+  code={`import java.util.*;
+
+public class Main {
+
+    static class WashingMachine {
+        String state = "Off";
+        Map<String, String> transitions = new HashMap<>();
+
+        WashingMachine() {
+            transitions.put("Off:power_on", "Ready");
+            transitions.put("Ready:start", "Running");
+            transitions.put("Running:pause", "Paused");
+            transitions.put("Paused:resume", "Running");
+            transitions.put("Running:cycle_complete", "Done");
+            transitions.put("Done:power_off", "Off");
+        }
+
+        void handle(String event) {
+            String key = state + ":" + event;
+            if (transitions.containsKey(key)) {
+                String old = state;
+                state = transitions.get(key);
+                System.out.println(old + " --" + event + "--> " + state);
+            } else {
+                System.out.println(state + " --" + event + "--> REJECTED (no such transition)");
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        WashingMachine machine = new WashingMachine();
+        String[] events = {"power_on", "start", "pause", "resume", "cycle_complete", "power_off"};
+        for (String event : events) {
+            machine.handle(event);
+        }
+
+        System.out.println();
+        System.out.println("Now trying an event the current state doesn't allow:");
+        machine.handle("start");
+    }
+}
+
+/* Output matches the Python run exactly. */`}
+/>
+
+<Callout type="tip">
+Notice the machine's `handle` method takes exactly ONE event and looks at exactly ONE thing to decide
+what happens next: the pairing of (current state, event). It doesn't need to remember anything else
+about history - the current state already IS the complete summary of everything relevant that happened
+before. This is the deep reason state machines are testable at all: the state captures history so you
+don't have to re-derive it from scratch on every check.
+</Callout>
+
+<FirstTime title="Your mission: identify a real state machine hiding in a feature you use">
+<StepChecklist
+  steps={[
+    { text: "Find a feature where the same action behaves differently over time", detail: "A login flow, a checkout process, a media player, a subscription's status - anywhere the identical input produces different results depending on what happened earlier." },
+    { text: "List every distinct MODE the feature can persist in", detail: "Write down each one with a short name. For each, ask: does this genuinely behave differently from the others, or is it just a different label for the same behavior?" },
+    { text: "List every single, momentary TRIGGER that causes a mode change", detail: "Button clicks, form submissions, timeouts, external events (a payment webhook firing) - anything that happens at one point and causes a move." },
+    { text: "Apply the persistence test to every item on both lists", detail: "States last over time; events happen once. If something on your states list only happens momentarily, or something on your events list persists, move it to the other list." },
+    { text: "Sketch, in words, at least three transitions", detail: "\"From [state], the event [x] moves to [state].\" Do this for three real transitions in your chosen feature before moving to the next note." },
+  ]}
+/>
+You found and correctly classified the states and events hiding inside a real, everyday feature - the exact groundwork the rest of this chapter builds on.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "I have two 'states' that seem to always behave identically - I can't find any real difference between them.",
+      fix: "This is worth resolving now, before building a diagram or table from the list. If two candidate states truly never differ in behavior, they're probably one state with two names - merge them. If you can construct even one scenario where they'd behave differently, they're genuinely separate; write that scenario down as your justification.",
+    },
+    {
+      symptom: "Something on my events list feels like it lasts for a while, not just a single moment.",
+      fix: "Re-examine it - it's likely actually a STATE, or a precondition of one. 'User is logged in' isn't an event; the momentary event was 'login succeeded,' and 'logged in' is the resulting state that persists afterward. Split the lasting condition from the momentary trigger that created it.",
+    },
+    {
+      symptom: "My system has an event that can fire from MULTIPLE different states, each time leading somewhere different.",
+      fix: "This is completely normal and expected, not a sign of a mistake - 'cancel' plausibly fires from several different order states, each time landing in a different result depending on where it started. Write down every (state, event) pairing separately; the next note in this chapter is specifically about modeling this cleanly in a table.",
+    },
+    {
+      symptom: "I found what looks like a state machine, but it has 10+ states and feels overwhelming to model.",
+      fix: "Consider whether some of those states are actually SUB-STATES of a smaller number of higher-level ones - a video call's 'Connected' state might have several visible sub-modes (muted, screen-sharing) that don't need full state-machine treatment if they don't gate which EVENTS are valid. Model at the level where events actually get accepted or rejected differently; collapse sub-detail that doesn't affect that.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where a real state machine is worth looking for:
+
+- **Any flow with a multi-step lifecycle** — order processing, subscription management, application/approval workflows: anywhere a record moves through named stages over time.
+- **Authentication and session flows** — logged out, logged in, locked out, password-reset-pending are classic states with meaningfully different behavior at each one.
+- **Real-time or connection-based features** — video calls, chat connections, live document collaboration: state (idle, connecting, connected, reconnecting) usually drives very different behavior for the same user action.
+- **Anything with a "can't do X from here" error message** — that error is direct evidence a state machine already exists in the system, whether or not anyone modeled it explicitly.
+- **Media and playback controls** — play, pause, buffering, ended are genuinely distinct states, and the SAME button often means something different depending on which one is currently active.
+
+The habit: **when the same input produces different results depending on what happened earlier, stop and ask what STATE the system must be tracking to make that possible - name it explicitly before testing further.**
+</WhereToCheck>
+
+<WorkedExample title="finding the hidden state machine in a 'simple' comment-editing feature">
+1. **The feature, as described in a ticket:** "Users can edit their own comments." Sounds simple - no state machine mentioned anywhere in the description.
+2. **Try the identical action from different starting points.** Click "Edit" on a comment posted 2 minutes ago: form opens normally. Click "Edit" on a comment posted 25 hours ago: a message appears - "Comments can only be edited within 24 hours." Same action, same button, different result depending on TIME - a strong signal of hidden state.
+3. **List the candidate states**: Editable (posted under 24 hours ago, no moderation flag), Locked (posted over 24 hours ago), Under Review (flagged, pending moderator action). Each behaves genuinely differently: Editable allows the edit form to open; Locked shows the explanatory message instead; Under Review blocks editing AND hides the comment from other users.
+4. **List the candidate events**: 24 hours elapsing (a time-based, not user-triggered, event), a moderator flagging the comment, a moderator clearing a flag, the comment's author submitting an edit.
+5. **Apply the persistence test to each.** "24 hours elapsing" happens once, at a specific moment, and causes a state change (Editable -> Locked) - a genuine event, even though no user clicked anything to cause it. "Flagged" is momentary (the moderator's action); "Under Review" is the resulting state that persists afterward.
+6. **Sketch three real transitions in words:** "From Editable, the event [24 hours elapse] moves to Locked." "From Editable, the event [moderator flags] moves to Under Review." "From Under Review, the event [moderator clears flag] moves to Editable" (assuming the 24-hour window hasn't also separately elapsed - a detail worth flagging as an open question for the next note's table to resolve explicitly).
+7. **This ticket, which never mentioned a state machine, actually has a genuine one hiding inside it** - three real states, at least three real events, and behavior that meaningfully depends on which state a given comment is currently in.
+8. **The value of doing this BEFORE writing test cases:** a tester who only tried "edit a comment" once, on a fresh comment, would completely miss the Locked and Under Review behaviors - exactly the coverage gap this whole chapter's technique exists to close.
+</WorkedExample>
+
+<Callout type="mistake">
+Treating every named status or label in a system as if it were automatically a real state, without
+checking whether it actually changes behavior. A field called `status` with values like "active,"
+"pending," "archived" LOOKS like a ready-made states list - but if two of those values produce
+identical system behavior in every way that matters, modeling them as separate states in a diagram or
+table just adds noise without adding real coverage. Apply the "does this genuinely behave differently"
+test to every candidate before trusting a database column's labels at face value.
+</Callout>
+
+<Quiz
+  question="A ticket describes a food delivery order with a `status` field that can be 'placed,' 'preparing,' 'out_for_delivery,' or 'delivered.' A tester also notices the system tracks a separate boolean, `customer_rated`, which becomes true once a customer leaves a star rating after delivery. Should `customer_rated` becoming true be modeled as a state transition event in the same state machine?"
+  options={[
+    "It depends on whether it changes what events the system will accept afterward - if rating the order doesn't unlock or block any different behavior, it's better modeled as a simple flag rather than folded into the order's state machine; if it DOES change accepted behavior (e.g., blocking a second rating), it's a legitimate event worth including",
+    "Yes, always - any boolean field that changes from false to true over the lifecycle of an order is automatically a state transition event by definition",
+    "No, never - state transition testing only applies to fields explicitly named 'status' in the system's data model",
+    "It cannot be determined without first building the full state diagram, since events can only be identified after every state has already been drawn"
+  ]}
+  answer={0}
+  explain="This note's core test for a state or event is behavioral, not structural - the real question is whether the change actually gates different accepted behavior afterward. If rating an order simply records a fact with no effect on what the system will or won't accept next, treating it as a full state-machine event adds complexity without adding real coverage, similar to this note's mistake callout about not treating every status label as automatically a real state. But if rating DOES change behavior - blocking a duplicate rating, for instance, the same way the Locked state blocked editing in the worked example - then it genuinely qualifies. The field's NAME ('status' vs a boolean) is irrelevant to whether it represents real state; behavior is what matters, not data-modeling conventions. And identifying events doesn't require the diagram to already exist - this note's own worked example found real events before any diagram was drawn, which is exactly the order this chapter follows (states and events first, diagrams and tables next)."
+/>
+
+<Flashcards
+  cards={[
+    { front: "State, in one line", back: "A distinct mode a system can be in, with behavior that persists until something explicitly changes it - not momentary, lasting." },
+    { front: "Event, in one line", back: "A single, momentary trigger that causes a transition from one state to another - happens once, at a point in time." },
+    { front: "The persistence test", back: "Does this last over time (state), or happen once at a moment and cause a change (event)? Apply it to every candidate before trusting an initial guess." },
+    { front: "The signal that a real state machine is hiding in a feature", back: "The identical input produces different results depending on what happened earlier - history, not just current input, is driving the behavior." },
+    { front: "Why a database status column isn't automatically a real state", back: "Only if two labeled values genuinely produce different system behavior are they real states. A label that doesn't change behavior is noise, not a distinction worth modeling." },
+    { front: "What this note sets up for the rest of the chapter", back: "A correctly classified list of states and events. The next note (diagrams and tables) turns that list into a model; the one after (valid vs invalid) tests it; the last one (worked example) runs the whole process end to end." },
+  ]}
+/>
+
+<Challenge>
+Pick a real feature you use regularly where the same action seems to behave differently depending on
+context (a streaming app's playback controls, an email client's draft/sent/archived states, a delivery
+app's order tracking - anything with a multi-step lifecycle). List every candidate state and event you
+can identify. Apply the persistence test to each one explicitly, and specifically check whether any two
+states you listed actually differ in behavior or are secretly the same state wearing two labels. Sketch
+three real transitions in words, using the format "From [state], the event [x] moves to [state]."
+</Challenge>
+
+<AskCommunity prompt="States/events check on `[feature]`: I identified states `[list]` and events `[list]`. Does anything here look like it fails the persistence test - a 'state' that's actually momentary, or an 'event' that actually lasts over time?">
+The most useful replies point at one SPECIFIC item and explain which side of the persistence test it
+actually fails - a general "looks reasonable" doesn't test the classification this note is asking about.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://glossary.istqb.org/en_US/term/state-transition-testing", title: "ISTQB Glossary — state transition testing, the standard testing-certification definition", kind: "read" },
+    { href: "https://www.geeksforgeeks.org/software-engineering/state-transition-testing/", title: "GeeksforGeeks — State Transition Testing, with states/events/transitions/actions", kind: "read" },
+    { href: "https://www.softwaretestingmaterial.com/state-transition-test-design-technique/", title: "Software Testing Material — State Transition Test Case Design Technique", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=ZWGiBbZdO1Q", title: "Software Testing Mentor — State Transition Testing Technique, tutorial #37", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=ZWGiBbZdO1Q" title="Software Testing Tutorial #37 — State Transition Testing Technique" minutes={12} />
+
+<Takeaways
+  points={[
+    "A state is a distinct mode with behavior that PERSISTS until changed. An event is a single, momentary trigger that CAUSES a change - the persistence test tells them apart.",
+    "The signal a real state machine is hiding in a feature: the identical input produces different results depending on what happened earlier, not just on the current input alone.",
+    "Not every database status label is a real state - only values that genuinely produce different system behavior deserve to be modeled as separate states.",
+    "An event doesn't need a user action behind it - time elapsing, an external system firing a webhook, or an automated process completing are all legitimate events.",
+    "The current state already summarizes all relevant history - a well-modeled transition only ever needs to look at (current state, event) to decide what happens next.",
+  ]}
+/>
+
+<Complete xp={10} />

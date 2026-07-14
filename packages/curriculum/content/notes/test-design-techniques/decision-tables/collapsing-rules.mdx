@@ -1,0 +1,341 @@
+---
+title: "Collapsing rules"
+summary: "A fully-built decision table is often bigger than it needs to be - some conditions genuinely don't affect certain outcomes. Collapsing merges those rows safely with a 'don't care' marker. Collapsing too eagerly is how a real distinction quietly disappears."
+tags: ["test-design-techniques", "decision-tables", "track-a"]
+updated: "2026-07-14"
+---
+
+<Hook>
+The previous note ended with a hint: two rows sharing an identical action despite differing in one
+condition. That's not a coincidence to ignore - it's a signal the table can be safely made smaller.
+Collapsing is the deliberate, careful version of that observation: merge rows where a condition
+genuinely doesn't matter, mark it "don't care," and shrink the table without losing a single bit of
+real coverage. Done carelessly, the exact same move quietly erases a genuine exception instead.
+</Hook>
+
+<Callout type="analogy">
+A shelf crowded with nesting dolls looks, at a glance, like dozens of individuals - but look closely
+and most of them share the identical red headscarf and floral pattern, differing only in trivial
+brushstroke details that don't change what they ARE. Those are safe to think of as one group, one
+representative standing in for all of them. But sitting right among that crowd is a single doll painted
+in green with a completely different pattern - and a hurried glance across a shelf that "all basically
+looks the same" is exactly how that one real exception gets lumped in with the majority and lost. A
+decision table's collapsing step is the same two-part discipline: group what's genuinely identical, and
+look hard enough to still catch the one that isn't.
+</Callout>
+
+<Term define="Collapsing a decision table means merging two or more rules into one by replacing a condition that doesn't affect the shared action with a 'don't care' marker (usually a dash, -). Two rules are SAFE to collapse only when they differ in EXACTLY one condition's value AND produce the IDENTICAL action. The 'don't care' marker means 'this condition's value doesn't change the outcome for this rule' - it does not mean 'this condition was never checked' or 'this condition doesn't matter anywhere in the table,' only that it doesn't matter for THIS specific merged rule.">Collapsing (decision tables)</Term>
+
+## The safe collapsing rule, precisely
+
+Two rules can be merged only when BOTH conditions hold: they differ in exactly one condition's value,
+and their actions are completely identical - not similar, not "close enough," identical. If either
+condition fails - two or more conditions differ, or the actions differ even slightly - the rows must
+stay separate. This precision is what keeps collapsing safe rather than a source of silently lost
+coverage.
+
+## Why collapsing is worth doing at all
+
+A fully-built table (the previous note's output) proves every combination was considered - but a table
+with sixteen or thirty-two rows is hard for a human to review by eye, and hard to keep in sync as a
+requirement changes. Collapsing genuinely-redundant rows down to a handful of rules makes the table
+reviewable again without discarding any of the completeness the full build already proved.
+
+## The real danger: collapsing too eagerly
+
+The mistake isn't usually collapsing two rows that shouldn't be merged at all - it's collapsing based on
+a SUPERFICIAL read of "these look similar" rather than a verified, identical action. Two rows can look
+nearly the same, differ in a condition that seems unlikely to matter, and still legitimately produce
+different actions for a business reason that isn't obvious from the table alone. Collapsing without
+checking the actual action values, not just eyeballing the row, is exactly how a real distinction gets
+quietly erased.
+
+{/* IMAGE: a crowded shelf of Russian matryoshka nesting dolls, most sharing an identical red headscarf and red floral pattern, with one visually distinct doll painted in green with a different pattern standing among them */}
+<HotspotImage
+  src="/notes/test-design-techniques/decision-tables/collapsing-rules.jpg"
+  alt="A crowded shelf of Russian matryoshka nesting dolls in Budapest, most sharing an identical red headscarf and red floral pattern, with one visually distinct doll painted in green with a different floral pattern standing among the red ones"
+  credit="Army of Matryoshka dolls — Wikimedia Commons, CC BY 2.0"
+  pins={[
+    { x: 77, y: 11, label: "The crowd of near-identical red-scarf dolls = rules that genuinely produce the same outcome", desc: "Dozens of these share the same headscarf, the same floral pattern, painted from the same template - functionally interchangeable for any purpose that doesn't care about tiny brushstroke differences. This is the safe case for collapsing: rules that truly, verifiably share an action." },
+    { x: 32, y: 56, label: "One red-scarf doll, in sharp focus = a single representative standing in for the whole group", desc: "Once a whole cluster is confirmed functionally identical, there's no need to keep tracking each one individually - one clearly-labeled representative does the job the whole group used to do. This is what the 'don't care' marker actually represents." },
+    { x: 50, y: 49, label: "A second red-scarf doll, same pattern = confirmation, not a new distinction", desc: "A second, third, fourth doll with the identical pattern doesn't add new information - it just confirms the merge was justified. Diminishing returns is exactly the signal a group is safe to collapse into one entry." },
+    { x: 67, y: 60, label: "The green-patterned doll = the one row that must NOT get collapsed away", desc: "Stood next to the sea of red ones, it's obviously different - but a hurried glance across a crowded shelf, or a hurried skim across a big decision table, is exactly how a genuine exception gets lumped in with the majority and silently lost." },
+    { x: 15, y: 23, label: "The dense, uncollapsed crowd = the full table, before any simplification", desc: "Every doll here still exists individually, un-merged - the same state a decision table is in the moment it's finished being built, before anyone has checked which rows can actually be safely combined." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Safely collapsing a built table, one merge at a time - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Start from a fully-built table", desc: "Every combination present, every action filled in - the previous note's complete, unsimplified output." },
+    { label: "Find two rules differing in exactly one condition", desc: "Not two, not three - exactly one. If more than one condition differs, these two rules aren't candidates for a single merge." },
+    { label: "Verify their actions are completely identical", desc: "Not similar - identical. Check the actual recorded action for both rows, don't assume from how alike the rows look." },
+    { label: "Replace the differing condition with a dash and merge", desc: "The merged rule keeps every condition that DID matter, and marks the one that didn't as don't-care - explicitly, not by silently deleting the column." },
+    { label: "Repeat until no more safe merges exist", desc: "Keep scanning the shrinking table for the same pattern - collapsing can cascade, since a merge can create a new pair that's now also safe to combine." },
+  ]}
+/>
+
+Here's an automated collapsing algorithm applied to the discount table from the previous note - safely
+shrinking 8 rows down to 4, checking real actions at every step, not just row similarity:
+
+<CodePlayground
+  language="python"
+  title="Run it - automatically collapsing a decision table (Python)"
+  code={`import itertools
+
+CONDITIONS = ["is_member", "order_over_100", "has_promo_code"]
+VALUES = ["Y", "N"]
+
+def determine_action(is_member, order_over_100, has_promo_code):
+    if is_member == "Y" and order_over_100 == "Y":
+        return "15% off + free shipping"
+    if is_member == "Y" or has_promo_code == "Y":
+        return "10% off"
+    return "no discount"
+
+rows = [(combo, determine_action(*combo)) for combo in itertools.product(VALUES, repeat=3)]
+
+def try_collapse(rows):
+    for i in range(len(rows)):
+        for j in range(i + 1, len(rows)):
+            combo_a, action_a = rows[i]
+            combo_b, action_b = rows[j]
+            if action_a != action_b:
+                continue
+            diffs = [k for k in range(3) if combo_a[k] != combo_b[k]]
+            if len(diffs) == 1:
+                merged = list(combo_a)
+                merged[diffs[0]] = "-"
+                new_rows = rows[:i] + rows[i+1:j] + rows[j+1:]
+                new_rows.append((tuple(merged), action_a))
+                return new_rows, True
+    return rows, False
+
+print(f"Original table: {len(rows)} rows ({', '.join(CONDITIONS)})")
+collapsed = rows
+changed = True
+while changed:
+    collapsed, changed = try_collapse(collapsed)
+
+print("\\nCollapsed table:")
+for combo, action in collapsed:
+    print(f"  {combo} -> {action}")
+print(f"\\n{len(rows)} original rows collapsed down to {len(collapsed)} rules")
+
+# Original table: 8 rows (is_member, order_over_100, has_promo_code)
+#
+# Collapsed table:
+#   ('Y', 'Y', '-') -> 15% off + free shipping
+#   ('Y', 'N', '-') -> 10% off
+#   ('N', '-', 'Y') -> 10% off
+#   ('N', '-', 'N') -> no discount
+#
+# 8 original rows collapsed down to 4 rules`}
+/>
+
+Same algorithm in Java - the shape a rule-engine's own table-simplification pass might take:
+
+<CodePlayground
+  language="java"
+  title="Run it - the collapsing algorithm (Java)"
+  code={`import java.util.*;
+
+public class Main {
+
+    static String determineAction(String isMember, String orderOver100, String hasPromoCode) {
+        if (isMember.equals("Y") && orderOver100.equals("Y")) return "15% off + free shipping";
+        if (isMember.equals("Y") || hasPromoCode.equals("Y")) return "10% off";
+        return "no discount";
+    }
+
+    record Row(String[] combo, String action) {}
+
+    static List<Row> tryCollapse(List<Row> rows) {
+        for (int i = 0; i < rows.size(); i++) {
+            for (int j = i + 1; j < rows.size(); j++) {
+                Row a = rows.get(i), b = rows.get(j);
+                if (!a.action().equals(b.action())) continue;
+                int diffIndex = -1, diffCount = 0;
+                for (int k = 0; k < 3; k++) {
+                    if (!a.combo()[k].equals(b.combo()[k])) {
+                        diffCount++;
+                        diffIndex = k;
+                    }
+                }
+                if (diffCount == 1) {
+                    String[] merged = a.combo().clone();
+                    merged[diffIndex] = "-";
+                    List<Row> newRows = new ArrayList<>(rows);
+                    newRows.remove(j);
+                    newRows.remove(i);
+                    newRows.add(new Row(merged, a.action()));
+                    return newRows;
+                }
+            }
+        }
+        return null;
+    }
+
+    public static void main(String[] args) {
+        String[] conditions = {"is_member", "order_over_100", "has_promo_code"};
+        String[] values = {"Y", "N"};
+
+        List<Row> rows = new ArrayList<>();
+        for (String a : values)
+            for (String b : values)
+                for (String c : values)
+                    rows.add(new Row(new String[]{a, b, c}, determineAction(a, b, c)));
+
+        System.out.println("Original table: " + rows.size() + " rows (" + String.join(", ", conditions) + ")");
+
+        List<Row> collapsed = rows;
+        List<Row> next;
+        while ((next = tryCollapse(collapsed)) != null) {
+            collapsed = next;
+        }
+
+        System.out.println("\\nCollapsed table:");
+        for (Row r : collapsed) {
+            System.out.println("  " + Arrays.toString(r.combo()) + " -> " + r.action());
+        }
+        System.out.println("\\n" + rows.size() + " original rows collapsed down to " + collapsed.size() + " rules");
+    }
+}
+
+/* Output matches the Python run exactly. */`}
+/>
+
+<Callout type="tip">
+Notice the collapsing algorithm checks `action_a != action_b` FIRST, before even looking at how many
+conditions differ - it never merges based on rows merely looking alike. This ordering matters: checking
+similarity before verifying identical actions is exactly the shortcut that causes over-collapsing when
+done by eye instead of systematically.
+</Callout>
+
+<FirstTime title="Your mission: collapse a table you built, by hand, checking actions not appearances">
+<StepChecklist
+  steps={[
+    { text: "Use a fully-built table from the previous note's mission", detail: "Or build a fresh 3-condition table if you don't have one handy. You need every row's action already filled in." },
+    { text: "Scan for pairs differing in exactly one condition", detail: "Compare every pair of rows systematically - which ones differ in only one column's value?" },
+    { text: "For each candidate pair, check the ACTUAL actions, not the row's overall appearance", detail: "Read both actions in full. 'Basically the same' doesn't count - they need to be completely identical." },
+    { text: "Merge only the pairs that pass both checks", detail: "Replace the differing condition with a dash, keep everything else, record the shared action." },
+    { text: "Repeat the scan on the shrunk table", detail: "A merge can create a new candidate pair that wasn't there before - keep scanning until no more safe merges exist." },
+  ]}
+/>
+You practiced the exact discipline that keeps collapsing safe: checking real, recorded actions every time, not trusting a row's surface-level resemblance to its neighbors.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "I merged two rows that looked like they'd have the same action, but I didn't actually check - and now I'm not sure if the merge was safe.",
+      fix: "Go back and verify both original actions explicitly, right now, before trusting the collapsed table further. If they turn out to differ, un-merge them immediately - a table with an incorrectly collapsed rule is worse than an unsimplified one, because it looks authoritative while quietly hiding a lost distinction.",
+    },
+    {
+      symptom: "After collapsing, I have two 'don't care' rules that look almost identical except for one condition - should I collapse them again?",
+      fix: "Only if they pass the same two checks: differ in exactly one condition, and share a genuinely identical action. A dash in one rule and a dash in another CAN sit in the same position and still represent a legitimate further collapse - just verify it the same rigorous way as the first pass, not by assuming a second collapse is automatically safe because the first one was.",
+    },
+    {
+      symptom: "I'm not sure whether a 'don't care' marker on a shared, high-risk condition (like payment method) is actually safe long-term.",
+      fix: "A don't-care that's correct TODAY can become incorrect if the business rule changes later - a collapsed table needs the same maintenance vigilance as any other artifact. When a requirement changes, specifically re-check any don't-care markers touching the changed area before trusting the table still holds.",
+    },
+    {
+      symptom: "My collapsed table has fewer rules, but I've lost track of which original combinations they actually cover.",
+      fix: "Keep the pre-collapse full table around as a reference, at least until the collapsed version is reviewed and trusted - don't discard the proof of completeness the moment you simplify it. Some teams keep both: the full table as the audit trail, the collapsed table as the day-to-day working reference.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where collapsing discipline matters most:
+
+- **Any table with 8+ rows before collapsing** — this is where a human reviewer genuinely benefits from simplification; smaller tables rarely need it and rarely justify the collapsing risk.
+- **Tables touching pricing, eligibility, or access control** — exactly where an incorrectly-collapsed "don't care" silently erases a real business rule with real financial or security consequences.
+- **Tables inherited from someone else, already collapsed** — the collapsing that happened before you saw the table is invisible; if something seems off, consider reconstructing the full table to verify the existing don't-care markers independently.
+- **After ANY requirement change touching a condition with a don't-care marker** — re-verify that don't-care is still accurate; a rule change is exactly when a previously-safe collapse can quietly become wrong.
+- **Code review of business logic against a collapsed table** — walk through each don't-care marker specifically and confirm the code genuinely ignores that condition for that rule, not just that the table claims it does.
+
+The habit: **collapse by checking real, recorded actions explicitly - never by trusting how similar two rows look at a glance.**
+</WhereToCheck>
+
+<WorkedExample title="a collapse that looked safe, wasn't, and the fix">
+1. **The table:** an insurance rule with three conditions - has_prior_claims (Y/N), vehicle_age_over_10 (Y/N), and coverage_type (basic/premium) - eight rows before any collapsing.
+2. **A tester scans quickly and notices** that (no prior claims, old vehicle, basic) and (no prior claims, old vehicle, premium) both show "standard rate" as their action. Tempting to collapse coverage_type to a dash here.
+3. **Before merging, check the actions with full attention, not a glance.** Re-reading the actual recorded actions: "standard rate" for basic, and "standard rate WITH a $50 premium-processing fee" for premium. They looked the same at a glance ("standard rate") but are NOT actually identical - the premium row has an extra clause the basic row doesn't.
+4. **This is exactly the over-collapsing trap this note warns about** - a superficial read ("both say standard rate") missed a real, meaningful difference sitting in the rest of the action's text.
+5. **Correctly decline the merge.** These two rows stay separate, precisely because their actions aren't truly identical even though they share a common prefix.
+6. **Continue scanning the rest of the table properly.** Two OTHER rows - (has prior claims, new vehicle, basic) and (has prior claims, new vehicle, premium) - are checked the same careful way, and this time the actions genuinely match word for word: "elevated rate, manual review required" for both. This pair collapses safely.
+7. **The corrected, safely-collapsed table** merges only the pair that passed the identical-action check, leaving the "standard rate" pair as two separate rows precisely because they weren't actually the same rule wearing similar wording.
+8. **The lesson, made concrete:** two actions can share most of their wording and still be meaningfully different - the discipline this note insists on (check the FULL action, not a resemblance) is exactly what catches this kind of near-miss before it ships as a silently wrong collapsed table.
+</WorkedExample>
+
+<Callout type="mistake">
+Collapsing two rows because they "basically do the same thing" without reading both actions completely,
+word for word. A shared prefix or a similar-sounding outcome is not the same as a truly identical
+action - an extra fee, a different message, an additional side effect buried later in the action's
+description are all real differences that a quick skim misses. Read the full action for both candidate
+rows, every time, before merging - this is the single check that separates safe collapsing from
+silently losing coverage.
+</Callout>
+
+<Quiz
+  question="Two decision-table rows differ only in their 'region' condition (US vs EU). Row A's action reads 'Order approved, standard shipping.' Row B's action reads 'Order approved, standard shipping, VAT applied.' A tester collapses them into one rule with region marked as don't-care. What's wrong?"
+  options={[
+    "The actions are NOT identical - Row B includes 'VAT applied' which Row A doesn't - so this collapse is unsafe and erases a real, meaningful business distinction (EU orders needing VAT applied) even though both actions share the same opening words",
+    "Nothing is wrong - both actions begin with 'Order approved, standard shipping,' which is enough similarity to justify marking region as don't-care",
+    "The collapse is fine, but the merged rule should be renamed to make the VAT difference clear in the rule's label instead of in its action",
+    "The two rows should never have been compared in the first place, since region is generally not a condition that's eligible for collapsing under any circumstances"
+  ]}
+  answer={0}
+  explain="This note's central safety rule for collapsing requires the two actions to be COMPLETELY identical, not merely similar or sharing a prefix - 'Order approved, standard shipping' and 'Order approved, standard shipping, VAT applied' are genuinely different actions, because one includes a real behavior (VAT application) the other doesn't. Collapsing them erases that distinction, exactly the over-collapsing trap this note's WorkedExample walks through with the insurance example. Renaming the merged rule doesn't fix the underlying problem - the collapsed table would still tell the system region doesn't matter, when it demonstrably does for VAT purposes. And there's no category of condition that's inherently ineligible for collapsing - any condition can be marked don't-care IF the actions genuinely match; the problem here is specifically that they don't, not that region was compared at all."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The two-part safe-collapse test", back: "Two rules differ in EXACTLY one condition's value, AND their actions are COMPLETELY identical - not similar, not sharing a prefix. Both checks must pass." },
+    { front: "What a 'don't care' marker actually means", back: "This specific condition's value doesn't change the outcome for THIS merged rule - not that the condition was never checked, and not that it doesn't matter anywhere else in the table." },
+    { front: "The real danger in collapsing", back: "Merging based on rows LOOKING similar rather than verifying actions are truly identical - a shared prefix or resemblance can hide a real, meaningful difference in the full action." },
+    { front: "Why collapsing can cascade", back: "A merge can create a new pair of rows that's now also eligible for collapsing (differ in exactly one condition, same action) - keep re-scanning the shrinking table until no more safe merges exist." },
+    { front: "Why keep the pre-collapse full table around", back: "It's the proof of completeness the build step already established - useful as an audit trail, and as a reference to re-verify don't-care markers when a requirement later changes." },
+    { front: "When to re-check an existing don't-care marker", back: "Any time a requirement changes near that condition - a collapse that was correct when made can become incorrect later without the table itself showing any sign of it." },
+  ]}
+/>
+
+<Challenge>
+Take the fully-built decision table from the previous note's mission (or build a fresh one with at
+least 8 rows). Manually scan for pairs of rows differing in exactly one condition. For each candidate
+pair, read BOTH full actions completely before deciding - explicitly write down whether they're truly
+identical or only superficially similar. Collapse only the pairs that genuinely match. Report your final
+collapsed table alongside at least one pair you considered but correctly declined to merge, explaining
+the real difference you found in their actions.
+</Challenge>
+
+<AskCommunity prompt="Collapse-safety check on this pair of rules: `[row A + action A]` vs `[row B + action B]`, differing only in `[condition]`. Are these actions genuinely identical, or is there a difference I'm at risk of glossing over?">
+The most useful replies quote back the exact wording of both actions and point at a specific word or
+clause that does or doesn't match - "looks fine" doesn't actually verify the identical-action check
+this note requires.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://istqb-glossary.page/collapsed-decision-table/", title: "ISTQB Glossary — Collapsed Decision Table, the standard testing-certification definition", kind: "read" },
+    { href: "https://testgrid.io/blog/decision-table-testing/", title: "TestGrid — Decision Table Testing: Types, Examples & Best Practices", kind: "read" },
+    { href: "https://www.tutorialspoint.com/learn-decision-table-testing-with-example", title: "TutorialsPoint — Learn Decision Table Testing with Example", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=zHokvz4fRGY", title: "RapidGenVideo — Simplifying Decision Tables", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=zHokvz4fRGY" title="Simplifying Decision Tables" minutes={5} />
+
+<Takeaways
+  points={[
+    "Collapsing merges two rules into one only when they differ in exactly one condition's value AND share a completely identical action - both checks are required, not either.",
+    "A 'don't care' marker means this condition doesn't affect THIS rule's outcome - not that it's irrelevant everywhere in the table.",
+    "The real danger is collapsing based on rows looking similar rather than verifying actions are truly identical - a shared prefix can hide a genuine difference.",
+    "Collapsing can cascade - a merge can create a new eligible pair, so keep re-scanning the shrinking table until no more safe merges remain.",
+    "Re-verify existing don't-care markers whenever a requirement changes near that condition - a collapse correct when made can silently become wrong later.",
+  ]}
+/>
+
+<Complete xp={10} />

@@ -1,0 +1,315 @@
+---
+title: "Worked example"
+summary: "States and events, modeled as a table, tested on both the valid and invalid halves - applied end to end to a real traffic light, catching a genuine safety bug that only shows up when the SAME event is tested from more than one starting state."
+tags: ["test-design-techniques", "state-transition", "track-a"]
+updated: "2026-07-14"
+---
+
+<Hook>
+A traffic light is a state machine everyone already understands intuitively - which makes it the
+perfect place to prove this chapter's full process actually works, start to finish. States and events,
+correctly identified. A table, built to force completeness. Valid and invalid transitions, both tested
+deliberately. This note runs all three steps against one system and finds a real defect - one that
+looks completely fine from ONE starting state and is a genuine safety problem from another.
+</Hook>
+
+<Callout type="analogy">
+At a real intersection, several traffic signals run the identical red-yellow-green logic at the same
+moment, each one its own independent instance - one might be red while another, a block away, is
+green, both perfectly correct at the same time. A pedestrian signal nearby runs a second, related but
+genuinely separate state machine, synchronized with the vehicle lights without being the same system.
+And a stopped car isn't choosing to wait out of politeness - the current state is actively enforcing
+that it can't proceed. Every piece of this chapter's vocabulary is sitting in one ordinary intersection:
+multiple instances of one state machine, a coordinated second state machine, and states that actively
+gate what's allowed to happen next.
+</Callout>
+
+<Term define="A state-transition worked example, done fully, chains everything this chapter covered: identify real states and events (not disguised ones), build the complete table (every cell filled or marked invalid), then test BOTH valid transitions (does it move correctly) AND invalid ones (is it genuinely refused) against a real implementation. The distinguishing move of a good worked example is testing the SAME event from MULTIPLE different starting states rather than just once - because a transition can be implemented correctly for one starting state and incorrectly for another, and testing it only once can miss that entirely.">State-transition worked example</Term>
+
+## The system, as specified
+
+A traffic light's normal cycle: Red -> Green -> Yellow -> Red, advanced by a `timer_advance` event.
+A safety requirement, from a real traffic engineering standard: on power loss, the light MUST enter a
+flashing-red safety mode from any state, and on power restoration, it MUST always resume at Red -
+never directly to Green - regardless of which state it was in when power was lost.
+
+## Step one: identify states and events
+
+Four states: Red, Green, Yellow, FlashingRed. Three events: `timer_advance`, `power_loss`,
+`power_restored`. Applying the first note's persistence test confirms all four are genuine states
+(each with distinct, lasting behavior) and all three are genuine momentary events - no disguised
+actions hiding among them.
+
+## Step two: build the table, and notice the safety rule's shape
+
+`power_loss` is valid from every single state (Red, Green, Yellow, FlashingRed all transition to
+FlashingRed on power loss - a genuine "any state" transition, worth naming explicitly rather than
+writing four identical-looking separate rules). `power_restored` is valid only from FlashingRed, and
+per the safety requirement, must ALWAYS produce Red - regardless of what state preceded the outage.
+
+## Step three: test the same event from more than one starting state
+
+This is the step a rushed test pass skips. Testing `power_loss` then `power_restored` starting from Red
+might look completely fine - Red before the outage, Red after, nothing suspicious. The exact same
+sequence starting from Green is where a real defect can hide, invisible from the first test alone.
+
+{/* IMAGE: a small-town street intersection with multiple traffic light signal heads showing red, a pedestrian signal, a stopped red pickup truck, and a school bus loading zone sign */}
+<HotspotImage
+  src="/notes/test-design-techniques/state-transition/state-transition-worked-example.jpg"
+  alt="A small-town street intersection with several traffic light signal heads mounted on poles, one showing red, a pedestrian crossing signal on the near pole, a red pickup truck stopped at the intersection, autumn trees, and a 'SCHOOL BUS LOADING ZONE' sign on the right"
+  credit="Stoplight — Wikimedia Commons, CC BY-SA 3.0 (Alexis Kondra)"
+  pins={[
+    { x: 68, y: 34, label: "One signal head, showing red = one instance, currently in exactly one state", desc: "This light is red right now - not 'red-ish' or 'about to be red,' genuinely and unambiguously in that one state. A worked example needs this same precision: name the exact current state before reasoning about what should happen next." },
+    { x: 18, y: 30, label: "A second signal head, further down the street = a separate instance of the identical state machine", desc: "This light runs the exact same red/yellow/green logic, but it's its own independent instance - possibly in a different state at this exact moment, not literally the same light being viewed twice." },
+    { x: 9, y: 56, label: "The pedestrian signal = a second, DIFFERENT state machine, coordinated with the first", desc: "Walk/don't-walk isn't the same state machine as red/yellow/green - it's a related but genuinely separate one, whose states have to stay synchronized without literally being the same machine." },
+    { x: 18, y: 85, label: "The truck, stopped at the line = an actor whose action is currently gated by the state", desc: "The driver isn't choosing to wait out of caution - the current state (red) is actively blocking the 'proceed' action, the same way a real system should actively refuse an action gated purely by which state it's currently in." },
+    { x: 96, y: 54, label: "The 'SCHOOL BUS LOADING ZONE' sign = a special-case rule layered on top of the normal cycle", desc: "At certain times, this ordinary intersection's rules change entirely, overriding the usual cycle. A worked example that only models the everyday case and skips a special, time-gated override like this one is missing exactly the kind of edge case real state machines have to handle." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Testing the same event from two different starting states - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Run power_loss then power_restored, starting from Red", desc: "Red -> FlashingRed -> back to Red. Looks completely correct - this is exactly the test someone in a hurry would run once and move on from." },
+    { label: "Now run the IDENTICAL event sequence, starting from Green instead", desc: "Green -> FlashingRed -> back to... Green? The safety rule said it must ALWAYS resume at Red, regardless of the prior state." },
+    { label: "Compare both results against the stated safety rule", desc: "One run matches the rule by coincidence (it started at Red already); the other exposes that the implementation resumes to whatever state preceded the outage, not always Red." },
+    { label: "Name the exact defect the divergence reveals", desc: "The power-restoration logic stores and restores the PRIOR state instead of hardcoding Red - a real, safety-relevant bug invisible if only tested from one starting point." },
+    { label: "Recognize this as testing the SAME transition from multiple states", desc: "Not two different transitions - the identical (any-state, power_restored) rule, tested against more than one of the states it claims to cover, catching an inconsistency the single test alone would miss." },
+  ]}
+/>
+
+Here's exactly that comparison, run for real - identical event sequence, two different starting states,
+one clean result and one real safety defect exposed:
+
+<CodePlayground
+  language="python"
+  title="Run it - the same transition tested from two starting states (Python)"
+  code={`class TrafficLight:
+    def __init__(self):
+        self.state = "Red"
+        self.pre_outage_state = None
+
+    def handle(self, event):
+        cycle = {"Red": "Green", "Green": "Yellow", "Yellow": "Red"}
+        if event == "timer_advance" and self.state in cycle:
+            self.state = cycle[self.state]
+            return "OK"
+        if event == "power_loss":
+            self.pre_outage_state = self.state
+            self.state = "FlashingRed"
+            return "OK"
+        if event == "power_restored" and self.state == "FlashingRed":
+            # BUG: resumes to whatever state it was in before the outage,
+            # instead of always resuming safely at Red
+            self.state = self.pre_outage_state
+            return "OK"
+        return "REFUSED"
+
+def run(events, label):
+    tl = TrafficLight()
+    print(f"{label}:")
+    for e in events:
+        result = tl.handle(e)
+        print(f"  {e:16} -> {result:10} state={tl.state}")
+    print()
+
+run(["timer_advance", "power_loss", "power_restored"], "Outage during Green (should resume to Red for safety)")
+run(["power_loss", "power_restored"], "Outage during Red (coincidentally looks fine)")
+
+# Outage during Green (should resume to Red for safety):
+#   timer_advance    -> OK         state=Green
+#   power_loss       -> OK         state=FlashingRed
+#   power_restored   -> OK         state=Green
+#
+# Outage during Red (coincidentally looks fine):
+#   power_loss       -> OK         state=FlashingRed
+#   power_restored   -> OK         state=Red`}
+/>
+
+Same defect, same two-scenario test in Java - the shape a real traffic controller's firmware might
+actually take:
+
+<CodePlayground
+  language="java"
+  title="Run it - the traffic light safety-resume bug (Java)"
+  code={`import java.util.*;
+
+public class Main {
+
+    static class TrafficLight {
+        String state = "Red";
+        String preOutageState = null;
+        Map<String, String> cycle = Map.of("Red", "Green", "Green", "Yellow", "Yellow", "Red");
+
+        String handle(String event) {
+            if (event.equals("timer_advance") && cycle.containsKey(state)) {
+                state = cycle.get(state);
+                return "OK";
+            }
+            if (event.equals("power_loss")) {
+                preOutageState = state;
+                state = "FlashingRed";
+                return "OK";
+            }
+            if (event.equals("power_restored") && state.equals("FlashingRed")) {
+                // BUG: resumes to whatever state it was in before the outage,
+                // instead of always resuming safely at Red
+                state = preOutageState;
+                return "OK";
+            }
+            return "REFUSED";
+        }
+    }
+
+    static void run(String[] events, String label) {
+        TrafficLight tl = new TrafficLight();
+        System.out.println(label + ":");
+        for (String e : events) {
+            String result = tl.handle(e);
+            System.out.printf("  %-16s -> %-10s state=%s%n", e, result, tl.state);
+        }
+        System.out.println();
+    }
+
+    public static void main(String[] args) {
+        run(new String[]{"timer_advance", "power_loss", "power_restored"}, "Outage during Green (should resume to Red for safety)");
+        run(new String[]{"power_loss", "power_restored"}, "Outage during Red (coincidentally looks fine)");
+    }
+}
+
+/* Output matches the Python run exactly - same safety bug exposed only in the Green-start scenario. */`}
+/>
+
+<Callout type="tip">
+This is the sharpest example in the whole module of why testing "the same transition" really means
+testing it from every state that claims to support it, not just once. `power_restored` from FlashingRed
+is technically ONE table cell - but the correct BEHAVIOR of that cell depends on hidden internal state
+(which state preceded the outage) that the table alone doesn't show. When a transition's correctness
+might depend on more than just the current state and event, that's a signal to test it from every
+plausible prior condition, not just whichever one comes to mind first.
+</Callout>
+
+<FirstTime title="Your mission: test one transition from at least two different starting states">
+<StepChecklist
+  steps={[
+    { text: "Find a state machine with an 'any state' transition", detail: "An event that's supposed to behave the same way regardless of which state it fires from - error handling, a reset button, a logout action are common examples." },
+    { text: "Test it once, from an obvious starting state", detail: "Record the result. On its own, this looks like a complete test." },
+    { text: "Test the SAME event again, from a different starting state", detail: "Deliberately pick one that's less obvious or less commonly exercised - not just the first one that came to mind." },
+    { text: "Compare both results against the stated rule for that transition", detail: "Do they both genuinely match what the rule says should happen, or does only one of them coincidentally look right?" },
+    { text: "If they diverge, name the hidden state the implementation is depending on", detail: "Like this note's pre-outage state - what internal detail is leaking into a transition that's supposed to be uniform?" },
+  ]}
+/>
+You tested the exact pattern this note's worked example is built around - the same transition, multiple starting points, catching a defect a single test would have missed entirely.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "I tested a supposedly 'any state' transition from every state and they all matched correctly.",
+      fix: "Report this plainly as strong, real evidence - confirming a transition is genuinely uniform across every starting state is valuable, not a wasted step just because nothing broke. This is exactly the kind of thorough result worth documenting explicitly.",
+    },
+    {
+      symptom: "I found a transition whose result depends on hidden state, and I'm not sure if that's actually a bug or intentional design.",
+      fix: "Check the actual stated rule or spec first, the same way earlier notes in this module handled ambiguity. If the rule explicitly says the behavior should be uniform (as this note's safety requirement does), a dependency on hidden state is a real defect. If no such rule exists, it's worth asking whoever owns the requirement whether uniform behavior was actually intended.",
+    },
+    {
+      symptom: "My system has many states, and testing every 'any state' transition from every single one feels like too much.",
+      fix: "Prioritize the same way earlier notes in this chapter and module suggested: safety-critical or financially consequential transitions get full coverage from every state; low-stakes ones can reasonably be sampled from two or three representative states rather than all of them.",
+    },
+    {
+      symptom: "I don't have a real system to test, only a written specification.",
+      fix: "You can still apply this pattern by reasoning carefully: for each state the 'any state' transition claims to support, trace through the specification's own logic by hand and check whether it could plausibly depend on anything other than the current state and event. This won't catch an implementation bug, but it can catch a specification that's ambiguous or self-contradictory before any code gets written.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where this "test from multiple starting states" pattern matters most:
+
+- **Any 'from any state' or 'always' transition in a written rule** — exactly the shape most likely to hide a hidden-state dependency, precisely because it's described as if it were uniform.
+- **Error recovery and reset logic** — this note's power-restoration bug is a classic shape: recovery code that quietly depends on what state preceded the failure instead of resetting to one safe, defined state.
+- **Logout and session-termination flows** — "always return to the login screen" is a common uniform-transition claim worth testing from several different starting pages or states, not just one.
+- **Safety-critical or regulated systems** — traffic signals, medical device states, industrial control systems: exactly where "resume safely regardless of prior state" is a real, often legally mandated requirement worth testing rigorously.
+- **Any bug report describing inconsistent behavior "depending on what I was doing before"** — that phrasing is often a direct symptom of exactly this defect class, worth investigating with this note's from-multiple-states technique.
+
+The habit: **when a transition claims to behave the same way from every state, actually test it from more than one - a single passing test proves far less than it looks like it does.**
+</WhereToCheck>
+
+<WorkedExample title="applying the full chapter, one more time, to a different 'any state' transition">
+1. **A second requirement for the same traffic light**: "An emergency vehicle preemption signal (event: `ev_preempt`) must immediately force the light to Green for the emergency route, from ANY current state, and must NOT re-enter the normal cycle until a separate `ev_clear` event fires."
+2. **Identify states and events, as this chapter's first note describes.** No new states needed - Red, Green, Yellow, FlashingRed all still apply. Two new events: `ev_preempt`, `ev_clear`.
+3. **Build the table entries for this new transition.** `ev_preempt` should be valid from all four states, always landing on Green. `ev_clear` should be valid only from the preemption-held Green state, returning to... the rule doesn't actually say. That's a real gap, worth flagging rather than guessing.
+4. **Test `ev_preempt` from multiple starting states, exactly this note's pattern.** From Red: correctly moves to Green. From Yellow: correctly moves to Green. From FlashingRed (mid-outage): also correctly forces Green - but wait, is overriding an active safety outage with a forced Green actually the intended behavior, or a dangerous interaction between two different safety rules?
+5. **This is a genuine finding, not a coding bug** - two independently reasonable safety rules (power-loss safety mode, and emergency-vehicle preemption) interact in a way neither rule's author likely considered in isolation. Flag it explicitly: "ev_preempt from FlashingRed forces Green during an active power-outage safety state - please confirm this interaction is intended."
+6. **Return to the earlier `ev_clear` gap** identified in step 3. Since the spec doesn't say what state to return to, propose the same safe default the power-restoration bug should have used: return to Red, not whatever state preceded the preemption - applying the lesson from this note's main worked example directly to a fresh transition.
+7. **Report both findings together**, since they're related: the power-restoration defect (fixed earlier) and this newly-discovered FlashingRed/ev_preempt interaction both stem from the same root cause - "any state" transitions that don't explicitly define behavior for every state they claim to cover.
+8. **The real payoff of this whole chapter, demonstrated twice in one system:** systematically testing a transition against every state it claims to support - not just the first one or two that come to mind - is what actually finds the interactions and edge cases a spec's authors didn't think through, whether that shows up as a coding bug or a genuine design gap.
+</WorkedExample>
+
+<Callout type="mistake">
+Testing an "any state" or "always" transition once and treating that as proof it's uniform everywhere.
+This note's whole worked example is built around a transition that looked completely correct from one
+starting state and was a real safety defect from another - the SAME event, the SAME code path, two
+different results depending on hidden internal state. A transition described as uniform needs to
+actually be tested from more than one state before that description is trusted.
+</Callout>
+
+<Quiz
+  question="A password-reset flow has a 'cancel' button described as working 'from any step of the flow, always returning to the login screen.' A tester clicks cancel once, from the first step, confirms it returns to login, and reports the feature as tested. What does this note suggest is missing?"
+  options={[
+    "The SAME cancel transition needs to be tested from other steps of the flow too (not just the first one) - a transition described as uniform can still depend on hidden state from a specific step, the same way this note's power-restoration bug looked correct from one starting state and was broken from another",
+    "Nothing is missing - once a transition is confirmed to work from any single starting point, that proves it works identically from every other starting point in the same flow",
+    "The tester should have tested a completely different button instead, since testing the same button twice from different steps provides no additional information",
+    "The flow needs a formal state diagram drawn before the cancel button can be tested at all, regardless of how many times it's clicked"
+  ]}
+  answer={0}
+  explain="This note's entire worked example demonstrates precisely this failure mode: a transition explicitly described as uniform ('resumes at Red, from any state') passed cleanly when tested from one starting state and exposed a real, safety-relevant defect when tested from a different one - the same code path, producing different real-world results depending on hidden state the description didn't mention. A single confirmed pass says nothing about the other steps; the whole reason multi-state testing exists as a deliberate technique is that 'looks uniform in the spec' and 'is actually uniform in the implementation' are different claims. Testing a different button entirely wouldn't check the SAME claim of uniformity that's actually in question. And while a diagram or table (from earlier notes in this chapter) helps ORGANIZE this kind of testing, the core technique - test the same transition from multiple states - is what actually catches the defect; the format used to plan it is a separate, supporting concern."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The core technique this worked example demonstrates", back: "Test the SAME transition from MULTIPLE starting states, not just once - a transition can be correctly implemented for one state and incorrectly implemented for another, invisible from a single test." },
+    { front: "Why 'from any state' or 'always' claims deserve extra scrutiny", back: "These are exactly the claims most likely to hide a hidden-state dependency, precisely because the description implies uniformity that the implementation may not actually have." },
+    { front: "The specific defect shape in this note's example", back: "Recovery/reset logic that stores and restores prior state instead of resetting to one safe, defined state - looks correct when the 'prior state' happens to already be the safe one, wrong otherwise." },
+    { front: "What to do when two independently reasonable rules interact badly", back: "Flag it explicitly as a genuine design question, not a coding bug to silently fix - as this note's second WorkedExample does with the FlashingRed/ev_preempt interaction, since neither rule's author likely considered the other." },
+    { front: "How this note's whole process chains together", back: "Identify states/events correctly -> build the complete table -> test valid transitions -> test invalid transitions -> for any 'uniform' transition, test it from MULTIPLE states specifically, not just one." },
+    { front: "The real payoff of full multi-state testing", back: "It surfaces interactions and edge cases a spec's own authors didn't think through - whether that turns out to be an implementation bug or a genuine gap in the original design." },
+  ]}
+/>
+
+<Challenge>
+Find a real "any state" or "always" transition in a system you have access to - a cancel button, a
+logout action, an error-recovery path, a reset function. Test it from at least THREE different starting
+states, not just one. Record every result explicitly. If all three match the stated rule, report that
+plainly as real, thorough evidence. If any diverge, name the specific hidden state or condition you
+suspect the implementation is depending on that the rule's description didn't account for.
+</Challenge>
+
+<AskCommunity prompt="Multi-state transition check on `[transition/event]`, described as working `[the stated uniform behavior]`. I tested it from `[list starting states + results]`. Do these all genuinely match the stated rule, or does anything here look like it depends on which state it started from?">
+The most useful replies compare each result against the LITERAL stated rule, not a general impression -
+"looks consistent" doesn't verify the specific claim this note is testing.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://glossary.istqb.org/en_US/term/state-transition-testing", title: "ISTQB Glossary — state transition testing, the standard testing-certification definition", kind: "read" },
+    { href: "https://www.geeksforgeeks.org/software-engineering/state-transition-testing/", title: "GeeksforGeeks — State Transition Testing, complete technique overview", kind: "read" },
+    { href: "https://www.softwaretestingmaterial.com/state-transition-test-design-technique/", title: "Software Testing Material — State Transition Test Case Design Technique", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=U4oqKxynEgE", title: "iSQI Group — Mini Tutorial with Lloyd Roden: State Transition Testing", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=U4oqKxynEgE" title="Mini Tutorial with Lloyd Roden — State Transition Testing" minutes={39} />
+
+<Takeaways
+  points={[
+    "A transition described as uniform ('from any state,' 'always') needs to actually be tested from more than one starting state before that description is trusted.",
+    "The same code path can produce a correct result from one starting state and an incorrect one from another - invisible unless multiple states are actually tested.",
+    "A common real defect shape: recovery or reset logic that stores and restores prior state instead of resetting to one safe, explicitly defined state.",
+    "When two independently reasonable rules interact in an untested way, flag it as a genuine design question - not everyone's mistake to silently patch over.",
+    "This chapter's full chain - identify states/events, build the table, test valid and invalid transitions, then test uniform transitions from multiple states - is what actually surfaces the defects a spec's own authors didn't anticipate.",
+  ]}
+/>
+
+<Complete xp={10} />
