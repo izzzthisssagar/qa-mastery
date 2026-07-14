@@ -1,0 +1,317 @@
+---
+title: "Session & cache"
+summary: "What a session actually is in storage terms — a cookie plus server state. Then the cache: the browser's photocopy pile of assets kept so pages load fast, until a deploy changes a file and the stale copy keeps being served. Why 'clear your cache' is a real mechanism, and how stale-asset bugs happen."
+tags: ["browser-devtools-mastery", "application-and-storage", "track-c"]
+updated: "2026-07-14"
+---
+
+<Hook>
+'Have you tried clearing the cache?' is the punchline everyone laughs at — the IT-support brush-off,
+the thing you say when you have no idea what's wrong. Here's the uncomfortable truth: it's often
+*exactly right*, and there is a precise, mechanical reason it works. The browser keeps copies of
+files so it doesn't re-download them every visit; when a new version ships but the browser is still
+handing you last week's copy, the site really is broken and clearing the pile really is the fix. In
+this note you'll see what a session looks like once you strip away the mystery (spoiler: it's the
+cookie from the last note plus a record on the server), what the **cache** actually stores, and why
+the most-mocked advice in tech is, mechanism and all, sometimes the correct diagnosis.
+</Hook>
+
+<Callout type="analogy">
+The cache is a **photocopy pile on your desk.** Every time the site hands you a file — a script, a
+stylesheet, the logo — you don't run back to the printer (the server) next time you need it; you grab
+the copy off your pile. Fast, cheap, no trip. The catch is the same one every photocopy has: the
+original can change while your copy doesn't. The office reissues the form, but you keep filling in
+the old one off your pile, and everything downstream is subtly wrong. That's a **stale-asset bug** —
+you're running last week's code because the browser never noticed the reprint. 'Clear the cache' is
+just 'throw out the pile so you're forced to fetch the current version.' Not magic. Housekeeping.
+</Callout>
+
+<Term define="The browser's local store of copies of files it has already downloaded — scripts, stylesheets, images, fonts — kept so the next page load can reuse them instead of fetching over the network again. It makes sites fast, but it can serve an OUT-OF-DATE copy after the server's version changes. Two layers matter to testers: the HTTP cache (governed by Cache-Control headers, visible in the Network tab where the Size column reads 'disk cache' or 'memory cache'), and Cache Storage (the programmable Cache API a service worker fills, listed in Application -> Storage -> Cache Storage). Clearing the cache empties these so the browser is forced to refetch.">cache</Term>
+
+## A session is just a cookie plus a record
+
+Start with the thing that feels mystical and isn't. The accounts note called a **session** a
+wristband; the cookies note showed you the wristband sitting in the table. In storage terms a logged-in
+session is exactly two pieces: a **cookie in your browser** (the token, e.g. `sessionid=abc123`) and a
+**record on the server** that says 'this token means priya, logged in at 09:04'. Neither half alone
+logs you in. Delete the cookie and your browser can't prove who it is; delete the server record (or it
+expires) and the token points at nothing. Everything you experience as 'being logged in' is the browser
+flashing that cookie on every request and the server matching it to the record. There's no third
+magical thing — which is why deleting the session cookie in the Application panel logs you straight out.
+
+The **cache** is a completely different animal, and confusing the two causes real grief. Storage
+(cookies, localStorage, sessionStorage) is *your data and your state* — who you are, your cart, your
+draft. The cache is *copies of the site's files* — the code and assets the server sent, kept purely to
+avoid re-downloading. Clearing storage logs you out and forgets your stuff; clearing the cache forgets
+nothing about *you*, it just forces the browser to re-fetch the site's files fresh. That distinction is
+the whole reason 'clear the cache' can fix a broken-looking page without touching your login: it throws
+out stale *code*, not your *session*.
+
+Now the mechanism behind the copies. When the server sends a file, it can attach a **Cache-Control**
+header — most importantly `max-age`, a number of seconds the browser may reuse the copy without asking
+again. `max-age=3600` means 'reuse this for an hour, no need to check back'. During that window the
+browser serves the file straight off its pile — in the Network tab you'll see the Size column say
+`(disk cache)` or `(memory cache)` and a status that never touched the server. That's fantastic for
+speed and a trap for deploys: if `app.js` was cached with a long max-age and you ship a new `app.js` at
+the same URL, browsers that already have the old copy won't even ask for the new one until the window
+expires. The professional fix is **cache busting** — ship the new file under a new name like
+`app.9f3c2.js` so it's a different URL the browser has never cached — but when that's missing or
+misconfigured, 'clear your cache' is the manual version of the same idea.
+
+{/* IMAGE: Chrome DevTools split view — Network tab showing requests with the Size column reading 'disk cache' for cached assets, alongside the Application panel's Cache Storage section listing named caches */}
+<HotspotImage
+  src="/notes/browser-devtools-mastery/application-and-storage/PLACEHOLDER-cache-storage.jpg"
+  alt="DevTools showing the Network tab Size column reading disk cache for reused assets, next to the Application panel Cache Storage list"
+  credit="Photo: PLACEHOLDER - replace with a screenshot showing the Network tab Size column reading 'disk cache' on cached requests, plus the Application panel Cache Storage section with named caches listed"
+  pins={[
+    { x: 50, y: 50, label: "Size column says 'disk cache' = no network trip", desc: "In the Network tab, a request served from the cache shows the Size column reading (disk cache) or (memory cache) instead of a byte count, and it returns almost instantly. This is the photocopy being grabbed off the pile — the server was never contacted. When you're debugging a stale-asset bug, this column tells you at a glance which files came fresh and which came from last week's copy." },
+    { x: 50, y: 50, label: "Cache-Control: max-age = the reuse window", desc: "Click a request and read its Response Headers for Cache-Control. max-age=3600 means the browser may reuse the copy for an hour without asking. A long max-age on a file whose URL never changes is the classic deploy trap: users keep the old copy until the window closes. Reading this header tells you HOW LONG a stale copy can haunt you." },
+    { x: 50, y: 50, label: "Cache Storage = the service worker's pile", desc: "Application -> Storage -> Cache Storage lists NAMED caches filled by a service worker via the Cache API — a separate, programmable pile from the HTTP cache. Progressive web apps live here. If a site keeps serving old content even after an HTTP-cache clear, this pile (and the service worker, next note) is very often the reason." },
+    { x: 50, y: 50, label: "Disable cache checkbox = test like a first visit", desc: "The Network tab's 'Disable cache' checkbox forces every request to the network for as long as DevTools is open — the browser ignores its pile entirely. This is how a tester reproduces a genuine first-visit or post-deploy load without nuking their whole cache. Tick it whenever you suspect a stale copy is hiding a bug or, worse, hiding a fix." },
+    { x: 50, y: 50, label: "Hard reload = refetch this page's assets", desc: "With DevTools open, right-click the reload button for Empty Cache and Hard Reload. It throws out this page's cached assets and refetches them, which is the surgical version of 'clear your cache' for one page. It's the fastest way to answer 'is this bug real, or am I just looking at a stale copy?' — the first question to settle before you write anything up." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Why a stale asset survives a deploy — press Play"
+  intervalMs={1900}
+  nodes={[
+    { label: "First visit: browser fetches app.js", desc: "You load the site for the first time. The browser requests app.js, the server returns it with Cache-Control: max-age=604800 (one week), and the browser files the copy on its pile. In the Network tab this is a normal 200 with a real byte size — a genuine network trip. So far, so healthy: the copy on the pile matches the server exactly." },
+    { label: "Next visits: served from the pile, no trip", desc: "For the next week, every load of app.js is answered from the cache — Size column reads (disk cache), status is instant, the server is never asked. This is the speed win the cache exists for. Crucially, the browser does NOT check whether the server has a newer version; max-age told it not to bother until the week is up." },
+    { label: "A deploy ships a new app.js at the SAME url", desc: "The team fixes a bug and deploys. The new app.js lives at the exact same URL as before. On the server, the file has changed. But your browser still has a valid, not-yet-expired copy on its pile — and because max-age hasn't lapsed, it keeps serving the OLD one. The fix shipped; your browser refuses to notice." },
+    { label: "The stale-asset bug: 'deployed but users see old version'", desc: "Users run last week's code for up to a week. The bug that was fixed is still 'happening' for them; a new feature is invisible; a QA sign-off on staging doesn't match what real users get. Nothing is broken on the server — the browser is just faithfully reusing a copy it was told it could trust. This is the exact bug the next note pins on stale service workers too." },
+    { label: "The fix: clear the cache, or bust the name", desc: "Manual fix: clear the cache (or Empty Cache and Hard Reload) so the browser is forced to refetch — instantly current. Real fix: cache-busting, ship the file as app.9f3c2.js so every deploy changes the URL and the browser has no old copy to reuse. 'Have you tried clearing the cache' is the manual version of the professional fix, and now you know precisely why it works." },
+  ]}
+/>
+
+Here's the mechanism as runnable code — a tiny freshness checker. Give it when a file was fetched, its
+`max-age`, and the time now, and it tells you whether the browser will reuse the copy or must refetch.
+Watch the one-year cache stay 'fresh' a full day later — that's the deploy trap in one line:
+
+<CodePlayground
+  language="python"
+  title="Run it — is this cached asset still fresh? (Python)"
+  code={`# Given when a file was fetched, its Cache-Control max-age, and the time now,
+# decide whether the browser reuses the cached copy or must go back to the server.
+# Times are plain 'seconds on a clock' to keep it readable.
+
+def cache_state(fetched_at, max_age_seconds, now):
+    age = now - fetched_at
+    fresh_for = max_age_seconds - age
+    if fresh_for > 0:
+        return 'FRESH', fresh_for
+    return 'STALE', fresh_for      # negative value = seconds PAST expiry
+
+scenarios = [
+    ('app.js  Cache-Control: max-age=3600, checked 30 min in', 0, 3600, 1800),
+    ('app.js  max-age=31536000 (one year), checked next day',  0, 31536000, 86400),
+    ('logo.png  max-age=60, checked 2 minutes later',          0, 60, 120),
+]
+
+for label, fetched, max_age, now in scenarios:
+    state, secs = cache_state(fetched, max_age, now)
+    print(state, '->', label)
+    if state == 'FRESH':
+        print('   reused from cache, NO network request. Fresh for', secs, 'more seconds')
+    else:
+        print('  ', -secs, 'seconds past expiry -> browser must revalidate or refetch')
+    print()
+
+# FRESH -> app.js  Cache-Control: max-age=3600, checked 30 min in
+#    reused from cache, NO network request. Fresh for 1800 more seconds
+#
+# FRESH -> app.js  max-age=31536000 (one year), checked next day
+#    reused from cache, NO network request. Fresh for 31449600 more seconds
+#
+# STALE -> logo.png  max-age=60, checked 2 minutes later
+#    60 seconds past expiry -> browser must revalidate or refetch`}
+/>
+
+The same freshness logic in Java. The takeaway is identical: a long `max-age` on a URL that never
+changes is a copy that can outlive the deploy that fixed the bug — which is why cache-busting file
+names exist, and why 'clear your cache' works when they're missing.
+
+<CodePlayground
+  language="java"
+  title="Run it — is this cached asset still fresh? (Java)"
+  code={`class Main {
+    static String[] cacheState(long fetchedAt, long maxAge, long now) {
+        long age = now - fetchedAt;
+        long freshFor = maxAge - age;
+        String state = freshFor > 0 ? "FRESH" : "STALE";
+        return new String[]{ state, String.valueOf(freshFor) };
+    }
+
+    public static void main(String[] args) {
+        String[] labels = {
+            "app.js  Cache-Control: max-age=3600, checked 30 min in",
+            "app.js  max-age=31536000 (one year), checked next day",
+            "logo.png  max-age=60, checked 2 minutes later"
+        };
+        long[] fetched = { 0, 0, 0 };
+        long[] maxAge  = { 3600, 31536000, 60 };
+        long[] now     = { 1800, 86400, 120 };
+
+        for (int i = 0; i < labels.length; i++) {
+            String[] r = cacheState(fetched[i], maxAge[i], now[i]);
+            long secs = Long.parseLong(r[1]);
+            System.out.println(r[0] + " -> " + labels[i]);
+            if (r[0].equals("FRESH"))
+                System.out.println("   reused from cache, NO network request. Fresh for " + secs + " more seconds");
+            else
+                System.out.println("   " + (-secs) + " seconds past expiry -> browser must revalidate or refetch");
+            System.out.println();
+        }
+    }
+}
+// FRESH -> app.js  Cache-Control: max-age=3600, checked 30 min in
+//    reused from cache, NO network request. Fresh for 1800 more seconds
+//
+// FRESH -> app.js  max-age=31536000 (one year), checked next day
+//    reused from cache, NO network request. Fresh for 31449600 more seconds
+//
+// STALE -> logo.png  max-age=60, checked 2 minutes later
+//    60 seconds past expiry -> browser must revalidate or refetch`}
+/>
+
+<Callout type="tip">
+Before you write up any 'the fix didn't work' or 'the new version looks wrong' bug, **rule out a
+stale copy first** — it's the cheapest check you own and it's wrong to skip. With DevTools open, tick
+the Network tab's 'Disable cache', then do an Empty Cache and Hard Reload, and re-test. If the bug
+vanishes, you were looking at last week's code and the real fix shipped fine — that's a note in the
+ticket, not a defect. If it survives a genuinely fresh load, now you have a real bug AND proof it
+isn't a caching artefact. Half the 'it's still broken on prod' reports that reach developers die the
+moment someone actually clears the cache; be the tester who checked.
+</Callout>
+
+<FirstTime title="Your mission: catch the cache in the act">
+<StepChecklist
+  steps={[
+    { text: "Watch a load from scratch", detail: "Open a site, press F12, go to the Network tab, tick 'Disable cache', and hard-reload. Every request shows a real byte size in the Size column — a genuine network fetch. This is what a first visit looks like: nothing reused, everything fresh from the server." },
+    { text: "Now watch it reuse the pile", detail: "Untick 'Disable cache' and reload normally. Look at the Size column: many assets now read (disk cache) or (memory cache) instead of a byte count, and the load is faster. You just watched the browser grab copies off its pile instead of re-fetching. Same page, no server trips for those files." },
+    { text: "Read a Cache-Control header", detail: "Click one cached request and open Response Headers. Find Cache-Control and read its max-age. That number is how many seconds the browser may reuse the copy without asking. A big number on a file whose name never changes is the deploy trap in the making — note it." },
+    { text: "Find the Cache Storage pile", detail: "Open Application -> Storage -> Cache Storage. On a plain site it may be empty; on a progressive web app you'll see NAMED caches full of URLs a service worker stored. This is the second, programmable cache — the one the next note's service workers fill, and a common hiding place for stale content." },
+    { text: "Do the surgical clear", detail: "Right-click the reload button (DevTools open) and choose Empty Cache and Hard Reload. Watch the Network tab go back to real byte sizes — you forced a fresh fetch for this page without wiping your whole browser. This is the precise, targeted version of 'clear your cache', and now you know exactly what it threw away." },
+  ]}
+/>
+You've now seen a first-visit load, watched the browser reuse cached copies, read the header that controls it, found the service-worker cache, and done a surgical clear — the full toolkit for telling a real bug from a stale copy.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A fix was deployed and confirmed on staging, but users (and you) still see the old, broken behaviour.",
+      fix: "Classic stale asset. The browser is serving an old app.js/css from cache because it was cached with a long max-age at an unchanged URL. Confirm with Network -> Disable cache + Empty Cache and Hard Reload: if the fix appears, it's a caching problem, not a code problem. The durable fix is cache-busting file names on deploy; the immediate one is clearing the cache. File it as 'fix works, but stale cache hides it from users'.",
+    },
+    {
+      symptom: "You clear the HTTP cache and hard-reload, but the site STILL serves old content.",
+      fix: "A service worker is almost certainly intercepting requests and answering from Cache Storage — a separate pile the HTTP-cache clear doesn't touch. Go to Application -> Service Workers, tick 'Update on reload' (or Unregister), and clear Cache Storage. This is the next note's whole subject; for now, know that 'cleared the cache but it's still old' points straight at a service worker.",
+    },
+    {
+      symptom: "A bug only reproduces on your machine, never on a colleague's fresh one.",
+      fix: "You likely have stale cached assets (or old localStorage) that a first-time visitor doesn't. Reproduce like a real new user: tick Disable cache, hard-reload, or use a fresh profile / private window (next note). If the bug survives a genuinely clean load, it's real and universal; if it only lives in your dirtied cache, it's a your-machine artefact — say so in the ticket instead of sending devs chasing a ghost.",
+    },
+    {
+      symptom: "An image or file updated on the server but the page keeps showing the old one.",
+      fix: "Same asset URL, still-fresh cached copy. The browser won't refetch logo.png until its max-age lapses or something changes the URL. Empty Cache and Hard Reload proves it (the new image appears). The right long-term fix is versioning the asset URL so a change forces a fresh fetch; the manual workaround is clearing the cache. Check the Cache-Control max-age to see how long the old copy could linger.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Caching sits between the server and the screen on almost everything, so its failures wear disguises.
+Where to look, and what the disguise is:
+
+- **Right after any deploy** — the number-one stale-asset window. New code is live, but returning users may run the old bundle until their cache expires. Re-test as a fresh visitor (Disable cache + hard reload) before trusting a 'deployed' sign-off.
+- **'The fix isn't working' reports** — before treating it as a reopened bug, clear the cache and re-test. A huge share of these are stale copies, and clearing the cache is the fastest way to tell a real regression from an old file.
+- **Updated images, PDFs, downloadable files** — same-URL assets are the stubbornest cache residents. If 'the new version won't show', check the cache before the CMS.
+- **Progressive web apps and anything offline-capable** — these use Cache Storage and a service worker, a second pile the ordinary cache clear misses. Old content that survives a normal clear lives here (next note).
+- **Cross-machine repro gaps** — 'works on mine, not theirs' or vice versa is frequently a cache/storage difference, not a code difference. Level the field with a fresh profile or Disable cache before concluding anything.
+
+Tester's habit: **settle 'am I looking at a fresh copy?' before you write a word.** A stale cache
+hides real fixes and fakes real bugs with equal enthusiasm; a ten-second Empty Cache and Hard Reload
+is the difference between a credible ticket and a wild goose chase for the developer.
+</WhereToCheck>
+
+<WorkedExample title="the fix that shipped but nobody got">
+1. **The report:** "We deployed the checkout fix Tuesday morning. Support is STILL getting the same 'total is wrong' complaints Thursday. Did the deploy fail?"
+2. **The tester checks the deploy first** — the build went out, the fix is on staging, and on a brand-new incognito window the checkout total is correct. So the code is fine. The bug only shows for *returning* users.
+3. **They reproduce a returning user** in their normal browser: old total, still wrong. Same code on the server, different result on the screen — the signature of something between server and screen. They open the Network tab.
+4. **The Size column tells the story.** `checkout.js` is being served with Size reading `(disk cache)` — no network trip. They click it, read Response Headers: `Cache-Control: max-age=604800`. A one-week cache. The old, buggy checkout.js was cached last week and won't be re-fetched until the week is up.
+5. **They confirm the mechanism** with Empty Cache and Hard Reload: now checkout.js fetches fresh (real byte size), and the total is correct. The fix works perfectly — the browser was just never asking for it.
+6. **The finding is precise:** the deploy succeeded, but assets ship at unchanging URLs with a long max-age, so returning users keep the old bundle for up to a week. It's not a code bug; it's a caching/deploy bug.
+7. **The fix is cache-busting:** build the assets under content-hashed names (`checkout.9f3c2.js`) so every deploy changes the URL and no browser has an old copy to reuse. As a stopgap, drop the max-age or add a version query so the fix reaches users now.
+8. **The lesson for a tester.** 'Deployed' is not 'delivered'. When a confirmed fix doesn't reach users, don't reopen the code bug — check whether the browser is serving a stale asset, prove it with a fresh load, and file the real problem (caching strategy), which no amount of re-fixing the checkout code would ever solve.
+</WorkedExample>
+
+<Callout type="mistake">
+Reopening a code bug when the real culprit is a **stale cache** — or, just as bad, declaring a bug
+fixed because it disappeared for *you* when your browser simply refetched. Both come from skipping the
+one question: is the browser showing the current version, or a copy off its pile? A confirmed fix that
+'doesn't work' for users, a bug that only reproduces on one machine, an image that won't update — treat
+every one of these as guilty-of-caching until a fresh load (Disable cache + Empty Cache and Hard
+Reload, or a private window) says otherwise. Clearing the cache isn't the tired IT brush-off; it's a
+diagnostic step with a known mechanism, and the tester who runs it saves everyone a fake bug hunt.
+</Callout>
+
+<Quiz
+  question="A confirmed fix is live on the server, but returning users still see the old broken behaviour while a brand-new incognito window shows the fix. What's the most likely cause?"
+  options={[
+    "The browser is serving a stale cached copy of the site's JS/CSS at an unchanged URL, because it was cached with a long max-age and hasn't expired",
+    "The deploy silently failed and the old code is still on the server",
+    "The users' accounts are corrupted and need their sessions reset",
+    "The server is randomly returning old and new versions to different people"
+  ]}
+  answer={0}
+  explain="The tell is that a FRESH context (incognito, no cache) shows the fix while returning browsers don't — that isolates the problem to the client's cached copies, not the server. If the deploy had failed, incognito would show the old behaviour too; it doesn't. Corrupted sessions would affect login, not which version of checkout.js runs — and clearing storage logs you out, whereas this is about stale CODE, a different pile entirely. The server returning random versions would hit incognito as well. The mechanism: assets cached with a long max-age at the same URL are reused without asking the server, so returning users run last week's bundle until the cache expires — proven in seconds with Empty Cache and Hard Reload, and fixed for real with cache-busting file names."
+/>
+
+<Flashcards
+  cards={[
+    { front: "A session, in pure storage terms", back: "Two pieces: a cookie in the browser (the token, e.g. sessionid=abc123) plus a record on the server (token -> user, logged in at 09:04). Neither half alone logs you in. This is why deleting the session cookie logs you out — you removed the browser's half of the pair." },
+    { front: "Cache vs storage — the crucial difference", back: "Storage (cookies/localStorage/sessionStorage) = YOUR data and state (identity, cart, drafts). Cache = copies of the SITE'S files kept to avoid re-downloading. Clearing storage logs you out; clearing the cache forgets nothing about you, it just forces a fresh fetch of the site's code." },
+    { front: "Cache-Control: max-age — what it does", back: "A response header giving the number of seconds the browser may reuse a cached copy WITHOUT asking the server again. During that window, requests are served from the pile (Network Size column reads 'disk cache'). A long max-age on an unchanging URL is the classic post-deploy stale-asset trap." },
+    { front: "Why 'clear your cache' actually works", back: "It empties the pile of copied files, forcing the browser to refetch the current versions from the server. When a deploy shipped new code at the same URLs but browsers still reuse old cached copies, clearing is the manual way to pull the fresh version. Real mechanism, not a brush-off." },
+    { front: "Cache busting — the professional fix", back: "Ship each asset under a content-hashed name (app.9f3c2.js) so every deploy changes the URL. The browser has no old copy at the new URL, so it always fetches the current version — no stale-asset bug, no manual clearing needed. When it's missing, stale-asset bugs appear after deploys." },
+    { front: "HTTP cache vs Cache Storage", back: "HTTP cache: governed by Cache-Control, seen in Network's Size column. Cache Storage: a programmable pile a service worker fills via the Cache API, listed in Application -> Cache Storage. Content that survives an HTTP-cache clear is often stuck in Cache Storage behind a service worker (next note)." },
+  ]}
+/>
+
+<Challenge>
+Pick a site and: (1) with Network open and 'Disable cache' UNticked, reload and list three assets
+served from cache (Size column reads disk/memory cache). (2) Click one, read its Cache-Control
+max-age, and work out the longest a stale copy of it could survive after a deploy. (3) Do an Empty
+Cache and Hard Reload and confirm those same assets now fetch fresh (real byte sizes). Finish with one
+sentence: a colleague says 'my fix is deployed but it's still broken for me' — what's the first thing
+you tell them to do, and what mechanism are you counting on?
+</Challenge>
+
+<AskCommunity prompt="Cache question: after `[a deploy / an asset update]`, users see `[old behaviour / an old image / last week's bundle]` on `[which page]`. Network tab shows the asset Size as `[disk cache / a real byte size]`, Cache-Control max-age is `[value]`. A fresh incognito window shows `[the old / the new]` version. Is this a caching issue or a real code bug?">
+Most 'the fix didn't ship' reports come down to one split: does a genuinely fresh load (incognito or
+Disable cache + Empty Cache and Hard Reload) show the correct version? If yes, it's a stale-cache
+problem — old copies at unchanged URLs — and the fix is cache-busting names, not re-fixing the code.
+If a fresh load is still wrong, it's a real bug. State what incognito shows and paste the max-age.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching", title: "MDN — HTTP caching: Cache-Control, max-age, and how the browser reuses copies", kind: "read" },
+    { href: "https://developer.chrome.com/docs/devtools/network/reference/", title: "Chrome DevTools — the Network panel, Size column, and Disable cache", kind: "read" },
+    { href: "https://web.dev/articles/http-cache", title: "web.dev — the HTTP cache explained, plus cache-busting with hashed filenames", kind: "read" },
+    { href: "PLACEHOLDER", title: "PLACEHOLDER video — stale-asset bugs and clearing the cache in DevTools (replace with a real screencast URL)", kind: "watch" },
+  ]}
+/>
+
+<Video href="PLACEHOLDER" title="Stale assets, Cache-Control, and clearing the cache" minutes={7} />
+
+<Takeaways
+  points={[
+    "A session in storage terms is just two halves: a cookie in your browser plus a record on the server. No third magic thing — which is exactly why deleting the session cookie logs you out.",
+    "The cache stores copies of the SITE'S files (not your data) so pages load fast. Cache-Control: max-age says how long the browser may reuse a copy without asking the server — visible in the Network tab's Size column reading 'disk cache'.",
+    "The stale-asset bug: a deploy ships new code at the same URL, but browsers keep serving the old cached copy until it expires — 'deployed but users see the old version'. The real fix is cache-busting file names; the manual fix is clearing the cache.",
+    "'Have you tried clearing the cache' is a genuine diagnostic with a known mechanism, not a brush-off. Before writing up any 'fix didn't work' or 'won't update' bug, prove it with Disable cache + Empty Cache and Hard Reload.",
+    "Content that survives an ordinary cache clear usually lives in Cache Storage behind a service worker — a second, programmable pile, and the whole subject of the next note.",
+  ]}
+/>
+
+<Complete xp={10} />

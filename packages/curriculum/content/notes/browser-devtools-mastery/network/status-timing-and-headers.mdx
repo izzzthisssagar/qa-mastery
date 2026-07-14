@@ -1,0 +1,309 @@
+---
+title: "Status, timing & headers"
+summary: "Triage by colour with status families, then read the Timing tab like a stopwatch: TTFB is the server thinking, content download is the payload travelling. Spot '(from disk cache)' rows, catch Content-Type lies, and read the waterfall to see WHY a page felt slow - with curl timing to prove it."
+tags: ["browser-devtools-mastery", "network", "track-c"]
+updated: "2026-07-14"
+---
+
+<Hook>
+"The page is slow" is the least useful sentence in software. Slow WHERE? Slow because the server
+sat there thinking for three seconds, or because it answered instantly and then dribbled four
+megabytes of JavaScript down the wire? Those are different bugs, owned by different people, fixed
+in different sprints — and the Network panel tells them apart with a stopwatch it runs on every
+single request, for free, whether anyone looks or not. This note is about looking. You'll triage
+rows by status family in seconds, split every request's time into "server thinking" versus
+"payload travelling" in the Timing tab, spot the rows that never touched the network at all
+(cache), and catch servers lying about what they're sending. By the end, "it's slow" leaves your
+vocabulary — replaced by sentences with milliseconds in them.
+</Hook>
+
+<Callout type="analogy">
+Ordering at a restaurant. **TTFB is the kitchen.** You order, and then you wait — menu closed,
+nothing on the table — until the FIRST plate appears. That wait is the kitchen thinking: time to
+first byte. **Content download is the serving.** If your order is a twelve-course tasting menu,
+plates keep arriving for another twenty minutes even though the kitchen was fast. Complaining "the
+restaurant is slow" is useless to the manager; "the kitchen took 40 minutes to start" fires a chef,
+while "the food came fast but there was too much to carry" hires a second waiter. The exact
+technical mapping: TTFB (the Timing tab's 'Waiting for server response') is backend work — database
+queries, application code — before the first byte returns; content download is the response body
+crossing the network, governed by payload size and connection speed. Different phases, different
+culprits, different fixes — and the Timing tab itemizes both on every row.
+</Callout>
+
+The star measurement of this note is
+<Term define="TTFB (Time To First Byte) is the delay between the browser finishing sending a request and the FIRST byte of the response arriving - shown in the Timing tab as 'Waiting for server response'. It is almost pure server-side time: routing, application code, database queries, upstream API calls. Network distance adds a little, but a large TTFB (say, beyond about 600 ms) usually means the backend is thinking too hard - slow query, missing index, overloaded service. Crucially, no amount of front-end optimization, image compression, or minification touches TTFB: it is the kitchen, not the waiter. When a tester reports slowness, splitting TTFB from download time is the difference between filing the bug on the right team and starting a cross-team blame carousel.">TTFB</Term>
+— because it single-handedly answers testing's oldest turf war: is this slowness the backend's
+fault or the frontend's?
+
+## Status families: triage by colour
+
+The internet module taught the families and they transfer here unchanged — the panel just paints
+them. **2xx** worked (200 here's your thing, 201 created, 204 done-nothing-to-say). **3xx** look
+elsewhere (301/302 redirects, and 304 Not Modified — "you already have this, use your copy").
+**4xx** the CLIENT sent something wrong (400 malformed, 401 who are you, 403 no, 404 no such
+thing, 429 slow down). **5xx** the SERVER broke (500 crash, 502/504 a machine behind the machine
+didn't answer, 503 overloaded). DevTools renders 4xx/5xx rows red, so triage is literally
+chromatic: scan for red, then read the number, then apply the family rule to assign jurisdiction.
+
+Two rows deserve a second look even when green. A **304** is the cache handshake working — the
+browser asked "has this changed?", the server said no, nothing was re-downloaded; a page emitting
+zero 304s on revisit is re-buying things it already owns. And sometimes the Size column skips the
+network entirely: **`(from memory cache)`** — served from RAM, this tab, effectively instant — or
+**`(from disk cache)`** — read off disk, no request sent at all. Cache rows are why "works on my
+machine" exists in web form: YOUR browser is quietly serving last Tuesday's file while the user
+downloads today's broken one — or vice versa. When retesting a fix, tick **Disable cache** in the
+panel (or hard-refresh) so you're testing the server's current truth, not your browser's souvenir.
+
+One more header worth interrogating: **`Content-Type`**, the response's claim about what its body
+IS. When the claim and the body disagree, weird bugs bloom. The classics: an API endpoint returns
+an HTML error page (`text/html` — often somebody's login redirect) to code expecting
+`application/json`, and the client explodes parsing `<!DOCTYPE...` as JSON; or the body is
+perfectly good JSON but the header says `text/html`, so nothing renders and the panel's preview
+looks scrambled. Check the Response tab's actual body against the Response Headers' claimed type —
+a mismatch is a real, filable bug with the evidence one click apart.
+
+{/* IMAGE: a restaurant pass/kitchen window with order tickets in a row and plates being handed out */}
+<HotspotImage
+  src="/notes/browser-devtools-mastery/network/PLACEHOLDER-kitchen-pass.jpg"
+  alt="A busy restaurant kitchen pass with a rail of order tickets and plates queued under heat lamps waiting for service"
+  credit="Photo: PLACEHOLDER - replace with a restaurant kitchen pass: a rail of paper order tickets above, finished plates queued under heat lamps, a chef reaching for the next ticket"
+  pins={[
+    { x: 50, y: 50, label: "The ticket rail = the waterfall", desc: "Orders arrive, queue, and get worked in overlapping batches - exactly the panel's waterfall stripe. Each Network row's bar shows when its request started and how long each phase lasted; stacked bars reveal what ran in parallel and what waited. Reading the waterfall answers 'slow WHERE': one giant bar (a single slow request) is a different bug from a staircase of short bars (requests queuing behind each other, often waiting on the one before)." },
+    { x: 50, y: 50, label: "The kitchen working = TTFB", desc: "Between ticket-in and first-plate-out, the customer sees nothing - that gap is Waiting for server response in the Timing tab. It is backend time: queries, application logic, upstream calls. A fat TTFB with a small download means the server thought too long; no image compression or front-end tune-up will shorten the kitchen. This is the number that assigns slowness to the backend team with evidence instead of vibes." },
+    { x: 50, y: 50, label: "Plates crossing the room = content download", desc: "The kitchen may be instant while the carrying takes forever: a 5 MB response dribbling over hotel wifi is all download time. In the Timing tab this is the content download phase; the Size column names the accomplice. Big size plus long download plus healthy TTFB means the payload is the problem - oversized images, unpaginated API responses returning 10,000 rows for a screen that shows ten." },
+    { x: 50, y: 50, label: "The regular's usual = cache hits", desc: "Some orders never reach the kitchen - the barista starts the usual on sight. Rows whose Size column says (from memory cache) or (from disk cache) never touched the network; 304 rows asked and were told 'use your copy'. Free speed - until you are RETESTING A FIX against a cached copy of the bug. Tick Disable cache when verifying fixes: test the server's truth, not your browser's souvenir." },
+    { x: 50, y: 50, label: "The wrong dish delivered = Content-Type mismatch", desc: "The ticket says soup; the plate is salad. When the Content-Type response header claims one thing and the body IS another - an HTML login page served to code expecting application/json is the classic - clients crash or render garbage. Verify the claim against the Response tab's actual body: 'Unexpected token < in JSON' in the console is this exact dish, and the panel shows both the lying header and the true body side by side." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One request's life through the waterfall - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Queueing and stalled: waiting for a turn", desc: "The request exists but has not left - the browser caps parallel connections per host and higher-priority requests board first. On a busy page this queue time is real: a request can 'take 2 seconds' having spent 1.8 of them waiting in the terminal, not flying. The waterfall shows it as the pale segment before anything else happens." },
+    { label: "DNS, connect, TLS: finding and greeting the server", desc: "Name to IP address (DNS), TCP handshake (connect), then the HTTPS negotiation (TLS) - the internet module's plumbing, itemized per request. Usually a few dozen milliseconds, and often zero on later requests because the connection is reused. When THESE are slow on every request, suspect network or DNS, not the app." },
+    { label: "Request sent... then the wait: TTFB", desc: "The request is transmitted in a blink, and then - silence. 'Waiting for server response' is the server thinking: routing, code, database. THIS is TTFB, the backend's share of the stopwatch. 80 ms is a healthy kitchen; 3 seconds is a slow query wearing a spinner as a disguise. Note it per-request: one slow endpoint among fast ones names the guilty query almost by itself." },
+    { label: "Content download: the payload travels", desc: "First byte to last byte. Duration = size divided by bandwidth, so this phase belongs to the payload and the network, not the server's brain: a 40 KB JSON arrives in a blink, a 6 MB hero image takes seconds on a phone. Fat download with slim TTFB = shrink the payload (compression, pagination, image sizing), a completely different fix from a slow kitchen." },
+    { label: "The verdict, written as evidence", desc: "The Timing tab now reads like a receipt: queued 40 ms, connect 30 ms, waiting 2,140 ms, download 90 ms. That sentence assigns the bug: backend endpoint, not front-end assets. The reverse receipt (waiting 60 ms, download 4,200 ms) sends it to whoever ships the payload. Either way, 'the page is slow' just became a number with an owner." },
+    { label: "Zoom out: the whole waterfall", desc: "Sort by the Waterfall column and read the page like sheet music: long bars are slow requests, staircases are chains (request B needed request A's answer first), and a lone late bar delaying everything is your bottleneck. One slow API call that everything else waits on is the most common performance bug in web apps - and it is visible at a glance, no tooling beyond this panel." },
+  ]}
+/>
+
+curl runs the same stopwatch — `-w` prints the phase clocks after any request, which is exactly the
+Timing tab as text (and the linux module's `-s -o /dev/null` trick keeps the output clean):
+
+<CodePlayground
+  language="bash"
+  title="Run it - the Timing tab in a terminal: curl's phase clocks"
+  code={`# Each %{time_*} variable is a cumulative clock, in seconds, since the request began.
+curl -s -o /dev/null -w "DNS:       %{time_namelookup}s\\nconnect:   %{time_connect}s\\nTLS done:  %{time_appconnect}s\\nfirst byte:%{time_starttransfer}s\\ntotal:     %{time_total}s\\n" https://api.example.com/orders
+# DNS:       0.021s
+# connect:   0.054s
+# TLS done:  0.112s
+# first byte:0.987s     <- TTFB lives here: time_starttransfer
+# total:     1.034s
+
+# The two numbers that settle the turf war:
+#   TTFB     = time_starttransfer - time_appconnect  ->  0.875s  (server thinking)
+#   download = time_total - time_starttransfer       ->  0.047s  (payload travelling)
+# Verdict: the kitchen is slow, the plate is small. Backend bug.
+
+# Same measurement on a fat static asset - watch the shape flip:
+curl -s -o /dev/null -w "first byte:%{time_starttransfer}s  total:%{time_total}s  size:%{size_download} bytes\\n" https://cdn.example.com/app.bundle.js
+# first byte:0.093s  total:3.410s  size:5872644 bytes
+# Fast kitchen, 5.8 MB plate. Front-end payload bug - nothing the backend can fix.
+
+# And a cache check without a browser: -I sends HEAD, showing the caching rulings
+curl -sI https://cdn.example.com/logo.png | grep -i -E "cache-control|etag|content-type"
+# cache-control: max-age=31536000
+# etag: "a1b2c3"
+# content-type: image/png    <- the claim. If the body were HTML, that would be the lie.`}
+/>
+
+And here's the waterfall itself, reconstructed from timing numbers — run it, then change one
+request's phases and watch the diagnosis flip:
+
+<CodePlayground
+  language="python"
+  title="Run it - draw the waterfall and let it diagnose itself (Python)"
+  code={`# Phase timings (ms) for four requests from one page load - the Timing tab's data.
+requests = [
+    # name             queued  connect  ttfb   download  status
+    ("GET /page",         0,      45,    120,      30,    200),
+    ("GET /api/orders",  60,       0,   2140,      90,    200),  # reused connection
+    ("GET /app.js",      70,       0,     95,    1900,    200),
+    ("GET /logo.png",    80,       0,      0,       0,    200),  # cache hit!
+]
+
+SCALE = 60  # ms per character
+print("WATERFALL  (q=queued  c=connect  W=waiting/TTFB  D=download)")
+for name, queued, connect, ttfb, download, status in requests:
+    bar = (" " * (queued // SCALE) + "q" * max(0, queued // SCALE and 1)
+           + "c" * (connect // SCALE) + "W" * (ttfb // SCALE) + "D" * (download // SCALE))
+    total = queued + connect + ttfb + download
+    cache = " (from disk cache)" if total == 0 else ""
+    print(f"{name:<18} {status} |{bar:<45}| {total:>5} ms{cache}")
+
+print()
+print("DIAGNOSIS")
+for name, queued, connect, ttfb, download, status in requests:
+    total = queued + connect + ttfb + download
+    if total == 0:
+        verdict = "cache hit - never touched the network (free, but retest fixes with cache disabled)"
+    elif ttfb > 600 and ttfb > download * 2:
+        verdict = f"TTFB {ttfb} ms dominates - the SERVER is thinking too long (backend bug)"
+    elif download > 600 and download > ttfb * 2:
+        verdict = f"download {download} ms dominates - the PAYLOAD is too big (front-end/asset bug)"
+    else:
+        verdict = "healthy - no phase dominates"
+    print(f"{name:<18} {verdict}")
+
+print()
+print("Swap /api/orders ttfb=2140 with download=90 and re-run: same total,")
+print("opposite diagnosis, different team. THAT is why the phases matter.")`}
+/>
+
+<Callout type="tip">
+Steal this reporting habit whole: every slowness bug gets **three numbers, one sentence** —
+"`GET /api/orders`: total 2,230 ms, of which TTFB 2,140 ms, download 90 ms (34 KB)." That sentence
+names the endpoint, proves the slowness, and assigns it to the backend in one breath — no dev can
+answer it with "works fine here." The reverse split ("TTFB 95 ms, download 1,900 ms, 5.8 MB")
+routes itself to the front-end. And before you file EITHER: re-run with Disable cache ticked and
+once on a throttled connection (the panel's throttling dropdown) — a bug that only exists on fast
+office wifi isn't fixed, it's hiding.
+</Callout>
+
+<FirstTime title="Your mission: split a slow page into phases">
+<StepChecklist
+  steps={[
+    { text: "Collect the families", detail: "Open a big news or shopping site with the Network panel recording. Scan the Status column: find a 200, a 304, and something red (4xx). Most large sites ship at least one quiet 404 - a tracking pixel or stale asset nobody misses. Say each one's family rule aloud." },
+    { text: "Find the cache rows", detail: "Reload the page (normal reload, cache enabled) and read the Size column: several rows now say (from memory cache) or (from disk cache), and some show 304. Those rows cost zero-to-nothing. Now tick Disable cache and reload - watch the sizes and times inflate to their honest values. That gap is what caching buys." },
+    { text: "Open one Timing tab and name the phases", detail: "Click the main document row - Timing tab. Identify: queueing/stalled, DNS + connect + TLS (may be zero on reused connections), Waiting for server response (TTFB - the kitchen), content download (the serving). Write down the two big numbers." },
+    { text: "Find the fattest TTFB on the page", detail: "Sort or scan Fetch/XHR rows for the longest Waiting time. That endpoint is the page's slowest kitchen. Is it over 600 ms? You've just done real performance triage with zero tooling beyond the browser." },
+    { text: "Read the waterfall for the story", detail: "Look at the Waterfall column top to bottom: what ran in parallel, what queued, and whether one long bar holds everything else hostage. A staircase pattern means chained requests - each waiting for the previous answer. One glance, whole-page diagnosis." },
+    { text: "Catch a Content-Type in the act", detail: "Click any API response - compare Response Headers' content-type against what the Response tab actually shows. Almost always they agree - which is exactly why the day they don't (HTML error page claiming to be a JSON endpoint's answer) you'll recognize it instantly." },
+  ]}
+/>
+You triaged by family, exposed the cache, split one request into kitchen-vs-serving, and read a whole page's story off the waterfall. 'Slow' now comes with numbers attached.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "The page takes four seconds but every single request in the panel looks fast.",
+      fix: "Read the waterfall's SHAPE, not the row durations: a staircase of short bars means chained requests - each one waits for the previous answer before starting (request B needs data from A, C needs B...). Ten fast requests in series is one slow page. Also check the queueing segment: browsers cap parallel connections per host, so on asset-heavy pages requests idle in line. Neither bug shows in any single Timing tab; both are obvious the moment you read the waterfall top to bottom.",
+    },
+    {
+      symptom: "I deployed a fix but the browser still shows the old broken behaviour.",
+      fix: "Check the Size column for the file you fixed: (from disk cache) means the browser never asked the server - you are retesting last week's file. Tick Disable cache in the Network panel (it applies while DevTools is open) or hard-refresh, and re-run. This is the single most common self-inflicted 'cannot reproduce the fix' in QA, and the panel confesses it in one column. When verifying ANY fix to a static asset, cache disabled is the ground rule.",
+    },
+    {
+      symptom: "The console screams 'Unexpected token < in JSON at position 0' and a feature dies.",
+      fix: "The client asked for JSON and got HTML - that leading < is the first character of an HTML page (that token is the < of <!DOCTYPE or <html>). Find the request in the panel and read the Response tab: usually a login redirect page, a 404 page, or a gateway error page served where JSON was expected - often with a misleading 200 status. Check the Content-Type response header against the body. File it with both: the endpoint, the claimed type, and the actual body. The fix is server-side (return JSON errors with correct types), but the DIAGNOSIS is one Response tab away.",
+    },
+    {
+      symptom: "The API is 'slow' but the backend team's dashboards swear the server answers in 50 ms.",
+      fix: "Both can be true - split the phases. If the Timing tab shows small Waiting (TTFB) but big content download, the server DID answer fast and the payload is fat or the network is slow: their dashboard measures the kitchen, you measured the whole meal. If TTFB itself is big in the panel but small on their dashboard, the time is being lost between you and them - proxy, CDN, geography - or their dashboard measures only part of the kitchen. Bring the phase numbers (and a curl -w run from another network if you can); the conversation changes instantly from 'is not/is too' to 'which phase'.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+The stopwatch and the rulings, panel by panel:
+
+- **Network → Status column** — the family triage: red rows first; 4xx means read the request, 5xx means capture and escalate; a suspicious all-200 page with broken behaviour means read the bodies.
+- **Network → Size column** — `(from memory cache)` / `(from disk cache)` rows never touched the network; 304s asked and were excused. Retesting a fix? **Disable cache** first.
+- **Network → Timing tab** — the phase receipt: queueing, DNS/connect/TLS, **Waiting for server response (TTFB)**, content download. Two big numbers, one verdict.
+- **Network → Waterfall column** — the page's story in bars: parallel vs chained, the queue, the one long bar everything waits on.
+- **Network → Response Headers** — `Content-Type` (the claim — verify against the actual body), `Cache-Control` and `ETag` (the caching rules that explain the 304s).
+- **Network → throttling dropdown** — replay the page on 'Slow 4G' before declaring anything fast; office wifi hides download-phase bugs from you and nobody else.
+- **`curl -s -o /dev/null -w '%{time_starttransfer} %{time_total}'`** — the Timing tab from a terminal, for evidence outside the browser (and next note makes this a habit).
+
+The habit: **never say slow — say which phase.** Kitchen or carrying, TTFB or download; every
+slowness complaint becomes a number with an owner.
+</WhereToCheck>
+
+<WorkedExample title="the dashboard that was 'slow' for exactly one team">
+1. **The report:** "The analytics dashboard takes 8+ seconds for the sales team. It's fine for engineering. Probably their wifi?" Nobody has numbers. Everybody has opinions.
+2. **The tester sits with a sales user,** opens Network with Preserve log, loads the dashboard, and sorts by Time. One row owns the page: `GET /api/reports/summary` — 7.4 seconds. Everything else totals under a second. The waterfall shows every widget's request queued behind this one. So: not wifi, one endpoint.
+3. **Open its Timing tab.** Waiting for server response: 7,210 ms. Content download: 130 ms (28 KB). The kitchen, not the carrying — wifi is formally exonerated; a 28 KB payload doesn't care about wifi.
+4. **Why only sales?** Compare with an engineering user's capture of the same row: TTFB 300 ms. Same endpoint, same build, wildly different kitchen time. Click both rows' Headers: the request URLs differ by one query param — the sales role loads `range=all_time`, engineering's default is `range=30d`.
+5. **The hypothesis writes itself:** the summary query has no index (or no limit) on the full-history path — the classic slow-query-behind-a-spinner. The panel can't see the database, but it has named the endpoint, the parameter, and the phase.
+6. **Evidence pack, per the log-investigation chapter's rules:** both timing receipts as text (sales: TTFB 7,210 ms / download 130 ms; engineering: TTFB 300 ms), the two full URLs, timestamps for correlation with the server logs, and a `curl -w` replay confirming 7 s from a different network - so nobody reopens the wifi theory.
+7. **The report:** "GET /api/reports/summary with range=all_time has 7.2 s TTFB (download 130 ms, 28 KB) - server-side latency, reproducible via curl, timestamps attached for log correlation. Same endpoint with range=30d: 300 ms. Suspect the all-time aggregation path." Backend finds an unindexed scan that afternoon.
+8. **The lesson:** "slow for some users" usually means "a parameter only some users trigger." The Timing tab assigns the phase, the URL assigns the parameter, and comparing a fast capture against a slow one — the same move as the anatomy note's worked example — turns politics into a query plan.
+</WorkedExample>
+
+<Callout type="mistake">
+Reading the Time column as the server's fault. That number is the WHOLE trip — queueing behind
+other requests, connection setup, server thinking, payload download — and blaming the backend for
+a 3-second Time when 2.8 seconds was a 6 MB download (or queue time on an asset-choked page) burns
+your credibility fast, in a "we checked, it's your report that's slow" way. The Time column is a
+symptom; the Timing tab is the diagnosis. Open it, split kitchen from carrying, and file the phase
+— not the total. Corollary in the other direction: a fast Time column on YOUR machine proves
+nothing either, when half the rows say `(from disk cache)` and your fibre connection is doing the
+payload a favour the users won't get. Disable cache, throttle, then believe.
+</Callout>
+
+<Quiz
+  question="A request shows Time: 3.2 s. Its Timing tab reads: Waiting for server response 180 ms, content download 2,950 ms, Size 6.1 MB. Where does this bug go?"
+  options={[
+    "Backend - 3.2 seconds means the server is slow, and TTFB numbers are unreliable anyway",
+    "Front-end/payload - the server answered in 180 ms; almost all the time is a 6.1 MB body crossing the wire, so the fix is shrinking or splitting the payload (compression, pagination, image sizing), not tuning the server",
+    "Networking team - any download over one second means the office network is faulty",
+    "Nowhere - 3.2 seconds is normal and no user will notice"
+  ]}
+  answer={1}
+  explain="Split the phases before assigning blame. TTFB (Waiting for server response) is 180 ms - the kitchen was quick; the server did its thinking and started answering almost immediately. The remaining ~2.95 s is content download: 6.1 MB travelling to the browser, and that phase scales with payload size and connection speed, not server code. The fix lives with whoever ships the payload - compress it, paginate it, resize it, split it - and no database tuning will touch it. The network-team answer misreads a size problem as an infrastructure problem (on a slower mobile connection this same payload gets WORSE, which is why you throttle before declaring things fine). And 3.2 s is absolutely user-visible. The one-sentence report: total 3.2 s, TTFB 180 ms, download 2,950 ms at 6.1 MB - payload bug, owner: front-end."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Status families, one line", back: "2xx worked - 3xx look elsewhere (304 = use your cached copy) - 4xx the CLIENT sent something wrong - 5xx the SERVER broke. The panel paints 4xx/5xx red: triage by colour, then by number." },
+    { front: "TTFB - what it is and what it means", back: "Time To First Byte: request sent -> first byte back, shown as 'Waiting for server response'. Almost pure backend time (code, queries, upstream calls). Big TTFB = slow kitchen; no front-end fix can shrink it." },
+    { front: "Content download - what it means", back: "First byte -> last byte: the body crossing the network. Scales with payload size and connection speed. Big download + small TTFB = fat payload (or slow network), owner: whoever ships the bytes." },
+    { front: "(from disk cache) / (from memory cache)", back: "The Size column's confession that no request was sent - the browser served its own copy (disk = survives restart, memory = this session, faster). Free speed for users; a trap when retesting fixes. Disable cache before verifying." },
+    { front: "Content-Type mismatch - the classic", back: "'Unexpected token < in JSON' = an HTML page (login redirect, error page) served where JSON was expected, sometimes with status 200. Compare the Content-Type response header against the actual Response tab body; file both." },
+    { front: "Reading the waterfall", back: "Bars show start time + phases per request. Long bar = slow request; staircase = chained requests (each waits for the last); pale leading segments = queueing. One late bar that everything waits on is the most common web perf bug." },
+    { front: "The slowness report formula", back: "Three numbers, one sentence: endpoint, total, TTFB vs download (+ size). 'GET /api/orders: 2,230 ms total, TTFB 2,140, download 90 (34 KB)' - names the bug, proves it, and assigns the right owner in one line." },
+  ]}
+/>
+
+<Challenge>
+Pick any production site and find its slowest request: open Network, reload with Disable cache,
+sort by Time, click the winner. Write the one-sentence report: endpoint, total, TTFB, download,
+size — and your verdict, kitchen or carrying. Then re-run with throttling set to 'Slow 4G' and
+write the sentence again. Finish with one line: which phase grew under throttling, and why was it
+exactly that one? (If you said download — payloads pay for bandwidth, kitchens don't — you've got
+the whole note.)
+</Challenge>
+
+<AskCommunity prompt="Slowness triage: [method] [url] - total [x] ms, TTFB [x] ms, download [x] ms, size [x] KB, status [code]. Cache state: [disabled / rows showing from-cache]. Same request on throttled 'Slow 4G': [numbers]. Waterfall shape: [one long bar / staircase / queued]. My verdict: [backend TTFB / payload / chained requests] - am I reading it right?">
+If you fill that template, you've already done the analysis — the community just referees your
+verdict. The usual corrections: blaming the server for download time, testing with cache still
+on, and missing a staircase (chained requests) because each individual row looked innocent.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.chrome.com/docs/devtools/network/reference#timing", title: "Chrome DevTools - the Timing tab, every phase explained", kind: "read" },
+    { href: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status", title: "MDN - HTTP status codes, the full family reference", kind: "read" },
+    { href: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching", title: "MDN - HTTP caching: Cache-Control, ETag, and why 304s are free speed", kind: "read" },
+    { href: "https://curl.se/docs/manpage.html", title: "man curl - the -w write-out variables behind terminal timing", kind: "read" },
+    { href: "PLACEHOLDER", title: "PLACEHOLDER video - Timing tab and waterfall walkthrough: TTFB vs download on a real slow page", kind: "watch" },
+  ]}
+/>
+
+<Video href="PLACEHOLDER" title="PLACEHOLDER - status families, the Timing tab, and reading the waterfall" minutes={11} />
+
+<Takeaways
+  points={[
+    "Status families triage in seconds and transfer straight from the internet module: 2xx worked, 3xx look elsewhere (304 = cache handshake), 4xx client's fault, 5xx server's fault - the panel paints the bad ones red.",
+    "Never say slow, say which phase: TTFB ('Waiting for server response') is the server thinking - a backend bug; content download is the payload travelling - a size/network bug. The Timing tab splits every request into both.",
+    "Cache rows - (from memory cache), (from disk cache), and 304s - never (re)downloaded anything: free speed for users, a trap for testers. Tick Disable cache before verifying any fix, and throttle before declaring anything fast.",
+    "Content-Type is a claim; the Response tab is the truth. 'Unexpected token < in JSON' means an HTML page (login redirect, error page) was served where JSON was expected - file the header AND the body.",
+    "Read the waterfall's shape, not just row times: staircases are chained requests, pale segments are queueing, and one long bar everything waits on is the classic web performance bug - visible at a glance, reportable as three numbers and one sentence.",
+  ]}
+/>
+
+<Complete xp={10} />

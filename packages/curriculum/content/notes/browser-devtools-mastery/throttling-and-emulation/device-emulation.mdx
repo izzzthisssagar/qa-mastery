@@ -1,0 +1,383 @@
+---
+title: "Device emulation"
+summary: "The device toolbar fakes a viewport, a device pixel ratio, and touch events on your desktop browser - fast enough to catch most responsive bugs, honest enough to admit what it can't: real fingers, real GPUs, real sensors."
+tags: ["browser-devtools-mastery", "throttling-and-emulation", "track-c"]
+updated: "2026-07-14"
+---
+
+<Hook>
+Last chapter you throttled the network to feel what a slow connection does to a real user.
+Device emulation is the same move aimed at a different variable: shape. Your desktop monitor is
+enormous, your mouse is precise, and your screen has one pixel density you've probably never
+thought about. None of that describes the phone in most of your users' hands. The device toolbar
+in DevTools resizes your viewport, fakes a pixel density, and simulates touch — turning your
+20-something-inch monitor into a rough approximation of a 6-inch screen, on purpose, so you catch
+the layout that breaks at 375 pixels wide before someone with an actual 375-pixel phone does. Rough
+approximation is the operative phrase, and by the end of this chapter you'll know exactly where
+that word is doing the most work.
+</Hook>
+
+<Callout type="analogy">
+A flight simulator is extraordinarily good at one thing: teaching a pilot the procedures, the
+instrument layout, the checklist under pressure. Hours in a simulator make a real pilot measurably
+safer. But no simulator has ever fully replicated the specific way your inner ear disagrees with
+your eyes during real turbulence, or the exact fear of a real engine sound changing pitch. Good
+simulators are honest about that gap — they train you for the 90% and tell you, explicitly, which
+10% only a real cockpit can teach. Device emulation is a flight simulator for screens: it will
+catch almost every layout bug you'll ever ship, using nothing but your desktop browser. It will
+never fully replicate a real thumb, a real GPU, or a real gyroscope. Knowing which is which is the
+entire skill.
+</Callout>
+
+<Term define="A DevTools feature that resizes the browser's viewport to a chosen device's dimensions, reports a fake device pixel ratio and user-agent string to the page, and translates mouse events into simulated touch events - all without leaving your desktop browser. Toggled via the device toolbar icon (the little phone-and-tablet icon next to the DevTools inspect arrow) or Cmd/Ctrl+Shift+M. It is a SIMULATION built on real desktop hardware: the CSS media queries and JavaScript your page reads (viewport width, pixel ratio, touch support) are faked convincingly enough to trigger the same responsive code paths a real device would - which catches the large majority of layout and breakpoint bugs. What it cannot fake is the underlying hardware: real touch latency and multi-touch gestures, a real mobile GPU's rendering quirks, real device sensors, and real mobile network stack behaviour (throttling helps with speed, not with the rest). Emulation is the fast, free, first-pass tool; a real device is still the final word before shipping anything touch- or sensor-heavy.">Device emulation</Term>
+
+## The device toolbar, piece by piece
+
+Open it with the phone-and-tablet icon in the DevTools toolbar, or Cmd/Ctrl+Shift+M. A dropdown
+at the top offers a curated list of real devices — recent iPhones, Pixels, iPads — each carrying a
+preset viewport width, height, device pixel ratio, and user-agent string bundled together, because
+those four things travel as a set on any real device. Below that sits **Responsive** mode: no
+preset, just two number fields for width and height that you can drag or type directly, the tool
+of choice for finding the *exact* pixel width where your layout snaps from broken to fine. A
+rotate icon flips width and height to check landscape, which people forget to test roughly always,
+and which breaks roughly often.
+
+Two settings deserve their own paragraph because they're invisible in the demo and load-bearing in
+production. **Device pixel ratio (DPR)** is how many real screen pixels a browser treats as one
+CSS pixel — a DPR of 1 is a standard desktop monitor, most modern phones run 2 or 3. A DPR
+mismatch is why images look crisp on your monitor and slightly soft on a phone: you served an
+image sized for DPR 1 to a screen that wants three times the pixel data. The device toolbar's
+"more options" (the vertical-dots menu) lets you override DPR independently of the preset, which
+is how you test a "retina" image pipeline without owning retina hardware. **Touch simulation** is
+the other one — with it on, a mouse click is translated into a touch event and CSS `hover` states
+stop firing the way they would on a real touchscreen (because touchscreens generally do not
+hover). This is precisely how emulation catches the tooltip that only appears on hover and
+therefore never appears for a thumb.
+
+Everything above is layout and event simulation, and it's genuinely excellent at what it claims to
+be. It is not, and was never designed to be, a hardware simulator — that boundary is the whole
+subject of the "honest limits" section a little further down, right after you've seen what the
+tool actually catches.
+
+<HotspotImage
+  src="/notes/browser-devtools-mastery/throttling-and-emulation/PLACEHOLDER-device-toolbar.jpg"
+  alt="Chrome DevTools device toolbar open, showing a device preset dropdown, viewport dimension fields, DPR and throttling options in the top bar, and a simulated phone-width page below"
+  credit="Photo: PLACEHOLDER - replace with a screenshot of the DevTools device toolbar active on a responsive page, dropdown expanded"
+  pins={[
+    { x: 50, y: 50, label: "Device preset dropdown", desc: "A curated list of real phones and tablets, each bundling a viewport size, device pixel ratio, and user-agent string together - because on a real device those four facts always travel as a set." },
+    { x: 50, y: 50, label: "Responsive mode's width and height fields", desc: "No preset - drag or type exact pixel dimensions. The tool for finding precisely where a layout breaks, rather than only checking the handful of widths a preset list happens to include." },
+    { x: 50, y: 50, label: "The rotate icon", desc: "Swaps width and height to simulate landscape orientation. Frequently forgotten in testing, frequently where a fixed-height modal or a sticky header quietly breaks." },
+    { x: 50, y: 50, label: "DPR override, in the extra options menu", desc: "Independent of the device preset - test a 1x, 2x, or 3x pixel density deliberately. This is how a soft, blurry image bug gets caught on a desktop monitor that has never displayed a soft, blurry image." },
+    { x: 50, y: 50, label: "Touch simulation toggle", desc: "Converts mouse events to touch events and disables hover-based CSS states, the way a real touchscreen would. Catches the tooltip, dropdown, or menu that only ever worked for a mouse." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Finding the exact pixel where a layout breaks - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Start at a known-good width", desc: "Open Responsive mode at 1280 pixels wide, a typical laptop width. The navigation shows as a full horizontal menu, three columns of cards sit side by side. This is the state everyone designs for and almost everyone tests." },
+    { label: "Drag the width down slowly", desc: "Shrink toward 768 pixels, watching continuously rather than jumping straight to a phone width. Around 900px the three-column grid becomes two columns - a breakpoint firing correctly. So far, so good." },
+    { label: "Keep going past the expected breakpoint", desc: "Continue toward 375 pixels, a common phone width. Somewhere around 420px the horizontal navigation menu doesn't collapse into a hamburger icon like the design intended - it just overflows, and a chunk of the menu silently scrolls off-screen instead." },
+    { label: "Isolate the exact pixel", detail: "Nudge the width one pixel at a time near the suspect zone. The CSS media query breakpoint was written as a fixed number that doesn't match the hamburger-menu JavaScript's OWN breakpoint check - two systems disagreeing about where 'mobile' begins, each internally consistent and mutually wrong." },
+    { label: "Confirm with a real preset, then rotate it", desc: "Switch to an actual device preset (say, a common phone at 390px) to confirm the same overflow reproduces there too, then hit rotate to check landscape at that same device. The bug holds in both orientations - now it's a precise, reproducible report instead of a vague 'menu looks broken on mobile'." },
+  ]}
+/>
+
+A breakpoint bug is a logic bug wearing a CSS costume: some rule decides "mobile" starts at one
+number, some other rule decides it starts at a different number, and the gap between them is where
+users land. Here's that logic made explicit and testable, in Python first:
+
+<CodePlayground
+  language="python"
+  title="Run it - a viewport breakpoint checker, and where two systems disagree (Python)"
+  code={`# Breakpoints as most responsive CSS defines them: named tiers, each starting
+# at a minimum width. Comes from the design system, in pixels.
+CSS_BREAKPOINTS = [
+    ("mobile", 0),
+    ("tablet", 640),
+    ("desktop", 1024),
+    ("wide", 1280),
+]
+
+def css_breakpoint(width):
+    tier = CSS_BREAKPOINTS[0][0]
+    for name, min_width in CSS_BREAKPOINTS:
+        if width >= min_width:
+            tier = name
+    return tier
+
+# The navigation's OWN JavaScript, written separately, months later, by
+# someone who did not check the CSS file. A classic drift bug waiting to happen.
+def nav_breakpoint(width):
+    if width < 600:
+        return "mobile"
+    elif width < 1000:
+        return "tablet"
+    else:
+        return "desktop"
+
+test_widths = [320, 375, 599, 600, 640, 768, 999, 1000, 1024, 1280]
+print(f"{'width':>6} | {'css says':>10} | {'nav js says':>12} | agree?")
+mismatches = 0
+for w in test_widths:
+    css = css_breakpoint(w)
+    nav = nav_breakpoint(w)
+    agree = "yes" if css == nav else "NO - MISMATCH"
+    if css != nav:
+        mismatches += 1
+    print(f"{w:>6} | {css:>10} | {nav:>12} | {agree}")
+
+print()
+print("Mismatches found:", mismatches, "of", len(test_widths), "tested widths")
+print("Every mismatch is a width where the menu and the layout disagree about the device.")
+
+# width | css says | nav js says | agree?
+#    320 |    mobile |      mobile | yes
+#    375 |    mobile |      mobile | yes
+#    599 |    mobile |      mobile | yes
+#    600 |    mobile |      tablet | NO - MISMATCH
+#    640 |    tablet |      tablet | yes
+#    768 |    tablet |      tablet | yes
+#    999 |    tablet |      tablet | yes
+#   1000 |    tablet |     desktop | NO - MISMATCH
+#   1024 |   desktop |     desktop | yes
+#   1280 |      wide |     desktop | NO - MISMATCH
+# Mismatches found: 3 of 10 tested widths`}
+/>
+
+The same drift-detection logic in Java, plus a second, equally common check: whether a tap target
+is actually big enough for a real thumb at a given device pixel ratio:
+
+<CodePlayground
+  language="java"
+  title="Run it - breakpoint drift and a minimum tap-target check (Java)"
+  code={`import java.util.*;
+
+public class Main {
+
+    record Tier(String name, int minWidth) {}
+
+    static final List<Tier> CSS_BREAKPOINTS = List.of(
+        new Tier("mobile", 0),
+        new Tier("tablet", 640),
+        new Tier("desktop", 1024),
+        new Tier("wide", 1280)
+    );
+
+    static String cssBreakpoint(int width) {
+        String tier = CSS_BREAKPOINTS.get(0).name();
+        for (Tier t : CSS_BREAKPOINTS) {
+            if (width >= t.minWidth()) tier = t.name();
+        }
+        return tier;
+    }
+
+    // Same "written separately" JS logic, ported for comparison
+    static String navBreakpoint(int width) {
+        if (width < 600) return "mobile";
+        if (width < 1000) return "tablet";
+        return "desktop";
+    }
+
+    // Apple and most accessibility guidance: 44 CSS pixels minimum tap target.
+    static boolean tapTargetOk(int widthPx, int heightPx, double dpr) {
+        double cssWidth = widthPx / dpr;
+        double cssHeight = heightPx / dpr;
+        return cssWidth >= 44 && cssHeight >= 44;
+    }
+
+    public static void main(String[] args) {
+        int[] testWidths = {320, 599, 600, 999, 1000, 1280};
+        int mismatches = 0;
+        for (int w : testWidths) {
+            String css = cssBreakpoint(w);
+            String nav = navBreakpoint(w);
+            boolean agree = css.equals(nav);
+            if (!agree) mismatches++;
+            System.out.printf("%5d | %8s | %10s | %s%n", w, css, nav, agree ? "yes" : "NO - MISMATCH");
+        }
+        System.out.println("Mismatches: " + mismatches + " of " + testWidths.length);
+        System.out.println();
+
+        // A button rendered at 96x60 real pixels on a DPR-3 phone screen
+        double dpr = 3.0;
+        int buttonRealWidth = 96;
+        int buttonRealHeight = 60;
+        boolean ok = tapTargetOk(buttonRealWidth, buttonRealHeight, dpr);
+        System.out.println("Button at " + buttonRealWidth + "x" + buttonRealHeight
+            + " real px, DPR " + dpr + " -> " + (buttonRealWidth / dpr) + "x" + (buttonRealHeight / dpr)
+            + " CSS px -- tap target ok: " + ok);
+    }
+}
+
+//   320 |   mobile |     mobile | yes
+//   599 |   mobile |     mobile | yes
+//   600 |   mobile |     tablet | NO - MISMATCH
+//   999 |   tablet |     tablet | yes
+//  1000 |   tablet |    desktop | NO - MISMATCH
+//  1280 |     wide |    desktop | NO - MISMATCH
+// Mismatches: 3 of 6
+//
+// Button at 96x60 real px, DPR 3.0 -> 32.0x20.0 CSS px -- tap target ok: false`}
+/>
+
+<Callout type="tip">
+When you check a responsive layout, don't jump straight to the preset device widths. Drag the
+Responsive-mode width slowly, watching for the exact pixel where something snaps, overflows, or
+overlaps. Preset widths (375px, 390px, 428px...) are popular real devices, but the bug in the
+Python and Java examples above lives at 600px and 1000px — numbers no phone happens to be. A
+breakpoint bug doesn't care what devices exist; it cares what the code says, and the only way to
+find the disagreement is to sweep the whole range, not sample four points on it.
+</Callout>
+
+<FirstTime title="Your mission: sweep a layout and find its honest edges">
+<StepChecklist
+  steps={[
+    { text: "Open the device toolbar and pick a preset", detail: "Cmd/Ctrl+Shift+M, choose a real phone from the dropdown. Load a page you know well. Note anything that looks even slightly off before you touch a single setting - that's your baseline." },
+    { text: "Switch to Responsive and sweep", detail: "Drag the width from 1280 down to 320 slowly, watching continuously. Note every pixel width where something visibly changes: a column drops, a menu collapses, text wraps oddly. You're mapping the layout's actual breakpoints, not the ones in the design spec." },
+    { text: "Rotate it", detail: "Pick a phone preset, then hit the rotate icon. Check anything with a fixed height - modals, sticky headers, video players. Landscape on a phone is often shorter than portrait on a laptop, and fixed-height elements do not know that." },
+    { text: "Override the DPR", detail: "In the extra options menu, set DPR to 3 on a desktop-sized viewport and look hard at your images and icons. Anything visibly soft or pixelated is being served at too low a resolution for that pixel density." },
+    { text: "Turn on touch simulation and hunt for hover-only features", detail: "With touch simulation on, try to trigger every tooltip, dropdown, and hover menu on the page using only clicks. Anything that never appears is a feature that quietly doesn't exist for a third or more of your users." },
+  ]}
+/>
+You've swept a full width range for real breakpoints, rotated for landscape, forced a high DPR, and hunted hover-only features with touch simulation on - the exact checklist that catches almost every layout bug before a real device ever needs to.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "Two parts of the UI (say, the layout grid and the navigation menu) disagree about when 'mobile' starts.",
+      fix: "Classic breakpoint drift: the CSS media queries and some JavaScript-driven component were written against different numbers, possibly months apart, by different people. Grep the codebase for every hardcoded breakpoint value and consolidate them into one shared source (CSS custom properties or a shared constants file) that both style rules and JavaScript read from - exactly the mismatch the Python and Java examples surfaced.",
+    },
+    {
+      symptom: "Images look crisp in DevTools emulation but soft or pixelated on an actual phone.",
+      fix: "Emulation reports a device pixel ratio to the page and the page CAN respond correctly to it, but emulation cannot verify that your image pipeline actually serves the right resolution for that ratio - it only tests that the CODE PATH runs. Check srcset/sizes attributes or your image CDN's DPR handling directly, and confirm on a real device, because 'DPR 3 was reported' and 'a DPR-3-appropriate image was served' are two different facts.",
+    },
+    {
+      symptom: "A feature works perfectly with touch simulation on, but real users on real phones can't use it.",
+      fix: "Touch simulation converts mouse events into touch events, but it cannot fake real hardware behaviour: multi-touch gestures (pinch, two-finger scroll), real touch latency, or a mobile browser's specific quirks. If the feature depends on any of those - a pinch-to-zoom gallery, a swipe carousel with momentum - emulation can confirm the code path exists and stop there; only a real device confirms it actually feels right.",
+    },
+    {
+      symptom: "A layout looks fine at every preset device width you tried, but users on an unusual device report it broken.",
+      fix: "Preset lists cover popular devices, not all devices - and 'popular' changes yearly while your preset list doesn't update itself. Sweep Responsive mode continuously across the full range instead of sampling presets (as in the FirstTime drill), and separately test any device the analytics say your users actually carry, preset or not.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where device emulation earns its keep, and where it politely runs out of authority:
+
+- **Responsive breakpoints, swept continuously** — not sampled at four preset widths. The exact pixel where something snaps is where the bug lives, and presets rarely land on it.
+- **Landscape orientation** — the rotate icon, on any screen with a fixed height. Forgotten constantly, broken often.
+- **Image resolution at high DPR** — override DPR to 2 or 3 and look for softness, then verify the actual bytes served (Network tab) match the claimed resolution, not just that the page looks fine.
+- **Hover-only UI, with touch simulation on** — any tooltip, dropdown, or menu that depends on `:hover` and never appears for touch. Emulation catches this reliably; it's a pure CSS logic check.
+- **Real-device-only territory** — multi-touch gestures, true touch latency, sensor-driven features (orientation, geolocation — next chapter), camera/microphone access, and anything that depends on a specific mobile GPU or browser engine quirk. Emulation cannot claim these; don't let a green emulation pass stand in for them.
+
+Tester's habit: **emulation answers "does the code path exist and run correctly", not "does it
+feel right in a real hand."** Use it as the fast, free first pass on every layout change; reserve
+real-device time for the things on the second list, where emulation is honest enough to admit it
+has nothing to say.
+</WhereToCheck>
+
+<WorkedExample title="the gallery that worked in every emulator and nowhere real">
+1. **The report:** a product image gallery with pinch-to-zoom, signed off by two testers using
+   DevTools device emulation on three different phone presets, all green. Within a week of launch,
+   a wave of one-star reviews: "can't zoom in on photos", "gallery is broken on my phone."
+2. **The confusion:** the testers had genuinely done real work — they'd checked the gallery at
+   iPhone, Pixel, and iPad preset widths, confirmed layout, confirmed touch simulation let them
+   "swipe" between images with clicks and drags. Every check passed.
+3. **The gap:** pinch-to-zoom is a two-finger gesture. DevTools touch simulation translates a
+   single mouse pointer into a single simulated touch point — there is no way to simulate two
+   independent, moving touch points with one mouse. The zoom code was never actually exercised by
+   emulation at all; the testers had tested everything AROUND the zoom feature and nothing of the
+   feature itself, because the tool had no way to ask for it.
+4. **The real bug, found on an actual phone in ten minutes:** the pinch handler had a sign error —
+   pinching outward (zoom in) shrank the image instead of enlarging it, and pinching inward did the
+   opposite. Inverted, not broken; still completely unusable, and completely invisible to a tool
+   that can't simulate the gesture in the first place.
+5. **The fix:** correct the sign in the scale calculation, and add it to the release checklist:
+   any feature built on multi-touch gestures gets a mandatory real-device pass, tagged explicitly
+   as "emulation cannot verify this", so it never again gets waved through on emulator-only green.
+6. **What the postmortem actually changed:** not "test more" in general, but a specific rule —
+   maintain a short list of features (multi-touch, sensors, camera, true touch latency) that are
+   flagged in the test plan as real-device-required, so the team stops mistaking "emulation passed"
+   for "the feature works."
+7. **The tester's lesson.** A passing emulation test is real evidence for what emulation can
+   actually simulate, and silence about everything it can't. The bug wasn't that the testers were
+   careless — it's that nobody had drawn the line between the two categories out loud, so a
+   thorough-looking test plan had an invisible hole in the exact shape of the one gesture no mouse
+   can fake.
+</WorkedExample>
+
+<Callout type="mistake">
+Treating a fully green device-emulation pass as equivalent to real-device testing. Emulation is
+outstanding at what it actually does — faking viewport size, DPR, user-agent, and single-touch
+events convincingly enough to trigger real responsive code paths — and it says nothing whatsoever
+about multi-touch gestures, real touch latency, actual GPU rendering, device sensors, or mobile
+browser engine quirks, because it was never built to. The danger isn't that emulation lies; it's
+that a confident green checkmark on features it can't actually exercise looks identical to a green
+checkmark on features it can. Know which list a feature is on before you trust the pass.
+</Callout>
+
+<Quiz
+  question="A pinch-to-zoom image gallery passes every DevTools device-emulation check across three phone presets. What should a tester conclude?"
+  options={[
+    "The feature is confirmed working on real phones, since emulation faithfully reproduces device behaviour",
+    "The layout, viewport handling, and single-touch interactions have been verified - but pinch-to-zoom is a two-finger gesture emulation cannot simulate with one mouse pointer, so the zoom logic itself has not actually been tested and needs a real device",
+    "The test is meaningless and should be redone entirely on real devices",
+    "Emulation passing means the code has no bugs in that feature"
+  ]}
+  answer={1}
+  explain="Touch simulation converts mouse input into ONE simulated touch point - it has no mechanism to represent two independent, moving contact points, which is exactly what a pinch gesture is. So the emulation pass is real and valuable evidence for everything it DID exercise - viewport, layout, single-touch taps and drags - and pure silence about the gesture-specific zoom logic, which was never actually invoked. Throwing out the emulation work entirely (option three) wastes real, valid coverage; treating the pass as proof of zero bugs (option four) ignores that automated or manual checks only report on what they actually run. The correct read is surgical: trust what was tested, real-device-verify what could not have been."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Device emulation - what it fakes, precisely", back: "Viewport width/height, device pixel ratio, user-agent string, and single-touch events (mouse-to-touch translation). Convincing enough to trigger real responsive CSS and JS code paths - which is most of what a layout bug needs to reproduce." },
+    { front: "Device pixel ratio (DPR)", back: "How many real screen pixels equal one CSS pixel. Desktop monitors are typically DPR 1; most modern phones run 2 or 3. A DPR mismatch between served image resolution and screen density is why images look crisp on a monitor and soft on a phone." },
+    { front: "What emulation genuinely catches", back: "Breakpoint drift between CSS and JavaScript, hover-only UI that never appears for touch, layout overflow at specific widths, landscape orientation issues, and DPR-driven image sizing bugs - all pure logic/CSS checks emulation is well-suited for." },
+    { front: "What only a real device catches", back: "Multi-touch gestures (pinch, two-finger scroll - one mouse pointer cannot fake two independent touch points), true touch latency, real mobile GPU rendering quirks, device sensors (orientation, geolocation - next chapter), and specific mobile browser engine behaviour." },
+    { front: "Sweep, don't sample", back: "Preset device widths (375px, 390px, 428px...) are popular real devices, not the widths where CSS breakpoints actually live. Drag Responsive mode continuously across the full range to find the exact pixel a layout snaps, rather than checking four preset points and calling it done." },
+    { front: "The honest-limits rule", back: "A green emulation pass is real evidence for what emulation can simulate and total silence about what it can't. Keep an explicit list of real-device-required features (multi-touch, sensors, camera, true latency) so a thorough-looking test plan doesn't have an invisible hole shaped like one gesture." },
+  ]}
+/>
+
+<Challenge>
+Pick a responsive page you know. (1) In Responsive mode, sweep the width from 1280 down to 320 and
+write down every pixel width where the layout visibly changes - not the design spec's claimed
+breakpoints, the ACTUAL ones. (2) Rotate a phone preset to landscape and check anything with a
+fixed height. (3) Override DPR to 3 and look for one soft image or icon. (4) With touch simulation
+on, try to find one feature that depends on hover and never appears. Finish with a one-sentence
+list of what you'd still want to check on a real phone before shipping, and why emulation couldn't
+answer it for you.
+</Challenge>
+
+<AskCommunity prompt="Emulation vs real-device question: [feature name] passes DevTools device emulation at [preset(s)/widths tested]. On a real [device model], it [symptom]. Interaction type: [multi-touch / single tap / hover-dependent / sensor-based]. DPR tested: [1x/2x/3x]. Is this a known emulation gap, or a real bug emulation should have caught?">
+Name the interaction type first - multi-touch and sensor features are known, documented emulation
+gaps; layout, single-touch, and hover-state bugs are things emulation SHOULD have caught, and a
+mismatch there points at a real bug, not a tooling limit.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.chrome.com/docs/devtools/device-mode/", title: "Chrome DevTools — device mode and the device toolbar", kind: "read" },
+    { href: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Responsive_images", title: "MDN — responsive images and device pixel ratio", kind: "read" },
+    { href: "https://web.dev/articles/accessible-tap-targets", title: "web.dev — accessible tap target sizing", kind: "read" },
+    { href: "PLACEHOLDER", title: "PLACEHOLDER video - sweeping a real layout for its true breakpoints", kind: "video" },
+  ]}
+/>
+
+<Video url="PLACEHOLDER" title="Sweeping a real layout for its true breakpoints" minutes={5} />
+
+<Takeaways
+  points={[
+    "Device emulation fakes viewport size, DPR, user-agent, and single-touch events convincingly enough to trigger real responsive code paths - it is a genuine, fast, free first pass on almost every layout bug.",
+    "Sweep Responsive mode continuously instead of sampling preset device widths - breakpoint bugs live at the exact pixel two systems (CSS, JavaScript) disagree, which is rarely a popular phone's width.",
+    "DPR override catches image-resolution bugs; touch simulation (single-touch only) catches hover-only UI that never appears for a real thumb.",
+    "The honest limit: no mouse can fake two independent touch points, real touch latency, a real mobile GPU, or device sensors - multi-touch gestures and sensor features need a real-device pass, full stop.",
+    "A green emulation result is trustworthy evidence for what it tested and complete silence about what it structurally cannot test - know which category a feature is in before you sign off on it.",
+  ]}
+/>
+
+<Complete xp={10} />

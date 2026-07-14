@@ -1,0 +1,364 @@
+---
+title: "Geolocation and sensors"
+summary: "The Sensors panel feeds a browser a fake GPS coordinate and a fake tilt, letting you test store finders, geo-restrictions, and timezone-dependent features from your desk - as long as you know which mechanism your feature actually checks."
+tags: ["browser-devtools-mastery", "throttling-and-emulation", "track-c"]
+updated: "2026-07-14"
+---
+
+<Hook>
+Two chapters ago you faked how slow the network was. Last chapter you faked how big and dense the
+screen was. This chapter fakes something stranger: where the device physically IS, and which way
+it's tilted. The Sensors panel feeds your browser a coordinate that says "you are in Tokyo" or a
+tilt reading that says "you are lying flat", and every piece of code that asks the browser "where
+am I" or "which way am I facing" gets a convincing, entirely fabricated answer. That's how you test
+a store locator, a delivery-radius check, or a geo-restricted feature without buying a plane
+ticket. It is also, as you'll see, extremely easy to fake the wrong layer — the override can be
+perfect and the feature can still ignore it completely, because it was never listening to that
+layer in the first place.
+</Hook>
+
+<Callout type="analogy">
+A film crew shoots an actor walking through "Paris" on a soundstage in Los Angeles: green screen
+behind them, a painted Eiffel Tower matted in during editing, wind machines for atmosphere. The
+actor's performance is completely real and completely convincing to the audience — right up until
+someone asks the actor to interact with something the set doesn't actually have, like real Parisian
+weather or the actual layout of a real street. The set fools the camera because the camera only
+ever looks at what's in front of it. Geolocation override works the same way: it convincingly fools
+any code that asks the browser's Geolocation API "where am I", because that's the only camera it's
+pointed at. It does nothing whatsoever to the network request your browser makes, which still
+leaves from your real IP address, in your real city — a second camera the override was never
+aimed at.
+</Callout>
+
+<Term define="The browser standard (navigator.geolocation in JavaScript) that lets a web page ask, with the user's permission, for the device's current coordinates - latitude, longitude, and an accuracy radius. Normally the browser gets this from GPS hardware, Wi-Fi positioning, or cell-tower triangulation, then hands the result to the page. DevTools' Sensors panel (Command Menu, Ctrl/Cmd+Shift+P, then 'Show Sensors', or More tools > Sensors) intercepts this at the API layer: instead of asking real hardware, it feeds the page whatever coordinate you typed in, or a preset city, or an explicit 'position unavailable' error to test permission-denied and GPS-failure paths. The override is completely convincing to any code that calls the Geolocation API - and completely invisible to any code that determines location a different way, such as a server reading your IP address. Those are two unrelated mechanisms that happen to answer the same question, and testing one does not test the other.">Geolocation API</Term>
+
+## The Sensors panel: location, tilt, and the fine print
+
+Open it from the Command Menu (Ctrl/Cmd+Shift+P, type "sensors") or via More tools. The
+**Geolocation** section offers a dropdown of preset cities plus a custom option where you type an
+exact latitude, longitude, and accuracy in metres — useful for testing a specific address rather
+than a city centre. A separate "Location unavailable" option simulates the browser's Geolocation
+API returning an error, which is the only realistic way to test what your app does when a real
+user denies location permission or has GPS turned off — a path that's trivial to forget because it
+never happens during normal development.
+
+The **Orientation** section does the same trick for a device's tilt: three sliders for alpha
+(compass heading), beta (front-to-back tilt), and gamma (left-to-right tilt), plus presets like
+"portrait" and "landscape (left)". Any code listening for `deviceorientation` or `devicemotion`
+events — a compass overlay, an AR "point your phone at the sky" feature, a game that steers with
+tilt — receives these fake readings exactly as if a real gyroscope produced them. It's convincing
+for testing the *logic* that reacts to orientation. It is not, and doesn't claim to be, a simulation
+of real sensor noise, drift, or the specific way a cheap phone's gyroscope disagrees with an
+expensive one — that gap is this chapter's version of last chapter's "no mouse can fake two
+fingers" limit.
+
+Timezone and locale are the third sensed variable, and they live in a different place entirely
+depending on how deep you need to go: for quick manual checks, changing your OS or browser display
+language covers most locale-formatting bugs (currency symbols, date order, translated strings). For
+a *repeatable, automated* timezone or locale override — the kind you'd want in a test suite, not
+just a manual click-through — automation frameworks are the more reliable tool: Playwright and
+Selenium both let a test explicitly set a browser context's timezone and locale before the page
+even loads, which is the pattern worth reaching for once "check it by hand" stops being enough.
+
+<HotspotImage
+  src="/notes/browser-devtools-mastery/throttling-and-emulation/PLACEHOLDER-sensors-panel.jpg"
+  alt="Chrome DevTools Sensors panel open, showing a geolocation override with latitude and longitude fields and a preset city dropdown, plus orientation sliders below it"
+  credit="Photo: PLACEHOLDER - replace with a screenshot of the DevTools Sensors panel showing geolocation override fields and orientation sliders together"
+  pins={[
+    { x: 50, y: 50, label: "Geolocation preset dropdown", desc: "A shortlist of world cities for a quick location swap. Fast for a first pass; doesn't test the exact address-level precision a delivery-radius or store-finder feature actually depends on." },
+    { x: 50, y: 50, label: "Custom latitude, longitude, accuracy", desc: "Type an exact coordinate for a precise test - the corner of a specific delivery zone, or a point just outside a geo-restricted boundary, where the interesting bugs actually cluster." },
+    { x: 50, y: 50, label: "Location unavailable option", desc: "Simulates the Geolocation API returning a permission-denied or hardware-failure error. The only realistic way to test your app's fallback UI without a real user's real, real-life permission denial." },
+    { x: 50, y: 50, label: "Orientation sliders (alpha, beta, gamma)", desc: "Fake a compass heading and a physical tilt. Convincing for logic that reacts to orientation events; not a simulation of real gyroscope noise or drift on actual hardware." },
+    { x: 50, y: 50, label: "What this panel does NOT touch", desc: "Your browser's real IP address, and therefore any server-side IP-based geolocation, is completely unaffected by anything in this panel. That gap is the single most common reason a geolocation override 'doesn't work' - it was never supposed to work on that layer." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Testing a geo-restricted feature - two different location mechanisms - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "The feature under test", desc: "A streaming page shows different content depending on the viewer's region - some shows are licensed only in certain countries. The task: confirm a UK-only show is correctly hidden for a non-UK viewer." },
+    { label: "The tester overrides geolocation", desc: "Sensors panel, custom coordinate set to a city in France. navigator.geolocation.getCurrentPosition now returns French coordinates to any page code that asks for them. Confidence: high." },
+    { label: "The show is still visible", desc: "Reload. The UK-only content is STILL there. First instinct: the override failed, or DevTools is broken. Neither is true - the actual mechanism just hasn't been identified yet." },
+    { label: "Reading the network request reveals why", desc: "The page never calls navigator.geolocation at all. The region check happens SERVER-SIDE: the backend reads the request's IP address, looks it up in a geo-IP database, and decides the region before the page even renders. The Geolocation API override was aimed at a mechanism this feature doesn't use." },
+    { label: "The correct tool for THIS mechanism", desc: "A VPN or proxy that actually changes the outgoing IP address's apparent location - a completely different tool from the Sensors panel. Once routed through a French exit node, the show correctly disappears. The bug was in the tester's mental model, not the product." },
+  ]}
+/>
+
+Store finders are the friendliest use of a coordinate override — feed it a fake location and watch
+the "nearest store" answer change. Here's the actual distance math a store finder runs, tested
+against a few overridden coordinates:
+
+<CodePlayground
+  language="python"
+  title="Run it - a store finder using overridden coordinates (Python)"
+  code={`import math
+
+def haversine_km(lat1, lon1, lat2, lon2):
+    # Great-circle distance between two coordinates, in kilometres.
+    R = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlambda / 2) ** 2
+    return 2 * R * math.asin(math.sqrt(a))
+
+STORES = [
+    ("Downtown",    40.7128, -74.0060),
+    ("Uptown",      40.8296, -73.9262),
+    ("Riverside",   40.7484, -73.9857),
+    ("Harbor Mall", 40.6892, -74.0445),
+]
+
+# Coordinates you'd type into the Sensors panel's custom geolocation fields
+OVERRIDES = {
+    "near Downtown":  (40.7135, -74.0070),
+    "near Uptown":    (40.8300, -73.9270),
+    "far away (LA)":  (34.0522, -118.2437),
+}
+
+def nearest_store(lat, lon):
+    best_name, best_km = None, float("inf")
+    for name, slat, slon in STORES:
+        d = haversine_km(lat, lon, slat, slon)
+        if d < best_km:
+            best_name, best_km = name, d
+    return best_name, best_km
+
+for label, (lat, lon) in OVERRIDES.items():
+    name, km = nearest_store(lat, lon)
+    print(label + " -> nearest store: " + name + " (" + str(round(km, 2)) + " km away)")
+
+# near Downtown -> nearest store: Downtown (0.11 km away)
+# near Uptown -> nearest store: Uptown (0.09 km away)
+# far away (LA) -> nearest store: Harbor Mall (3936.35 km away)
+print()
+print("The LA override still returns a nearest store instead of a graceful")
+print("'no stores near you' state - that's a real bug this override just surfaced.")`}
+/>
+
+The Java version adds the two other patterns this chapter is about: a geo-restriction check
+(deliberately using a *region code* — the honest, server-appropriate way — never `navigator.
+geolocation`), and a timezone-dependent "is this store open right now" check:
+
+<CodePlayground
+  language="java"
+  title="Run it - geo-restriction by region code, and a timezone-aware open-now check (Java)"
+  code={`import java.time.*;
+import java.util.*;
+
+public class Main {
+
+    // Geo-restriction that checks a REGION CODE, the way a real server-side
+    // check typically works - resolved from IP, not from navigator.geolocation.
+    static final Set<String> RESTRICTED_REGIONS = Set.of("UK", "IE");
+
+    static boolean showIsAvailable(String viewerRegionCode) {
+        return !RESTRICTED_REGIONS.contains(viewerRegionCode);
+    }
+
+    // A store's open hours, checked against the VIEWER's local time zone -
+    // a classic timezone bug: comparing the store's hours against the wrong clock.
+    static boolean isStoreOpenNow(ZoneId storeZone, int openHour, int closeHour) {
+        int hourNow = ZonedDateTime.now(storeZone).getHour();
+        return hourNow >= openHour && hourNow < closeHour;
+    }
+
+    public static void main(String[] args) {
+        System.out.println("--- Geo-restriction, checked by region code (not GPS) ---");
+        for (String region : List.of("US", "UK", "FR", "IE", "DE")) {
+            boolean available = showIsAvailable(region);
+            System.out.println(region + " -> show available: " + available);
+        }
+        System.out.println();
+
+        System.out.println("--- Timezone-aware open-now check, one store, several viewer clocks ---");
+        ZoneId storeZone = ZoneId.of("America/New_York");
+        int openHour = 9;
+        int closeHour = 21;
+        boolean openNow = isStoreOpenNow(storeZone, openHour, closeHour);
+        System.out.println("Store local time now: " + ZonedDateTime.now(storeZone));
+        System.out.println("Store open now (using STORE's own timezone, correctly): " + openNow);
+
+        // The bug this chapter is built to catch: checking against the
+        // BROWSER's timezone instead of the store's.
+        boolean openNowWrong = isStoreOpenNow(ZoneId.systemDefault(), openHour, closeHour);
+        System.out.println("Store open now (using the SYSTEM/viewer timezone, WRONG): " + openNowWrong);
+        System.out.println("These two lines can disagree for any viewer not in the store's own zone -");
+        System.out.println("exactly the bug a timezone override in a test suite is built to expose.");
+    }
+}
+
+// --- Geo-restriction, checked by region code (not GPS) ---
+// US -> show available: true
+// UK -> show available: false
+// FR -> show available: true
+// IE -> show available: false
+// DE -> show available: true
+//
+// --- Timezone-aware open-now check, one store, several viewer clocks ---
+// Store local time now: 2026-07-14T14:32:07.481-04:00[America/New_York]
+// Store open now (using STORE's own timezone, correctly): true
+// Store open now (using the SYSTEM/viewer timezone, WRONG): (depends on the machine running it)
+// These two lines can disagree for any viewer not in the store's own zone -
+// exactly the bug a timezone override in a test suite is built to expose.`}
+/>
+
+<Callout type="tip">
+Before you override anything, find out which mechanism the feature actually reads. Search the
+codebase (or ask the network tab) for `navigator.geolocation` — if it's there, the Sensors panel
+will fool it completely. If the region or "near you" logic instead comes from a server response
+that never mentions the Geolocation API, the panel will do nothing at all, and you need a VPN,
+proxy, or a request header override instead. Five minutes reading the mechanism saves an hour of
+concluding "the override is broken" when it was aimed at the wrong target the whole time.
+</Callout>
+
+<FirstTime title="Your mission: fake a location, a tilt, and catch the mechanism mismatch">
+<StepChecklist
+  steps={[
+    { text: "Override your location to somewhere far away", detail: "Sensors panel, custom coordinates, pick a city on another continent. Reload a page with a store finder or delivery checker and watch the 'nearest' or 'available' answer change - or fail to." },
+    { text: "Trigger the location-denied path", detail: "Set the dropdown to 'Location unavailable' and reload a location-dependent feature. If nothing visibly different happens, you've likely found a missing error state - the FirstTime drill from chapter one, same species, different sensor." },
+    { text: "Tilt a fake compass", detail: "Orientation section, drag the alpha slider through a full circle while watching any compass or map-bearing UI on the page. Confirm it actually reacts - and note that a smooth slider drag is nowhere near as noisy as a real hand holding a real phone." },
+    { text: "Find a feature that ignores your override completely", detail: "Pick any 'available in your region' or 'delivery to your area' feature, override geolocation to somewhere it should NOT be available, and check whether it actually changes. If it doesn't, open the Network tab and look for where the region actually comes from - that's this chapter's central lesson, caught by hand." },
+    { text: "Check one date or hours-of-operation display", detail: "Change your OS or browser display timezone (or, better, use an automation framework's context override if you have one set up) and reload a feature showing store hours or a countdown. A display that never changes is either correctly using a fixed reference time zone, or has never been tested against a different one - and you now know which questions to ask to find out which." },
+  ]}
+/>
+You've faked a location, faked a tilt, forced a permission-denied path, and caught a feature whose region logic never touched the Geolocation API at all - the exact mismatch that wastes the most time when nobody names it out loud.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "You override geolocation to a restricted region and the geo-blocked content still shows.",
+      fix: "The feature almost certainly checks the viewer's IP address server-side, not navigator.geolocation - two unrelated mechanisms that happen to answer a similar question. Confirm by reading the Network tab for a region-check request or by grepping the codebase for navigator.geolocation (if it's absent, the override was never going to matter). Test IP-based restrictions with a VPN or proxy exit node in the target region instead.",
+    },
+    {
+      symptom: "The app never shows a 'location unavailable' or 'enable location' message, even in Sensors' 'Location unavailable' mode.",
+      fix: "The code likely only handles the success callback of the Geolocation API and never wrote an error handler - so a denial or hardware failure silently does nothing instead of showing a fallback. This is the same missing-error-state pattern from earlier chapters; the fix is a proper .catch or error callback with a real message, not a silent no-op.",
+    },
+    {
+      symptom: "An orientation-driven feature (compass, AR overlay) works fine with the Sensors sliders but feels janky or wrong on a real phone.",
+      fix: "Orientation override feeds clean, smooth, noise-free readings - real gyroscopes drift, jitter, and need calibration, none of which the sliders simulate. If the feature is sensitive to real sensor noise (smoothing, dead zones, calibration prompts), that logic needs verification on real hardware; the Sensors panel can only confirm the code REACTS to orientation events, not that it reacts well to real ones.",
+    },
+    {
+      symptom: "A 'store open now' or 'sale ends in X hours' display is correct for you but wrong for testers in other timezones.",
+      fix: "The comparison is very likely using the VIEWER's local clock (system timezone) instead of the STORE's or the EVENT's fixed timezone - exactly the two-line divergence in the Java example. Store all such reference times with an explicit timezone (never assume local), and add a test that runs the same check from at least two different simulated timezones to catch the divergence before a real viewer does.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where geolocation and sensor overrides earn their keep, and where the mechanism actually matters:
+
+- **Store finders, delivery-radius checks, 'near you' features** — override to a coordinate just inside and just outside the boundary; the edge is where the bug lives, same as breakpoints last chapter.
+- **Permission-denied and GPS-failure paths** — the 'Location unavailable' option; the path almost nobody manually triggers because it never happens during normal development.
+- **Geo-restricted content and features** — read the Network tab FIRST to confirm whether the check is client-side (Geolocation API — Sensors panel works) or server-side (IP-based — needs a VPN/proxy instead).
+- **Compass, AR, and tilt-driven UI** — orientation sliders for logic correctness; a real device for anything sensitive to sensor noise or calibration.
+- **Timezone- and locale-dependent displays** — store hours, countdowns, 'posted 3 hours ago' timestamps, currency and date formatting — checked from at least two different simulated timezones or locales, not just your own.
+
+Tester's habit: **before overriding a sensor, find the line of code that reads it.** The override
+is only as useful as your certainty that the feature is actually listening on that channel — and
+the single most common "the override didn't work" report is really "I overrode the wrong
+mechanism", not a tooling failure.
+</WhereToCheck>
+
+<WorkedExample title="the free-shipping banner that ignored every fake location">
+1. **The report:** QA spent an afternoon "confirming" a free-shipping-in-this-region banner using
+   the Sensors panel — overriding to addresses inside and outside the shipping zone — and the
+   banner never once changed. Filed as "geolocation feature completely broken."
+2. **The engineer's first question:** "does the banner even call the Geolocation API?" A grep for
+   `navigator.geolocation` across the checkout code returns nothing.
+3. **Reading the actual banner code** shows it reads a `shippingRegion` value baked into the page at
+   server-render time, computed from the request's IP address via a geo-IP lookup service — a
+   completely different, entirely reasonable mechanism that simply doesn't involve the browser's
+   Geolocation API at all, because it doesn't need the user's permission or a location prompt.
+4. **The override was real and the target was wrong.** Every Sensors panel change genuinely
+   updated `navigator.geolocation`'s return value; nothing in the banner's code path ever asked
+   for it. Two working systems, zero overlap, and an afternoon spent proving that fact the hard
+   way.
+5. **The corrected test approach:** a VPN with exit nodes inside and outside the shipping zone,
+   confirming the IP-based mechanism directly — and, longer term, a request-header override
+   (`X-Debug-Region` or similar, if the team wants a faster non-VPN test path) added specifically
+   so QA doesn't need a VPN subscription to test one banner.
+6. **What went into the test plan afterward:** a one-line rule — "before testing any
+   location-dependent feature, confirm client-side (Geolocation API) or server-side (IP) first,
+   in the Network tab, before choosing a tool" — because the tool choice depends entirely on that
+   answer, and guessing wrong wastes exactly the kind of afternoon this one did.
+7. **The tester's lesson.** "Broken" and "tested with the wrong tool" produce identical symptoms
+   from the outside — the feature just doesn't change. The five-minute mechanism check that would
+   have prevented this was cheaper than the entire afternoon of confused re-testing that followed
+   it, and it's the same habit this whole chapter is trying to install.
+</WorkedExample>
+
+<Callout type="mistake">
+Assuming "override the Geolocation API" and "the app now thinks it's somewhere else" mean the same
+thing. They don't, and the gap is invisible until a test fails to change anything. A page can
+determine a viewer's location three unrelated ways — the browser's Geolocation API (which the
+Sensors panel fakes perfectly), the request's IP address via server-side geo-IP lookup (which the
+panel cannot touch at all), or a value the user typed into a form (which no location tool touches).
+Before trusting an override, find out which one your feature actually uses. Otherwise a completely
+correct override and a completely unaffected feature will look, from where you're sitting, exactly
+like a broken test — when really it's a mismatched one.
+</Callout>
+
+<Quiz
+  question="You override geolocation in DevTools' Sensors panel to a coordinate outside a delivery zone, but the app still offers delivery. What's the most likely explanation, and what should you check next?"
+  options={[
+    "DevTools is broken and needs a restart",
+    "The delivery-zone check almost certainly doesn't call navigator.geolocation at all - check the Network tab for how the app actually determines the delivery address (often a typed address or IP-based lookup), since the Sensors override only affects the Geolocation API",
+    "The delivery zone itself is misconfigured on the server and needs a database check",
+    "Geolocation overrides only work on mobile device presets, not in desktop emulation"
+  ]}
+  answer={1}
+  explain="The Sensors panel is a real, working override of exactly one mechanism: the browser's Geolocation API. If a feature determines location a different way - a typed delivery address, a saved account address, or a server-side IP lookup - the override has nothing to affect, and the feature behaving 'normally' is not a bug in DevTools or the app, it's a mismatch between the tool and the mechanism. The fix is investigative, not a restart: read the Network tab or the code to find which mechanism is actually in play, then pick the matching tool (a form field, a VPN/proxy, or the Sensors panel, respectively). Jumping to 'server misconfigured' skips the cheaper, faster diagnostic step that usually answers the question in under five minutes."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Geolocation override (Sensors panel)", back: "Feeds a fake coordinate to navigator.geolocation - convincing to ANY code that calls that specific API. Preset cities or custom lat/long/accuracy; a 'Location unavailable' option simulates permission-denied or GPS-failure errors." },
+    { front: "The mechanism mismatch (this chapter's core lesson)", back: "A page can determine location via the Geolocation API (Sensors panel fakes this), server-side IP geolocation (Sensors panel does NOT touch this), or a typed address (no location tool touches this). Check the Network tab or code first to know which one a feature uses." },
+    { front: "Orientation override", back: "Alpha/beta/gamma sliders fake compass heading and tilt for deviceorientation/devicemotion listeners. Convincing for reaction logic; does not simulate real gyroscope noise, drift, or calibration - real-device territory for anything sensitive to that." },
+    { front: "Testing geo-restrictions correctly", back: "If the restriction is server-side IP-based (the common case), use a VPN or proxy with an exit node in the target region - not the Sensors panel, which only affects the browser's Geolocation API and never touches the outgoing IP address." },
+    { front: "Timezone-dependent bugs", back: "Classic mistake: comparing a fixed reference time (store hours, sale end time) against the VIEWER's local clock instead of an explicit stored timezone. Test by checking the same feature from at least two different simulated timezones - manually via OS locale, or repeatably via an automation framework's context override." },
+    { front: "The five-minute habit that saves the afternoon", back: "Before overriding any sensor, find the line of code (or Network request) that actually reads it. A perfect override aimed at a mechanism the feature doesn't use looks identical, from the outside, to a broken feature - and only reading the code tells them apart." },
+  ]}
+/>
+
+<Challenge>
+Pick any feature on a site you use that claims to know your location or the time. (1) Override
+geolocation to somewhere far away and note whether the feature changes at all. (2) If it doesn't
+change, open the Network tab and try to find where the location actually comes from instead. (3)
+Trigger 'Location unavailable' and check for a real fallback message, not silence. (4) If the
+feature shows any time-relative text ('closes in X hours', 'posted Y ago'), change your display
+timezone and check whether the number is still correct. Write one sentence naming which mechanism
+(API, IP, typed input) the feature actually used, and whether your first guess was right.
+</Challenge>
+
+<AskCommunity prompt="Geolocation/sensor question: [feature name] does [not change / breaks / shows wrong data] when I override [geolocation to X / orientation / timezone]. Network tab shows the location/time actually comes from: [navigator.geolocation / server IP lookup / typed field / not sure yet]. Real-device behaviour: [same / different / not tested]. What I've checked: [Sensors panel setting used, exact values].">
+Say what the Network tab (or code) shows about WHERE the feature actually reads location or time
+from - that one fact usually reveals immediately whether the override should have worked at all,
+before anyone spends time debugging the feature itself.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.chrome.com/docs/devtools/device-mode/geolocation/", title: "Chrome DevTools — overriding geolocation and orientation", kind: "read" },
+    { href: "https://developer.mozilla.org/en-US/docs/Web/API/Geolocation_API", title: "MDN — the Geolocation API", kind: "read" },
+    { href: "https://playwright.dev/docs/emulation#geolocation", title: "Playwright docs — geolocation and timezone emulation in automated tests", kind: "read" },
+    { href: "PLACEHOLDER", title: "PLACEHOLDER video - catching a geo-restriction that checked the wrong mechanism", kind: "video" },
+  ]}
+/>
+
+<Video url="PLACEHOLDER" title="Catching a geo-restriction that checked the wrong mechanism" minutes={5} />
+
+<Takeaways
+  points={[
+    "The Sensors panel fakes exactly two things convincingly: the Geolocation API's coordinate, and orientation events' tilt readings - both fully convincing to any code that actually listens for them.",
+    "The core trap: a feature can determine location via the Geolocation API, server-side IP lookup, or a typed address - three unrelated mechanisms, and overriding one does nothing to the others.",
+    "Before overriding anything, find the line of code or Network request that reads it - a perfect override aimed at the wrong mechanism looks identical, from outside, to a genuinely broken feature.",
+    "Orientation sliders and geolocation overrides test reaction LOGIC well; real sensor noise, drift, and calibration are real-device-only territory, same honest-limits shape as last chapter's multi-touch gap.",
+    "Timezone-dependent displays break when a fixed reference time is compared against the viewer's local clock instead of an explicit stored timezone - test from at least two different simulated zones, not just your own.",
+  ]}
+/>
+
+<Complete xp={10} />

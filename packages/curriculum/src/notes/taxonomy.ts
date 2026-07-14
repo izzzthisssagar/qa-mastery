@@ -628,6 +628,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         topics: [
           { slug: "qa-vs-qc-vs-testing", title: "QA vs QC vs testing" },
           { slug: "the-testers-mindset", title: "The tester's mindset" },
+          { slug: "quality-defined", title: "Quality, defined" },
+          { slug: "roles-on-a-team", title: "Roles on a team" },
         ],
       },
       {
@@ -636,6 +638,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         topics: [
           { slug: "the-1947-moth-story", title: "The 1947 moth story" },
           { slug: "five-eras-debugging-to-prevention", title: "Five eras: debugging to prevention" },
+          { slug: "the-pioneers-and-their-big-ideas", title: "The pioneers and their big ideas" },
+          { slug: "how-agile-devops-and-ai-reshaped-qa", title: "How agile, DevOps, and AI reshaped QA" },
         ],
       },
       {
@@ -645,6 +649,7 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
           { slug: "cost-of-defects", title: "The cost of defects" },
           { slug: "famous-failures", title: "Famous testing failures" },
           { slug: "risk-and-value", title: "Risk and value: what testing actually buys you" },
+          { slug: "when-to-stop", title: "When to stop testing" },
         ],
       },
       {
@@ -652,6 +657,9 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         title: "The seven principles",
         topics: [
           { slug: "the-7-principles", title: "The 7 principles of testing" },
+          { slug: "defect-clustering", title: "Defect clustering: the 80/20 of bugs" },
+          { slug: "applying-them", title: "Applying the seven principles: a daily decision guide" },
+          { slug: "testing-myths", title: "Testing myths that refuse to die" },
         ],
       },
       {
@@ -660,6 +668,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         topics: [
           { slug: "critical-thinking-for-testers", title: "Critical thinking for testers" },
           { slug: "cognitive-biases", title: "Cognitive biases in testing" },
+          { slug: "curiosity-and-questioning", title: "Curiosity and questioning" },
+          { slug: "psychology-of-tester-developer-relations", title: "The psychology of tester-developer relations" },
         ],
       },
       {
@@ -668,18 +678,91 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         topics: [
           { slug: "sdlc-phases", title: "SDLC phases" },
           { slug: "stlc-phases", title: "STLC phases" },
+          { slug: "where-testing-fits", title: "Where testing fits" },
+          { slug: "entry-and-exit-criteria", title: "Entry & exit criteria" },
         ],
       },
       {
         slug: "models",
         title: "Models",
         topics: [
+          { slug: "v-model", title: "The V-model" },
+          { slug: "choosing-a-model", title: "Choosing a model: there's no silver bullet" },
           { slug: "waterfall", title: "Waterfall model" },
           { slug: "agile", title: "Agile model" },
         ],
       },    ],
   },
   // END qa-foundations
+  // BEGIN browser-devtools-mastery
+  {
+    slug: "browser-devtools-mastery",
+    title: "Browser DevTools mastery",
+    summary: "The manual tester's home turf — inspecting the DOM, reading the console, dissecting network requests, throttling and emulation, storage and state, and Lighthouse audits, panel by panel.",
+    chapters: [
+      {
+        slug: "elements-and-styles",
+        title: "Elements & styles",
+        topics: [
+          { slug: "inspecting-the-dom", title: "Inspecting the DOM" },
+          { slug: "editing-html-css-live", title: "Editing HTML & CSS live" },
+          { slug: "finding-locators", title: "Finding locators", planned: true },
+          { slug: "debugging-layout-and-spacing", title: "Debugging layout & spacing", planned: true },
+        ],
+      },
+      {
+        slug: "console",
+        title: "Console",
+        topics: [
+          { slug: "reading-js-errors", title: "Reading JS errors" },
+          { slug: "warnings-vs-errors", title: "Warnings vs errors", planned: true },
+          { slug: "filtering-the-noise", title: "Filtering the noise", planned: true },
+          { slug: "what-to-paste-into-a-bug-report", title: "What to paste into a bug report", planned: true },
+        ],
+      },
+      {
+        slug: "network",
+        title: "Network",
+        topics: [
+          { slug: "anatomy-of-a-request", title: "Anatomy of a request" },
+          { slug: "status-timing-and-headers", title: "Status, timing & headers" },
+          { slug: "copy-as-curl", title: "Copy as cURL", planned: true },
+          { slug: "har-export-as-bug-evidence", title: "HAR export as bug evidence", planned: true },
+        ],
+      },
+      {
+        slug: "throttling-and-emulation",
+        title: "Throttling & emulation",
+        topics: [
+          { slug: "slow-3g-and-offline-mode", title: "Slow 3G & offline mode" },
+          { slug: "device-emulation", title: "Device emulation" },
+          { slug: "geolocation-and-sensors", title: "Geolocation & sensors" },
+          { slug: "testing-what-users-really-feel", title: "Testing what users really feel", planned: true },
+        ],
+      },
+      {
+        slug: "application-and-storage",
+        title: "Application & storage",
+        topics: [
+          { slug: "cookies-and-local-storage", title: "Cookies & local storage" },
+          { slug: "session-and-cache", title: "Session & cache" },
+          { slug: "clearing-state-properly", title: "Clearing state properly", planned: true },
+          { slug: "service-workers-gently", title: "Service workers, gently", planned: true },
+        ],
+      },
+      {
+        slug: "audits-and-performance",
+        title: "Audits & performance",
+        topics: [
+          { slug: "lighthouse-reports", title: "Lighthouse reports" },
+          { slug: "accessibility-signals", title: "Accessibility signals", planned: true },
+          { slug: "performance-recording-gently", title: "Performance recording, gently", planned: true },
+          { slug: "when-to-escalate-to-devs", title: "When to escalate to devs", planned: true },
+        ],
+      },
+    ],
+  },
+  // END browser-devtools-mastery
   {
     slug: "foundations",
     title: "QA Foundations",

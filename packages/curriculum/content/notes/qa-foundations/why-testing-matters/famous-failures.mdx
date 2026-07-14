@@ -1,0 +1,391 @@
+---
+title: "Famous testing failures"
+summary: "Ariane 5, Therac-25, Mars Climate Orbiter, Knight Capital, and the 2024 CrowdStrike outage — five real disasters, accurately told, and the specific testing lesson each one actually teaches."
+tags: ["qa-foundations", "why-testing-matters", "track-c"]
+updated: "2026-07-13"
+---
+
+<Hook>
+Every one of these stories is real, dated, and documented in public investigation reports — no
+urban legends, no "I heard from a guy." A rocket destroyed itself 37 seconds after launch because
+of a number that didn't fit in a box. A medical device delivered lethal radiation doses because two
+things happening at once wasn't supposed to be possible. A spacecraft burned up because one team
+used pounds and another used newtons. A trading firm lost $440 million in 45 minutes because old
+code woke back up. And in 2024, a single bad file crashed millions of computers worldwide before
+lunch. None of these were caused by mysterious, unknowable forces. Each one has a specific,
+nameable testing lesson — and this note tells the accurate version of all five, then extracts
+exactly what each one teaches.
+</Hook>
+
+<Callout type="analogy">
+Think of these five failures as five different ways a bridge can fall down — not because bridges
+are mysterious, but because each failure mode is boringly specific once you know it. One collapses
+because a beam was rated for a smaller load than what it actually carries (Ariane 5: a number
+overflowed). One kills people because two safety systems were assumed to never fail at the same
+moment (Therac-25: a race condition). One is built to the wrong blueprint entirely because two
+teams used different units (Mars Climate Orbiter: metric vs imperial). One collapses under its own
+weight because old scaffolding was never removed (Knight Capital: dead code reactivated). And one
+brings down traffic across an entire country because the inspection process for a single support
+beam was skipped (CrowdStrike: an unvalidated content update). Different bridges, same underlying
+truth: nobody tested the ONE scenario that turned out to matter.
+</Callout>
+
+## Ariane 5 Flight 501 — a number too big for its box
+
+On June 4, 1996, the European Space Agency's Ariane 5 rocket self-destructed 37 seconds after
+launch, on its maiden flight, destroying an uninsured payload worth roughly $370 million. The
+official inquiry board (chaired by Jacques-Louis Lions) found the cause: the rocket's Inertial
+Reference System tried to convert a 64-bit floating-point number representing horizontal velocity
+into a 16-bit signed integer. The number was too large to fit — Ariane 5 flew a much steeper,
+faster initial trajectory than its predecessor, Ariane 4. The conversion caused an overflow, which
+triggered an unhandled exception, which shut down the primary AND backup guidance computers (both
+running the same software) within milliseconds of each other. The rocket's onboard computer
+diagnostic data was then misread by the flight control system as legitimate flight data, sending
+the rocket wildly off course, which triggered self-destruct.
+
+The gut-punch detail: this exact conversion code was reused, unmodified, from Ariane 4 — where the
+smaller, slower trajectory meant the number never got big enough to overflow. It had never failed
+in years of Ariane 4 flights, so nobody re-tested it against Ariane 5's actual flight parameters.
+It also weakly needed to run at all after liftoff; it was for a pre-launch alignment function with
+no purpose once the rocket was airborne, but it was left running anyway.
+
+<Term define={`A bug where a calculation produces a value too large (or too small) to fit in the number type meant to hold it. Ariane 5's inertial guidance software converted a 64-bit floating-point velocity value into a 16-bit signed integer, which can only hold values from -32,768 to 32,767 -- the actual velocity value exceeded that range because Ariane 5 flew a steeper trajectory than the Ariane 4 software this code was inherited from was ever tested against. The fix is never 'trust the number will be small' -- it's validating ranges explicitly, or choosing a data type wide enough for every input the new context can actually produce, not just the old context it was written for.`}>Integer overflow</Term>
+
+## Therac-25 — when two things happen at once that "never" should
+
+Between 1985 and 1987, the Therac-25, a radiation therapy machine, delivered massive radiation
+overdoses to at least six patients across the US and Canada, contributing to several deaths. Unlike
+its predecessors, the Therac-25 removed hardware safety interlocks and relied entirely on software
+to prevent the machine's high-power electron beam from firing without the beam-spreader plate in
+place (the plate that turns a concentrated beam into a safe, diffuse therapy dose). Investigators
+(notably Nancy Leveson and Clark Turner's landmark analysis) traced the failures to race conditions:
+if an operator entered treatment settings and then rapidly corrected them using keyboard edits
+within a narrow window — something experienced operators did routinely, since they typed fast — the
+software's internal state could desynchronize, arming the full-power beam without the safety plate
+positioned correctly. The bug was intermittent, timing-dependent, and had shipped for years,
+because the specific fast-typing sequence that triggered it wasn't something the original
+single-threaded testing on earlier machines had ever exercised.
+
+Manufacturer AECL's initial response to the first reported incidents was that the machine could not
+possibly have caused the injuries described, since "extensive" testing had found no such fault —
+testing that, crucially, had never included the exact rapid-edit sequence operators used in real
+clinics. Multiple additional patients were injured before the actual root cause was isolated and
+the timing bug fixed.
+
+## Mars Climate Orbiter — the unit mismatch that burned $327 million
+
+On September 23, 1999, NASA's Mars Climate Orbiter was lost as it entered orbit around Mars,
+approaching far too close to the planet and either burning up or flying off into space. The
+investigation board's finding was strikingly simple: the ground software team at Lockheed Martin
+calculated small forces from thruster firings in pound-seconds (a US customary/imperial unit),
+while the navigation team at NASA's Jet Propulsion Laboratory expected that data in newton-seconds
+(the metric unit specified in the project's interface requirements). The mismatch — roughly a
+factor of 4.45 — accumulated over months of trajectory correction maneuvers, silently steering the
+$327.6 million spacecraft off its intended course by a wide enough margin to destroy it.
+
+The specification DID require metric units. The software that produced the mismatched values was
+technically correct by its own internal logic — it just wasn't validated against what the
+consuming system actually expected, and no integration check compared the two systems' assumptions
+against real, physical, sanity-checkable numbers before the data was trusted for course corrections
+that mattered.
+
+{/* IMAGE: the actual Mars Climate Orbiter in the cleanroom during pre-launch testing — the bug that killed it walked straight through this room */}
+<HotspotImage
+  src="/notes/qa-foundations/why-testing-matters/famous-failures.jpg"
+  alt="The Mars Climate Orbiter spacecraft in a cleanroom during pre-launch testing in 1998: a boxy gold-and-black bus with a large silver high-gain antenna dish, surrounded by three technicians in white cleanroom suits and masks, standing on a dark test floor marked with orange grid squares"
+  credit="Mars Climate Orbiter during pre-launch testing, 1998 — NASA/JPL via Wikimedia Commons, Public domain"
+  pins={[
+    { x: 68, y: 30, label: "The high-gain antenna = telemetry that reported 'all nominal'", desc: "This dish faithfully phoned home for nine months while the trajectory drifted. Every status report was internally consistent, because each system was correct BY ITS OWN UNITS. Telemetry tells you what the system believes about itself - and a system built on a wrong shared assumption believes everything is fine." },
+    { x: 17, y: 58, label: "The technicians = two teams, each correct in isolation", desc: "Lockheed Martin's ground software computed thruster impulses in pound-seconds; JPL's navigation expected newton-seconds. Neither team's code was wrong on its own terms. The defect lived in the space BETWEEN them - the place no single team owned, and no single team's tests covered." },
+    { x: 45, y: 62, label: "The wiring harnesses = the interface where plain numbers crossed", desc: "Data moved between the two systems as bare numbers - no unit tag, no automated scale check. A '4.45' in pounds and a '4.45' in newtons look identical in a file. Every integration bug you'll ever file is a version of this: two components, each unit-tested green, disagreeing about what the number MEANS." },
+    { x: 62, y: 70, label: "The gold thermal blanket = tested for the wrong hazards", desc: "This spacecraft was rigorously tested against vacuum, vibration, and radiation - the hazards everyone could imagine. It was destroyed by a spreadsheet-grade unit conversion. Test effort follows imagination, and imagination follows the failure modes you've already seen. The $327.6M lesson: test the interfaces, not just the components." },
+    { x: 50, y: 92, label: "The cleanest room on Earth = where the bug walked through untouched", desc: "Not a speck of dust got near this hardware - and the fatal defect was never IN the hardware. It rode in ground software, crossing between organisations, invisible to every cleanroom protocol. Process rigor in one place doesn't cover risk living in another. The boring integration sanity-check nobody ran would have caught it on transmission one." },
+  ]}
+/>
+
+<FlowAnimation
+  title="How one unit mismatch destroyed a $327 million spacecraft — press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Two teams, two unit systems", desc: "Lockheed Martin's ground software calculated small thruster-firing impulse data in pound-seconds (imperial). NASA JPL's navigation software expected that same data in newton-seconds (metric), per the project's own interface spec. Neither team's code was 'wrong' in isolation." },
+    { label: "The interface between them trusted the numbers, not the units", desc: "Data crossed from one system to the other as plain numbers -- no unit tag, no automated check that the value's scale matched what the receiving system assumed. A number is not self-describing; '4.45' means something very different in pounds versus newtons." },
+    { label: "The error was small per-correction, and accumulated silently", desc: "Each individual trajectory correction was off by the unit-conversion factor, but small enough that nothing alarmed anyone in the short term. Over months of maneuvers, the errors compounded into a large real-world course deviation." },
+    { label: "The spacecraft arrived on the wrong path", desc: "Mars Climate Orbiter approached Mars at an altitude far lower than planned -- close enough that atmospheric stress likely destroyed it, or sent it past the planet entirely. By the time the trajectory error was large enough to notice, it was unrecoverable." },
+    { label: "The fix that should have existed: a boring sanity check", desc: "A single automated cross-check -- comparing the units or magnitude of data as it crossed the interface between the two systems -- would have caught the mismatch on the very first transmission. No exotic tool needed; just a test that verified an INTEGRATION assumption, not just each side's internal correctness." },
+  ]}
+/>
+
+## Knight Capital — $440 million in 45 minutes from dead code waking up
+
+On August 1, 2012, Knight Capital Group, a major US market maker, deployed new trading software to
+its production servers. The deployment was supposed to update all eight production servers with a
+new module, replacing an old, unused flag that had been repurposed for a new feature called
+"Power Peg." Due to a deployment error, one of the eight servers did not get the new code — it kept
+an old copy that still contained dead code left over from a feature retired years earlier, code
+that reused the SAME flag the new software now used for something completely different.
+
+When the market opened, that eighth server's old code activated, misinterpreting incoming order
+flow as triggers for the retired feature, and began firing an enormous volume of unintended, rapid
+buy and sell orders into the market. Within about 45 minutes before the system could be manually
+shut down, Knight Capital had accumulated a huge, unwanted trading position and realized a loss of
+approximately $440 million — a sum that nearly bankrupted the firm overnight and led to it being
+acquired within months. The technical root causes, per the SEC's later order, were a combination of
+the deployment failure (inconsistent code across the eight servers) and the reused flag colliding
+with dormant code that was never actually removed, only disabled.
+
+<Term define={`Old code that is no longer intended to run but is left in the codebase, often because removing it felt riskier or less urgent than just disabling it. Knight Capital's disaster happened because a years-old, retired feature's code was still physically present on one production server, and a NEW feature reused the same trigger flag the old dead code responded to -- when that server didn't get the new deployment, the old code woke up and misinterpreted live market data as its own commands. The lesson for testers and engineers alike: dead code is not neutral. If it's not safe to delete, it's not safe to leave lying around either, because the next reused flag, config value, or file name can reactivate it in ways nobody is watching for.`}>Dead code reactivation</Term>
+
+Here's a simplified, safe version of the Ariane 5 overflow, runnable in Java, so you can watch a
+value silently wrap around a small integer type instead of just reading about it — this is the
+actual failure MODE, scaled down to something harmless:
+
+<CodePlayground
+  language="java"
+  title="Run it — an Ariane-5-style short overflow, made safe (Java)"
+  code={`public class Main {
+    public static void main(String[] args) {
+        // Ariane 4's trajectory kept this value comfortably inside a 16-bit
+        // signed range. Ariane 5's steeper, faster trajectory did not --
+        // the SAME conversion code, unmodified, met a bigger real value.
+
+        int ariane4LikeVelocity = 30000;   // fits fine in a 16-bit signed short
+        short converted4 = (short) ariane4LikeVelocity;
+        System.out.println("Ariane-4-like value 30000 as a short: " + converted4 + " (correct)");
+
+        int ariane5LikeVelocity = 40000;   // Ariane 5's real, steeper trajectory
+        short converted5 = (short) ariane5LikeVelocity;
+        System.out.println("Ariane-5-like value 40000 as a short: " + converted5 + " (WRONG -- silently wrapped)");
+
+        // Java's (short) cast does NOT throw an error on overflow -- it wraps
+        // around silently, exactly the class of bug that doomed Flight 501.
+        // The short range is -32768 to 32767; 40000 wraps to a negative number.
+        System.out.println();
+        System.out.println("A short can only hold -32768 to 32767.");
+        System.out.println("40000 does not fit, so it wraps instead of erroring -- no crash, no warning, just a WRONG number.");
+
+        // The fix: validate the range BEFORE converting, for every real input
+        // the new context can produce -- not just the old context it was written for.
+        int[] realWorldValues = {30000, 40000, 32767, 32768, -32769};
+        for (int v : realWorldValues) {
+            boolean fitsInShort = v >= Short.MIN_VALUE && v <= Short.MAX_VALUE;
+            System.out.println(v + " fits in a short? " + fitsInShort);
+        }
+    }
+}`}
+/>
+
+The same idea in Python — Python integers don't silently overflow the way a fixed-size type does,
+so this version makes the danger visible by simulating a fixed-width conversion explicitly, the
+way you'd validate an incoming value from an external system before trusting it downstream:
+
+<CodePlayground
+  language="python"
+  title="Run it — simulating a fixed-width overflow check (Python)"
+  code={`# Python ints don't silently overflow like a 16-bit type does -- but plenty of
+# systems Python talks to (embedded devices, binary protocols, other services)
+# DO use fixed-width integers. This simulates that boundary explicitly.
+
+SHORT_MIN, SHORT_MAX = -32768, 32767
+
+def to_signed_16bit(value):
+    """Simulates what a real 16-bit signed conversion does: wrap silently."""
+    value = value & 0xFFFF                  # mask to 16 bits
+    if value > SHORT_MAX:
+        value -= 0x10000                    # reinterpret as signed
+    return value
+
+ariane4_like_velocity = 30000   # comfortably fits Ariane 4's real flight envelope
+ariane5_like_velocity = 40000   # Ariane 5's steeper, faster real trajectory
+
+print("Ariane-4-like value 30000 ->", to_signed_16bit(ariane4_like_velocity), "(correct)")
+print("Ariane-5-like value 40000 ->", to_signed_16bit(ariane5_like_velocity), "(WRONG -- silently wrapped)")
+
+print()
+print("A 16-bit signed range only holds", SHORT_MIN, "to", SHORT_MAX)
+print("The fix: validate the range BEFORE converting, for every real input the")
+print("new context can produce -- not just the old context the code was tested against.")
+
+real_world_values = [30000, 40000, 32767, 32768, -32769]
+for v in real_world_values:
+    fits = SHORT_MIN <= v <= SHORT_MAX
+    print(v, "fits in a signed 16-bit value?", fits)`}
+/>
+
+<Callout type="tip">
+Notice the pattern across all five failures: not one of them was caused by a rare, exotic bug that
+nobody could have predicted. Ariane 5 reused untested code in a new context. Therac-25 never tested
+realistic fast operator input. Mars Climate Orbiter never cross-checked units at an integration
+boundary. Knight Capital left dead code lying around and reused a flag. Each fix, in hindsight, is
+almost boring: validate ranges, test realistic timing, check units at the boundary, delete what you
+retire. The lesson isn't "testing is impossibly hard" — it's "test the SPECIFIC scenario that
+actually occurs in the real system," not just the scenario the original test suite happened to
+cover.
+</Callout>
+
+<FirstTime title="Your mission: find the specific untested scenario in each disaster">
+<StepChecklist
+  steps={[
+    { text: "Run the overflow demo", detail: "Run both playgrounds and watch 40000 silently become a wrong, wrapped value instead of erroring. That silent wrap -- no crash, no warning -- is exactly the shape of the Ariane 5 bug, just scaled down to something safe to run on your own machine." },
+    { text: "Name the untested scenario for Ariane 5", detail: "It wasn't 'nobody tested the conversion code' -- it was tested, on Ariane 4's trajectory. What specific NEW input (the steeper trajectory's larger velocity value) was never tested against the reused code?" },
+    { text: "Name the untested scenario for Therac-25", detail: "It wasn't 'nobody tested the software' -- it was extensively tested. What specific TIMING pattern (fast sequential keyboard edits) did real operators produce that the test scripts never reproduced?" },
+    { text: "Name the untested scenario for Mars Climate Orbiter", detail: "Both teams' code worked correctly in isolation. What specific INTEGRATION check -- comparing units or magnitude at the boundary between two systems -- was missing?" },
+    { text: "Name the untested scenario for Knight Capital", detail: "The new code was fine. What specific DEPLOYMENT scenario (one server out of eight not receiving the update, combined with old dead code reacting to a reused flag) was never verified as part of the rollout process?" },
+  ]}
+/>
+You've now practiced the single most useful habit this note teaches: reading past 'a bug happened'
+to the exact scenario that was never exercised -- because that's the level of specificity that
+actually prevents the next one.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "Reused legacy code fails when deployed into a new context with different real-world inputs.",
+      fix: "Never assume old code is safe just because it worked in its original context. Re-validate its assumptions (input ranges, data types, timing) against the ACTUAL inputs the new context will produce, the way Ariane 5's guidance software should have been re-tested against Ariane 5's own steeper trajectory, not just inherited from Ariane 4's test history.",
+    },
+    {
+      symptom: "A bug only appears under fast, realistic user input timing, never in scripted test runs.",
+      fix: "Scripted tests often type, click, or submit at a slow, tidy, sequential pace that real experienced users never actually use. Add tests that simulate rapid, overlapping, or out-of-order input -- the way Therac-25's real operators quickly corrected entries, a pattern the original testing never modeled.",
+    },
+    {
+      symptom: "Two systems each report correct results internally, but data is silently wrong once it crosses between them.",
+      fix: "Internal correctness on both sides does not guarantee the INTERFACE between them is correct. Add explicit boundary checks -- units, scale, format, sign -- exactly the check that would have caught Mars Climate Orbiter's pound-seconds-versus-newton-seconds mismatch before it accumulated into a fatal trajectory error.",
+    },
+    {
+      symptom: "A deployment goes out to most servers/instances successfully, but one falls behind or fails silently, and something old reactivates.",
+      fix: "Verify deployments completed identically across EVERY instance, not just a sample -- and treat any disabled or retired feature flag as something that must be physically removed, not just turned off, because Knight Capital shows exactly how a reused flag can wake old dead code back up on the one server that didn't get updated.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+These five disasters map directly onto ordinary testing habits, not just extreme edge cases:
+
+- **Reused or inherited code moving to a new context** — new hardware, new scale, new customer, new
+  region. Ask what NEW input ranges or timing that context introduces, and test against those, not
+  the old context's history (Ariane 5).
+- **Realistic, fast, experienced-user input** — don't just test the "polite" input pace a script
+  produces; test rapid corrections, double-clicks, and quick sequential edits real users actually
+  do (Therac-25).
+- **Any boundary where two systems, teams, or services exchange data** — check units, scale, and
+  format assumptions explicitly at the boundary, don't just trust each side's internal tests
+  (Mars Climate Orbiter).
+- **Deployment consistency across every instance** — a rollout that succeeds on 7 of 8 servers is a
+  failed rollout; verify all of them, and remove retired feature code rather than merely disabling
+  it (Knight Capital).
+- **Any large-scale software update pushed automatically to production fleets** — the 2024
+  CrowdStrike outage (a faulty content update to the Falcon sensor causing a Windows boot loop
+  across millions of machines) is this same category at internet scale: validate updates in
+  controlled rings before a global push, and test with the update file itself, not just the code
+  that reads it.
+
+Tester's habit: **for every failure story, ask "which specific scenario went untested?" instead of
+"what went wrong?"** — the second question invites vague answers; the first one gives you a test
+case you can actually write.
+</WhereToCheck>
+
+<WorkedExample title="the 2024 CrowdStrike outage, reconstructed">
+1. **The event:** On July 19, 2024, cybersecurity vendor CrowdStrike pushed a routine content
+   update (a "Rapid Response Content" update, not a full software release) for its Falcon endpoint
+   security sensor to Windows machines worldwide. Within minutes, machines running the affected
+   sensor version began crashing into the Windows "Blue Screen of Death" and entering a boot loop,
+   unable to start normally.
+2. **The scale:** Roughly 8.5 million Windows devices were affected worldwide, per Microsoft's own
+   estimate, grounding flights, disrupting hospitals, banks, and broadcasters — one of the largest
+   IT outages in history, caused not by an attacker, but by the vendor's own routine update process.
+3. **The technical root cause, per CrowdStrike's public post-incident report:** a content
+   validation gap. The update included a configuration file with a structure the sensor's content
+   interpreter did not correctly handle, triggering an out-of-bounds memory read in the sensor
+   driver, which runs at the Windows kernel level — meaning the crash took the entire operating
+   system down with it, not just an application.
+4. **What testing existed, and what didn't:** CrowdStrike's own report acknowledged that this
+   category of content update had NOT been going through the same staged validation and gradual
+   rollout process applied to full sensor software releases — content updates were treated as
+   lower-risk and pushed more broadly and quickly, to all customers essentially at once.
+5. **The tester's angle:** the update passed whatever validation existed for its own category, but
+   that category's testing bar was lower than the risk actually warranted, since a kernel-level
+   driver has essentially no safety margin for a bad input — a corrupted or unexpected structure in
+   the content file wasn't tested as an input case, only "normal" content was.
+6. **The fix CrowdStrike committed to publicly:** staged, gradual deployment ("canary" rollouts) for
+   content updates just like code updates, additional validation checks on content files before
+   they reach the sensor, and giving customers more control over when content updates apply to
+   their fleet.
+7. **The lesson for a tester:** "it's just a data/content update, not a code change" is exactly the
+   assumption that lets an update skip the testing rigor its actual blast radius deserves. If a
+   component runs at a privileged level (kernel driver, root service, firmware), the update
+   MECHANISM feeding it data needs testing as rigorous as the code itself — because bad data can
+   crash a privileged process just as thoroughly as bad code can.
+</WorkedExample>
+
+<Callout type="mistake">
+Reading these stories and concluding "well, that would never happen to us, we don't build rockets
+or trading systems." Every one of these lessons downscales perfectly to ordinary software: reused
+code meeting new inputs, realistic fast user behavior untested, data crossing a boundary between
+two systems with different assumptions, an incomplete rollout waking up old code, or a "just a
+config change" skipping the scrutiny a real code change would get. The size of the disaster scales
+with the blast radius of the system — a rocket, a hospital, a stock exchange, or the entire
+internet — but the SHAPE of the missed test case is identical to the shape you'll meet in your own,
+much smaller system. That's exactly why these stories are worth knowing precisely, not just as
+scary trivia.
+</Callout>
+
+<Quiz
+  question="What is the most accurate, specific testing lesson from the Mars Climate Orbiter loss in 1999?"
+  options={[
+    "NASA's software had a critical bug in its trajectory calculations that nobody ever tested",
+    "One team's ground software produced values in pound-seconds while the receiving navigation software expected newton-seconds, and no integration check compared units/magnitude at the boundary between the two systems before the mismatch accumulated into a fatal trajectory error",
+    "The spacecraft was destroyed by a solar flare that no amount of testing could have predicted",
+    "A single developer forgot to write any tests at all for the navigation software"
+  ]}
+  answer={1}
+  explain="Both software components were functioning correctly according to their own internal logic -- the ground software at Lockheed Martin genuinely computed valid pound-seconds values, and JPL's navigation software correctly processed whatever numbers it received as newton-seconds. The failure was a missing INTEGRATION check: nothing compared the two systems' unit assumptions at the boundary where the data crossed between them, so a consistent, silent unit mismatch accumulated over months of trajectory corrections into a fatal course error. This is why 'both sides passed their own tests' is not the same as 'the system works' -- the untested scenario was the handoff itself, not either side's internal logic. It had nothing to do with solar flares or missing tests altogether; the software was well-tested in isolation, just not at the boundary that mattered."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Ariane 5 Flight 501 (1996) — what happened and the lesson", back: "A 64-bit velocity value overflowed a 16-bit integer conversion inherited unmodified from Ariane 4, whose slower trajectory never produced a value that large. Lesson: re-validate reused code's assumptions against the ACTUAL inputs of its new context, not just its original context's history." },
+    { front: "Therac-25 (1985-1987) — what happened and the lesson", back: "A race condition triggered by fast, realistic operator keyboard edits could arm the full-power beam without the safety spreader plate correctly in place, contributing to several deaths. Lesson: test realistic FAST user input timing, not just slow, tidy scripted sequences." },
+    { front: "Mars Climate Orbiter (1999) — what happened and the lesson", back: "Ground software produced values in pound-seconds; navigation software expected newton-seconds per spec. No boundary check compared them; the spacecraft was lost. Lesson: check units/assumptions explicitly at every integration boundary between systems." },
+    { front: "Knight Capital (2012) — what happened and the lesson", back: "A deployment update reached 7 of 8 servers; the 8th kept old dead code that reacted to a reused feature flag, firing unintended trades and losing about $440 million in 45 minutes. Lesson: verify deployments identically across every instance, and remove retired code rather than merely disabling it." },
+    { front: "CrowdStrike outage (2024) — what happened and the lesson", back: "A faulty content update to a kernel-level security sensor crashed roughly 8.5 million Windows devices worldwide because content updates skipped the staged rollout rigor applied to code releases. Lesson: privileged components need their update MECHANISM tested as rigorously as their code, since bad data can crash them just as badly." },
+    { front: "The one pattern across all five disasters", back: "None were caused by exotic, unpredictable bugs. Each had a specific, nameable scenario that was never tested: a new input range, realistic user timing, a cross-system boundary, a partial rollout, or a low-scrutiny 'just data' update." },
+  ]}
+/>
+
+<Challenge>
+Pick one of the five failures. Write, in your own words, the single test case (one sentence, as if
+it were a real test step) that — had it existed and been run before release — would most plausibly
+have caught the failure before it reached the real world. Then write one sentence naming a place in
+your OWN current project where a similar untested scenario (new context for old code, realistic
+fast input, a cross-system boundary, a partial rollout, or a low-scrutiny data update) could plausibly
+exist today.
+</Challenge>
+
+<AskCommunity prompt="Failure-lesson question: I'm looking at `[a bug / an incident / a near-miss]` in my own project that resembles `[Ariane 5's reused-code overflow / Therac-25's timing race / Mars Climate Orbiter's unit mismatch / Knight Capital's dead-code reactivation / CrowdStrike's low-scrutiny content update]`. The specific untested scenario I think it maps to: `[describe it]`. What test would you add first?">
+The most useful replies name the exact test case, not just 'test more' -- these five disasters are
+valuable precisely because each one reduces to one specific, writable test that was missing.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.di.unipi.it/~boccal/ARIANE5REP.HTML", title: "Ariane 5 Flight 501 Inquiry Board report (the original public findings)", kind: "read" },
+    { href: "https://web.eecs.umich.edu/~aprakash/eecs588/handouts/therac25.html", title: "Leveson and Turner — An Investigation of the Therac-25 Accidents", kind: "read" },
+    { href: "https://llis.nasa.gov/lesson/641", title: "NASA Mars Climate Orbiter Mishap Investigation Board report summary", kind: "read" },
+    { href: "https://www.sec.gov/litigation/admin/2013/34-70694.pdf", title: "SEC order on the Knight Capital Group trading incident", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=Iq_r7IcNmUk", title: "25 crazy software bugs explained in 10 minutes — Fireship's rapid-fire disaster reel", kind: "video" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=Ap0orGCiou8" title="History's worst software error — Kyle Hill's deep, accurate telling of the Therac-25 story you just read" minutes={22} />
+
+<Takeaways
+  points={[
+    "Ariane 5 (1996): a 64-bit velocity value overflowed a 16-bit conversion inherited from Ariane 4's slower trajectory -- reused code needs its assumptions re-validated against its NEW context's real inputs.",
+    "Therac-25 (1985-1987): a timing race triggered by realistic fast operator input, never reproduced by the original test scripts, allowed lethal radiation overdoses -- test realistic user speed, not just tidy scripted sequences.",
+    "Mars Climate Orbiter (1999): pound-seconds versus newton-seconds, uncaught at the boundary between two internally-correct systems -- integration boundaries need their own explicit checks.",
+    "Knight Capital (2012): an incomplete deployment left dead code active on one server, which a reused flag reactivated, costing $440 million in 45 minutes -- verify rollouts on every instance and delete retired code.",
+    "CrowdStrike (2024): a kernel-level sensor crashed millions of machines because a 'just a content update' skipped the rigor a code release would have gotten -- privileged components need their update mechanism tested as hard as their code.",
+  ]}
+/>
+
+<Complete xp={10} />

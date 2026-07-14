@@ -1,0 +1,352 @@
+---
+title: "Lighthouse reports: five scores, one honest read"
+summary: "Running Lighthouse, what its five categories actually check, why a score is a signal to investigate and not a grade to defend, lab data vs field data, and the findings worth acting on versus the noise worth ignoring."
+tags: ["browser-devtools-mastery", "audits-and-performance", "track-c"]
+updated: "2026-07-14"
+---
+
+<Hook>
+Somewhere in your first month of testing, you will click the little tab in DevTools labeled
+**Lighthouse**, hit the run button, and watch five colored circles fill in like a report card from a
+school that grades in traffic lights. It feels like the truth arriving. It is not the truth arriving
+-- it is one automated opinion, generated on your machine, under conditions nobody in production will
+ever experience, about a page that might score differently five minutes from now with zero code
+changes. That doesn't make Lighthouse useless. It makes Lighthouse a **flashlight**, not a **verdict**
+-- brilliant at showing you where to look, terrible at being trusted blindly. This note is about
+running the audit properly, reading what each of the five categories is really checking, telling lab
+data from field data, and turning a wall of colored bars into two or three findings you can actually
+act on instead of a screenshot you paste into Slack and never revisit.
+</Hook>
+
+<Callout type="analogy">
+A Lighthouse run is a home inspection, not a bank appraisal. The inspector walks through once, on one
+day, with one set of tools, and hands you a checklist: loose railing, aging water heater, a draft
+under the back door. None of that is the FINAL word on the house's worth -- it's a prioritized list
+of things worth a second look, gathered under inspection-day conditions that might not match how the
+house behaves in a heatwave or a blizzard. A smart buyer reads the report, walks the flagged items in
+person, and ignores the inspector's overall "condition score" as marketing. A nervous buyer frames the
+score on the wall and refuses to buy a house that scored 84. Lighthouse rewards the smart buyer.
+</Callout>
+
+## Five categories, one button
+
+Open DevTools, click the **Lighthouse** panel, pick a device (mobile or desktop -- they score
+differently, mobile is stricter and closer to how most users actually arrive), pick categories, and
+hit **Analyze page load**. Under the hood Chrome throws away the current page state, reloads it in a
+clean, throttled environment, and records everything that happens from first byte to fully settled.
+That reload-from-scratch step matters: Lighthouse is measuring a **cold** page load, not the warm,
+cached, already-logged-in page you've been clicking around in for twenty minutes. If your bug only
+shows up after three interactions, Lighthouse's default run will never see it.
+
+The five categories, in plain words. **Performance** scores how fast the page becomes visible,
+interactive, and stable -- built from the Core Web Vitals covered later in this chapter. **Accessibility**
+runs automated checks for contrast, labels, ARIA misuse, and landmark structure -- a real signal, and
+also a partial one, since it catches maybe a third of real accessibility problems (the next note in
+this chapter covers exactly what it catches and misses). **Best Practices** flags security and code
+quality smells: mixed HTTP content on an HTTPS page, deprecated APIs, console errors, missing
+`crossorigin` attributes on third-party scripts, image aspect-ratio mismatches. **SEO** checks whether
+search engines can parse and rank the page: meta descriptions, crawlable links, valid `robots.txt`,
+readable font sizes. And **PWA** (when present) checks installability and offline behavior against the
+Progressive Web App checklist -- a manifest file, a service worker, an offline fallback. None of the
+five is graded on a curve against other sites; each is graded against a fixed rubric, which is exactly
+why the number is comparable across runs of the SAME page, and much less comparable across different
+sites doing genuinely different jobs.
+
+Underneath every score sits a list of **audits** -- individual pass/fail (or numeric) checks with
+names like "Eliminate render-blocking resources" or "Image elements have `alt` attributes." The
+category score is a weighted roll-up of those audits; two pages can land on the identical Performance
+score of 62 for completely different reasons. This is the single most important habit to build: **the
+number tells you where to look, the audit list tells you what's actually wrong.** A tester who reports
+"Performance is 62, please fix" has handed a developer a mystery. A tester who reports "the
+render-blocking CSS on `/checkout` is costing 800ms of the LCP time, per the Lighthouse audit" has
+handed them a lead.
+
+{/* IMAGE: a desk-level shot of a laptop screen showing a Lighthouse report with five colored circular score gauges above a scrollable list of named audits */}
+<HotspotImage
+  src="/notes/browser-devtools-mastery/audits-and-performance/PLACEHOLDER-lighthouse-report.jpg"
+  alt="A laptop screen showing a Lighthouse report with five colored circular score gauges for Performance, Accessibility, Best Practices, SEO, and PWA above a scrollable list of individual named audits"
+  credit="Photo: PLACEHOLDER - replace with a desk-level shot of a laptop screen showing a full Lighthouse report with five score gauges and an expanded audit list"
+  pins={[
+    { x: 50, y: 50, label: "The five gauges = five DIFFERENT rubrics, not one grade", desc: "Performance, Accessibility, Best Practices, SEO, and PWA each score against their own fixed checklist -- a 95 in SEO and a 40 in Performance are not contradictory, they are two unrelated report cards for the same page. Never average them in your head into one 'health number'; read each on its own terms." },
+    { x: 50, y: 50, label: "The circle color = a threshold, not a curve", desc: "Green is 90-100, orange is 50-89, red is 0-49 -- fixed cutoffs applied to every page on earth, not a ranking against competitor sites. A page scoring orange isn't 'below average'; it's below a specific bar Google set for that category. Treat the color as a triage signal: red first, orange next, green rarely worth chasing further." },
+    { x: 50, y: 50, label: "The audit list below the gauges = where the real information lives", desc: "Each row names a specific, fixable thing: an oversized image, a render-blocking script, a missing alt attribute. This list is what you paste into a bug report -- never the top-line score alone, which tells a developer nothing about WHERE to look or HOW MUCH it's costing." },
+    { x: 50, y: 50, label: "Opportunities vs Diagnostics = estimated savings vs raw facts", desc: "Lighthouse splits Performance audits into 'Opportunities' (estimated time you'd save fixing this) and 'Diagnostics' (facts with no time estimate, like total byte weight). The estimated savings are ESTIMATES from a simulated throttled run -- useful for prioritizing, not a contract for how many milliseconds a fix will actually buy in production." },
+    { x: 50, y: 50, label: "The device toggle above the gauges = mobile vs desktop, a different page entirely", desc: "Lighthouse simulates a mid-tier mobile CPU and a slow 4G-ish connection by default -- deliberately pessimistic, because that's closer to a real user's phone than your fiber-connected laptop. A page scoring 90 on desktop and 45 on mobile isn't lying twice; it's telling you the truth about two very different real audiences." },
+  ]}
+/>
+
+<FlowAnimation
+  title="From click to color -- what a Lighthouse run actually does"
+  intervalMs={1800}
+  nodes={[
+    { label: "Pick device and categories, hit Analyze", desc: "You choose mobile or desktop simulation and which of the five categories to run. This choice alone can swing the Performance score 20-40 points -- mobile throttling is deliberately harsh, so always state which mode a score came from when you report it." },
+    { label: "Chrome reloads the page from a CLEAN slate", desc: "Lighthouse does not audit your current tab state. It opens a fresh load -- often in an incognito-like profile with no extensions -- and throttles CPU and network to simulate a mid-tier device on a so-so connection. This is why a page that FEELS instant to you can still score orange: you're testing on hardware and a connection Lighthouse deliberately isn't." },
+    { label: "Every audit runs against the recorded trace", desc: "Dozens of individual checks -- render-blocking resources, image sizing, contrast ratios, missing meta tags -- each evaluate the same underlying performance trace and DOM snapshot. This is why one slow third-party script can tank several unrelated-looking audits at once: one root cause, many downstream symptoms." },
+    { label: "Audits roll up into five weighted category scores", desc: "Each category applies its OWN weighting formula to its own audits (Performance weights Largest Contentful Paint and Interaction to Next Paint heavily; Accessibility weights color contrast and labels). The single 0-100 number is a summary, and summaries always lose information -- which is exactly why the audit list underneath is where the actionable detail lives." },
+    { label: "You read the report as a LEAD LIST, not a scoreboard", desc: "The professional move: sort audits by estimated impact, cross-check the worst offenders against field data (next stage), and file findings with numbers attached -- not 'performance is bad,' but 'render-blocking CSS costs an estimated 640ms of LCP, confirmed against real-user CrUX data for the same page.'" },
+  ]}
+/>
+
+Here's a tiny model of the color-banding Lighthouse uses, plus a check on why a single run should
+never be trusted alone -- run the same simulated page three times and watch the score drift with zero
+code changes:
+
+<CodePlayground
+  language="python"
+  title="Run it -- Lighthouse category bands, and why one run lies (Python)"
+  code={`# Lighthouse gives five 0-100 category scores. This bands each score the way
+# the report colours it (green/orange/red), then shows why one lab run is a
+# SAMPLE, not a verdict, by re-scoring the same page across three runs.
+CATEGORIES = {
+    "Performance": 62,
+    "Accessibility": 94,
+    "Best Practices": 83,
+    "SEO": 100,
+    "PWA": 30,
+}
+
+
+def band(score):
+    if score >= 90:
+        return "green -- good"
+    if score >= 50:
+        return "orange -- needs improvement"
+    return "red -- poor"
+
+
+print("Single Lighthouse run:")
+for name, score in CATEGORIES.items():
+    print(f"  {name:14s} {score:3d}  {band(score)}")
+
+# Three lab runs of the SAME page, same code, same day -- scores still drift.
+# This is the lab-data reality: CPU throttling, background tabs, thermal
+# state, even browser cache state all nudge the number a few points.
+perf_runs = [62, 58, 67]
+spread = max(perf_runs) - min(perf_runs)
+print()
+print("Three Performance runs on the SAME build:", perf_runs)
+print("Spread:", spread, "points -- a single run is a sample, not a verdict")
+print("Rule of thumb: run 3-5x, read the MEDIAN, and treat +/-", spread,
+      "as noise, not regression")
+
+# Output:
+# Single Lighthouse run:
+#   Performance     62  orange -- needs improvement
+#   Accessibility   94  green -- good
+#   Best Practices  83  orange -- needs improvement
+#   SEO            100  green -- good
+#   PWA             30  red -- poor
+#
+# Three Performance runs on the SAME build: [62, 58, 67]
+# Spread: 9 points -- a single run is a sample, not a verdict
+# Rule of thumb: run 3-5x, read the MEDIAN, and treat +/- 9 as noise, not regression`}
+/>
+
+Same banding logic in Java -- useful if your team runs Lighthouse via `lighthouse-ci` and pipes scores
+into a Java-based reporting or gating step:
+
+<CodePlayground
+  language="java"
+  title="Run it -- Lighthouse category bands (Java)"
+  code={`import java.util.LinkedHashMap;
+import java.util.Map;
+
+public class Main {
+
+    static String band(int score) {
+        if (score >= 90) return "green -- good";
+        if (score >= 50) return "orange -- needs improvement";
+        return "red -- poor";
+    }
+
+    public static void main(String[] args) {
+        Map<String, Integer> categories = new LinkedHashMap<>();
+        categories.put("Performance", 62);
+        categories.put("Accessibility", 94);
+        categories.put("Best Practices", 83);
+        categories.put("SEO", 100);
+        categories.put("PWA", 30);
+
+        System.out.println("Single Lighthouse run:");
+        for (Map.Entry<String, Integer> e : categories.entrySet()) {
+            System.out.printf("  %-14s %3d  %s%n", e.getKey(), e.getValue(), band(e.getValue()));
+        }
+
+        int[] perfRuns = {62, 58, 67};
+        int max = perfRuns[0], min = perfRuns[0];
+        for (int r : perfRuns) {
+            if (r > max) max = r;
+            if (r < min) min = r;
+        }
+        int spread = max - min;
+
+        System.out.println();
+        System.out.print("Three Performance runs on the SAME build: [");
+        for (int i = 0; i < perfRuns.length; i++) {
+            System.out.print(perfRuns[i] + (i < perfRuns.length - 1 ? ", " : ""));
+        }
+        System.out.println("]");
+        System.out.println("Spread: " + spread + " points -- a single run is a sample, not a verdict");
+        System.out.println("Rule of thumb: run 3-5x, read the MEDIAN, and treat +/- " + spread
+                + " as noise, not regression");
+    }
+}
+
+/* Output:
+Single Lighthouse run:
+  Performance     62  orange -- needs improvement
+  Accessibility   94  green -- good
+  Best Practices  83  orange -- needs improvement
+  SEO            100  green -- good
+  PWA             30  red -- poor
+
+Three Performance runs on the SAME build: [62, 58, 67]
+Spread: 9 points -- a single run is a sample, not a verdict
+Rule of thumb: run 3-5x, read the MEDIAN, and treat +/- 9 as noise, not regression
+*/`}
+/>
+
+<Term define={`Data collected two fundamentally different ways, and Lighthouse only ever gives you one of them. LAB data is what Lighthouse itself measures: a single simulated page load, on your machine, under artificial throttling, in a lab-like controlled environment -- reproducible, debuggable, available instantly for a page nobody has even shipped yet, and completely disconnected from what real users experience on real devices and real networks. FIELD data (also called Real User Monitoring, RUM) is measurements collected from actual visitors' actual browsers in actual conditions -- Google's Chrome User Experience Report (CrUX) is the most common free source, visible inside PageSpeed Insights as the field data section, or your own RUM tooling if the product has it. Field data is truth about real experience but arrives late (it needs real traffic to accumulate, often a 28-day rolling window) and can't be debugged step by step the way a lab trace can. The professional move is triangulation, never either alone: lab data catches regressions fast, before a single real user is affected, and pinpoints WHERE in the code the problem lives; field data confirms whether the lab finding actually matters to real people on real hardware. A page that scores poor in the lab but good in the field might mean your throttling profile is stricter than your actual audience's devices. A page that scores good in the lab but poor in the field usually means something the lab run can't see -- a slow third-party script that field users hit but your lab run's ad-blocker or cache state didn't, or a geography with genuinely worse networks than the lab's simulated one.`}>Lab data vs field data</Term>
+
+<Callout type="tip">
+A fast habit for reading any Lighthouse report without drowning in it: **sort by estimated savings,
+read the top three, ignore the rest for now.** The report already ranks Performance "Opportunities" by
+estimated milliseconds saved -- start there, not at the top of the alphabetical list. And before you
+file anything as a regression, ask "**compared to what, and how many runs?**" A single 71 today versus
+an 84 from a screenshot someone took three weeks ago on a different device profile isn't evidence of
+anything; a median of five runs today versus a median of five runs on the last release, same device
+mode, same network conditions, is.
+</Callout>
+
+<FirstTime title="Your mission: run it, distrust it a little, then act on it">
+<StepChecklist
+  steps={[
+    { text: "Run Lighthouse on a real page, mobile mode, all five categories", detail: "Open DevTools on any page you use daily, go to the Lighthouse panel, select mobile device simulation and all categories, and run it. Note the five scores before reading a single audit -- this is your baseline gut-check, and you're about to test whether that gut-check survives contact with the details." },
+    { text: "Open the audit list and find the actual worst offender", detail: "Under Performance, open 'Opportunities' and sort mentally by estimated savings. Find the single audit costing the most time. That is your headline finding -- not the top-line score, which you now know is a summary of dozens of these." },
+    { text: "Re-run it two more times and note the spread", detail: "Run the same page, same settings, two more times without touching the code. Write down all three Performance scores. If they differ by more than a few points (they usually will), you've just proven to yourself that a single run is a sample -- exactly what the Python playground modeled." },
+    { text: "Cross-check against field data in PageSpeed Insights", detail: "Paste the same URL into PageSpeed Insights (pagespeed.web.dev) if the site has enough real traffic, and look for the 'Discover what your real users are experiencing' section. Compare it to your lab score. Agreement builds confidence; disagreement is itself a finding worth writing down." },
+    { text: "Write one finding with a number attached", detail: "Pick your single worst audit and write it as you would a bug: what it is, the estimated cost in milliseconds, and which category it hurts. 'Render-blocking CSS on /checkout costs an estimated 640ms of LCP (Performance audit, mobile, median of 3 runs)' is a finding a developer can act on in one read." },
+  ]}
+/>
+You've run it, caught it lying to itself across three runs, checked it against reality, and turned a wall of colors into one numbered, evidence-backed finding.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "The score swings 15+ points between runs with zero code changes.",
+      fix: "Normal lab-data noise, not a bug -- background tabs, other apps competing for CPU, thermal throttling on a warm laptop, and even browser extensions running in the profile all shift timing. Close other tabs and apps, run 3-5 times, and report the MEDIAN, not a single run. If you need tighter reproducibility, run Lighthouse from the command line (lighthouse-ci) on a dedicated, idle machine or in CI.",
+    },
+    {
+      symptom: "Lighthouse says Performance is great, but users are reporting the page feels slow.",
+      fix: "Classic lab-vs-field mismatch. Lighthouse's simulated throttling may be more generous than your actual user base's real devices and networks -- especially if a large chunk of users are on older phones or weaker connections than the default mobile profile assumes. Pull field data (CrUX via PageSpeed Insights, or your own RUM) for the same URL and trust that over the lab number when they disagree; it's measuring the people who actually complained.",
+    },
+    {
+      symptom: "The score tanks after a change nobody thinks touched performance.",
+      fix: "Check what actually shipped, not what was intended -- a new analytics snippet, an unoptimized hero image, a font that isn't preloaded, or a third-party embed (chat widget, ad script) are the usual silent culprits. Open the audit list, find which specific audit regressed, and trace it to a commit. 'Performance dropped' is not a finding; 'Total Blocking Time regressed because a new chat-widget script now runs on load' is.",
+    },
+    {
+      symptom: "A stakeholder is treating the overall score as a KPI to hit, ignoring which audits are behind it.",
+      fix: "Redirect the conversation from the number to the user-facing metrics underneath it, especially Core Web Vitals (covered in this chapter's Performance panel note) -- those map to real experience, and a page can be optimized to game an aggregate score without actually getting faster for users. Propose tracking field-data Core Web Vitals against Google's published thresholds instead of a lab score alone; it's harder to game and it's literally what search ranking cares about.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Lighthouse earns its keep at very specific moments in the testing cycle, not as a constant background hum:
+
+- **Before and after any perceptible perf change** -- a new library, an image-heavy redesign, a third-party script addition. Run it before, run it after, compare medians of 3+ runs, same device mode.
+- **On the pages that actually matter to the business** -- checkout, signup, the primary landing page. A 98 on a static about page is not news; a 45 on checkout is a revenue conversation.
+- **Whenever a "performance regression" is reported informally** -- someone says a page "feels slower." Run Lighthouse first to see if there's a lab signal at all before spending time on deeper investigation (the next note in this chapter covers what to do when there isn't one yet).
+- **In CI, on every PR, if the team has lighthouse-ci wired up** -- catching a regression at PR time is dramatically cheaper than catching it after it ships, and a CI run controls for the noise a manual run can't (same machine, same throttling, every time).
+- **Cross-checked against PageSpeed Insights field data periodically** -- monthly is plenty for most teams -- to make sure the lab number and the real-user number haven't drifted apart, which is itself a signal something about the audience or the environment has changed.
+
+Tester's habit: **a Lighthouse score is a claim about a moment, not a fact about the product.** Treat
+every number as an invitation to open the audit list, not a headline to repeat.
+</WhereToCheck>
+
+<WorkedExample title="the score that dropped and the ticket that almost blamed the wrong thing">
+1. **The report:** a teammate posts a screenshot in the team channel: "Lighthouse Performance just dropped from 88 to 61 on the pricing page, did someone break something in the release?" Panic tone, no other detail.
+2. **The tester's first move, before touching code:** re-run Lighthouse three times on the current build, mobile mode, same throttling as the screenshot claims to have used. Scores come back 63, 60, 65 -- a consistent drop, not noise. Good, there's a real signal here.
+3. **Open the audit list instead of arguing about the headline number.** The top "Opportunity" by estimated savings is new: "Reduce unused JavaScript," pointing at a bundle that wasn't flagged before. Total Blocking Time has also jumped.
+4. **Trace the bundle.** A recent PR added a full analytics SDK to every page, including pricing, when it was only meant to load on the checkout flow -- a routing condition was missed. The SDK is large, parses synchronously, and blocks the main thread right when Lighthouse measures interactivity.
+5. **Cross-check field data before filing.** PageSpeed Insights' field-data section for the pricing URL shows Interaction to Next Paint also degrading in the last week's real-user window -- confirming this isn't just a lab artifact, real visitors are feeling it too.
+6. **The finding gets written with numbers, not adjectives:** "Pricing page Performance dropped from a median of 87 to 62 (mobile, 3 runs) after PR #482. Root cause: analytics SDK now loads on /pricing instead of only /checkout, adding ~180KB of blocking JS (Lighthouse 'Reduce unused JavaScript' audit). Field data (CrUX, PageSpeed Insights) confirms Interaction to Next Paint regressed for real users in the same window. Fix: scope the SDK load to the checkout route only."
+7. **The fix ships, and the score is verified, not assumed** -- a follow-up run confirms it lands back near 86-89, and field data is checked again a week later once enough real traffic accumulates.
+8. **The lesson for a tester.** The instinct to blame "the release" in general was right in spirit and useless in practice; the audit list turned a vague panic into a specific, fixable, verifiable root cause -- and checking field data before filing kept the report honest about whether this mattered beyond one machine's lab run.
+</WorkedExample>
+
+<Callout type="mistake">
+Treating the top-line score as the finding. "Performance is 61, please fix" tells a developer
+nothing about where to look, how much it costs, or whether it's even real versus lab noise from a
+warm laptop. It also invites the worst possible response: someone "optimizes" for the number instead
+of the user, deferring a script or lazy-loading something in a way that games the specific audit
+without improving anything a real visitor feels. The score is the smoke detector, not the fire report
+-- always open the audit list, name the specific offending item, attach an estimated cost, and where
+possible confirm it against field data before it goes in a ticket. A tester who reports numbers gets
+believed; a tester who reports adjectives gets re-checked.
+</Callout>
+
+<Quiz
+  question="A page scores Performance 58 in one Lighthouse run and 71 in another, five minutes later, with no code changes in between. What's the correct next step?"
+  options={[
+    "Run it several more times, report the median, and treat the roughly 13-point spread as normal lab-data noise rather than a real regression or improvement",
+    "Trust the higher score of 71 since it's more flattering and closer to the passing threshold",
+    "Trust the lower score of 58 since testers should always report the worst-case number to be safe",
+    "File a bug immediately titled 'Lighthouse is broken' since a consistent tool should not produce different numbers for the same page"
+  ]}
+  answer={0}
+  explain="Lighthouse's lab data is a single simulated run under throttled conditions on a real, shared machine -- background processes, thermal state, and even browser profile differences nudge the timing every run, which is exactly the spread the Python and Java playgrounds modeled. The professional response to run-to-run noise is more runs and a median, not picking whichever single number tells the story you want. Always trusting the higher score would hide real regressions; always trusting the lower score would manufacture false alarms and burn credibility for no reason. And the tool isn't broken -- variance between individual lab runs is expected behavior, not a defect; the actual bug-worthy signal is a median that has shifted, confirmed across several runs, ideally cross-checked against field data."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The five Lighthouse categories", back: "Performance (speed/Core Web Vitals), Accessibility (automated a11y checks), Best Practices (security/code smells), SEO (crawlability), and PWA (installability/offline). Each scores against its OWN fixed rubric -- never average them into one health number." },
+    { front: "Score vs audit list", back: "The 0-100 score is a weighted summary of dozens of individual audits. The score tells you WHERE to look; the audit list tells you WHAT is actually wrong and roughly how much it costs. Always report the audit, never just the number." },
+    { front: "Lab data vs field data", back: "Lab = one simulated Lighthouse run, fast and debuggable but disconnected from reality. Field = real users' real devices (CrUX/RUM), slower to arrive but true. Triangulate both; never trust lab alone for a shipped-and-trafficked page." },
+    { front: "Why scores vary run to run", back: "Background CPU load, thermal throttling, browser profile state, and network jitter all nudge lab timing. A single run is a sample. Run 3-5x, compare medians, and treat small swings as noise rather than regressions." },
+    { front: "Mobile vs desktop mode", back: "Lighthouse's default is a simulated mid-tier mobile CPU on a throttled connection -- deliberately pessimistic and closer to a real broad audience than a fiber-connected laptop. Always state which mode a score came from; the two are not comparable." },
+    { front: "The one-sentence tester habit", back: "A Lighthouse score is a claim about a moment, not a fact about the product -- open the audit list, name the specific offender, attach an estimated cost, and cross-check against field data before it goes in a ticket." },
+  ]}
+/>
+
+<Challenge>
+Pick any page you use often. (1) Run Lighthouse in mobile mode, all categories, three times, and
+record the Performance score each time -- note the spread. (2) Open the Opportunities list and name
+the single audit with the highest estimated savings; write down its exact wording and the estimated
+milliseconds. (3) Check PageSpeed Insights for the same URL and see whether field data is available;
+if it is, note whether Core Web Vitals there agree with your lab run's implied experience. (4) Write
+one finding, the way you'd file it: page, mode, median score across your runs, the specific worst
+audit, its estimated cost, and (if you got field data) whether it's confirmed beyond the lab. Finish
+with one sentence: what did opening the audit list tell you that the top-line score alone didn't?
+</Challenge>
+
+<AskCommunity prompt="Lighthouse read: I ran `[page/URL]` in `[mobile/desktop]` mode, `[N]` times, scores were `[list of scores]`. Top Opportunity by estimated savings: `[audit name, estimated ms]`. Field data (PageSpeed Insights/CrUX) for the same URL: `[agrees / disagrees / not enough traffic to show]`. Is this worth filing, and at what severity?">
+The two questions that settle most Lighthouse debates: is the lab signal consistent across several
+runs (not a one-off), and does field data agree with it? A consistent lab drop with no field data yet
+(brand-new page, low traffic) is still worth filing as a lab-confirmed regression -- just say so
+explicitly, so nobody mistakes it for confirmed real-user impact it hasn't earned yet.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.chrome.com/docs/lighthouse/overview", title: "Chrome Developers -- Lighthouse overview and how scoring works", kind: "read" },
+    { href: "https://developer.chrome.com/docs/lighthouse/performance/performance-scoring", title: "Chrome Developers -- how the Performance score is calculated and weighted", kind: "read" },
+    { href: "https://pagespeed.web.dev/", title: "PageSpeed Insights -- lab AND field data for any public URL, side by side", kind: "read" },
+    { href: "https://developer.chrome.com/docs/crux", title: "Chrome UX Report (CrUX) -- the real-user field-data source behind PageSpeed Insights", kind: "read" },
+  ]}
+/>
+
+<Video href="PLACEHOLDER" title="PLACEHOLDER -- Reading a Lighthouse report like a tester, not a scoreboard" minutes={8} />
+
+<Takeaways
+  points={[
+    "Lighthouse's five categories (Performance, Accessibility, Best Practices, SEO, PWA) each score against a fixed rubric -- never average them into one health number, and always state which device mode a score came from.",
+    "The 0-100 score is a summary of dozens of individual audits; the score says WHERE to look, the audit list says WHAT is wrong and roughly what it costs. Report the audit, not just the number.",
+    "Lab data (Lighthouse itself) is fast, debuggable, and disconnected from reality; field data (CrUX/RUM) is slow to arrive but true. Triangulate both before trusting a finding for a live, trafficked page.",
+    "A single run is a sample, not a verdict -- background load, thermal state, and browser profile all cause run-to-run drift. Run 3-5 times and compare medians before calling anything a regression.",
+    "The professional habit: sort by estimated savings, name the specific worst audit, attach a number, and cross-check field data -- turning a wall of colored gauges into one evidence-backed finding a developer can act on.",
+  ]}
+/>
+
+<Complete xp={10} />

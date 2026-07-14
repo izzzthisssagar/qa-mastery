@@ -1,0 +1,365 @@
+---
+title: "Slow 3G and offline mode"
+summary: "DevTools network throttling (presets, custom profiles, the offline checkbox) turns your gigabit office connection into whatever your users actually have. What it exposes: forever-spinners, double-submits, and race conditions no fast network ever triggers."
+tags: ["browser-devtools-mastery", "throttling-and-emulation", "track-c"]
+updated: "2026-07-14"
+---
+
+<Hook>
+You built the checkout flow on office fibre, tested it on office fibre, and shipped it feeling
+great about office fibre. Somewhere in the world right now a real customer is on a train, on
+one bar of 3G, tapping "Pay now" for the second time because the first tap didn't visibly do
+anything. You will never meet that customer. DevTools network throttling is how you meet them
+anyway — a dial in the Network panel that turns your machine's excellent connection into their
+mediocre one, on purpose, before they find the bug for you. This chapter is about that dial: the
+presets, the custom profiles, the offline checkbox, and the three bug species — forever-spinners,
+double-submits, race conditions — that only show up once the network stops being instant.
+</Hook>
+
+<Callout type="analogy">
+Hospitals train medical students with an **age-simulation suit**: weighted joints, fogged
+goggles, gloves that dull touch. Nothing is actually wrong with the student — the suit
+*manufactures* the experience of a body that doesn't respond instantly, so they learn what
+"reach for the railing" actually costs before a real patient teaches them. Network throttling is
+the same trick aimed at the other end of your stack. Your laptop is not slow; you make it *act*
+slow, on purpose, so you feel what a two-second gap between tap and response does to a real
+person's patience, thumb, and trust. The suit doesn't change the student's body. Throttling
+doesn't change your code. Both just remove the unfair advantage of testing in ideal conditions.
+</Callout>
+
+<Term define="Chrome DevTools' Network panel feature that deliberately caps download and upload throughput and adds artificial latency to every request the page makes, simulating a slower connection on hardware that is not actually slow. Built-in presets (labelled things like Fast 4G, Slow 4G, 3G) apply fixed download/upload speeds plus a latency figure in milliseconds; a Custom profile lets you set your own numbers, and an Offline option fails every request outright. It only throttles requests from that browser tab - it does not touch your real network, your other tabs, or anyone else's connection. The point is not to make your machine slower for its own sake; it is to make the SAME build behave the way it will for a user whose connection you don't control, so you find the failures before they do.">Network throttling</Term>
+
+## Presets, and when to build your own
+
+Open DevTools, go to the Network panel, and the throttling dropdown (top toolbar, usually reads
+"No throttling") has a handful of built-in presets. Exact names drift between Chrome versions —
+you'll see some combination of "Fast 4G", "Slow 4G", "3G" and older builds still show "Fast 3G" /
+"Slow 3G" — but the shape is always the same: each preset fixes a download speed, an upload speed,
+and an added latency in milliseconds, then applies all three to every request the page makes.
+"Slow 4G" is a reasonable stand-in for a crowded urban network; "3G" or "Slow 3G" is closer to a
+rural signal or a packed train car — download speeds low enough that a single unoptimised hero
+image can take several seconds on its own.
+
+Presets are a starting point, not the whole job. The **Custom profile** option (in the same
+dropdown, "Add custom profile...") lets you set your own download kbps, upload kbps, and latency
+ms — worth doing when your actual user base skews toward a condition no preset captures: a support
+team in a region with high latency but decent bandwidth (satellite links), or a market where
+uploads are throttled far harder than downloads (common on capped mobile plans). The **Offline**
+checkbox is the blunt instrument: every request fails immediately, simulating a dropped connection
+mid-session, not just a slow one. If your app has a service worker, an offline banner, or any
+"you're offline" messaging, this checkbox is the only realistic way to test it without leaving the
+building.
+
+This is the same "same build, different conditions" idea you met with environment variables — a
+`PAYMENT_MODE=live` note taped to one server made an identical binary behave differently. Network
+throttling tapes a different note onto your browser tab: same HTML, same JavaScript, same
+database — a different connection, and suddenly a different app. The code never changes. The
+conditions do. That gap is where an entire bug class lives, and almost nobody tests it because
+their own desk connection is excellent.
+
+<HotspotImage
+  src="/notes/browser-devtools-mastery/throttling-and-emulation/PLACEHOLDER-network-throttling-panel.jpg"
+  alt="Chrome DevTools Network panel with the throttling dropdown open, showing preset options and a custom profile entry, plus the offline checkbox nearby"
+  credit="Photo: PLACEHOLDER - replace with a screenshot of the DevTools Network panel throttling dropdown expanded, showing presets and the Add custom profile option"
+  pins={[
+    { x: 50, y: 50, label: "The throttling dropdown", desc: "Defaults to No throttling, meaning your test ran on your real (probably excellent) connection the entire time. Every demo you've ever given ran here. Every user complaint you've ever dismissed as 'works for me' probably didn't." },
+    { x: 50, y: 50, label: "A named preset", desc: "Fixed download speed, upload speed, and latency in milliseconds, applied to every request from this tab only. Good enough for a first pass; not a substitute for knowing your actual user distribution." },
+    { x: 50, y: 50, label: "Add custom profile", desc: "Set your own numbers when a preset doesn't match reality: high latency with decent bandwidth, or uploads far worse than downloads. Worth building once and reusing across every session." },
+    { x: 50, y: 50, label: "The Offline checkbox", desc: "Every request fails immediately - not slow, gone. The only realistic way to test offline banners, service-worker caching, and 'connection lost' messaging without physically leaving Wi-Fi range." },
+    { x: 50, y: 50, label: "Applies per tab, resets on reload", desc: "Throttling lives with the DevTools session for that tab; it does not follow you to a new tab and some setups reset it on a hard reload. Re-check it's still active before trusting a long test run." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One click, three ways it can go wrong on a slow network - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "The user taps Pay now", desc: "On your desk, on fibre, this button responds in under 100 milliseconds and everyone moves on. Throttled to Slow 4G or worse, the same tap can take two, three, five seconds before ANYTHING visible happens - the request is genuinely still in flight, not broken." },
+    { label: "Nothing visible happens", desc: "If the button gave no immediate feedback - no spinner, no disabled state - the user has no way to know the tap registered. From where they're sitting, the button might just be broken. This single missing signal is the root of most of what follows." },
+    { label: "The user taps again", desc: "A reasonable human response to an unresponsive button is to press it again. If the button wasn't disabled after the first tap, this second tap fires a SECOND request - a double-submit, and on a payment button that can mean a second charge." },
+    { label: "Two responses race back", desc: "Two in-flight requests on a slow, variable connection do not necessarily finish in the order they were sent. If the UI blindly applies whichever response arrives LAST, an older, stale result can silently overwrite a newer one - a race condition with no error anywhere in the logs." },
+    { label: "What should have happened", desc: "Disable the button (or show a spinner) the instant the tap registers, ignore or cancel duplicate submissions, and tag each response with its request so a stale one can be discarded on arrival. None of this is visible on a fast network, because nothing is ever slow enough to expose the gap." },
+  ]}
+/>
+
+Here's the tax throttling makes visible: three sequential API calls, timed under four different
+connection profiles, no code changed at all — only the simulated conditions:
+
+<CodePlayground
+  language="python"
+  title="Run it - the same three requests, four network conditions (Python)"
+  code={`import time
+
+# Each entry: (download_kbps, upload_kbps, added_latency_ms) - matches
+# DevTools' own throttling model: a fixed extra delay per request, plus
+# a size-based transfer time.
+PROFILES = {
+    "No throttling": (999999, 999999, 2),
+    "Fast 4G":       (9000,   9000,   40),
+    "Slow 4G":       (1600,   750,    150),
+    "Slow 3G":       (400,    200,    400),
+}
+
+# Three sequential calls a real login flow makes: auth, profile, dashboard.
+# Sizes are in kilobits, chosen to be realistic-ish for JSON responses.
+REQUESTS = [
+    ("POST /login",        6),
+    ("GET /profile",       14),
+    ("GET /dashboard-feed", 180),
+]
+
+def simulate(profile_name):
+    download_kbps, upload_kbps, latency_ms = PROFILES[profile_name]
+    total_ms = 0.0
+    for name, size_kb in REQUESTS:
+        transfer_ms = (size_kb / download_kbps) * 1000
+        request_ms = latency_ms + transfer_ms
+        total_ms += request_ms
+        print("  " + name + ": " + str(round(request_ms, 1)) + "ms")
+    print(profile_name + " -- total sequential load time: " + str(round(total_ms, 1)) + "ms")
+    print()
+    return total_ms
+
+results = {}
+for profile in PROFILES:
+    results[profile] = simulate(profile)
+
+fastest = results["No throttling"]
+slowest = results["Slow 3G"]
+print("Slow 3G is " + str(round(slowest / fastest, 1)) + "x slower than no throttling,")
+print("for the EXACT same three requests. Nothing about the app changed - only the conditions.")
+
+# No throttling:  ~2ms x 3 requests, total under 10ms
+# Fast 4G:        auth ~41ms, profile ~42ms, dashboard-feed ~60ms, total ~143ms
+# Slow 4G:        auth ~154ms, profile ~159ms, dashboard-feed ~570ms, total ~883ms
+# Slow 3G:        auth ~415ms, profile ~435ms, dashboard-feed ~1300ms, total ~2150ms
+# Slow 3G is roughly 200x-300x slower than no throttling for the identical flow.`}
+/>
+
+Timing shows *why* users wait. The next one shows what happens when they get tired of waiting —
+a Java simulation of the double-submit bug from the FlowAnimation, once broken and once fixed:
+
+<CodePlayground
+  language="java"
+  title="Run it - double-submit on a slow connection, broken then fixed (Java)"
+  code={`import java.util.concurrent.atomic.AtomicInteger;
+
+public class Main {
+
+    // Simulates a slow, throttled network request: sleeps, then "charges" the card.
+    static void chargeCard(AtomicInteger chargeCount, String label) {
+        try {
+            Thread.sleep(500); // Slow 3G-ish delay before the server responds
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        int count = chargeCount.incrementAndGet();
+        System.out.println(label + " -- charge #" + count + " processed");
+    }
+
+    public static void main(String[] args) throws InterruptedException {
+        System.out.println("--- BROKEN: button stays clickable while the request is in flight ---");
+        AtomicInteger brokenCharges = new AtomicInteger(0);
+        // User taps twice, 150ms apart, because nothing on screen told them the first tap worked
+        Thread firstTap = new Thread(() -> chargeCard(brokenCharges, "tap 1"));
+        firstTap.start();
+        Thread.sleep(150);
+        Thread secondTap = new Thread(() -> chargeCard(brokenCharges, "tap 2 (impatient re-tap)"));
+        secondTap.start();
+        firstTap.join();
+        secondTap.join();
+        System.out.println("Total charges: " + brokenCharges.get() + " -- customer billed twice.");
+        System.out.println();
+
+        System.out.println("--- FIXED: a submitted flag guards every tap after the first ---");
+        AtomicInteger fixedCharges = new AtomicInteger(0);
+        final boolean[] submitted = { false };
+        Runnable guardedTap = () -> {
+            synchronized (submitted) {
+                if (submitted[0]) {
+                    System.out.println("tap ignored -- already submitted, button was disabled");
+                    return;
+                }
+                submitted[0] = true;
+            }
+            chargeCard(fixedCharges, "guarded tap");
+        };
+        Thread guarded1 = new Thread(guardedTap);
+        guarded1.start();
+        Thread.sleep(150);
+        Thread guarded2 = new Thread(guardedTap);
+        guarded2.start();
+        guarded1.join();
+        guarded2.join();
+        System.out.println("Total charges: " + fixedCharges.get() + " -- customer billed once.");
+    }
+}
+
+// --- BROKEN: button stays clickable while the request is in flight ---
+// tap 1 -- charge #1 processed
+// tap 2 (impatient re-tap) -- charge #2 processed
+// Total charges: 2 -- customer billed twice.
+//
+// --- FIXED: a submitted flag guards every tap after the first ---
+// tap ignored -- already submitted, button was disabled
+// guarded tap -- charge #1 processed
+// Total charges: 1 -- customer billed once.`}
+/>
+
+<Callout type="tip">
+Before you throttle anything, throttle deliberately for at least sixty seconds of real use, not
+one page load. Set Slow 4G (or Slow 3G for a harder test), then actually shop, actually fill the
+form, actually wait through the pauses without clicking anything twice out of habit. The bugs in
+this chapter don't live in a single request's timing chart — they live in what a bored, impatient
+human does during the gap. You have to feel the gap to find the bug it creates.
+</Callout>
+
+<FirstTime title="Your mission: throttle a real flow until it breaks">
+<StepChecklist
+  steps={[
+    { text: "Set a preset and watch a page load", detail: "DevTools Network panel, throttling dropdown, pick Slow 4G. Hard-reload a real page you use daily. Time how long before it feels usable, not just before the spinner disappears - those are often different moments." },
+    { text: "Build a custom profile", detail: "Add custom profile with a high latency (600ms) but decent bandwidth (a satellite-link approximation), separately from a low-bandwidth-but-low-latency one. Load the same page under both and notice they FEEL different even if total load time is similar." },
+    { text: "Hunt the forever-spinner", detail: "Throttle to Slow 3G and trigger a network call that might not have a timeout (a form submit, a search). If the spinner runs well past ten seconds with no fallback message, you've found the forever-spinner bug in the wild." },
+    { text: "Try to double-submit yourself", detail: "On Slow 3G, click a submit button twice, quickly, the way an impatient real user would. Check the network tab for two identical outgoing requests. If you see two, the app has no client-side guard - and neither does its server, probably." },
+    { text: "Flip Offline mid-session", detail: "Load a page fully, THEN check the Offline box and try to interact with it - submit a form, navigate, refresh. Real users lose connection mid-task far more often than they start already offline; make sure your app has an opinion about it." },
+  ]}
+/>
+You've felt the load-time tax, hunted a forever-spinner, tried to double-submit on purpose, and pulled the plug mid-session - the three failure modes this chapter is built around, found by hand.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A spinner runs forever on a slow connection and never resolves, on either success or failure.",
+      fix: "No request timeout exists in the code, so a slow response and a hung one look identical to the UI - it just waits. Add an explicit timeout with an AbortController (fetch) or a client timeout config, and design a real 'this is taking longer than expected, retry?' state instead of an infinite spinner. Test it by throttling hard enough that the timeout actually fires.",
+    },
+    {
+      symptom: "Clicking submit twice on a slow network creates two orders, two charges, or two support tickets.",
+      fix: "The button stayed clickable (and the form stayed submittable) for the entire round trip. Disable the button - or swap it for a spinner - the instant the first tap registers, before the network call even starts. Belt-and-braces: the server should also reject or dedupe a second identical submission within a short window, because client-side guards can be bypassed or simply fail to run.",
+    },
+    {
+      symptom: "A fast typeahead search shows results for an OLDER query after a newer one was typed.",
+      fix: "This is the race condition from the FlowAnimation: two requests in flight, and the UI applies whichever response arrives last, not whichever was sent last. Tag each request (a counter or the query string itself) and discard any response that doesn't match the current input value when it lands. Reproduce it by throttling and typing fast - a fast connection rarely lets the race finish in the 'wrong' order.",
+    },
+    {
+      symptom: "The offline banner never appears, or appears and never goes away even after reconnecting.",
+      fix: "Most apps either don't listen for the browser's online/offline events at all, or they set the banner state once and never re-check it. Verify the app actually listens for both directions of the transition, then confirm with DevTools: check Offline mid-session (banner should appear), uncheck it (banner should clear), and don't just trust a demo recorded once by the developer who wrote the happy path.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where throttling earns its keep, in order of how often it finds something:
+
+- **Every submit button that triggers money, data changes, or a support ticket** — throttle, then try to click it twice on purpose. If you can, so can your users, by accident.
+- **Anything with a spinner and no visible timeout** — throttle hard and just wait. A spinner that never resolves either way is a bug, not a loading state.
+- **Typeahead, live search, autosave — anything that fires a request per keystroke or edit** — throttle and type fast. Out-of-order responses are a race condition wearing a UI costume.
+- **Offline banners, service-worker caching, "you're back online" messaging** — the Offline checkbox, flipped mid-session, not just at page load. Real disconnects happen mid-task.
+- **Multi-step flows (checkout, onboarding, multi-page forms)** — throttle the whole flow, not one page. A single slow page is a nuisance; five slow pages in a row is where users actually abandon.
+
+Tester's habit: **your desk connection is not a test environment, it's a blind spot.** Anything
+that assumes a fast round trip — no timeout, no disabled state, no request tagging — is invisible
+on fibre and inevitable on 3G. Throttle before you sign off, every time, the way you'd check a
+form on mobile before calling responsive design "done".
+</WhereToCheck>
+
+<WorkedExample title="the checkout that charged people twice, only on bad Wi-Fi">
+1. **The report:** a support ticket pattern, not a crash — a slow but steady trickle of customers
+   billed twice for one order, always for the same total, always resolved by a manual refund. No
+   error logs, no exceptions, no obvious repro on the support team's fast office connection.
+2. **The tester's first move:** stop trying to repro on fibre. Open DevTools, throttle to Slow
+   3G, load the checkout page, and just try to buy something the way an impatient person would —
+   including clicking "Pay now" a second time when nothing visibly happened after the first tap.
+3. **It reproduces immediately.** The Network tab shows two identical POST requests to
+   `/api/charge`, roughly 400 milliseconds apart — exactly the gap between an unresponsive button
+   and a second, understandable tap.
+4. **Reading the button's code** confirms the mechanism: the click handler starts the request but
+   never disables the button or shows a busy state. On a fast connection the round trip is so
+   quick a second click is nearly impossible to land in the window. On Slow 3G, that window is
+   nearly a full second — plenty of time for a real, frustrated thumb.
+5. **The server side makes it worse.** `/api/charge` has no idempotency check — it charges
+   whatever it's told, every time it's told. Two identical requests, two identical charges,
+   zero errors anywhere to flag it.
+6. **The fix is two layers**, matching the guarded Java example earlier: the button disables
+   itself the instant the first tap registers (client-side, fast, imperfect), and the charge
+   endpoint gains an idempotency key so a duplicate submission within a short window is a no-op
+   server-side (the layer that actually can't be bypassed).
+7. **The regression test that gets written:** throttle to Slow 3G in the automated suite, submit
+   the form twice in quick succession, assert exactly one charge exists. That test would have
+   caught this before a single customer did.
+8. **The tester's lesson.** "Works every time on our office network" was true and irrelevant — the
+   bug's entire trigger condition was network speed, which the team's own test environment never
+   varied. A bug that only reproduces under specific timing is not rare; it's just untested at the
+   timing that exposes it.
+</WorkedExample>
+
+<Callout type="mistake">
+Testing exclusively on your own connection and calling a flow "done" because it felt instant. Your
+desk Wi-Fi (or wired connection, if you're one of the disciplined few) is not representative of
+anyone — not your actual users, not the train commuter, not the person in a region with patchy
+coverage. A form that behaves perfectly at sub-second round trips can double-submit, race, or
+spin forever the moment that round trip stretches past a second — and every one of those failures
+is invisible until you deliberately make your own connection worse. Throttling isn't an edge case
+you get to when you have time. It's the test environment most of your users are actually in.
+</Callout>
+
+<Quiz
+  question="A submit button fires an API call and shows no loading state. On your fast office connection it never causes problems. What's the most likely reason, and what should you test?"
+  options={[
+    "There is no problem - if it works on a fast connection it works everywhere",
+    "The round trip is so quick on a fast connection that a second click almost never lands inside the request's open window; throttle to Slow 3G/4G and try to click it twice on purpose to see if it double-submits",
+    "The button's HTML is broken and needs a code review, not a network test",
+    "Fast connections mask memory leaks, which is the real underlying bug"
+  ]}
+  answer={1}
+  explain="A missing loading/disabled state is a latent bug that a fast round trip simply never has time to expose - the window between tap and response is too small for a human to land a second click inside it. Slow the connection down and that window widens to hundreds of milliseconds or more, which is exactly enough time for an impatient, reasonable person to tap again. The first option is the classic mistake this chapter is about: fast-network success proves nothing about slow-network behaviour. The button's HTML being 'broken' isn't indicated by anything in the scenario, and memory leaks are an unrelated failure mode - the described symptom (no loading state, works fast, might not work slow) points specifically at a timing-dependent double-submit, which throttling is the direct tool to expose."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Network throttling - what it actually does", back: "Caps download/upload speed and adds latency to every request from one browser tab, simulating a slower real connection on fast hardware. Presets (Fast 4G, Slow 4G, 3G) are starting points; Custom profiles set your own numbers; Offline fails every request outright." },
+    { front: "Forever-spinner", back: "A loading state with no timeout and no fallback UI. On a fast connection it resolves before anyone notices the gap; on a slow one it can spin indefinitely because nothing in the code ever gives up and says so." },
+    { front: "Double-submit", back: "A user taps submit twice because the first tap gave no visible feedback during a slow round trip. Fix in two layers: disable the button client-side on first tap, AND make the server endpoint idempotent so a duplicate request is a no-op." },
+    { front: "Race condition (in-flight requests)", back: "Two requests sent in order don't necessarily ARRIVE in order on a slow, variable connection. A UI that blindly applies whichever response lands last can display stale data over fresh data. Fix by tagging requests and discarding out-of-date responses on arrival." },
+    { front: "The Offline checkbox", back: "Fails every request immediately - simulates a dropped connection, not just a slow one. The only realistic way to test offline banners and service-worker behaviour without physically losing Wi-Fi. Test it mid-session, not just at page load." },
+    { front: "Why throttling matters for testers specifically", back: "Same build, different network conditions, different behaviour - the same 'environment changes the outcome' idea as environment variables and Wi-Fi jitter. Your desk connection is a blind spot, not a test environment; throttle before signing off any flow that submits data." },
+  ]}
+/>
+
+<Challenge>
+Pick any form on a site you use (or one of your own). (1) Throttle to Slow 3G and load it fresh —
+time how long before it's actually usable, not just visually present. (2) Try to submit it twice
+in under a second; check the Network tab for duplicate requests. (3) Load it fully, then flip
+Offline and try to submit — note exactly what happens (nothing? a cryptic error? a graceful
+message?). (4) Write one sentence describing what a real user on a train would experience across
+all three steps, and one sentence describing what SHOULD happen instead.
+</Challenge>
+
+<AskCommunity prompt="Throttling bug: on [Slow 3G / Slow 4G / custom profile], [flow name] does [double-submits / spins forever / shows stale data / ignores offline]. Repro steps: [exact clicks/taps and timing]. Network tab shows: [number and timing of requests]. Fast-connection behaviour: [fine / also broken]. Server-side idempotency: [present / absent / not sure].">
+Name the profile, the exact repro timing, and what the Network tab actually shows — most
+throttling bugs are a missing disabled-state, a missing timeout, or a missing idempotency check,
+and the request timeline usually points straight at which one before anyone reads a line of code.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.chrome.com/docs/devtools/network/#throttle", title: "Chrome DevTools — network throttling and custom profiles", kind: "read" },
+    { href: "https://web.dev/articles/vitals", title: "web.dev — Core Web Vitals and why real-world conditions matter", kind: "read" },
+    { href: "https://developer.mozilla.org/en-US/docs/Web/API/Navigator/onLine", title: "MDN — navigator.onLine and the online/offline events", kind: "read" },
+    { href: "PLACEHOLDER", title: "PLACEHOLDER video - throttling a real checkout flow until it breaks", kind: "video" },
+  ]}
+/>
+
+<Video url="PLACEHOLDER" title="Throttling a real checkout flow until it breaks" minutes={6} />
+
+<Takeaways
+  points={[
+    "Network throttling caps speed and adds latency to one tab's requests, simulating a real user's connection on your fast machine - presets for a quick check, custom profiles when a preset doesn't match reality, Offline for a hard-dropped connection.",
+    "Three bug species only a slow connection exposes: forever-spinners (no timeout), double-submits (no disabled state during the request), and race conditions (out-of-order responses overwriting fresh data with stale data).",
+    "The fix pattern repeats: disable/spin on first tap, timeout with a real fallback state, tag requests so stale responses can be discarded, and back client-side guards with a server-side idempotency check that can't be skipped.",
+    "This is the same 'same build, different conditions, different behaviour' story as environment variables and Wi-Fi jitter - the code never changes, only the conditions, and the conditions are where the bug was hiding the whole time.",
+    "Your desk connection is a blind spot, not a test environment - throttle deliberately, for a full flow and at least sixty seconds, before calling any data-submitting feature done.",
+  ]}
+/>
+
+<Complete xp={10} />
