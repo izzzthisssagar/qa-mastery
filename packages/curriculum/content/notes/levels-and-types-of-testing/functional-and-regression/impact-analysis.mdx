@@ -1,0 +1,346 @@
+---
+title: "Impact analysis"
+summary: "Before testing a change, map what else it could touch: dependencies, shared components, data flows. Impact analysis scopes a regression suite by risk instead of rerunning everything - the formal name for blast-radius thinking."
+tags: ["levels-and-types-of-testing", "functional-and-regression", "track-c"]
+updated: "2026-07-14"
+---
+
+<Hook>
+A one-line change lands: a shipping-cost function gets a new rounding rule. The pull request is tiny,
+the ticket is tiny, and the instinct is to test tiny - check the shipping total on checkout, ship it.
+Except that function also feeds the invoice PDF, the refund calculator, and a nightly reconciliation
+report that finance runs against the payment processor's numbers. None of that is visible from the
+diff. None of it is mentioned in the ticket. And none of it gets tested if the only question anyone
+asks is "does checkout still work?" The question that actually matters - and the one most testers
+skip under deadline pressure - is asked *before* a single test case gets written: what else could
+this change reach? That question has a name, and skipping it is how a one-line fix becomes a
+month-end reconciliation incident nobody saw coming.
+</Hook>
+
+<Callout type="analogy">
+Before a city closes one street for repaving, traffic engineers don't just look at that street - they
+model where the traffic *currently on it* will go instead. Which side streets will absorb the
+overflow? Which intersections, three blocks away, are about to see triple their normal load? Which
+bus routes need a detour published before, not after, commuters are stranded? Skipping that modeling
+doesn't make the impact disappear - it just means the city discovers it live, through gridlock and
+angry calls, instead of on a map beforehand. Testing a code change works the same way: the change
+itself is the closed street. Everything downstream of it - features, data, other developers' code -
+is traffic that has to go *somewhere*, whether or not anyone mapped where in advance.
+</Callout>
+
+<Term define="The practice of identifying, before testing begins, everything a proposed change could plausibly affect: other features, shared code, data flows, integrations, and downstream consumers of anything the change touches. Impact analysis is the formal name for what testers informally call blast-radius thinking - it turns 'what should I test?' from a guess into a traceable map, and its output directly sets the SCOPE of the regression suite that follows.">impact analysis</Term>
+
+This is exactly the discipline covered from the code side when [understanding blast
+radius](/notes/version-control-with-git/reading-code-as-a-tester/understanding-blast-radius): "everything
+a change could affect... regression testing is scoped to this radius." Impact analysis is the same
+idea, one level up - it's the thinking a tester does *before* opening a test case editor, using
+whatever evidence is available (code, data flow diagrams, a five-minute conversation with a
+developer), to decide how wide the coming regression pass needs to be.
+
+## Three places impact hides: code, data, and integrations
+
+Impact analysis has to check three separate channels, because a change can ripple through any of
+them independently, and missing one means missing an entire category of regression risk.
+
+**Code dependencies** are the most visible channel: which functions, classes, or modules call the
+changed code directly, and what calls *those*? This is the [blast
+radius](/notes/version-control-with-git/reading-code-as-a-tester/understanding-blast-radius) trace -
+`git grep` the changed function's name, follow the callers one or two hops out, and you have a
+first-pass map. **Shared components** are the second channel and the sneakiest, because a UI
+component, a config file, or a design-system button can be reused across features that share no code
+path at all in the traditional sense - a single shared `<Button>` component with a changed default
+style affects every screen that renders it, discoverable only by searching usage, not by reading
+logic. **Data flows** are the third channel and the one grep can never find: does the changed code
+write to a database column, a cache, a queue message, or an exported file in a new format? Then
+every downstream reader of that data - a report, another service, an analytics pipeline - is impacted
+with zero function call connecting it to the change at all. Skipping the data-flow question is the
+single most common way impact analysis under-scopes a regression suite, because it's the one channel
+that leaves no trace in the code itself.
+
+<HotspotImage
+  src="/notes/levels-and-types-of-testing/functional-and-regression/spiderweb-dew.jpg"
+  alt="A spider web strung between a concrete post and an overhead wire, every strand outlined in dozens of dew drops - a dense radial network of connections converging toward one point at the bottom, most threads invisible until the water reveals exactly where they run"
+  credit="Photo: Dew drops on spider web - Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Dew_drops_on_Spider_web.jpg"
+  pins={[
+    { x: 48, y: 88, label: "The point where every thread converges - the change itself", desc: "One small change - a function, a config value, a shared component - sits exactly here, at the single point every strand in this web eventually reaches back to. Everything else on this map exists to answer what this one point could reach beyond itself." },
+    { x: 25, y: 25, label: "The dew-heavy strands running to the overhead wire", desc: "These threads are impossible to miss - fully lit up by water, easy to trace start to finish. That's the code dependency arrows: direct callers and their callers, found by searching the changed name across the codebase. The easiest of the three channels to map, and the easiest to skip mapping thoroughly precisely because it LOOKS complete." },
+    { x: 70, y: 45, label: "A thinner strand, drops smaller and more scattered", desc: "Still visible, but you have to look for it - the shared-component arrow. A component or utility reused across features with no shared business logic, only a shared piece of UI or shared config. A changed default here fans out quietly across every screen that renders it, thinner and less obvious than the main lines." },
+    { x: 85, y: 65, label: "A near-invisible thread fading into the blurred background", desc: "This strand barely holds any dew at all - you'd miss it entirely without looking closely. That's the database question: what does this change WRITE, and in what format? Every reader of that data is impacted with no call path linking it to the change. Grep will never find this thread; only a deliberate question will." },
+    { x: 10, y: 60, label: "The concrete post the whole web is anchored to", desc: "Solid, unmoving, taking the load of every strand at once - and completely outside the web's own visible pattern. That is the unmarked, trailing impact: a nightly report, a partner integration, an analytics job, anchored to the same underlying data but never drawn on anyone's dependency diagram. This is the anchor every real impact-analysis miss traces back to." },
+  ]}
+/>
+
+## From impact map to regression scope
+
+A map with no decision attached to it is just a diagram. Impact analysis earns its keep the moment it
+turns into a scoped regression plan - and that scoping should follow the same [risk =
+likelihood x impact](/notes/qa-foundations/why-testing-matters/risk-and-value) formula already used
+elsewhere on this platform to decide what to test first. Every item on the impact map gets the same
+two questions: how *likely* is this dependent area to actually be affected by the change (a direct
+caller is more likely than a two-hop dependency; a data reader of a changed column is highly likely;
+an area with no plausible path is unlikely), and how *costly* is it if that area breaks (a nightly
+finance reconciliation report outranks a rarely-viewed admin log, regardless of how many hops away
+each one is). High likelihood and high cost earns a deep regression pass. Low likelihood and low cost
+earns a skip - a *conscious* skip, stated out loud, not a silent one. This is precisely how impact
+analysis avoids the two failure modes that plague regression scoping: testing everything (which burns
+time nobody has) and testing only what the ticket names (which is how the shipping-cost change in the
+hook would have shipped without anyone checking the reconciliation report at all).
+
+<FlowAnimation
+  title="Turning a one-line change into a scoped regression plan - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Name exactly what changed", desc: "One function: calculate_shipping(). One new rule: round to the nearest 5 cents instead of the nearest cent. This is the closed street - everything else on the map starts from this single, precise fact." },
+    { label: "Trace the code dependency channel", desc: "git grep calculate_shipping finds three callers: checkout, the invoice PDF generator, and the refund calculator. None of these were named in the ticket, which only mentioned checkout." },
+    { label: "Trace the shared-component channel", desc: "No shared UI component is involved here - this channel comes up empty for this particular change, and that's a valid, useful finding: one fewer channel to worry about, stated explicitly rather than silently assumed." },
+    { label: "Trace the data-flow channel", desc: "The shipping amount gets written to an orders table, which a nightly finance reconciliation job reads to match totals against the payment processor. This arrow has no function call behind it at all - only the data question finds it." },
+    { label: "Score and scope: likelihood times impact per item", desc: "Checkout: high likelihood, medium cost - test it. Invoices: high likelihood, medium cost - test it. Refunds: high likelihood, HIGH cost (real money) - test it deeply. Reconciliation: high likelihood (same data), HIGH cost (finance-facing) - test it, even though the ticket never mentioned it existed." },
+  ]}
+/>
+
+Here's that exact shipping-rounding change, mapped and scored in code - four downstream consumers, one
+risk score each, and a regression plan that falls out of the arithmetic instead of the ticket's wording:
+
+<CodePlayground
+  language="python"
+  title="Run it - impact analysis scores a change's blast radius by likelihood x impact (Python)"
+  code={`# The change: shipping now rounds to the nearest 5 cents, not the nearest cent.
+def shipping_old(raw_cost):
+    return round(raw_cost, 2)
+
+def shipping_new(raw_cost):
+    return round(raw_cost * 20) / 20  # nearest 5 cents
+
+# Impact map: every consumer found via code-dependency and data-flow tracing,
+# each scored on likelihood (does it actually depend on this?) and impact
+# (how costly if it silently breaks?), 1-5 each -- same scale as risk-and-value.
+consumers = [
+    {"name": "Checkout display (direct caller, in the ticket)",         "likelihood": 5, "impact": 3},
+    {"name": "Invoice PDF (direct caller, NOT in the ticket)",          "likelihood": 5, "impact": 3},
+    {"name": "Refund calculator (direct caller, NOT in the ticket)",    "likelihood": 5, "impact": 5},
+    {"name": "Nightly finance reconciliation (data-flow only, NOT in the ticket)", "likelihood": 4, "impact": 5},
+    {"name": "Admin order-history label (leaf, cosmetic only)",          "likelihood": 2, "impact": 1},
+]
+
+for c in consumers:
+    c["risk"] = c["likelihood"] * c["impact"]
+
+ranked = sorted(consumers, key=lambda c: c["risk"], reverse=True)
+
+print(f"{'Consumer':<48}{'Risk':>6}")
+for c in ranked:
+    print(f"{c['name']:<48}{c['risk']:>6}")
+
+print()
+print("Regression scope, in order:")
+for i, c in enumerate(ranked, start=1):
+    depth = "deep test" if c["risk"] >= 15 else ("light check" if c["risk"] >= 6 else "conscious skip")
+    print(f"  {i}. {c['name']} -> {depth}")
+
+print()
+print("Two of the top three consumers were never named in the ticket.")
+print("Impact analysis is why they still make the regression plan.")`}
+/>
+
+Same mapping in Java, for teams whose impact-analysis meetings end in a ticket queue, not a notebook:
+
+<CodePlayground
+  language="java"
+  title="Run it - impact analysis scores a change's blast radius by likelihood x impact (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    record Consumer(String name, int likelihood, int impact) {
+        int risk() { return likelihood * impact; }
+    }
+
+    public static void main(String[] args) {
+        List<Consumer> consumers = new ArrayList<>(List.of(
+            new Consumer("Checkout display (direct caller, in the ticket)", 5, 3),
+            new Consumer("Invoice PDF (direct caller, NOT in the ticket)", 5, 3),
+            new Consumer("Refund calculator (direct caller, NOT in the ticket)", 5, 5),
+            new Consumer("Nightly finance reconciliation (data-flow only, NOT in the ticket)", 4, 5),
+            new Consumer("Admin order-history label (leaf, cosmetic only)", 2, 1)
+        ));
+
+        consumers.sort((a, b) -> b.risk() - a.risk());
+
+        System.out.printf("%-48s%6s%n", "Consumer", "Risk");
+        for (Consumer c : consumers) {
+            System.out.printf("%-48s%6d%n", c.name(), c.risk());
+        }
+
+        System.out.println();
+        System.out.println("Regression scope, in order:");
+        int i = 1;
+        for (Consumer c : consumers) {
+            String depth = c.risk() >= 15 ? "deep test" : (c.risk() >= 6 ? "light check" : "conscious skip");
+            System.out.println("  " + i + ". " + c.name() + " -> " + depth);
+            i++;
+        }
+
+        System.out.println();
+        System.out.println("Two of the top three consumers were never named in the ticket.");
+        System.out.println("Impact analysis is why they still make the regression plan.");
+    }
+}`}
+/>
+
+<Callout type="tip">
+Run impact analysis BEFORE the fix ships, not after the bug report arrives - the whole value is in
+catching the reconciliation-report class of surprise while it's still a five-minute conversation
+instead of a production incident. Ask the developer directly: "what else reads the data this touches,
+and what else calls the function you're changing?" Developers usually know the code-dependency answer
+instantly and the data-flow answer only if asked directly - so ask the data question explicitly, every
+time, because it's the one nobody volunteers unprompted.
+</Callout>
+
+<FirstTime title="Your mission: map a change's impact before writing a single test case">
+<StepChecklist
+  steps={[
+    { text: "Run the Python playground as-is", detail: "Read the ranked output. Notice the finance reconciliation item outranks the invoice PDF despite a lower likelihood score - impact (5, real financial risk) is doing the work, exactly like the risk formula elsewhere on this platform." },
+    { text: "Add a consumer the map is missing", detail: "Think of one more plausible consumer of a shipping-cost function (a shipping-label print job? a customs-declaration export?), assign it a likelihood and impact score, and add it to the list. Re-run and see where it lands." },
+    { text: "Find the channel each consumer belongs to", detail: "For every consumer in the list, label it code-dependency, shared-component, or data-flow. If every single one is code-dependency, you've only checked one of the three channels - go back and ask which data the change writes." },
+    { text: "Turn one 'conscious skip' into a stated sentence", detail: "Pick the lowest-risk item (the admin order-history label) and write the one sentence you'd say out loud to justify skipping it: what makes its likelihood or impact low enough to earn that skip on purpose, not by accident?" },
+    { text: "Apply it to a real change", detail: "Take any change from a project you know (or invent a small one). List every consumer you can find across all three channels, score each, and write the resulting regression plan - deep test, light check, or skip - for every item." },
+  ]}
+/>
+You've now built an impact map the same way it's built on the job: name the change, trace all three channels, score by likelihood times impact, and let the scores - not the ticket's wording - set the regression scope.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A regression suite passes clean, but production breaks in a feature the impact analysis never even listed.",
+      fix: "The map missed a channel, almost always the data-flow one - it leaves no code trail, so a code-only trace (grep, find-usages) will never surface it. Go back and ask explicitly: what does the changed code write, and who reads it? Add that consumer to the map retroactively, and make the data-flow question a permanent step, not an optional one.",
+    },
+    {
+      symptom: "Impact analysis takes so long that the team skips it under deadline pressure and just 'tests what seems relevant'.",
+      fix: "A full three-channel trace on every change is the ideal, not a requirement for every single diff - scale the depth of the analysis to the size of the change, same as regression depth scales to risk. A one-line config flip still needs the code and data-flow questions asked (they're fast); a five-file refactor deserves the full map. 'Testing what seems relevant' without ever asking the three channel questions is exactly the failure mode this note exists to prevent.",
+    },
+    {
+      symptom: "Two testers independently analyze the same change's impact and come up with completely different scopes.",
+      fix: "This usually means the analysis was done from memory or gut feeling rather than from evidence - grep results, a data-flow question asked to a developer, an actual usage search for a shared component. Standardize the three channels as a checklist (code dependencies, shared components, data flows) so any two testers tracing the same change converge on the same map, even if they weight the risk scores slightly differently.",
+    },
+    {
+      symptom: "A developer insists 'this change can't affect anything else' and the impact map is treated as a formality to rubber-stamp that claim.",
+      fix: "Developers know the code-dependency channel well and the data-flow channel poorly, almost every time - not from carelessness, but because data consumers (a report, another team's service) are often outside the code they can see. Ask the data question directly and separately: 'does this write anywhere that something else reads?' A confident 'no' to code dependencies is not the same claim as a confident 'no' to data flows, and conflating them is how the reconciliation-report surprise keeps happening.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Impact analysis shows up as a habit, not a document, at these moments:
+
+- **Before estimating test effort in planning** - ask all three channel questions (code, shared components, data) before scoping how long testing a change will take, not after starting.
+- **Any change to a shared function, component, or config** - the strongest trigger for a full impact trace; anything with more than one caller deserves the map before the fix even lands.
+- **Any change that writes to a database column, cache, queue, or exported file in a new way** - the data-flow question, asked explicitly, every time, because it's the channel nobody volunteers.
+- **The regression suite's actual scope, compared against the map** - does every high-risk item on the impact map have a corresponding test in the plan? A gap here is the exact shape of the reconciliation-report miss.
+- **Post-incident reviews for "unrelated" bugs** - trace backwards: which channel would have caught this if the impact analysis had asked about it? Add that question to the standard checklist permanently.
+
+Tester's habit: before writing the first test case for any change, say out loud - **"what does this
+touch that isn't in the ticket?"** - across code, shared components, and data. That sentence is the
+entire discipline in miniature.
+</WhereToCheck>
+
+<WorkedExample title="the loyalty-tier change that quietly cost the marketing team their segment">
+1. **The change:** a developer adjusts the loyalty-points threshold for "Gold" tier from 1,000 points
+   to 1,200 points, to align with a new rewards budget. The ticket says exactly that - one number,
+   one file, `loyalty/tiers.py`.
+2. **Code-dependency trace:** `git grep` for the tier-calculation function finds two callers - the
+   account dashboard (shows the user's tier badge) and the checkout page (Gold members get free
+   shipping). Both get added to the impact map, both were expected.
+3. **Shared-component trace:** the tier badge is a shared UI component also used in the mobile app's
+   push-notification preview and the customer-support agent's account-lookup screen. Neither was in
+   the original ticket; both go on the map as data-flow-adjacent because they render a value derived
+   from the same threshold.
+4. **The data-flow question, asked explicitly:** does anything else READ the tier value, not just
+   compute it fresh? Yes - a nightly export feeds the marketing team's email segmentation tool, which
+   sends a "you're so close to Gold" campaign to anyone within 100 points of the threshold. That job
+   reads a stored tier value, not the live function, and nobody thought to ask about it until the
+   data-flow question was asked directly.
+5. **Scoring the map:** dashboard and checkout score high likelihood, medium impact - solid checks,
+   not the deepest pass. The marketing segmentation export scores high likelihood (same underlying
+   threshold) and high impact (a live marketing campaign silently targeting the wrong ten thousand
+   customers) - it earns the deepest test of anything on the map, despite never appearing in the
+   ticket.
+6. **What shipped:** the threshold change went out with the marketing export explicitly re-verified
+   first - the campaign's segment was manually recalculated against the new threshold before the
+   nightly job ran, avoiding an email blast built on stale numbers.
+7. **The lesson:** two of the three channels (code dependencies) were obvious from the diff alone. The
+   one that actually mattered most - a marketing team, in a different part of the org, silently
+   reading exported data derived from the changed number - was invisible to every code-tracing tool
+   and only surfaced because someone asked the data-flow question on purpose.
+</WorkedExample>
+
+<Callout type="mistake">
+Doing impact analysis only across the code-dependency channel and calling the map complete. Code
+dependencies are the easiest channel to trace - grep does most of the work - which is exactly why
+teams stop there and miss the shared-component and data-flow channels that grep can never find. A
+"complete" impact map that never asked "what does this write, and who reads it later?" isn't
+complete; it's the easy third of the job, mistaken for the whole job. All three channels, every time,
+or the map has a blind spot exactly the shape of last quarter's surprise incident.
+</Callout>
+
+<Quiz
+  question="A change modifies a shared 'order status' field's possible values, adding a new status. Code-dependency tracing finds two UI screens that display the status. What should impact analysis ALSO check before scoping the regression plan?"
+  options={[
+    "Nothing further - two screens found via code tracing is a complete and sufficient impact map",
+    "Whether any external system, report, or analytics job reads the stored order-status value and might not recognize the new status value - the data-flow channel that code tracing cannot see",
+    "Whether the two screens found are visually appealing, since that's the remaining open question",
+    "Whether the developer wrote unit tests for the two screens, since that determines whether impact analysis is needed at all"
+  ]}
+  answer={1}
+  explain="Code-dependency tracing (grep, find-usages) only covers ONE of the three impact channels this note describes. A field's stored VALUE is exactly the kind of thing other systems read without ever calling the code that produces it -- a reporting dashboard, a partner integration, or an analytics pipeline could all break (or silently misclassify orders) if they don't recognize the new status value, and none of them would show up in a code trace. Option one stops at the easy channel and misses the one that causes real incidents; option three is irrelevant to impact scope; option four confuses test coverage of the found screens with whether other, unfound consumers exist. The correct next step is always the data-flow question: what reads this value that isn't found by tracing calls?"
+/>
+
+<Flashcards
+  cards={[
+    { front: "Impact analysis - definition", back: "Identifying, before testing begins, everything a change could plausibly affect: other features, shared code, data flows, integrations. The formal name for blast-radius thinking - its output sets the scope of the regression suite that follows." },
+    { front: "The three channels impact hides in", back: "Code dependencies (traceable by grep/find-usages), shared components (traceable by usage search, no shared logic required), and data flows (traceable only by asking what the change writes and who reads it - grep can never find this one)." },
+    { front: "Why the data-flow channel is the most commonly missed", back: "It leaves no trace in the code itself. A report, another service, or an analytics job can read data a change writes with zero function call connecting it to the change - only a deliberate question surfaces it." },
+    { front: "How impact analysis sets regression scope", back: "Score every item on the impact map by likelihood times impact (same risk formula used platform-wide). High-high earns deep testing; low-low earns a CONSCIOUS, stated skip. The scores decide depth, not the ticket's wording." },
+    { front: "The failure mode of 'testing everything' vs 'testing only the ticket'", back: "Testing everything burns time nobody has; testing only what the ticket names misses exactly the consumers (like a data-flow reader) the ticket never mentioned because the developer didn't know about them either. Impact analysis is the middle path, built from evidence." },
+    { front: "The one question that finds the hardest-to-see impact", back: "'What does this change WRITE, and who reads that later?' Ask it explicitly and separately from 'what calls this function' - developers answer the second reflexively and the first only when asked directly." },
+  ]}
+/>
+
+<Challenge>
+Pick a real or invented change to a shared function, component, or config value. Trace all three
+channels: (1) code dependencies via grep or find-usages, (2) shared components via a usage search,
+(3) data flows by explicitly asking what the change writes and who might read it later (a report, an
+export, another service). Score every consumer you find on likelihood and impact (1-5 each), rank
+them, and write the resulting regression plan - deep test, light check, or conscious skip - for each
+one. Finish with one sentence naming which channel surfaced the consumer you were LEAST likely to
+have found without deliberately asking.
+</Challenge>
+
+<AskCommunity prompt="Impact analysis question: a change touches `[function/component/config]`. My code-dependency trace found `[callers]`. My data-flow question turned up `[readers, or 'nothing found yet']`. My regression plan so far is `[deep/light/skip per item]`. What consumer, especially on the data-flow side, am I likely still missing?">
+List what you found on each of the three channels separately, not as one combined summary - the
+community's best catches are almost always the data-flow reader nobody thought to ask about, and
+that's easiest to spot when your data-flow findings are visible on their own line.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://en.wikipedia.org/wiki/Change_impact_analysis", title: "Change impact analysis - the formal definition this note is built on", kind: "read" },
+    { href: "https://martinfowler.com/articles/rise-test-impact-analysis.html", title: "Martin Fowler - The Rise of Test Impact Analysis", kind: "read" },
+    { href: "https://glossary.istqb.org/en/search/impact%20analysis", title: "ISTQB Glossary - impact analysis, the official definition", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=ZRH8Yrt7jvQ", title: "What is Impact Analysis in Software Testing? (Software Testing Mentor)", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=ZRH8Yrt7jvQ" title="What is Impact Analysis in Software Testing? (Software Testing Mentor)" minutes={8} />
+
+<Takeaways
+  points={[
+    "Impact analysis identifies, before testing starts, everything a change could plausibly affect - it's the formal name for blast-radius thinking, and its output sets the regression suite's scope.",
+    "Impact hides in three channels: code dependencies (grep finds these), shared components (usage search finds these), and data flows (only a deliberate question finds these - grep never will).",
+    "The data-flow channel is the most commonly missed because it leaves no trace in the code - always ask explicitly what a change writes and who reads that data later.",
+    "Score every item on the impact map by likelihood times impact, the same risk formula used platform-wide - the scores decide regression depth, not the ticket's stated scope.",
+    "Impact analysis replaces two failure modes - testing everything (wastes time) and testing only what the ticket names (misses exactly the consumers nobody thought to mention) - with a scoped plan built from evidence.",
+  ]}
+/>
+
+<Complete xp={10} />

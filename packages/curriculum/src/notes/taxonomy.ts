@@ -941,6 +941,54 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   },
   // END levels-and-types-of-testing
   {
+    slug: "exploratory-testing",
+    title: "Exploratory Testing",
+    summary: "Testing that designs, executes, and learns in the same breath — the mindset, the session-based discipline that makes it accountable, the heuristics and tours that give it structure, and the reporting habits that turn a session's findings into evidence a team and its managers can actually trust.",
+    chapters: [
+      {
+        slug: "the-exploratory-mindset",
+        title: "The exploratory mindset",
+        topics: [
+          { slug: "scripted-vs-exploratory", title: "Scripted vs exploratory" },
+          { slug: "exploratory-not-ad-hoc", title: "Not ad hoc testing" },
+          { slug: "learn-design-execute-at-once", title: "Learn, design, execute at once" },
+          { slug: "when-exploratory-wins", title: "When exploratory wins" },
+        ],
+      },
+      {
+        slug: "session-based-test-management",
+        title: "Session-based test management",
+        topics: [
+          { slug: "time-boxed-sessions", title: "Time-boxed sessions" },
+          { slug: "charters", title: "Charters" },
+          { slug: "note-taking-under-pressure", title: "Note-taking under pressure" },
+          { slug: "debriefing-and-coverage", title: "Debriefing and coverage" },
+        ],
+      },
+      {
+        slug: "heuristics-and-tours",
+        title: "Heuristics & tours",
+        topics: [
+          { slug: "testing-heuristics-sfdpot", title: "SFDPOT" },
+          { slug: "tours-the-feature-tour-and-money-tour", title: "Testing tours" },
+          { slug: "oracles-how-you-know-its-a-bug", title: "Oracles" },
+          { slug: "cheat-sheets-that-travel", title: "Cheat sheets that travel" },
+        ],
+      },
+      {
+        slug: "reporting-exploratory-work",
+        title: "Reporting exploratory work",
+        topics: [
+          { slug: "bugs-and-coverage-from-a-session", title: "Bugs and coverage from a session" },
+          { slug: "pairing-and-ensemble-testing", title: "Pairing and ensemble testing" },
+          { slug: "making-it-visible-to-managers", title: "Making it visible to managers" },
+          { slug: "when-to-switch-to-scripted", title: "When to switch to scripted" },
+        ],
+      },
+    ],
+  },
+  // END exploratory-testing
+  {
     slug: "foundations",
     title: "QA Foundations",
     summary: "The vocabulary and mental models every tester needs.",

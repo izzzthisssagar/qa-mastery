@@ -1,0 +1,358 @@
+---
+title: "Integration testing"
+summary: "Integration testing checks whether two or more units, components, or services actually work TOGETHER - at the seams: API contracts, database connections, third-party calls. Big-bang vs incremental integration, and why each part works alone but fails together is this level's signature bug."
+tags: ["levels-and-types-of-testing", "test-levels", "track-c"]
+updated: "2026-07-14"
+---
+
+<Hook>
+Two components can each be perfect, individually, and still produce garbage the moment they
+talk to each other - and if that sentence sounds like a contradiction, welcome to the entire
+reason integration testing exists as its own level. The unit-testing note in this chapter
+covered pieces working correctly ALONE, dependencies faked out on purpose so nothing else could
+interfere. This note covers what happens the moment you stop faking things: when the real
+checkout function calls the real payment service, when the real frontend parses the real
+backend's response, when your app talks to a third party you don't control at all. Bugs at this
+level have a very specific signature, and once you learn to recognize it, you'll start spotting
+"works here, breaks there" problems that unit tests were never designed to catch and system
+tests are often too broad to localize quickly.
+</Hook>
+
+<Callout type="analogy">
+Two musicians can each be flawless, alone, in separate practice rooms. The guitarist nails every
+chord change; the drummer holds perfect tempo through the whole song. Put them on stage
+together for the first time and the guitarist counts the song in at a different tempo than the
+drummer learned it, or the drummer's fill at the bridge lands half a beat before the guitarist
+expects the change - and the result is a mess, even though neither musician played a single
+wrong note. Nothing was wrong with either performer. What was untested was the SEAM between
+them: the shared tempo, the shared cue, the moment one hands off to the other. That handoff is
+exactly what integration testing checks, and "sounded fine solo, fell apart together" is the
+single most common note a band's first joint rehearsal produces - just like it's the single most
+common bug this test level exists to catch.
+</Callout>
+
+<Term define={`The test level that checks whether two or more units, components, or services work correctly when combined, rather than in isolation. Where unit testing fakes every dependency to test one piece alone, integration testing deliberately lets real pieces talk to real pieces - two internal modules, a service and its database, or your application and a third-party API - and checks the SEAM between them: does the data one side sends match what the other side expects, does an error on one side get handled sanely by the other, does the connection itself behave correctly under normal and abnormal conditions. Its signature bug is the one no unit test can ever catch by design: each part is individually correct and passes its own tests, yet the combination fails, because correctness was checked against each side's own assumptions rather than against what the other side actually does.`}>integration testing</Term>
+
+## Where the bugs live: at the seams, not inside the parts
+
+Every piece of software is made of boundaries - a function calling another function, a service
+calling another service, your code calling a database or a payment provider you'll never see the
+source code of. Unit testing, as the previous note in this chapter covered, deliberately hides
+those boundaries behind mocks and stubs so it can judge one piece alone. Integration testing does
+the opposite on purpose: it removes the fakes and lets real components meet for the first time,
+specifically to find the class of bug that only exists at a boundary. An **API contract**
+mismatch - the backend renamed a field from `user_id` to `userId` and the frontend never got the
+memo - is invisible to both sides' unit tests, because each side's unit tests only check that side
+against its OWN expectations. A **database connection** that times out under real load, a
+**third-party service** that returns an error shape nobody accounted for, an authentication token
+that one service issues in a format the next service can't parse - none of these are "wrong code"
+in the unit sense. Each side did exactly what its own developer intended. The seam is what broke.
+
+That gives this level its signature symptom, worth saying in exactly these words because it's
+the fastest way to recognize you're looking at an integration bug rather than a unit bug or a
+whole-system bug: **each part works alone, and fails together.** You can demonstrate the
+checkout service handles a payment response correctly with a fake response. You can demonstrate
+the payment provider's own sandbox returns a valid response to a direct call. Wire the two real
+services together and the checkout service crashes, because the real response has a nested field
+the fake response never modeled. Nobody lied in either test - the fake just didn't match reality,
+and integration testing is the level built specifically to catch that gap before a user does.
+
+## Big-bang vs incremental: two ways to find out
+
+There are two broad strategies for actually running integration tests, and the difference is
+less about tooling and more about how much pain arrives at once. **Big-bang integration** builds
+every component first, then wires the entire system together in one go and tests it as a whole.
+It's fast to set up and mirrors how some smaller systems genuinely get built - but when it fails,
+it fails everywhere at once, and figuring out which of a dozen new connections actually broke can
+turn into a multi-day hunt. **Incremental integration** wires components together a few at a time
+- often starting from one core module and adding neighbours one connection at a time - testing
+each new seam before adding the next. It's slower to reach "the whole thing is connected," but
+when something breaks, it broke at the seam you JUST added, which narrows the search from "the
+entire system" to "the one connection made an hour ago." Most real teams lean incremental for
+exactly that reason: a localized failure is a cheap failure.
+
+{/* IMAGE: two separate mechanical or plumbing components (pipes, gears, or connectors) being joined together at a single connection point, the join itself in sharp focus */}
+<HotspotImage
+  src="/notes/levels-and-types-of-testing/test-levels/coupling-joint.jpg"
+  alt="Underneath two rail freight cars: a screw coupling joins them hook-to-hook at the center, flanked by two air-brake hoses (one green-tagged, one black) connecting each car's brake system to the other's - every component intact, the joint itself the only place anything could go wrong"
+  credit="Photo: Screw coupling used in Indian Railways - Wikimedia Commons, CC0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Screw_Coupling_used_in_Indian_Railways.jpg"
+  pins={[
+    { x: 22, y: 55, label: "The left car's hook, flawless on its own", desc: "This car passed its own inspection before it ever backed up to this one - wheels true, brakes tested, structure sound. That is a unit that passed all its own tests: fully correct in isolation, and that correctness proves NOTHING yet about what happens when it meets another car." },
+    { x: 50, y: 62, label: "The screw coupling itself - the seam", desc: "This threaded link is the only place two independently-perfect cars can actually fail each other: wrong tension, wrong thread engagement, a coupling rated for a different car class. That is the visual equivalent of an API contract, a database connection, or a third-party call - integration bugs live exactly here, not inside either car." },
+    { x: 68, y: 48, label: "The green-tagged brake hose", desc: "One hose, one specific system (the brake line), connected at its own separate joint from the mechanical coupling. Two components can integrate correctly on ONE interface (the hook) while still mismatching on another (the hose) - which is why integration testing checks every seam, not just the obvious one." },
+    { x: 78, y: 58, label: "The second, unlabeled black hose beside it", desc: "A near-identical hose, easy to cross with its neighbor during assembly - the physical version of a field-name mismatch or a format the other side never expected. Two hoses that look interchangeable but carry different signals is exactly the kind of seam-level bug integration testing exists to catch before the train ever moves." },
+    { x: 40, y: 30, label: "The gap between the two cars, hoses stretched taut", desc: "The visible slack and tension in these hoses is the joint under real stress - not weight the pipes carry, but load concentrated AT the connection as the cars shift. This is where integration bugs concentrate: not inside either component, but at the boundary where assumptions from one side meet assumptions from the other." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Two flawless units meet for the first time - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Unit A passes its own tests", desc: "The checkout service's unit tests mock the payment provider's response as a flat object: { status: 'approved', amount: 42.00 }. Every unit test for the checkout service passes against that mock." },
+    { label: "Unit B passes its own tests, separately", desc: "The payment provider's actual sandbox is tested on its own terms and genuinely returns a nested object: { result: { status: 'approved', amount: 42.00 } }. Its own tests are also green - it's returning exactly what it was designed to return." },
+    { label: "Integration testing wires the real two together", desc: "Instead of the mock, the checkout service now calls the real payment sandbox. The checkout service reads response.status, expecting the flat shape from its own mock - the real response nests status one level deeper, under result." },
+    { label: "The seam fails, loudly and immediately", desc: "response.status comes back undefined. The checkout service, which handled the mocked shape perfectly, has no idea what to do with a value that isn't there, and the whole checkout flow breaks - not because either side is broken, but because their assumptions about each other never matched." },
+    { label: "The fix lands at the seam, not inside either unit", desc: "The contract gets agreed and documented, the checkout service adjusts to read the real nested shape, and an integration test now runs the two REAL services together on every relevant change - specifically so this exact class of mismatch gets caught again automatically, the moment either side's shape drifts." },
+  ]}
+/>
+
+Here's the exact bug from the flow above, reproduced as runnable code: two little "services"
+that each pass their own unit-style checks alone, and then genuinely fail the moment they're
+combined, because of a shape mismatch neither side's own tests could ever have revealed:
+
+<CodePlayground
+  language="python"
+  title="Run it - two working units, one integration failure at the seam (Python)"
+  code={`# Unit A: the checkout service. Tested alone against its OWN mocked shape.
+def handle_payment_response(response):
+    if response["status"] == "approved":
+        return "Order confirmed"
+    return "Payment failed"
+
+# Unit A's own unit test -- passes, using a mock that matches what
+# the developer of checkout ASSUMED the payment service would send.
+mock_response = {"status": "approved", "amount": 42.00}
+print("Unit A alone:", handle_payment_response(mock_response))
+
+# Unit B: the payment service. Tested alone, and genuinely correct
+# on its own terms -- it just nests its result one level deeper.
+def payment_service_charge(amount):
+    return {"result": {"status": "approved", "amount": amount}}
+
+real_response = payment_service_charge(42.00)
+print("Unit B alone:", real_response)
+
+# Integration: wire the REAL two together instead of the mock.
+try:
+    outcome = handle_payment_response(real_response)
+    print("Integrated:", outcome)
+except KeyError as e:
+    print("INTEGRATION FAILURE -- KeyError:", e)
+    print("Each unit passed its own tests. Together, checkout expected")
+    print("response['status'] at the top level; payment nests it under 'result'.")
+    print("This is the signature bug of integration testing: works alone, fails together.")`}
+/>
+
+The same seam failure in Java, with the mismatch showing up as an exception the moment the two
+real classes meet instead of a mock:
+
+<CodePlayground
+  language="java"
+  title="Run it - the same seam mismatch, two Java classes meeting for real (Java)"
+  code={`import java.util.*;
+
+class Main {
+    // Unit A: checkout, tested alone against its OWN mocked shape.
+    static String handlePaymentResponse(Map<String, Object> response) {
+        String status = (String) response.get("status");
+        if (status == null) {
+            throw new RuntimeException("status missing at top level");
+        }
+        return status.equals("approved") ? "Order confirmed" : "Payment failed";
+    }
+
+    // Unit B: payment service, correct on its own terms, but nested.
+    static Map<String, Object> paymentServiceCharge(double amount) {
+        Map<String, Object> inner = new LinkedHashMap<>();
+        inner.put("status", "approved");
+        inner.put("amount", amount);
+        Map<String, Object> outer = new LinkedHashMap<>();
+        outer.put("result", inner);
+        return outer;
+    }
+
+    public static void main(String[] args) {
+        // Unit A's own unit test, using a mock that matches what checkout assumed.
+        Map<String, Object> mockResponse = new LinkedHashMap<>();
+        mockResponse.put("status", "approved");
+        mockResponse.put("amount", 42.00);
+        System.out.println("Unit A alone: " + handlePaymentResponse(mockResponse));
+
+        // Unit B alone, genuinely correct against its own contract.
+        Map<String, Object> realResponse = paymentServiceCharge(42.00);
+        System.out.println("Unit B alone: " + realResponse);
+
+        // Integration: wire the REAL two together.
+        try {
+            String outcome = handlePaymentResponse(realResponse);
+            System.out.println("Integrated: " + outcome);
+        } catch (RuntimeException e) {
+            System.out.println("INTEGRATION FAILURE -- " + e.getMessage());
+            System.out.println("Each class passed alone. Together, checkout expected status");
+            System.out.println("at the top level; payment nests it under result.");
+            System.out.println("Works alone, fails together -- the seam is where this lives.");
+        }
+    }
+}`}
+/>
+
+<Callout type="tip">
+When you're deciding whether a bug belongs to unit, integration, or system testing, ask one
+question first: could this bug have been found with EVERY dependency faked out? If the answer is
+yes, it's a unit-level concern. If the answer is "only once two real pieces actually talked to
+each other," you're looking at an integration bug, and the fix belongs at the seam - a contract
+gets agreed, documented, and tested going forward - not inside either individual component.
+</Callout>
+
+<FirstTime title="First time? Trace a seam bug from mock to failure and back">
+<StepChecklist
+  steps={[
+    { text: "Run the Python playground and read both 'alone' outputs first", detail: "Confirm both units genuinely work on their own terms before the integration attempt runs. This is the setup that makes the failure meaningful - if either side were already broken alone, this wouldn't be an integration bug, it'd be a unit bug." },
+    { text: "Read the KeyError and name the mismatch in one sentence", detail: "Write: 'checkout expects X, payment sends Y.' That one sentence is the entire diagnosis of an integration bug - it's always a shape, format, or timing mismatch between two things that were each internally consistent." },
+    { text: "Fix it at the seam, not inside either function", detail: "Change handle_payment_response to read response['result']['status'] instead of response['status'], re-run, and confirm 'Integrated: Order confirmed' now prints. Notice you didn't touch payment_service_charge at all - the fix lives at the point of contact." },
+    { text: "Invent a second seam mismatch", detail: "In the Java version, change paymentServiceCharge to also omit the amount field entirely under some condition, and predict what handlePaymentResponse would do with it before running. Integration bugs are rarely just one flavor - missing fields, renamed fields, and wrong types all live at the same seam." },
+    { text: "Decide: big-bang or incremental, for this exact pair", detail: "If checkout also had to integrate with a shipping service and a notifications service at the same time as payment, would you wire all three at once (big-bang) or one at a time (incremental)? Write one sentence on which you'd pick and why, given how hard THIS bug already was to isolate." },
+  ]}
+/>
+You've now reproduced, diagnosed, and fixed the exact signature bug of this test level - two
+correct parts, one incorrect assumption about each other, found only once they met for real.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A feature works perfectly in a demo using mocked data, then breaks the moment it's pointed at the real backend or a real third-party sandbox.",
+      fix: "This is the textbook integration-testing gap: the demo only ever exercised the mock, which encodes what the frontend developer ASSUMED the backend would send, not what it actually sends. Get the real request/response pair from a network trace or the API docs, compare it field by field against what the code expects, and treat any difference as the bug - not a frontend bug or a backend bug specifically, but a contract mismatch that needs to be agreed and tested going forward.",
+    },
+    {
+      symptom: "Two teams each swear their service is 'fully tested,' and the combined feature still fails the first time the two services actually talk to each other.",
+      fix: "Both teams are very likely telling the truth about their OWN unit tests - and that's exactly the blind spot. Ask each team what they mocked for the other side, and compare that mock to what the other side actually produces right now. The gap between 'what we assumed' and 'what they actually do' is almost always the entire bug, and closing it means writing an integration test that uses the real two services together, not better unit tests for either one alone.",
+    },
+    {
+      symptom: "A big-bang integration attempt wires ten new services together at once, several things break, and nobody can tell which connection is actually at fault.",
+      fix: "This is the known cost of big-bang integration: failures arrive all at once with no isolation. Roll back to wiring one connection at a time - pick the two services most central to the failure, verify that single seam in isolation, then add the next connection only once the previous one is confirmed solid. It's slower to reach full integration, but every failure that does occur points at exactly one new connection instead of a tangle of ten.",
+    },
+    {
+      symptom: "A manager asks why integration testing is worth the setup effort when 'unit tests already cover the code, and system testing will catch anything big.'",
+      fix: "Name the specific gap directly: unit tests intentionally fake away every dependency, so by design they cannot see a seam mismatch. System testing, covered next in this chapter, tests the whole assembled product and CAN eventually catch a seam bug too - but usually much later, in a much bigger surface area, where localizing 'which of forty connections actually broke' is far more expensive than catching it at the one seam that just changed. Integration testing is the level built specifically to make that seam failure cheap and fast to find.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Integration bugs cluster at predictable boundaries - check these first whenever a feature
+touches more than one system:
+
+- **API contracts between frontend and backend** - field names, data types, required vs
+  optional fields, and what happens when a field is missing or null on either side.
+- **Database connections under real conditions** - timeouts, connection pool limits, and what
+  the application does when a query that always worked in a mock suddenly takes three seconds.
+- **Third-party integrations** - payment providers, email services, external auth. These are the
+  seams you don't control at all; their sandbox environments frequently drift from what your own
+  mocks assume, quietly, without anyone telling you.
+- **Version mismatches between services** - service A expects API version 2, service B still
+  serves version 1, and neither side's own tests would ever notice, because each side only tests
+  against the version IT expects.
+- **Message queues and async handoffs** - one service publishes an event, another consumes it;
+  check what happens when the consumer expects a field the publisher stopped sending, or when
+  messages arrive out of order.
+
+Tester's habit: whenever a bug report contains the phrase "it worked when I tested it alone" from
+either side of an integration, treat that sentence as a diagnosis, not an excuse - it's very
+likely a seam bug, and the fix belongs at the connection, not inside either component.
+</WhereToCheck>
+
+<WorkedExample title="the shipping estimate that was correct on both sides and wrong together">
+1. **The setup:** an e-commerce checkout page needs to show a shipping estimate by calling an
+   internal `pricing-service`, which in turn calls an external carrier API to get a live rate.
+2. **Unit level, both green:** `pricing-service`'s unit tests mock the carrier API's response as
+   a single number - `4.99`. All pass. The carrier API's own tests (run by the carrier, not this
+   team) confirm it correctly returns a rate object shaped as `{ "rate": { "amount": 4.99,
+   "currency": "USD" } }`. Also all pass - it's doing exactly what it was built to do.
+3. **The integration attempt:** QA points a staging build at the carrier's real sandbox instead
+   of the mock. The checkout page shows "$NaN" for shipping on every single order.
+4. **Diagnosing at the seam, not inside either service:** the tester doesn't assume
+   `pricing-service` is broken (its unit tests are green) or that the carrier is broken (its docs
+   clearly describe the nested shape). Instead: "pricing-service expects a flat number; the
+   carrier sends a nested object. That mismatch is the whole bug."
+5. **Big-bang would have hidden this:** if this project had wired pricing, checkout, tax, and
+   shipping all together in one go, the "$NaN" symptom could plausibly have been blamed on tax
+   calculation, currency conversion, or the checkout UI itself. Because only the pricing-to-carrier
+   seam was integrated first (incremental), the failure pointed at exactly one connection.
+6. **The fix, and the follow-up:** `pricing-service` is updated to read `rate.amount` from the
+   real response shape, and an integration test is added that calls the carrier's actual sandbox
+   (not a mock) on every relevant change, specifically so a future shape drift from the carrier's
+   side gets caught automatically instead of showing up as "$NaN" in front of a real customer.
+7. **The lesson:** neither team wrote a single wrong line of code by their own standards. The bug
+   lived entirely in the gap between two correct assumptions about each other - which is precisely
+   why this level of testing has to exist as its own deliberate step, not an accident that
+   happens to get caught later during system testing.
+</WorkedExample>
+
+<Callout type="mistake">
+Assuming that because two components each have excellent unit test coverage, the combination is
+automatically safe. It's the single most common blind spot at this level, and it's subtle
+precisely because both halves of the belief are individually true: the unit tests ARE excellent,
+and each component IS correct on its own terms. What's missing is any test that lets the two real
+components actually meet - and no amount of additional unit testing on either side, alone, can
+ever close that gap, because by definition a unit test only checks one component against its OWN
+assumptions about the other. The fix is never "write more unit tests" - it's "write a test that
+uses the real seam," which is the entire reason integration testing exists as a distinct level
+instead of being folded into unit testing or left for system testing to eventually stumble onto.
+</Callout>
+
+<Quiz
+  question="Service A's unit tests all pass using a mocked version of Service B. Service B's unit tests all pass on their own terms. The first time the real Service A calls the real Service B, the feature breaks. What does this scenario demonstrate?"
+  options={[
+    "Service A's developer must have written the mock carelessly, so Service A's unit tests are invalid",
+    "Service B is the one that's actually broken, since it caused the failure once connected",
+    "This is the signature bug of integration testing: each unit is individually correct against its own assumptions, and the failure lives at the seam between them - a mismatch in what one side sends versus what the other expects, which no unit test on either side was designed to catch",
+    "Unit testing failed at its job here and should be replaced with integration testing entirely"
+  ]}
+  answer={2}
+  explain="This is exactly the works-alone-fails-together pattern that defines integration-level bugs: each unit's tests passed because each unit was checked against its own internal assumptions (a mock, in Service A's case, and its own contract, in Service B's), and neither test could ever see a mismatch between the two, because isolating each unit from the other is precisely what a unit test is designed to do. Option one wrongly blames the mock for being 'careless' - the mock may have been entirely reasonable given the information available; the real problem is that nobody verified the mock against Service B's ACTUAL behavior, which is an integration-testing concern, not a unit-testing mistake. Option two wrongly assigns fault to Service B alone, when Service B may be behaving exactly as documented - the bug is the MISMATCH, not either side individually. Option four throws out a level that's still doing real, valuable work (catching bugs inside each component) in favor of a level that catches a different class of bug entirely; the two are complementary, not substitutes."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Integration testing - definition", back: "Testing whether two or more units, components, or services work correctly when combined for real, rather than with dependencies faked out. Checks the SEAM: API contracts, database connections, third-party calls - not the internal correctness of either side alone." },
+    { front: "The signature bug of integration testing", back: "'Works alone, fails together': each part is individually correct against its own assumptions, but the combination breaks because those assumptions about each other never actually matched. No unit test on either side is designed to catch this by definition." },
+    { front: "Big-bang integration", back: "Build every component, then wire and test the whole thing together at once. Fast to set up, but when it fails, it fails everywhere simultaneously - isolating which of many new connections actually broke can take a long time." },
+    { front: "Incremental integration", back: "Wire components together a few at a time, testing each new seam before adding the next. Slower to reach full integration, but a failure points at exactly the one connection just added, not a tangle of many." },
+    { front: "Where integration bugs cluster", back: "API contracts (field names, types, required/optional), database connections under real load, third-party services you don't control, version mismatches between services, and async message handoffs where a consumer expects a field the publisher stopped sending." },
+    { front: "The diagnostic question for this level", back: "'Could this bug have been found with every dependency faked out?' Yes means unit-level. 'Only once two real pieces actually talked to each other' means integration-level - and the fix belongs at the seam, not inside either component." },
+  ]}
+/>
+
+<Challenge>
+Take the Python `handle_payment_response` / `payment_service_charge` pair from this note's
+playground and design a THIRD seam mismatch that isn't about nesting: make `payment_service_charge`
+sometimes omit the `amount` field entirely (say, for a zero-amount order), and predict, in one
+sentence, what `handle_payment_response` would do when it receives that response - before you run
+it. Then write two sentences: one describing how you'd decide between big-bang and incremental
+integration if this checkout flow also needed to integrate with a shipping service and a fraud-
+check service at the same time, and one naming which single question you'd ask first when a bug
+report says "it worked when I tested it alone."
+</Challenge>
+
+<AskCommunity prompt="Integration bug I can't localize: two components, `[name them - service A and service B, frontend and backend, app and third-party X]`, each pass their own tests, and the combination fails with `[describe the symptom]`. What I've compared so far: `[the request/response shapes, or connection behavior, you've already checked]`. My current theory about the mismatch: `[your one-line theory]`. Is this reading like a genuine seam bug, and what's the fastest way you'd narrow down which side's assumption is wrong?">
+Paste the actual request/response shapes or connection details if you can, not just a
+description of them - seam mismatches are almost always visible the moment two real payloads sit
+side by side. Say what each side currently ASSUMES about the other; the fastest replies usually
+spot the exact field, type, or timing gap in seconds once both assumptions are laid out plainly.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://glossary.istqb.org/en/search/integration%20testing", title: "ISTQB Glossary - integration testing definition", kind: "read" },
+    { href: "https://martinfowler.com/articles/practical-test-pyramid.html", title: "Martin Fowler / Ham Vocke - The Practical Test Pyramid, integration tests in context", kind: "read" },
+    { href: "https://martinfowler.com/bliki/ContractTest.html", title: "Martin Fowler - Contract Test, a technique aimed directly at seam mismatches", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=p8vrpGMR3g4", title: "Integration Testing with examples - Software Engineering (Gate Smashers)", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=p8vrpGMR3g4" title="Integration Testing with examples - Software Engineering (Gate Smashers)" minutes={9} />
+
+<Takeaways
+  points={[
+    "Integration testing checks whether two or more units, components, or services work correctly TOGETHER, by letting real pieces meet instead of faking dependencies away - the opposite move from unit testing.",
+    "Bugs at this level live at the seams: API contracts, database connections, third-party services - not inside either component's own logic.",
+    "The signature bug is 'each part works alone, fails together' - both sides pass their own tests because each is checked against its OWN assumptions about the other, and no unit test is designed to catch a mismatch between two sets of assumptions.",
+    "Big-bang integration wires everything at once (fast setup, hard-to-localize failures); incremental integration wires connections one at a time (slower, but failures point at exactly the connection just added).",
+    "The fix for a seam bug belongs at the seam - an agreed, documented, tested contract - never inside either individual component, no matter how many more unit tests get added to either side.",
+  ]}
+/>
+
+<Complete xp={10} />

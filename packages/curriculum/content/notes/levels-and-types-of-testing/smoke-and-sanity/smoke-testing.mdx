@@ -1,0 +1,353 @@
+---
+title: "smoke testing: does the app even launch?"
+summary: "Named after plugging in a circuit board and watching for smoke: a shallow, wide check that the build isn't fundamentally broken. Runs first, gatekeeps everything deeper. Real example: the bash smoke script from linux-for-testers."
+tags: ["levels-and-types-of-testing", "smoke-and-sanity", "track-c"]
+updated: "2026-07-14"
+---
+
+<Hook>
+Somewhere in a 1940s hardware lab, an engineer plugged in a freshly assembled circuit board, flipped
+the power switch, and watched for one thing: smoke. No smoke meant the board was worth testing
+properly. Smoke meant everyone went home and came back tomorrow with a new board. That's the whole
+origin story of **smoke testing**, and software stole the name because the metaphor survived the
+jump perfectly. You do not open a new build by exploring the refund-edge-case-with-a-coupon-and-a-
+loyalty-discount flow. You open it by asking the dumbest possible question first: does the app even
+launch? Does the login page load? Can I see the homepage without a white screen of shame? If the
+answer is no, every hour you were about to spend on clever exploratory testing was about to be spent
+finding out that a config value was missing. Smoke testing exists so you find that out in ninety
+seconds instead of a wasted afternoon.
+</Hook>
+
+<Callout type="analogy">
+Picture that hardware lab again, because the analogy is not decorative here — it's literally where
+the word came from. A technician doesn't start a new board with a multimeter and a day of signal
+analysis. They plug it in and watch for smoke. **No smoke** is a rough, binary, five-second signal
+that the board is at least *fundamentally* sound enough to justify real testing. **Smoke** means stop
+immediately — nothing downstream matters until this is fixed. Software smoke testing keeps that exact
+shape: instead of watching for literal smoke, you watch a small set of critical paths — does the app
+start, does the homepage render, does login succeed, does the primary API respond — and you watch for
+the software equivalent of smoke: a blank screen, a 500, a login that eats your password and gives
+you nothing back. The check is shallow on purpose (you're not measuring voltage, you're watching for
+smoke) and wide on purpose (you check the WHOLE board's major components, not one resistor in
+isolation). Depth is for later. Right now you just need to know it won't catch fire.
+</Callout>
+
+<Term define="A shallow, wide check run against a fresh build to confirm the software is stable enough for real testing to begin - it exercises the critical, must-work paths (does the app launch, does the homepage render, does login succeed, do the main screens load, does the primary API respond) rather than any single feature in depth. Named after hardware smoke testing: power on the board, watch for smoke, and only proceed to real testing if none appears. Runs FIRST, before any other test activity, and its outcome is a gate - not a report: PASS means deeper testing (regression, exploratory, feature testing) is authorized to begin; FAIL means the build is rejected and sent back, because testing a fundamentally broken build produces noise (false 'defects' that are really just the environment or the build being dead) instead of signal. Also called build verification testing when it is fully automated and wired into CI - see build-acceptance.">smoke testing</Term>
+
+## Shallow and wide, on purpose
+
+The two words that define smoke testing are **shallow** and **wide**, and both are deliberate design
+choices, not corners cut under time pressure. Shallow means you don't verify that the discount code
+applies the exact right percentage or that the date picker handles February 29th — you verify that
+the checkout page *loads* and the "place order" button *exists* and *responds*. Wide means you don't
+spend that shallow effort on one feature — you spread it across every major area of the app: home,
+search, product page, cart, checkout, account, the primary API endpoint. Picture it as a grid: depth
+on one axis, breadth on the other. Smoke testing deliberately occupies the top-left corner — minimum
+depth, maximum breadth — because its job is not to find bugs, it's to answer one binary question fast:
+*is this build alive enough to be worth anyone's time?*
+
+That framing matters because it tells you what smoke testing is explicitly not trying to do. It is
+not trying to find the subtle off-by-one bug in pagination. It is not trying to catch a wrong tax
+calculation on international orders. Those bugs are real, they matter, and smoke testing will walk
+straight past every one of them without noticing — because noticing them isn't the job. `stlc-phases`
+frames this exactly right: the smoke test is the gate at the end of environment setup, and skipping it
+"is how teams spend a day filing defects that are actually environment problems." A build that's
+fundamentally broken doesn't need forty bug reports about forty different symptoms of the same root
+cause — it needs to bounce back to development with one clear signal: *this doesn't work at all, fix
+it and resubmit.*
+
+## Runs first, gatekeeps everything else
+
+Order matters more in smoke testing than almost any other test type, because its entire value depends
+on running *before* anything else. Run regression first and you might spend two days executing three
+hundred test cases against a build where the login page was broken the whole time — every single
+failure downstream of login was predictable from minute one, and you paid two days to learn it. Run
+smoke first and that same broken login costs you two minutes: the smoke pass fails at step one, the
+build gets rejected, and the two hundred and ninety-nine other test cases never had to be pointlessly
+executed against a corpse. This is why `entry-and-exit-criteria` lists "the build passes a smoke test"
+as a canonical entry criterion for a test cycle — not a nice-to-have, a *precondition*. No smoke, no
+further testing. The gate isn't rude; it's the cheapest possible insurance against wasting everyone's
+afternoon on a build that was never going to survive contact with a real test case.
+
+## The real-world example you already built
+
+Here's the part that should feel satisfying rather than theoretical: you have already written a
+production-shaped smoke test, back in
+[automating repetitive checks](/notes/linux-for-testers/bash-scripting-for-qa/automating-repetitive-checks).
+That note's `smoke.sh` — loop over a list of URLs, `curl` each one, compare the status code, print a
+dated verdict, count failures, exit non-zero if anything failed — is not "smoke-test-flavored." It IS
+a smoke test, in the fullest sense of the definition on this page: shallow (it only checks "did I get
+a 200," not "is the content correct"), wide (it checks the home page, a broken page, and an error
+endpoint all in one pass — extend that list to your actual app's main screens and you have exactly
+this note's concept), and gate-shaped (the aggregate exit code is precisely the PASS/FAIL signal that
+authorizes or blocks everything downstream). If you scheduled that script with
+[cron](/notes/linux-for-testers/bash-scripting-for-qa/cron-scheduling) or wired it into a CI pipeline
+step, you already own a working smoke suite. This note gives the concept its name and its rules;
+that note gave you the muscle memory.
+
+{/* IMAGE: a technician's hand flipping a power switch on a freshly assembled circuit board on a lab bench, an oscilloscope and multimeter visible but unused in the background, a thin wisp of smoke rising from one corner of the board */}
+<HotspotImage
+  src="/notes/levels-and-types-of-testing/smoke-and-sanity/chip-testing.jpg"
+  alt="An electronics test bench: several freshly assembled circuit boards wired to a live oscilloscope and probes, one board mounted in a 3D-printed test fixture with pins connected, cables running everywhere between boards and instruments - everything powered and live, nothing yet declared safe"
+  credit="Photo: Testing AstroPix, a new gamma-ray detector chip (NASA/SVS) - Wikimedia Commons, Public domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:Testing_AstroPix,_A_New_Gamma-Ray_Detector_(SVS14809_-_ASTEP_Chips3).jpg"
+  pins={[
+    { x: 48, y: 68, label: "The board in the 3D-printed fixture, freshly powered = deploying the build", desc: "Wired up, connected, live - the moment a fresh build reaches a test environment. Nothing has been judged yet, this is just the board arriving, powered on, ready for its first seconds of scrutiny." },
+    { x: 65, y: 15, label: "The oscilloscope screen, actively reading a signal = the smoke test running", desc: "Not a deep inspection - a fast, wide watch over the whole board's basic behavior. Software equivalent: does the app launch, does the homepage render, does login succeed, does the main API answer. Shallow on purpose, wide on purpose." },
+    { x: 30, y: 40, label: "The second board wired up behind it = the next build in the queue", desc: "Boards get tested one after another on this same bench, same setup, same fast check every time. A clean pass on THIS one authorizes moving to the next - in software, a green smoke suite is the entry criterion that authorizes regression, exploratory, and feature testing to begin." },
+    { x: 15, y: 75, label: "The tangle of black probe cables converging on one board", desc: "Every wire here exists to catch a problem the instant power flows - not to diagnose it deeply yet, just to detect it fast. That is the smoke test's entire job: cheap, wide detection before anyone commits to the slow, expensive work of real diagnosis." },
+    { x: 85, y: 55, label: "The white ceramic module on the right, untouched, waiting", desc: "Sitting idle until its turn on the bench - exactly like deeper testing tools wait for a build to clear the cheap check first. That ordering - cheap and wide before slow and deep - is the entire economic argument for running a smoke test first, every single time, no exceptions for 'we're in a hurry.'" },
+  ]}
+/>
+
+<FlowAnimation
+  title="One build's first ninety seconds - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Build lands on the test environment", desc: "CI finishes, the artifact deploys to staging. Nobody has looked at it yet. At this moment the build is Schrodinger's release: it might be perfect, it might not even start." },
+    { label: "The smoke suite runs - shallow, wide, fast", desc: "A script (like smoke.sh) hits home, login, search, product page, cart, and the primary API - a handful of critical paths, checked for 'did it load' not 'is it correct.' Total time: seconds to a couple of minutes, never longer." },
+    { label: "Gate check: did anything come back broken?", desc: "One aggregate verdict, exactly like the bash script's exit code: 0 means every critical path answered, non-zero means at least one didn't. There is no partial credit here - the gate is binary by design." },
+    { label: "FAIL path: bounce immediately, one ticket", desc: "The build never reaches a human tester. It goes back to development with a precise, single defect - 'login returns 500 on staging' - instead of the twenty confused bug reports a broken login would have generated across a full test cycle." },
+    { label: "PASS path: deeper testing is now authorized", desc: "Regression, exploratory sessions, feature testing for this sprint's work - all of it was WAITING on this gate as an entry criterion. The ninety-second check just saved however many hours the full cycle would otherwise have burned on a dead build." },
+  ]}
+/>
+
+The exact script from `automating-repetitive-checks`, retargeted at an app's main screens instead of a
+generic URL list — this is what a real smoke test looks like end to end:
+
+<CodePlayground
+  language="bash"
+  title="Try it - a smoke suite over an app's critical paths"
+  code={`mkdir -p ~/qa-checks && cd ~/qa-checks
+
+# The smoke checklist as data - the app's MUST-WORK screens, not every screen:
+cat > smoke-urls.txt <<'EOF'
+https://staging.example.com/
+https://staging.example.com/login
+https://staging.example.com/products
+https://staging.example.com/cart
+https://staging.example.com/api/health
+EOF
+
+# Same shape as automating-repetitive-checks.mdx: loop, verdict, aggregate.
+cat > smoke.sh <<'EOF'
+#!/bin/bash
+fails=0
+while read -r url; do
+  status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url")
+  stamp=$(date '+%Y-%m-%d %H:%M')
+  if [ "$status" = "200" ]; then
+    echo "[$stamp] OK   $status $url"
+  else
+    echo "[$stamp] FAIL $status $url"
+    fails=$((fails + 1))
+  fi
+done < smoke-urls.txt
+echo "[$(date '+%Y-%m-%d %H:%M')] smoke: checked $(wc -l < smoke-urls.txt | tr -d ' ') critical paths, $fails failed"
+[ "$fails" -eq 0 ]   # 0 = build is alive, non-zero = reject before real testing starts
+
+./smoke.sh
+# [2026-07-14 09:00] OK   200 https://staging.example.com/
+# [2026-07-14 09:00] OK   200 https://staging.example.com/login
+# [2026-07-14 09:00] OK   200 https://staging.example.com/products
+# [2026-07-14 09:00] FAIL 500 https://staging.example.com/cart
+# [2026-07-14 09:00] OK   200 https://staging.example.com/api/health
+# [2026-07-14 09:00] smoke: checked 5 critical paths, 1 failed
+echo $?
+# 1    <- FAIL. This build gets bounced BEFORE a human opens a test case.`}
+/>
+
+<CodePlayground
+  language="bash"
+  title="Try it - wiring the gate into a pipeline step"
+  code={`# The whole point of automating smoke: its exit code becomes a GATE
+# that decides whether the rest of the pipeline (or the rest of the
+# test cycle) is even allowed to start.
+
+cd ~/qa-checks
+
+run_smoke_gate() {
+  ./smoke.sh
+  if [ $? -eq 0 ]; then
+    echo "SMOKE PASS - deeper testing is authorized, proceeding."
+    return 0
+  else
+    echo "SMOKE FAIL - build rejected, deeper testing skipped entirely."
+    return 1
+  fi
+}
+
+# Simulate a pipeline step: only run regression if smoke passed.
+if run_smoke_gate; then
+  echo "Starting regression suite..."
+  echo "Starting exploratory session notes..."
+else
+  echo "Notifying dev channel: build failed smoke, bounced, not tested further."
+fi
+# SMOKE FAIL - build rejected, deeper testing skipped entirely.
+# Notifying dev channel: build failed smoke, bounced, not tested further.
+#
+# Flip the cart URL back to a 200 and every downstream stage runs -
+# THAT branch is the entry criterion from entry-and-exit-criteria.mdx,
+# expressed as three lines of bash instead of a paragraph of policy.`}
+/>
+
+<Callout type="tip">
+Keep your smoke list short on purpose — five to fifteen critical paths, never fifty. The moment a
+smoke suite grows past a couple of minutes, teams quietly stop running it before every deploy, and a
+gate nobody runs is not a gate. If you're tempted to add a screen "just to be thorough," ask: would
+this app be *unusable* without it? If the answer is "annoying but survivable," that check belongs in
+regression, not smoke. The discipline of staying shallow and wide is the whole reason the gate stays
+fast enough that nobody's ever tempted to skip it under deadline pressure.
+</Callout>
+
+<FirstTime title="Your mission: build and break your own smoke gate">
+<StepChecklist
+  steps={[
+    { text: "List your app's five to ten must-work paths", detail: "Not every page - the ones where failure means the app is basically unusable: home, login, the core feature, one write action (add to cart, submit a form), and the primary API health endpoint. This list IS your smoke suite's scope." },
+    { text: "Adapt the smoke.sh from automating-repetitive-checks", detail: "Point urls.txt at your five to ten paths instead of the generic example. Run it once against a healthy environment - every line should read OK. If it doesn't, you just found either a broken URL or a genuinely broken critical path - both are useful information on day one." },
+    { text: "Prove FAIL works by breaking one path on purpose", detail: "Point one URL at something that 404s or point --max-time at an endpoint you know is slow. Confirm the script prints FAIL, increments the counter, and exits non-zero. A gate that can't fail isn't a gate - it's decoration." },
+    { text: "Time the whole run", detail: "It should complete in well under two minutes. If it's slower, your suite has drifted from shallow-and-wide toward deep-and-narrow - trim it back down. Speed is not a nice-to-have here, it's the property that keeps the gate honest." },
+    { text: "Write the one-sentence gate rule for your team", detail: "'No test cycle starts, and no build reaches a tester, until smoke.sh exits 0.' Say it in a standup or a test plan. This sentence is the entry criterion from entry-and-exit-criteria.mdx, made concrete for your actual project." },
+  ]}
+/>
+You've now built the exact gate that separates 'is this build alive' from 'is this build correct' -
+and proven both directions of it with your own hands.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "The smoke suite passes but testers still hit obvious, glaring bugs within the first five minutes of exploring.",
+      fix: "This usually means the smoke list is too narrow or checking the wrong signal. A 200 status code proves a page RESPONDED, not that it rendered correctly - a page that returns 200 with a blank white body still passes a status-code-only check. Add a lightweight content assertion (does the response contain an expected string, like the page title or a known element) alongside the status check, and make sure your critical-path list actually includes the paths testers immediately touch, not just the ones that were easy to script.",
+    },
+    {
+      symptom: "The team keeps skipping the smoke test 'just this once' when a release is late, and it keeps costing more time than it saved.",
+      fix: "This is the exact failure mode the gate exists to prevent, and the fix is procedural, not technical: make smoke a hard, automated, non-optional entry criterion (wire it into CI so a red smoke stage literally blocks the deploy from reaching QA, per build-acceptance) rather than a step a human can quietly shrug off under deadline pressure. A gate that can be argued around by whoever is most stressed that day isn't a gate.",
+    },
+    {
+      symptom: "Smoke tests take fifteen minutes to run and nobody wants to wait for them before starting real testing.",
+      fix: "Fifteen minutes is a symptom of scope creep - somewhere along the way the suite absorbed feature-level detail it was never meant to carry. Audit the list against the shallow-and-wide test: for each check, ask 'does this verify the app is ALIVE, or does it verify a FEATURE is correct?' Move every feature-correctness check into regression or a feature test suite, and get the smoke pass back under two minutes. If genuine infrastructure slowness (not scope) is the cause, parallelize the checks instead of running them one at a time.",
+    },
+    {
+      symptom: "Different people run 'the smoke test' and mean completely different things - one person's list of five URLs versus another's fifty-case manual click-through.",
+      fix: "This is a definition problem, not a testing problem. Write the smoke suite down as a named, versioned artifact (a urls.txt in the repo, or an automated CI stage) rather than tribal knowledge in someone's head or a personal habit. Once it's a file everyone can read and pull-request changes against, 'the smoke test' stops being a matter of opinion and starts being a thing the whole team can point at and agree on.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where to look for smoke testing doing its job (or quietly not doing it) on a real team:
+
+- **The CI pipeline's first automated stage after deploy** — a green smoke step is what unlocks every
+  later stage; a red one should stop the pipeline outright. See [running tests in the pipeline](/notes/cicd/pipelines/test-in-pipeline) for how it slots in among lint, unit, integration, and e2e.
+- **The test cycle's entry criteria document** — "build deployed and passes smoke" is the canonical
+  line item in [entry and exit criteria](/notes/qa-foundations/sdlc-and-stlc/entry-and-exit-criteria); if that line is missing, testing is absorbing chaos it shouldn't.
+- **The environment setup phase of STLC** — [STLC phases](/notes/qa-foundations/sdlc-and-stlc/stlc-phases) puts the smoke test exactly where this note puts it: the gate at the end of setup, before execution begins.
+- **Your own bash history** — if you've ever manually clicked five pages every morning before trusting a staging environment, you were already running a smoke test by hand; automate it per [automating repetitive checks](/notes/linux-for-testers/bash-scripting-for-qa/automating-repetitive-checks).
+- **The build's rejection log** — count how many builds get bounced at smoke versus how many reach full testing broken. A rising bounce rate is development's signal, made visible early instead of discovered late.
+
+Tester's habit: **if you can't answer "does the app even launch" in under two minutes, you don't
+have a smoke test — you have an aspiration.**
+</WhereToCheck>
+
+<WorkedExample title="the release that would have wasted a full test day">
+1. **Friday, 4:45 pm:** a build lands on staging ahead of Monday's release. The test lead, instead of
+   diving into the sprint's feature test cases, runs the five-path smoke script first — a two-minute
+   habit that's saved her before.
+2. **09:00 output:** four OK lines, one FAIL — `/cart` returns a 500. The rest of the app looks fine
+   from the outside; only the cart endpoint is dead.
+3. **Old-world instinct:** start testing anyway, "it's probably just cart, everything else looks
+   fine." Except cart touches checkout, checkout touches order confirmation, order confirmation
+   touches the email service test cases — a huge fraction of Monday's planned test cases would have
+   failed downstream of this one root cause, generating a pile of defects that are really one defect
+   wearing many disguises.
+4. **What she does instead:** stops immediately, files one precise ticket — "cart endpoint 500s on
+   staging as of 4:45pm build, blocks all downstream checkout/order/email test cases" — and pings the
+   on-call developer before leaving for the weekend.
+5. **Monday, 9:15 am:** the developer had already fixed it Saturday from a phone alert (the smoke
+   script was wired into CI and paged the channel automatically). The re-run is clean across all five
+   paths.
+6. **Monday, 9:20 am:** the FULL test cycle begins — on time, against a build actually worth testing,
+   with zero hours burned discovering the same root cause forty different ways.
+7. **What got saved:** roughly a full test day that would otherwise have been spent filing, deduping,
+   and re-triaging cart-shaped defects across a dozen different test cases — the exact "eleven
+   defects that were really one environment problem" pattern that `stlc-phases` warns about, prevented
+   by a two-minute check run at exactly the right moment.
+8. **The lesson:** smoke testing's value isn't the bugs it finds — it's the hours it prevents from
+   being spent finding the SAME bug over and over, dressed up as twenty different symptoms.
+</WorkedExample>
+
+<Callout type="mistake">
+Treating a passing smoke test as proof the build is *good*. It only proves the build is *alive*.
+Smoke testing is a floor, not a ceiling — it tells you the app didn't catch fire, not that every
+feature works correctly, not that yesterday's bug is fixed, not that performance is acceptable. The
+failure mode shows up as false confidence: "smoke is green, ship it" skips regression, feature
+testing, and exploratory sessions entirely, on the theory that a shallow, wide, two-minute check
+somehow substitutes for depth it was never designed to have. Smoke answers "is it worth testing
+further?" — never "is it done."
+</Callout>
+
+<Quiz
+  question="A team's CI pipeline runs the full regression suite (40 minutes) immediately after every deploy, with no smoke test beforehand. What is the main problem with this ordering?"
+  options={[
+    "Nothing - regression covers more ground than smoke would, so running it first is strictly better",
+    "If the build is fundamentally broken (e.g. the app fails to start), the full 40-minute regression suite runs anyway and produces a wall of downstream failures that are really one root cause, instead of a 2-minute smoke gate catching it immediately and bouncing the build",
+    "Regression tests cannot run without a smoke test having executed first - CI will refuse to start the suite",
+    "Smoke tests and regression tests check identical things, so the order genuinely doesn't matter"
+  ]}
+  answer={1}
+  explain="Smoke testing exists specifically to fail fast and cheap: a two-minute, shallow, wide check that catches a fundamentally broken build BEFORE the expensive, deep suite runs against it. Skipping it doesn't make regression more thorough - the same 'the app never started' root cause just gets rediscovered forty different ways across forty test cases, burning 40 minutes of pipeline time and producing a results report that looks like forty separate defects instead of one clear bounce-worthy signal. Option one is wrong because more coverage on a dead build produces noise, not extra value - depth is worthless without the shallow-and-wide precondition holding first. Option three is wrong: nothing technically stops regression from running without smoke - the problem is that it SHOULD be stopped, by policy (an entry criterion), not that CI enforces it automatically unless a team wires that gate in itself. Option four is wrong on the core distinction this whole note draws: smoke is shallow and wide (is it alive), regression is deep and targeted (did anything break) - they are answering different questions on purpose."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Smoke testing - definition and origin", back: "A shallow, wide check that a fresh build is stable enough for real testing to begin: does it launch, do main screens load, does the primary API respond. Named after hardware smoke testing - power on the board, watch for smoke, proceed only if none appears." },
+    { front: "Shallow and wide - what it means", back: "Shallow: verify a path LOADS, not that its logic is correct in every detail. Wide: spread that shallow check across every major area of the app (home, login, core feature, primary API), not deep into any one of them. Depth is for regression and feature testing, which come later." },
+    { front: "Why smoke must run FIRST", back: "Its value depends entirely on running before anything else. A broken build tested with regression first wastes the full cycle's time discovering the same root cause forty different ways; smoke run first bounces the build in minutes, before deeper testing wastes any effort on a dead build." },
+    { front: "Smoke as a gate, not a report", back: "The outcome is binary and consequential: PASS authorizes deeper testing to begin (an entry criterion), FAIL rejects the build back to development immediately, before a human tester opens a single test case." },
+    { front: "The real-world example already built", back: "smoke.sh from automating-repetitive-checks.mdx: loop over critical URLs, curl each, verdict per line, aggregate exit code. That script IS a smoke test - shallow (status code only), wide (multiple critical paths), gate-shaped (non-zero exit blocks downstream steps)." },
+    { front: "The classic mistake", back: "Treating 'smoke passed' as 'build is good.' Smoke proves the build is ALIVE, not correct, not complete, not performant. It's a floor that unlocks deeper testing - never a substitute for regression, feature testing, or exploratory sessions." },
+  ]}
+/>
+
+<Challenge>
+Take your own project (or BuggyShop/BuggyAPI if you don't have one handy) and build a real smoke
+gate end to end: (1) list five to ten genuinely must-work paths - not every page, only the ones whose
+failure makes the app unusable; (2) write the loop-curl-verdict-aggregate script, adapted from
+automating-repetitive-checks.mdx; (3) prove both outcomes by running it once healthy and once with
+one path deliberately broken, pasting both exit codes; (4) write the one-sentence entry-criterion
+policy your team would enforce ("no test cycle starts until smoke.sh exits 0"); (5) the judgment
+question - pick one thing currently on your list that's actually a REGRESSION check in disguise
+(too deep for smoke) and explain in one sentence why it doesn't belong here.
+</Challenge>
+
+<AskCommunity prompt="Smoke testing question: my team's smoke suite covers [N] critical paths and currently [passes reliably / is flaky / gets skipped under deadline pressure / doesn't exist yet]. The specific friction: [describe - false positives, too slow, nobody enforces the gate, disagreement on what counts as 'critical']. What I've tried so far: [describe]. Is my scope shallow-and-wide enough, or has it drifted toward regression territory?">
+Paste your actual critical-path list if you have one - most smoke-suite disagreements are really
+scope disagreements, and seeing the list usually makes it obvious within a minute whether something
+on it is testing "is it alive" versus quietly testing "is it correct," which is regression's job, not
+smoke's.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://glossary.istqb.org/en/search/smoke%20test", title: "ISTQB Glossary - smoke test, the official definition", kind: "read" },
+    { href: "https://www.atlassian.com/continuous-delivery/software-testing/smoke-testing", title: "Atlassian - what is smoke testing and how it fits CI/CD", kind: "read" },
+    { href: "/notes/linux-for-testers/bash-scripting-for-qa/automating-repetitive-checks", title: "automating repetitive checks - the real smoke.sh script this note builds on", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=9zNWiExLPQg", title: "What is Smoke Testing? - Quick Software Testing Guide (Excalion Chronicles)", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=9zNWiExLPQg" title="What is Smoke Testing? - Quick Software Testing Guide (Excalion Chronicles)" minutes={7} />
+
+<Takeaways
+  points={[
+    "Smoke testing is a shallow, wide check that a fresh build is alive enough to be worth testing further - it verifies critical paths LOAD, not that features are correct in detail.",
+    "It runs FIRST, before any other test activity, because its entire value depends on catching a dead build cheaply before deeper testing wastes hours rediscovering the same root cause forty times.",
+    "Its outcome is a binary gate, not a bug report: PASS authorizes regression, exploratory, and feature testing (an entry criterion); FAIL bounces the build back to development immediately.",
+    "The smoke.sh script from automating-repetitive-checks.mdx is a real, working smoke test - loop over critical URLs, verdict per line, aggregate exit code deciding whether downstream steps run at all.",
+    "A green smoke suite is a floor, not a ceiling: it proves the app didn't catch fire, never that it's correct, complete, or performant - treat 'smoke passed, ship it' as the mistake it is.",
+  ]}
+/>
+
+<Complete xp={10} />

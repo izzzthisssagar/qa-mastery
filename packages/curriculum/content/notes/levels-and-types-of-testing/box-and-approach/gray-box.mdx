@@ -1,0 +1,347 @@
+---
+title: "Gray-box testing"
+summary: "The tester who has read the DB schema or the API contract, but not the source - gray-box uses partial internal knowledge to aim purely black-box tests sharper, no code required."
+tags: ["levels-and-types-of-testing", "box-and-approach", "track-c"]
+updated: "2026-07-14"
+---
+
+<Hook>
+There's a tester on every good team who has never opened `git clone` in their life, cannot read a
+single `if` statement, and still keeps writing bug reports that make developers say "wait, how did
+you even think to try that?" Their secret isn't a hidden coding skill. It's that they read the
+database table before writing test cases, or pulled a HAR file and noticed the API silently accepts
+a field the UI never lets you type. They're not black-box (they know something about the inside) and
+they're not white-box (they never touched the implementation). There's a name for that exact middle
+ground, and once you know it exists, you'll start using it on purpose instead of by accident.
+</Hook>
+
+<Callout type="analogy">
+A home appraiser walks through a house before valuing it. They don't rip open a single wall - that's
+the inspector's job, or the electrician's, someone with tools and training the appraiser doesn't
+have. But the appraiser DOES pull the permit history and the original blueprints before they even
+step inside: they know from paperwork alone that the house was built on a slab (no crawl space to
+worry about), that a bedroom was added without a permit in 2003 (a red flag worth walking straight
+toward), and that the electrical was upgraded to code in 2015 (one whole category of risk they can
+mostly skip). None of that required opening a wall. All of it changes exactly where the appraiser
+spends their limited walk-through time - toward the unpermitted addition, past the up-to-code wiring.
+That's the appraiser's whole method: partial documented knowledge, zero hands-on internals, and a
+walk-through that's sharper for having read the paperwork first.
+</Callout>
+
+<Term define="Testing performed with PARTIAL knowledge of the system's internals - typically the database schema, an API contract, network traffic, or architecture diagrams - but WITHOUT reading or writing the application's implementation code. The tester still interacts with the system purely from the outside, exactly as black-box testing does; the difference is that the test cases are informed by internal artifacts most black-box testers never look at. Distinct from white-box testing (which reads and often modifies source code) and from white-box awareness (which reads the code's structure specifically). Gray-box is the most common real-world testing posture for experienced QA engineers, because most testers who have worked on a product for a while accumulate exactly this kind of partial knowledge without ever becoming developers.">gray-box testing</Term>
+
+## The knowledge you can pick up without writing a single function
+
+Gray-box testing sits in a very specific, very common gap: more than a brand-new tester staring at
+a login form with zero context, less than a developer who wrote `authenticate_user` and knows every
+branch by heart. The internal knowledge that qualifies is deliberately narrow — it's things a tester
+can learn by reading an ARTIFACT, never by reading or writing CODE. A database schema is the
+classic example: open the `discount_codes` table and see columns `max_uses INTEGER NOT NULL`,
+`expires_at DATE NULL`, `discount_pct DECIMAL(3,2)`. You now know three things no black-box tester
+staring at the checkout page would ever guess for free — `max_uses` cannot be blank, `expires_at`
+genuinely can be, and `discount_pct` has a hard three-digit-with-two-decimal ceiling. None of that
+required reading a single line of the application code that enforces (or fails to enforce) those
+rules.
+
+An API contract works the same way. This platform's api module already covers exactly this
+artifact — a spec document (often OpenAPI/Swagger) that states, independent of any implementation,
+which fields are required, what types they must be, and which status codes a given endpoint can
+legally return. Reading that contract before testing is gray-box by definition: you now know the
+`quantity` field is documented as an integer between 1 and 99, so you go test 0, 100, and `1.5`
+before the black-box tester who only looked at the checkout form ever thinks to. And this platform's
+network module already named a third artifact that works identically —
+<Term define="HAR (HTTP Archive) is a JSON file format that captures every network request the Network panel recorded during a session: for each entry, the full request (method, URL, headers, cookies, body) and response (status, headers, cookies, body content, MIME type), plus a timing breakdown per request, and metadata like server IP and page markers. A full transcript of a session a developer can load and walk through exactly as you saw it.">a HAR file</Term>
+: exporting one and reading it can reveal that an endpoint returns `discount: "12.00"` as a STRING
+in one response and `discount: 12.0` as a NUMBER in another, purely from staring at the JSON in the
+transcript — no source code required, no debugger attached, just the recorded traffic doing the
+talking.
+
+## Why this is genuinely different from white-box awareness
+
+It's worth being precise here, because the two are easy to blur. White-box awareness — covered
+elsewhere on this platform — means opening the actual source file and counting `if` statements to
+find untested branches; it requires reading code, even if you never write any. Gray-box testing
+requires reading no code at all — a schema, a contract, a HAR file are all artifacts ABOUT the
+system, generated or documented independently of ever opening `discount.py`. A tester who has never
+seen a programming language in their life can still be an excellent gray-box tester: give them a
+database GUI and an API spec, and they'll design sharper tests than most black-box testers, purely
+from reading documentation and data — the exact same "read the paperwork, then walk the house"
+method the appraiser used, adapted to software.
+
+<HotspotImage
+  src="/notes/levels-and-types-of-testing/box-and-approach/network-ops.jpg"
+  alt="A NASA Jet Propulsion Laboratory operator at a wall of monitors showing live telemetry dashboards, status timelines, and colour-coded data tables - reading the spacecraft's observable state and logs in real time, with no source code editor open anywhere"
+  credit="Photo: Deep Space Network operations, NASA JPL - Wikimedia Commons, Public domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:Watching_Over_the_Deep_Space_Network_Before_Artemis_II_Signal_Acquisition.jpg"
+  pins={[
+    { x: 22, y: 30, label: "The status timeline with colour-coded bars", desc: "This is a pure gray-box artifact: a readout of what the system is DOING, timestamped and structured, readable without opening a single line of the flight software that produced it. Exactly like reading a database schema or a HAR file - informed by structure, blind to implementation." },
+    { x: 20, y: 78, label: "The green-highlighted rows in the lower-left table", desc: "A status flag, drawn from telemetry, not from source code - the operator's equivalent of a NOT NULL constraint or an HTTP status code. One piece of this kind of structured signal generates a concrete, targeted test case for free, without ever reading how the flag gets set internally." },
+    { x: 48, y: 88, label: "The operator's own hands on the keyboard, no IDE in sight", desc: "She is reading dashboards and logs, not source files. That absence of a code editor anywhere in the shot is the whole point of gray-box work: genuinely more informed than blind black-box guessing, without requiring the implementation knowledge white-box testing demands." },
+    { x: 68, y: 20, label: "The upper monitor's dense multi-panel data view", desc: "Different data streams, different formats, laid out side by side for cross-checking - the physical version of comparing one API response's field types against another's and spotting a contract mismatch neither side's own tests would catch alone." },
+    { x: 88, y: 25, label: "The illuminated JPL / NASA signage above the desk", desc: "This entire room exists to WATCH a system operate from its observable signals, not to rebuild it from source - institutional gray-box testing at planetary scale. The same posture a tester takes reading a HAR file or a DB table: informed observation, not code reading." },
+  ]}
+/>
+
+<FlowAnimation
+  title="From reading a schema to a sharper black-box test - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Generic black-box plan: guess reasonable inputs", desc: "Without any internal knowledge, a tester on the discount-code feature tests the obvious cases: a valid code, an invalid code, an expired code. Reasonable, and genuinely useful - but every case comes from imagining a user, not from anything the system actually enforces." },
+    { label: "Open the database schema - no application code touched", desc: "The tester opens a read-only DB admin view of the discount_codes table. max_uses INTEGER NOT NULL, discount_pct DECIMAL(3,2), expires_at DATE NULL. This took two minutes, required zero programming knowledge, and touched zero source files." },
+    { label: "Translate each constraint into a concrete test case", desc: "NOT NULL on max_uses means: what happens if a code is created with max_uses missing entirely, at the database layer bypassing the UI validation? DECIMAL(3,2) means: what happens with a discount of exactly 9.99 percent versus 10.00 - does the UI even allow four digits? Every constraint is now a specific input, not a guess." },
+    { label: "Execute purely black-box - through the UI or API only", desc: "Crucially, the tester never stops being black-box in EXECUTION: every one of these new test cases is still run through the checkout page or the public API, exactly as a real user would trigger it. The schema informed WHAT to try; it never became a shortcut to skip actually testing the behavior." },
+    { label: "Bugs a generic battery would have missed surface directly", desc: "The discount_pct boundary case reveals the UI silently truncates a 10.00 percent code to 9.99 without warning the user - a real, user-facing bug that a schema-blind tester, running only 'reasonable' guesses, had no structural reason to ever try." },
+  ]}
+/>
+
+Here's the schema-reading habit as runnable code — read a table's constraints (no application logic
+anywhere in sight) and generate the test cases they imply:
+
+<CodePlayground
+  language="python"
+  title="Run it - turn a DB schema into black-box test cases (Python)"
+  code={`# A gray-box artifact: the SCHEMA only. No application code included or needed.
+discount_codes_schema = {
+    "code":          {"type": "string",  "max_length": 12, "nullable": False},
+    "max_uses":      {"type": "integer", "min": 1, "max": 999, "nullable": False},
+    "discount_pct":  {"type": "decimal", "precision": 3, "scale": 2, "nullable": False},
+    "expires_at":    {"type": "date",    "nullable": True},
+}
+
+def derive_test_cases(schema):
+    # Reading constraints, not code, to generate black-box inputs.
+    cases = []
+    for column, rules in schema.items():
+        if not rules["nullable"]:
+            cases.append(f"{column}: send NULL / empty (should be rejected - NOT NULL)")
+        if rules["type"] == "string":
+            over = rules["max_length"] + 1
+            cases.append(f"{column}: send {over} characters (one past max_length {rules['max_length']})")
+        if rules["type"] == "integer":
+            cases.append(f"{column}: send {rules['min'] - 1} (one below min {rules['min']})")
+            cases.append(f"{column}: send {rules['max'] + 1} (one above max {rules['max']})")
+        if rules["type"] == "decimal":
+            ceiling = "9" * (rules["precision"] - rules["scale"]) + "." + "9" * rules["scale"]
+            cases.append(f"{column}: send a value one step past {ceiling} (precision {rules['precision']},{rules['scale']} ceiling)")
+        if rules["nullable"]:
+            cases.append(f"{column}: send NULL on purpose (schema allows it - does the UI handle it gracefully?)")
+    return cases
+
+print("Test cases derived purely from reading the schema - no source code opened:")
+for i, case in enumerate(derive_test_cases(discount_codes_schema), start=1):
+    print(f"  {i}. {case}")
+
+print()
+print("Every one of these still gets EXECUTED black-box, through the checkout")
+print("UI or the public API - the schema only decided WHICH inputs are worth")
+print("the tester's limited time.")`}
+/>
+
+Same idea in Java, reading a schema-shaped map and turning constraints into a concrete test list —
+notice the method never imports or calls anything from the application itself:
+
+<CodePlayground
+  language="java"
+  title="Run it - the same schema-to-test-case translation (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    record Column(String type, boolean nullable, Integer maxLength, Integer min, Integer max) {}
+
+    public static void main(String[] args) {
+        // A gray-box artifact: the SCHEMA only. No application code referenced.
+        Map<String, Column> schema = new LinkedHashMap<>();
+        schema.put("code", new Column("string", false, 12, null, null));
+        schema.put("max_uses", new Column("integer", false, null, 1, 999));
+        schema.put("discount_pct", new Column("decimal", false, null, null, null));
+        schema.put("expires_at", new Column("date", true, null, null, null));
+
+        List<String> cases = new ArrayList<>();
+        for (var entry : schema.entrySet()) {
+            String col = entry.getKey();
+            Column c = entry.getValue();
+            if (!c.nullable()) {
+                cases.add(col + ": send NULL / empty (should be rejected - NOT NULL)");
+            } else {
+                cases.add(col + ": send NULL on purpose (schema allows it - handled gracefully?)");
+            }
+            if (c.type().equals("string")) {
+                cases.add(col + ": send " + (c.maxLength() + 1) + " characters (one past max_length " + c.maxLength() + ")");
+            }
+            if (c.type().equals("integer")) {
+                cases.add(col + ": send " + (c.min() - 1) + " (one below min " + c.min() + ")");
+                cases.add(col + ": send " + (c.max() + 1) + " (one above max " + c.max() + ")");
+            }
+        }
+
+        System.out.println("Test cases derived purely from reading the schema:");
+        for (int i = 0; i < cases.size(); i++) {
+            System.out.println("  " + (i + 1) + ". " + cases.get(i));
+        }
+        System.out.println();
+        System.out.println("Every case still runs black-box, through the real UI or API -");
+        System.out.println("the schema only aimed which inputs were worth the tester's time.");
+    }
+}`}
+/>
+
+<Callout type="tip">
+The fastest way to start doing gray-box testing on a real project is to ask for READ-ONLY access to
+two things: the database (or a schema diagram) and the API's spec document (OpenAPI/Swagger, or a
+Postman collection someone already built). You do not need write access, and you should not need to
+ask a developer to walk you through it line by line — schemas and contracts are meant to be read
+directly. Twenty minutes with a schema browser routinely produces test cases a purely black-box plan
+would never have reached, and it costs the team nothing, because you are reading artifacts that
+already exist for other reasons.
+</Callout>
+
+<FirstTime title="Your mission: read one artifact, write three sharper test cases">
+<StepChecklist
+  steps={[
+    { text: "Get read-only access to one internal artifact", detail: "A database schema, an OpenAPI spec, or export a HAR file from a real session (covered in the browser-devtools-mastery module). Pick whichever is easiest to get your hands on - you need read access only, never write, never source code." },
+    { text: "List every constraint you can find in five minutes", detail: "Column types and NULL rules, or required/optional fields and their types, or a field's value across several HAR entries. Write down five to eight facts. None of this requires programming knowledge - it is closer to reading a spreadsheet." },
+    { text: "Translate each constraint into one test case", detail: "A NOT NULL column becomes 'try submitting it empty.' A max_length of 12 becomes 'try 13 characters.' A field that is a string in one HAR entry and a number in another becomes 'does the UI break if the API ever sends the other type?' Write the actual input, not just the idea." },
+    { text: "Execute every case black-box, through the real interface", detail: "Run each test through the UI or the public API exactly as a user or client would - never by calling internal functions or editing the database directly to fake a result. Gray-box informs WHAT you test; it never replaces actually testing the real interface." },
+    { text: "Compare against a black-box-only version of yourself", detail: "Before reading the artifact, would you have thought to try any of these three cases? Be honest. The gap between what 'default you' would have tried and what 'artifact-informed you' tried is the entire value of gray-box testing, made visible." },
+  ]}
+/>
+You've now done real gray-box testing - partial internal knowledge, zero implementation code read, and test cases sharper than guessing could have produced alone.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A tester reads the database schema, gets excited, and starts editing rows directly in the database to set up test scenarios instead of going through the application.",
+      fix: "That has quietly stopped being gray-box testing and become direct data manipulation - useful for some setup tasks, but it means you are no longer testing the actual PATH a real user or API client takes to create that state, and you can accidentally create data combinations the application itself would never allow. Use the schema to decide WHAT state to test for, then create that state through the real interface wherever possible, and clearly label any direct DB setup as test scaffolding, not as the test itself.",
+    },
+    {
+      symptom: "A tester with gray-box access to the API contract starts treating the documented spec as ground truth and stops actually testing whether the live API matches it.",
+      fix: "This flips gray-box testing into blind trust of documentation - and specs drift from implementation constantly, which is exactly what contract testing exists to catch. The contract tells you what SHOULD be true and hands you sharp test cases; you still have to run every one of them against the live system and treat any mismatch between the spec and reality as a bug in its own right.",
+    },
+    {
+      symptom: "A tester has no idea how to get access to a schema or an API contract and assumes gray-box testing requires special developer permission they will never be granted.",
+      fix: "Ask specifically for READ-ONLY access, framed as a testing need, not a development need: a schema diagram, a Postman collection, an OpenAPI file, or simply export a HAR file yourself from the browser's Network panel, which requires no permission from anyone. Most teams already have at least one of these artifacts sitting in a repo or a wiki page, unread.",
+    },
+    {
+      symptom: "A team assumes gray-box testing is a formal, named process someone has to schedule, so nobody does it and testers keep guessing at inputs with zero internal context.",
+      fix: "Gray-box testing rarely needs a ceremony - it is a habit: before testing any feature with a data model behind it, spend five minutes looking at the schema or the contract first. Treat it the same way you would treat reading the ticket before testing the feature - a five-minute step that belongs at the start of test design, not a separate project phase.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Gray-box opportunities are sitting, unread, on most projects already - go find them:
+
+- **The database schema or an ER diagram** - column types, NOT NULL flags, foreign keys, unique
+  constraints. Each one is a test case waiting to be written, and most schema browsers need no
+  developer help to open.
+- **The API's OpenAPI/Swagger spec or Postman collection** - required vs optional fields, documented
+  types, and the full list of status codes an endpoint is allowed to return. Read it before testing
+  the endpoint, not after a bug forces you to.
+- **A HAR export from a real session** - covered in this platform's network module. Reading actual
+  captured traffic can reveal field types, hidden request parameters, and inconsistencies between
+  what different endpoints return for the same conceptual data.
+- **Architecture or sequence diagrams** - even a rough whiteboard photo of "service A calls service B
+  which calls service C" tells a tester where a failure in one service might silently affect another,
+  without reading a line of any of the three services' code.
+- **Feature flag or config dashboards** - knowing a feature is gated behind a flag, and what values
+  that flag can take, is gray-box knowledge that turns "test the new checkout flow" into "test it
+  with the flag on, off, and mid-rollout" - three real test conditions from one dashboard glance.
+</WhereToCheck>
+
+<WorkedExample title="the refund that only broke for a specific currency">
+1. **The starting point:** a black-box tester tests refunds thoroughly - full refund, partial refund,
+   refund on an already-refunded order (correctly rejected). Everything passes. The feature ships.
+2. **A week later**, a support ticket: a customer in Japan got a refund for double the correct amount.
+   No repro steps that make sense from the UI - refunds in USD, EUR, and GBP all work perfectly.
+3. **A gray-box tester picks it up** and, before touching the UI at all, opens the `orders` table
+   schema. One column jumps out: `currency_minor_units INTEGER, DEFAULT 2` - a field that stores HOW
+   MANY decimal places a given currency uses, because most currencies use 2 (cents) but a few, like
+   Japanese yen, use 0.
+4. **The test case writes itself from that one column:** does the refund calculation actually READ
+   `currency_minor_units`, or does it assume 2 everywhere? The tester never opens the refund
+   calculation code - they simply now know exactly which currency to test with, because the schema
+   told them yen is the structural outlier.
+5. **They run one black-box test**: refund a yen order through the real UI. The refund comes back
+   doubled - the system was treating a yen amount as if it had two decimal places that do not exist
+   for that currency, a 100x-scale bug hiding behind a column nobody without the schema would have
+   thought to check.
+6. **The lesson:** the black-box battery from step 1 was genuinely thorough for the currencies the
+   tester thought to try. It could never have reached this bug, because nothing about testing USD,
+   EUR, and GBP would ever surface a yen-specific scaling issue. Five minutes with the schema did
+   what a much larger, purely behavior-guessed test battery never would have - and the tester still
+   never opened a single line of the refund calculation's source code.
+</WorkedExample>
+
+<Callout type="mistake">
+Treating gray-box testing as "black-box testing, but I peeked once" and then never actually using
+what you learned. The value isn't in KNOWING the schema has a `currency_minor_units` column - it's in
+turning that specific fact into a specific test you then actually run. A tester who reads an API
+contract and still only tests the three inputs they would have guessed anyway got nothing out of the
+reading. The other common mistake runs the opposite direction: reading internal artifacts and
+starting to trust them as automatically true. A schema or a contract describes what the system is
+SUPPOSED to do - it is itself sometimes wrong, out of date, or unenforced, and the only way to know is
+still to run the test against the real, live behavior.
+</Callout>
+
+<Quiz
+  question="A tester opens a database schema (never the application source) and notices a column called discount_pct is DECIMAL(3,2), meaning it can only store values up to 9.99. They then go test the checkout UI with a 10.00 percent discount code, entered exactly as a real customer would. What best describes this testing approach?"
+  options={[
+    "White-box testing, because internal system knowledge was used to design the test",
+    "Black-box testing, because the schema is irrelevant once a real UI input is used",
+    "Gray-box testing - partial internal knowledge (the schema constraint) informed the test case, but the test itself was executed purely from the outside, through the real UI, with no application code read or written",
+    "This is not a valid testing approach because schemas should never influence test design"
+  ]}
+  answer={2}
+  explain="This is the textbook shape of gray-box testing: an internal ARTIFACT (the database schema) was read to discover a concrete, non-obvious boundary (9.99 as a hard ceiling), and that knowledge shaped which input got tested - but the actual test execution stayed entirely black-box, through the real checkout UI, exactly as a customer would use it, with zero application source code read or modified. Option one is wrong because white-box testing specifically means designing tests from the SOURCE CODE, not from a schema or contract artifact. Option two is wrong because it ignores that the schema reading is precisely what made this a sharper, non-obvious test case rather than a random guess. Option four is simply false - schema and contract-informed testing is one of the most common and valuable testing postures on real teams, precisely because it costs nothing and catches bugs generic guessing misses."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Gray-box testing - definition", back: "Testing with PARTIAL internal knowledge - a database schema, an API contract, a HAR file, an architecture diagram - but WITHOUT reading or writing the application's implementation code. Execution stays black-box (through the real UI/API); only the test DESIGN is informed by internal artifacts." },
+    { front: "Gray-box vs white-box awareness - the key difference", back: "White-box awareness means reading actual source code (functions, ifs, branches) without writing any. Gray-box means reading artifacts ABOUT the system - schema, contract, captured traffic - and requires zero code reading of any kind. A non-programmer can be an excellent gray-box tester." },
+    { front: "Three artifacts that make you a gray-box tester", back: "A database schema (column types, NOT NULL, max lengths, foreign keys), an API contract/spec (required fields, documented types, valid status codes), and a HAR file of captured network traffic (real request/response shapes, revealing type or field inconsistencies)." },
+    { front: "Why gray-box test cases beat pure guessing", back: "Black-box guesses are derived from imagining a user's behavior. Gray-box test cases are derived from an actual documented CONSTRAINT (a DECIMAL(3,2) ceiling, a NOT NULL column, a currency_minor_units field) - which routinely surfaces boundary and edge cases a tester would have no structural reason to guess." },
+    { front: "The gray-box execution rule", back: "Reading an artifact only decides WHAT to test - execution must still happen through the real interface (UI, API) exactly as a genuine user or client would trigger it. Editing the database directly to fake a result, or trusting a spec without running the live test, both break the approach." },
+    { front: "How to get gray-box access on a real team", back: "Ask for READ-ONLY access framed as a testing need: a schema diagram, a Postman/OpenAPI spec, or simply export a HAR file yourself from DevTools' Network panel, which needs no permission from anyone. Most teams already have these artifacts sitting unread." },
+  ]}
+/>
+
+<Challenge>
+Find one real internal artifact you have access to right now - a database table in a practice app, a
+public API's documented spec, or export a HAR file from any site you use (five minutes in DevTools).
+(1) List five concrete constraints or facts you learn from it that the UI alone never told you. (2)
+For each one, write the exact test input it implies. (3) Run at least two of those tests through the
+real interface and record what actually happened - pass, fail, or something the artifact did not
+predict. (4) Write one sentence: which of your five test cases would "black-box-only you," reading
+nothing, have never thought to try?
+</Challenge>
+
+<AskCommunity prompt="Gray-box access question: I am testing `[feature name]` and I have (or want) read access to `[the database schema / an API spec / HAR exports]`. The specific thing I found: `[the constraint, field, or inconsistency]`. My planned test case from it: `[your input]`. Is this a genuine gray-box find, and what other artifacts should I be asking to read for this kind of feature?">
+Paste the actual constraint (the column definition, the schema fragment, or the HAR field), not a
+summary of it - specific artifacts get specific, useful replies about what test cases similar
+constraints have exposed elsewhere.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://glossary.istqb.org/en/search/gray-box%20testing", title: "ISTQB Glossary - gray-box testing, the official definition", kind: "read" },
+    { href: "https://swagger.io/docs/specification/about/", title: "OpenAPI/Swagger - about the specification, the API contract artifact gray-box testers read", kind: "read" },
+    { href: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/HAR_specification", title: "MDN - the HAR (HTTP Archive) format specification", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=0U3RPrkw9NY", title: "Gray Box Testing - Software Engineering (Education 4u)", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=0U3RPrkw9NY" title="Gray Box Testing - Software Engineering (Education 4u)" minutes={9} />
+
+<Takeaways
+  points={[
+    "Gray-box testing uses PARTIAL internal knowledge - a database schema, an API contract, a HAR file - to design sharper tests, while execution stays fully black-box through the real UI or API.",
+    "It is distinct from white-box awareness: gray-box requires reading artifacts ABOUT the system, never the application's actual source code. A non-programmer can be an excellent gray-box tester.",
+    "Schemas and contracts hand you concrete, non-obvious constraints - a DECIMAL ceiling, a NOT NULL column, a currency-scaling field - that turn into specific test cases no amount of behavior-guessing would reliably produce.",
+    "The discipline is a habit, not a ceremony: five minutes reading a schema or a spec before testing a data-backed feature routinely surfaces bugs a purely black-box battery structurally could not reach.",
+    "The one rule that keeps it honest: reading the artifact only decides WHAT to test - the test itself must still run through the real interface, and any mismatch between the artifact and live behavior is itself a bug worth reporting.",
+  ]}
+/>
+
+<Complete xp={10} />

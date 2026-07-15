@@ -1,0 +1,342 @@
+---
+title: "Regression testing"
+summary: "Regression testing re-runs existing checks after a change to confirm nothing that used to work quietly broke. Why shared code ripples, how regression suites form, and why this work became automation's natural home."
+tags: ["levels-and-types-of-testing", "functional-and-regression", "track-c"]
+updated: "2026-07-14"
+---
+
+<Hook>
+A developer fixes a genuine bug in the email validator - it used to reject addresses with a plus
+sign, which broke every user who filters their inbox with `name+tag@example.com`. Good fix, well
+tested, ships clean. Three days later, support tickets flood in: hundreds of newsletter subscribers
+can no longer confirm their subscription. Nobody touched the newsletter feature. Except somebody
+did - the newsletter's confirmation form calls the exact same validator, and the "fix" quietly added
+a *new* rule (block consecutive dots) that the newsletter form's auto-generated addresses happen to
+violate. The bug wasn't in what changed. It was in everything that changed code touches without
+anyone re-checking it. That's the entire reason regression testing exists: code doesn't stay where
+you left it, and "it worked yesterday" is a promise nothing keeps automatically.
+</Hook>
+
+<Callout type="analogy">
+Renovate one wall in a house and a good contractor doesn't just admire the new paint - they check the
+water still runs in the kitchen, the lights in the hallway still switch on, the door down the corridor
+still closes properly. None of those rooms got touched. But the wall they knocked through carried
+wiring and plumbing that fed all three, and "we only worked on the living room" is not a promise that
+the bathroom tap still works - it's a hope. A competent contractor walks the whole house after any
+structural change, not because they distrust their own work on the wall, but because walls are rarely
+as isolated as they look. Software is the same: a change rarely stays inside the file it was made in,
+and regression testing is the walk-through that confirms the rest of the house still works.
+</Callout>
+
+<Term define="Re-testing existing functionality after a change, to catch things that USED to work and quietly broke. The depth of regression testing - one smoke test vs a full sweep - should scale with the risk of the change, not with its line count.">regression testing</Term>
+
+This exact definition already showed up when [spotting risky changes](/notes/version-control-with-git/reading-code-as-a-tester/spotting-risky-changes) in a diff - this note is where regression testing gets the full spotlight instead of a supporting role. Same idea, now the main event.
+
+## Why one change ripples into features nobody touched
+
+Code gets reused on purpose - that's good engineering, not an accident. A validation function, a
+pricing helper, a date formatter: write it once, call it from everywhere, and you've saved the team
+from five copies of the same logic quietly drifting apart. But that exact virtue is what makes
+regression bugs possible. When someone edits the shared function to fix feature A, every other caller
+of that function - B, C, D - inherits the new behaviour whether or not anyone tested them, and whether
+or not anyone even remembered they existed. The developer who fixed the email validator was thinking
+about signup. They had no reason to think about the newsletter form, because nothing in the ticket
+mentioned it - but the function didn't know it was only supposed to change for signup. This is the
+same shared-dependency shape covered when [understanding blast radius](/notes/version-control-with-git/reading-code-as-a-tester/understanding-blast-radius):
+a change's effects spread through every caller, direct and indirect, whether the author was thinking
+about them or not.
+
+Regression bugs have a specific, recognisable flavor: **the "it worked yesterday" bug class**. Nobody
+disputes the feature used to work - there's a green test run from last week, a happy customer from last
+month, a demo video that still plays. The dispute is entirely about now, and the cause is almost never
+"the feature broke itself." Something it depends on moved. A shared function changed. A default value
+flipped. A database column started storing a slightly different format. The feature under test is
+innocent; the actual suspect is somewhere else in the blast radius, which is exactly why regression
+testing can't be scoped by asking "did we change this feature" - it has to be scoped by asking "does
+this feature depend, directly or indirectly, on anything that changed."
+
+## Why regression became automation's home turf
+
+Regression tests share a property that makes them unusually well suited to automation: **they don't
+change often, and they run constantly**. The test case for "a valid coupon still discounts a $50 cart"
+doesn't need to be rewritten every sprint - the requirement is stable, only the code around it keeps
+moving. That combination - a fixed, well-understood check, run over and over, against a codebase that
+changes daily - is exactly the profile automation is built for. A human re-running the exact same
+fifty checks by hand, every single build, burns out fast and starts skipping "boring" ones under
+deadline pressure; a script runs all fifty in the time it takes to make coffee, doesn't get tired, and
+doesn't quietly decide the fiftieth check is "probably fine." That's why nearly every automation
+suite in a real company, when you ask what it actually tests, turns out to be a regression suite at
+its core - new features often still get explored and tested by hand first, but once a feature is
+stable, its regression check gets handed to a machine so a human never has to manually re-verify "the
+$50 boundary still works" for the two-hundredth time.
+
+<HotspotImage
+  src="/notes/levels-and-types-of-testing/functional-and-regression/domino.jpg"
+  alt="A row of black dominoes captured mid-fall: the rightmost domino stands sharp and upright, the ones behind it blur into motion as they topple in sequence, one push at the start producing motion all the way down the line"
+  credit="Photo: Domino Cascade - Wikimedia Commons, CC BY 2.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Domino_Cascade.JPG"
+  pins={[
+    { x: 82, y: 45, label: "The upright domino - the change nobody's worried about yet", desc: "Sharp, standing, untouched - this is the commit message's version of events: 'fixed the email validator for plus-addressing.' Narrow, honest, and completely silent about anything else, because from this domino's own point of view, nothing else is connected." },
+    { x: 45, y: 55, label: "The blur in the middle - motion already in progress", desc: "By the time you can SEE motion at the middle dominoes, the first push already happened off-frame. This is a regression suite running: hundreds of pre-existing checks, most unrelated to this commit on paper, all re-run anyway because any one of them could be standing exactly where this blur is." },
+    { x: 15, y: 70, label: "The far domino, already fully toppled", desc: "This one fell without ever touching the hand that pushed the first domino - it only fell because of what happened in between. That's a newsletter-confirmation test failing from a change to an email validator: the single red line that surfaces exactly the breakage a commit message would never warn you about." },
+    { x: 60, y: 30, label: "The gap between dominoes - the dependency nobody drew", desc: "You can't see WHY one topple causes the next from a single domino's shape alone - the connection is spacing, not decoration. That is a shared function two features both call: invisible in either feature's own code, only visible once you look at the row as a whole." },
+    { x: 90, y: 20, label: "The empty space behind the standing domino - what regression testing checks before it's too late", desc: "Nothing has fallen here yet. Running the regression suite is standing exactly here, checking the space behind the change, BEFORE deciding the row is stable - because 'it's a small fix, skip the suite' feels safe right up until the one connection nobody mapped turns out to reach the whole line." },
+  ]}
+/>
+
+<FlowAnimation
+  title="How one shared-function fix becomes a regression bug - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "A real bug gets fixed, correctly, in shared code", desc: "The signup form rejects valid plus-addressed emails. A developer fixes the shared validate_email function. The fix is correct and well-intentioned - for signup." },
+    { label: "The fix changes behaviour for every OTHER caller too", desc: "validate_email is also called by the newsletter form, the support-ticket form, and the admin user importer. None of those were mentioned in the ticket. All of them now run the new rule." },
+    { label: "Testing scoped to 'the ticket' misses the ripple", desc: "QA tests signup with plus-addressed emails - it works, ticket closed. Nobody re-ran the newsletter form's checks, because the ticket never said 'newsletter', and the diff LOOKS like it only touches one file." },
+    { label: "Production reveals what the ticket didn't say", desc: "Newsletter confirmations that used to succeed now fail, because the shared function's new rule rejects addresses the newsletter form generates automatically. The feature that broke was never in the ticket at all." },
+    { label: "A regression suite would have caught it before shipping", desc: "If a pre-existing check for 'newsletter confirmation succeeds' had been re-run against this change - regardless of the ticket's stated scope - the failure would have shown up in CI, not in a support queue three days later." },
+  ]}
+/>
+
+Here's that exact shape in runnable code - a shared function, two callers who used to both succeed,
+one deliberate fix, and a look at the actual output before and after the change:
+
+<CodePlayground
+  language="python"
+  title="Run it - a shared validator fix, one caller helped, one caller silently broken (Python)"
+  code={`# validate_email_v1: the ORIGINAL rule. Both signup and newsletter use it.
+def validate_email_v1(email):
+    return "@" in email and "." in email.split("@")[-1]
+
+# validate_email_v2: the FIX for signup's real bug -- it used to reject
+# plus-addressing like name+tag@example.com. But the fix also adds a
+# NEW rule (no consecutive dots) that nobody asked for and nobody tested
+# against the newsletter form.
+def validate_email_v2(email):
+    local, _, domain = email.partition("@")
+    if ".." in email:
+        return False
+    return "@" in email and "." in domain
+
+signup_email    = "name+tag@example.com"        # the case the fix targets
+newsletter_email = "auto.generated..promo@list.example.com"  # newsletter's own format
+
+print("BEFORE the fix (v1):")
+print("  signup     :", validate_email_v1(signup_email))
+print("  newsletter :", validate_email_v1(newsletter_email))
+
+print()
+print("AFTER the fix (v2):")
+print("  signup     :", validate_email_v2(signup_email))
+print("  newsletter :", validate_email_v2(newsletter_email))
+
+print()
+print("Signup went from failing to passing -- the fix worked, exactly as")
+print("intended. Newsletter went from passing to failing -- a feature the")
+print("ticket never mentioned, broken by a rule nobody wrote a test for.")
+print("That second line is a regression, and only a regression suite that")
+print("re-runs the NEWSLETTER'S checks (not just signup's) would catch it")
+print("before a customer does.")`}
+/>
+
+The same before/after story in Java, so a shared regression suite reads the same regardless of which
+language ships the fix:
+
+<CodePlayground
+  language="java"
+  title="Run it - a shared validator fix, one caller helped, one caller silently broken (Java)"
+  code={`public class Main {
+    // v1: the ORIGINAL rule, used by signup and newsletter alike.
+    static boolean validateEmailV1(String email) {
+        int at = email.indexOf('@');
+        if (at < 0) return false;
+        String domain = email.substring(at + 1);
+        return domain.contains(".");
+    }
+
+    // v2: fixes signup's real bug (plus-addressing) but ALSO adds a new
+    // rule -- no consecutive dots -- that nobody asked for and nobody
+    // tested against the newsletter form's own address format.
+    static boolean validateEmailV2(String email) {
+        if (email.contains("..")) return false;
+        int at = email.indexOf('@');
+        if (at < 0) return false;
+        String domain = email.substring(at + 1);
+        return domain.contains(".");
+    }
+
+    public static void main(String[] args) {
+        String signupEmail = "name+tag@example.com";
+        String newsletterEmail = "auto.generated..promo@list.example.com";
+
+        System.out.println("BEFORE the fix (v1):");
+        System.out.println("  signup     : " + validateEmailV1(signupEmail));
+        System.out.println("  newsletter : " + validateEmailV1(newsletterEmail));
+
+        System.out.println();
+        System.out.println("AFTER the fix (v2):");
+        System.out.println("  signup     : " + validateEmailV2(signupEmail));
+        System.out.println("  newsletter : " + validateEmailV2(newsletterEmail));
+
+        System.out.println();
+        System.out.println("Signup: failing to passing, exactly as intended.");
+        System.out.println("Newsletter: passing to failing, a feature the fix's");
+        System.out.println("ticket never mentioned. Only a regression suite that");
+        System.out.println("still runs the newsletter's OWN checks catches this");
+        System.out.println("before a customer files the support ticket.");
+    }
+}`}
+/>
+
+<Callout type="tip">
+When you can't afford to re-run every existing check on every change (almost always true), scope the
+regression suite the same way you'd scope any other risk decision: what shares code, data, or config
+with what changed? A dedicated smoke-regression set - the twenty or so checks covering your highest
+traffic, highest-stakes flows - should run on every single change, no exceptions, no matter how small
+it looks. The full suite runs on a schedule or before a release. And whenever a shared function
+changes, treat "who else calls this" as a checklist item before you even open a test case editor -
+that one question is what would have caught the newsletter bug before it shipped.
+</Callout>
+
+<FirstTime title="Your mission: watch a well-intentioned fix create a regression, live">
+<StepChecklist
+  steps={[
+    { text: "Run the Python playground as-is", detail: "Read both BEFORE and AFTER blocks. Confirm signup genuinely was broken before the fix and genuinely works after. The fix is not fake or careless - that's the point. A careful, correct, well-tested fix still regressed something else." },
+    { text: "Isolate exactly which new rule caused the regression", detail: "In validate_email_v2, comment out the `if '..' in email: return False` line and re-run. Newsletter now passes again. That one line was never mentioned in any ticket about signup, and it's the entire cause of the regression." },
+    { text: "Add a THIRD caller and predict its fate", detail: "Add a third address representing a support-ticket auto-reply form, e.g. one with a plus sign AND consecutive dots. Predict, in writing, whether v2 will pass or fail it before running the code. Then run it and check your prediction." },
+    { text: "Write the regression check that would have caught this pre-release", detail: "In one sentence, describe the test case that - if it existed and had been re-run against this fix - would have failed in CI instead of in production. (Hint: it's simply 'newsletter confirmation succeeds for the newsletter form's own address format'.)" },
+    { text: "Decide what belongs in the smoke-regression set", detail: "If you could only afford to re-run five checks on every single commit to this codebase, which five would you pick, and why does 'newsletter confirmation' or something like it belong on that short list rather than the full, slower suite?" },
+  ]}
+/>
+You've now watched the exact mechanism behind almost every "it worked yesterday" bug report: a correct, well-tested fix to one caller, silently redefining behaviour for a caller nobody thought to re-check.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A feature that passed every test last release fails this release, and nobody touched its code.",
+      fix: "Assume a dependency moved, not that the feature broke itself. Check what shared functions, config, or data the feature reads, and check THEIR recent history - `git log` on the feature's own files will show nothing, because the change happened one layer away. This is the exact shape covered in understanding blast radius: trace callers backwards from the symptom to the actual change.",
+    },
+    {
+      symptom: "The regression suite takes so long to run that the team only runs it once a week, and bugs slip through in between.",
+      fix: "A suite that's too slow to run often gets skipped, which defeats its purpose entirely. Split it: a fast smoke-regression subset (the highest-risk, highest-traffic checks) runs on every commit; the full sweep runs nightly or before release. A regression suite that runs rarely because it's slow is worse than a smaller one that actually runs.",
+    },
+    {
+      symptom: "A developer says 'I only changed one small thing, regression testing this is overkill.'",
+      fix: "Ask what else calls the changed code before agreeing or disagreeing - size of the diff and size of the risk are different questions. A one-line change to a widely shared function deserves MORE regression attention than a five-hundred-line change to a brand-new, uncalled page, not less.",
+    },
+    {
+      symptom: "Regression tests keep failing for reasons unrelated to real bugs - flaky timing, stale test data, environment drift - and the team starts ignoring red results.",
+      fix: "A regression suite the team has learned to ignore provides zero protection, no matter how many checks it contains. Flaky or environment-dependent failures need to be fixed or quarantined immediately, because every ignored red result trains the team to also ignore the one red result that's a real regression.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Regression risk shows up in predictable places - check these before assuming a change is isolated:
+
+- **Shared utilities and helpers** - anything named `format`, `validate`, `calculate`, `parse` is called from more places than the ticket mentions; grep for its name before scoping the regression check.
+- **Default parameter values** - a changed default silently rewires every caller that relied on the old one without passing the argument explicitly, and those callers never appear in the diff.
+- **Shared data: tables, caches, config** - a change that writes differently affects every reader of that data, with zero call-path connecting them.
+- **The "unrelated" bug report** - a fresh bug in a feature nobody touched this release is the single strongest signal a regression, not a new defect, just occurred.
+- **CI's regression gate** - is it required to pass before merge, or is it advisory and routinely overridden under deadline pressure? An ignorable gate is not a gate.
+
+Tester's habit: whenever a fix targets one specific caller of shared code, ask **"who else calls
+this, and did anyone re-check them?"** before closing the ticket - that question is the whole
+discipline in one sentence.
+</WhereToCheck>
+
+<WorkedExample title="the discount rule that got smarter and broke the refund calculator">
+1. **The setup:** a team has one shared function, `final_price(base, discount_pct)`, used by the cart
+   display, the invoice PDF, and the refund calculator.
+2. **The change:** a developer notices the cart sometimes shows `$34.98` instead of `$34.99` due to
+   float rounding, and "fixes" it by switching from rounding to truncation. The ticket says: "fix cart
+   price display rounding." The PR touches one function, in one file.
+3. **What testing covered:** QA re-tests the cart page with several prices, confirms the display now
+   looks correct, and closes the ticket. Nothing in the ticket mentioned refunds, so nothing about
+   refunds got re-tested.
+4. **What actually happened:** the refund calculator also calls `final_price` to compute how much to
+   return a customer. Truncation instead of rounding means every refund is now a fraction of a cent
+   short - individually invisible, but the finance team notices the totals don't reconcile at
+   month-end, weeks after the "small fix" shipped.
+5. **The regression, made visible:** a pre-existing regression check - "refund amount matches the
+   amount originally charged, to the cent" - had existed for months and had always passed. It was
+   simply never re-run against this change, because the change didn't look like it touched refunds.
+6. **Where the process failed:** not in writing the fix, and not in the fix being wrong for its
+   intended purpose - it worked perfectly for the cart. It failed in scoping regression testing by
+   the ticket's stated intent instead of by what the changed function actually touches.
+7. **The fix going forward:** the team adds a rule - any change to a function found in more than one
+   feature's code path automatically re-runs that shared regression suite, ticket description or not.
+8. **The lesson:** "it worked yesterday" bugs are rarely caused by carelessness. They're caused by
+   correct, narrow fixes meeting shared code, and a regression scope drawn from the ticket instead of
+   from the dependency graph.
+</WorkedExample>
+
+<Callout type="mistake">
+Believing regression testing means literally re-running one hundred percent of every test that has
+ever existed, every single time. That belief is exactly why teams eventually stop doing regression
+testing at all - "we don't have time to run everything" quietly becomes "we run nothing." The real
+skill isn't running everything; it's scoping intelligently, using the same risk and blast-radius
+thinking covered elsewhere in this platform, so the regression suite that actually runs on every
+change is fast enough that skipping it never feels like the easier option.
+</Callout>
+
+<Quiz
+  question="A shared discount-calculation function is changed to fix a bug reported on the checkout page. The ticket only mentions checkout. What's the correct regression testing move?"
+  options={[
+    "Only re-test checkout, since that's the only feature named in the ticket",
+    "Re-run every test that exists in the entire application, regardless of relevance",
+    "Find every caller of the changed function (checkout and any others), and re-run existing checks for each of them - not just the one named in the ticket",
+    "Skip regression testing entirely, since the fix was already verified to work on checkout"
+  ]}
+  answer={2}
+  explain="The ticket describes what the developer was THINKING about, not what the change actually touches -- a shared function's callers inherit new behaviour whether or not they're named anywhere. Re-testing only checkout (option one) under-scopes and misses exactly the kind of ripple this note's worked examples show. Running the entire suite regardless of relevance (option two) wastes time on code with no path to the change at all. Skipping regression entirely (option four) ignores that 'verified on checkout' says nothing about the other callers. The correct move is scoped by dependency, not by the ticket's wording: find the callers, then regression-test each one -- which is the exact discipline that would have caught both the newsletter and the refund bugs in this note's examples."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Regression testing - definition", back: "Re-testing existing functionality after a change, to catch things that USED to work and quietly broke. Depth should scale with the risk of the change, not its line count - same definition used across this platform." },
+    { front: "Why regressions happen even from correct fixes", back: "Shared code multiplies a change across every caller. A fix that's completely correct for its intended feature can still redefine behaviour for other features calling the same code, none of which the ticket mentioned." },
+    { front: "The 'it worked yesterday' bug class", back: "Nobody disputes the feature used to work. The cause is almost never the feature itself -- it's a dependency (shared function, default, config, data format) that moved underneath it. Scope regression by dependency, not by 'did we touch this feature.'" },
+    { front: "Why regression testing became automation's natural home", back: "Regression checks are stable (the requirement doesn't change often) but need to run constantly (every build). That combination -- fixed check, run repeatedly, on a fast-moving codebase -- is exactly what automation is built for; humans re-running the same 50 checks by hand burn out and start skipping the boring ones." },
+    { front: "Smoke-regression vs full regression", back: "A small, fast subset covering the highest-risk flows runs on EVERY change, no exceptions. The full sweep runs on a schedule or before release. A suite too slow to run often gets skipped entirely, which defeats its purpose." },
+    { front: "The one question that catches most regressions before release", back: "'Who else calls this changed code, and did anyone re-check them?' Ticket scope tells you what the developer intended; dependency scope tells you what could actually break." },
+  ]}
+/>
+
+<Challenge>
+Find (or invent) a shared function used by at least two features in a project you know. Write down
+its current behaviour, then change it in a way that fixes one caller's real problem while
+plausibly breaking another caller's assumption (a changed default, a stricter validation rule, a
+different rounding behaviour). Run both callers before and after your change, print the actual
+output each time, and write two sentences: which caller improved, and which caller regressed -
+quietly, exactly like this note's worked examples - and what regression check, if it had existed
+and been re-run, would have caught it before release.
+</Challenge>
+
+<AskCommunity prompt="Regression testing question: a change to `[shared function/file]` was scoped to fix `[the intended feature]`, but I'm worried about ripple into `[other features that might share the same code/data]`. My current regression plan covers `[what you're already re-testing]`. What am I likely missing, and how would you scope this without re-running the entire suite?">
+Describe the shared dependency specifically - the function or data it touches - not just "I changed
+some code." The best answers usually name the caller you hadn't thought to check, the same way the
+newsletter form and the refund calculator hid in this note's examples.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://glossary.istqb.org/en/search/regression%20testing", title: "ISTQB Glossary - regression testing, the official definition", kind: "read" },
+    { href: "https://martinfowler.com/bliki/RegressionTest.html", title: "Martin Fowler - Regression Test, on what counts as a regression and why suites matter", kind: "read" },
+    { href: "https://www.ministryoftesting.com/", title: "Ministry of Testing - community resources on regression suite strategy", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=5496sXljdnQ", title: "Regression Testing with Real Life Examples (Gate Smashers)", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=5496sXljdnQ" title="Regression Testing with Real Life Examples (Gate Smashers)" minutes={9} />
+
+<Takeaways
+  points={[
+    "Regression testing re-runs EXISTING checks after a change, to catch things that used to work and quietly broke - depth scales with the risk of the change, not its line count.",
+    "Shared code is why 'small' changes ripple: every caller of a changed function inherits the new behaviour whether or not the ticket, or the developer, was thinking about them.",
+    "The 'it worked yesterday' bug class is almost never the feature breaking itself - it's a dependency moving underneath it. Scope regression testing by dependency, not by the ticket's stated intent.",
+    "Regression became automation's natural home because the checks are stable but need to run constantly - exactly the profile that burns humans out and that scripts handle without complaint.",
+    "Run a fast smoke-regression subset on every change, no exceptions, and the full sweep on a schedule - a suite too slow to run often gets skipped, which defeats the entire point of having one.",
+  ]}
+/>
+
+<Complete xp={10} />
