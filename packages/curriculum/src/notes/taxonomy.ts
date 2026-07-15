@@ -852,10 +852,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "traceability",
         title: "Traceability",
         topics: [
-          { slug: "the-rtm", title: "The RTM", planned: true },
-          { slug: "traceability-coverage", title: "Coverage", planned: true },
-          { slug: "linking-to-requirements", title: "Linking to requirements", planned: true },
-          { slug: "finding-coverage-gaps", title: "Finding gaps", planned: true },
+          { slug: "the-rtm", title: "The RTM" },
+          { slug: "traceability-coverage", title: "Coverage" },
+          { slug: "linking-to-requirements", title: "Linking to requirements" },
+          { slug: "finding-coverage-gaps", title: "Finding gaps" },
         ],
       },
       {
