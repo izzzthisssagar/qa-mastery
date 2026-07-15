@@ -842,10 +842,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "test-plans-and-strategy",
         title: "Test plans & strategy",
         topics: [
-          { slug: "whats-in-a-plan", title: "What's in a plan", planned: true },
-          { slug: "test-strategy", title: "Test strategy", planned: true },
-          { slug: "plan-entry-and-exit-criteria", title: "Entry / exit criteria", planned: true },
-          { slug: "lightweight-plans", title: "Lightweight plans", planned: true },
+          { slug: "whats-in-a-plan", title: "What's in a plan" },
+          { slug: "test-strategy", title: "Test strategy" },
+          { slug: "plan-entry-and-exit-criteria", title: "Entry / exit criteria" },
+          { slug: "lightweight-plans", title: "Lightweight plans" },
         ],
       },
       {
