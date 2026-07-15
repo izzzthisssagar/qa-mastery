@@ -862,10 +862,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "test-data",
         title: "Test data",
         topics: [
-          { slug: "what-test-data-is", title: "What test data is", planned: true },
-          { slug: "preparing-test-data", title: "Preparing data", planned: true },
-          { slug: "data-driven-thinking", title: "Data-driven thinking", planned: true },
-          { slug: "managing-test-data", title: "Managing data", planned: true },
+          { slug: "what-test-data-is", title: "What test data is" },
+          { slug: "preparing-test-data", title: "Preparing data" },
+          { slug: "data-driven-thinking", title: "Data-driven thinking" },
+          { slug: "managing-test-data", title: "Managing data" },
         ],
       },
       {

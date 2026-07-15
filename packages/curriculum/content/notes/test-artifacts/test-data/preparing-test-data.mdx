@@ -1,0 +1,302 @@
+---
+title: "Preparing data"
+summary: "Test data doesn't exist by itself the moment you need it - someone has to prepare it deliberately, into a known, labeled, reproducible starting state, or every test built on top of it inherits an unpredictable foundation."
+tags: ["test-artifacts", "test-data", "track-a"]
+updated: "2026-07-14"
+---
+
+<Hook>
+The previous note treated test data as something that simply exists, ready to plug into a case. In
+reality, it doesn't - not until someone deliberately prepares it. "Run the test" quietly assumes a
+starting state: specific records exist, specific fields hold specific values, nothing left over from
+yesterday's run is still sitting there. Preparing test data is the work of making that assumption
+actually true, on purpose, every time.
+</Hook>
+
+<Callout type="analogy">
+A microbiology reference plate isn't just "some bacteria on a dish" - it's deliberately cultivated,
+labeled with its orientation ("Top," "Bottom") and its exact contents in handwriting right on the
+container, so that whoever looks at it next knows precisely what they're seeing without guessing. Nobody
+scraped this together from whatever happened to be growing nearby; it was prepared, on purpose, into a
+known, documented, reproducible state. Test data prepared carelessly - grabbed from whatever's left in
+a database from the last test run - is the opposite of this: unlabeled, undocumented, and impossible to
+trust the next time someone needs it.
+</Callout>
+
+<Term define="Preparing test data is the deliberate act of creating or resetting the data a test needs into a known, documented starting state BEFORE the test runs - as opposed to relying on ambient, leftover, or undocumented data from a previous run. Well-prepared test data is reproducible (running the same preparation twice gives the same starting state), isolated (one test's data doesn't quietly depend on another test having run first), and safe (synthetic or scrubbed values, never real customer data with genuine personal information). The alternative - tests that assume 'whatever's currently in the database' - produces results that depend on execution order and history, which is a well-documented source of flaky, hard-to-reproduce test failures.">Preparing test data</Term>
+
+## Known state beats leftover state
+
+A test that passes because of data some earlier, unrelated test happened to leave behind will eventually
+fail the day someone runs it alone, runs it out of order, or runs it after that earlier test gets deleted.
+Preparing data means establishing exactly what should exist before the test starts, not inheriting
+whatever's currently lying around.
+
+## Reproducible means the SAME every time, not just similar
+
+Preparation that produces roughly-similar-but-different data on each run (a randomly generated email,
+an auto-incrementing ID that shifts) makes a failure hard to reproduce later - "it failed on my machine"
+becomes genuinely true, because the data genuinely was different. Deliberate preparation fixes the values
+that matter and only randomizes what genuinely doesn't need to be fixed.
+
+## Never real customer data
+
+Production data can look tempting - it's realistic, it's already there. It's also frequently a real
+privacy and compliance liability the moment it lands in a test environment. Preparing data properly means
+synthetic or deliberately scrubbed values that look and behave like real data without ever being real
+personal information.
+
+{/* IMAGE: a laboratory petri dish viewed from below, showing multiple distinct cultivated colonies, hand-labeled with "Top" and "Bottom" orientation arrows and a written identifier for the sample */}
+<HotspotImage
+  src="/notes/test-artifacts/test-data/preparing-test-data.jpg"
+  alt="A laboratory petri dish viewed from below on a dark surface, showing multiple distinct colored colonies growing in a pattern, with hand-written 'Top' and 'Bottom' orientation labels and arrows, and a written sample identifier on the side of the dish"
+  credit="Master Patch Plate, bottom.jpg — Wikimedia Commons, CC BY-SA 4.0 (Jennifer.thomas.acc)"
+  pins={[
+    { x: 44, y: 18, label: "The 'Top' label and arrow = documented orientation metadata", desc: "Without this, the same physical dish could be misread by anyone who picks it up later - exactly like test data prepared without documentation of what each value is supposed to represent." },
+    { x: 14, y: 52, label: "The written sample identifier = a specific, named, traceable preparation", desc: "Not 'some bacteria' - a specific, labeled sample anyone could reference precisely. Prepared test data needs this same specificity: a known seed set, not an undocumented blob." },
+    { x: 48, y: 28, label: "One distinct, deliberately cultivated colony = one specific prepared data point", desc: "Grown on purpose, not an accident of contamination - the same deliberateness good test data preparation requires over accidentally-leftover records." },
+    { x: 50, y: 80, label: "The 'Bottom' label = a labeling convention applied consistently, not just once", desc: "Both ends are labeled the same careful way - consistent documentation practice, not a one-off note that only covers part of the setup." },
+    { x: 65, y: 55, label: "The full array of colonies across the dish = an entire prepared, known data set", desc: "Multiple related, deliberately cultivated data points together - the same idea as a full seed data set prepared as one coherent, known starting state." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Preparing data into a known state, every run - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Clear whatever's currently there first", desc: "Don't build on top of leftover state from a previous run - start from an explicitly known-empty or known-reset point." },
+    { label: "Insert a fixed, documented seed set", desc: "The same specific records, the same specific values, every single time preparation runs." },
+    { label: "Use synthetic values, never real customer data", desc: "Realistic-looking, safe, and free of any genuine personal information." },
+    { label: "Keep each test's data isolated from other tests' data", desc: "One test's setup should never quietly depend on another test having already run first." },
+    { label: "Re-run the SAME preparation and confirm the SAME result", desc: "If preparing twice gives two different starting states, it isn't actually reproducible yet." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="Run it - resetting to a known state, regardless of what a previous run left behind (Python)"
+  code={`# A tiny in-memory "database" standing in for a real one.
+database = {}
+
+SEED_USERS = [
+    {"id": "U-001", "email": "active.buyer@example.com", "status": "active", "orders": 3},
+    {"id": "U-002", "email": "new.signup@example.com", "status": "active", "orders": 0},
+    {"id": "U-003", "email": "suspended.user@example.com", "status": "suspended", "orders": 1},
+]
+
+def seed_database(db, users):
+    db.clear()  # start from a known-empty state, not whatever was left over
+    for user in users:
+        db[user["id"]] = dict(user)  # copy, so re-seeding never reuses a mutated object
+    return db
+
+def run_test_needing_active_user_with_orders(db):
+    candidates = [u for u in db.values() if u["status"] == "active" and u["orders"] > 0]
+    return candidates[0] if candidates else None
+
+# First run: something mutates the data mid-test, as real test runs sometimes do.
+seed_database(database, SEED_USERS)
+target = run_test_needing_active_user_with_orders(database)
+print(f"Run 1 - found target: {target['id'] if target else None}")
+database["U-001"]["status"] = "suspended"  # simulate a test that changes state
+
+# Second run: re-seeding resets to the SAME known state, regardless of what the last run did.
+seed_database(database, SEED_USERS)
+target = run_test_needing_active_user_with_orders(database)
+print(f"Run 2 (after re-seed) - found target: {target['id'] if target else None}")
+print(f"U-001 status after re-seed: {database['U-001']['status']}")
+
+# Run 1 - found target: U-001
+# Run 2 (after re-seed) - found target: U-001
+# U-001 status after re-seed: active`}
+/>
+
+Same reset-to-known-state discipline in Java - the shape a JUnit `@BeforeEach` seeding step might take:
+
+<CodePlayground
+  language="java"
+  title="Run it - the same reset-to-known-state check (Java)"
+  code={`import java.util.*;
+
+public class Main {
+
+    static class User {
+        String id, email, status;
+        int orders;
+        User(String id, String email, String status, int orders) {
+            this.id = id;
+            this.email = email;
+            this.status = status;
+            this.orders = orders;
+        }
+        User copy() {
+            return new User(id, email, status, orders);
+        }
+    }
+
+    static void seedDatabase(Map<String, User> db, List<User> users) {
+        db.clear();
+        for (User u : users) {
+            db.put(u.id, u.copy());
+        }
+    }
+
+    static User findActiveUserWithOrders(Map<String, User> db) {
+        for (User u : db.values()) {
+            if (u.status.equals("active") && u.orders > 0) return u;
+        }
+        return null;
+    }
+
+    public static void main(String[] args) {
+        Map<String, User> database = new LinkedHashMap<>();
+        List<User> seedUsers = Arrays.asList(
+            new User("U-001", "active.buyer@example.com", "active", 3),
+            new User("U-002", "new.signup@example.com", "active", 0),
+            new User("U-003", "suspended.user@example.com", "suspended", 1)
+        );
+
+        seedDatabase(database, seedUsers);
+        User target = findActiveUserWithOrders(database);
+        System.out.println("Run 1 - found target: " + (target != null ? target.id : null));
+        database.get("U-001").status = "suspended";
+
+        seedDatabase(database, seedUsers);
+        target = findActiveUserWithOrders(database);
+        System.out.println("Run 2 (after re-seed) - found target: " + (target != null ? target.id : null));
+        System.out.println("U-001 status after re-seed: " + database.get("U-001").status);
+    }
+}
+
+/* Run 1 - found target: U-001
+   Run 2 (after re-seed) - found target: U-001
+   U-001 status after re-seed: active */`}
+/>
+
+<Callout type="tip">
+Notice `seed_database` calls `db.clear()` FIRST, before inserting anything. That single line is doing
+most of the real work in this playground - without it, a test's mutation from a previous run (U-001
+getting suspended) would silently leak into the next run and change its outcome.
+</Callout>
+
+<FirstTime title="Your mission: turn an assumed data state into a deliberately prepared one">
+<StepChecklist
+  steps={[
+    { text: "Find a test you or someone else has that assumes 'some user exists' or similar", detail: "Look for a case that doesn't explicitly set up its own data before running." },
+    { text: "Write down exactly what data state it actually needs to pass", detail: "Be specific: which fields, which values, how many records." },
+    { text: "Write a small setup step that creates exactly that state from scratch", detail: "Clear or reset first, then insert the fixed, known values - mirroring this note's playground." },
+    { text: "Run the setup twice in a row and confirm you get the identical state both times", detail: "This is the actual reproducibility check - not just 'it worked once.'" },
+    { text: "Confirm no real customer data is involved anywhere in the setup", detail: "If it currently is, that's worth flagging even if this exercise doesn't fix it today." },
+  ]}
+/>
+You converted an implicit assumption about data into an explicit, reproducible preparation step - the exact discipline that keeps a test suite trustworthy over time.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A test passes when I run the whole suite but fails when I run it alone.",
+      fix: "This is close to the signature symptom of unprepared, order-dependent data - the passing run was quietly relying on data an earlier test happened to leave behind. Add explicit setup so the test creates what it needs itself.",
+    },
+    {
+      symptom: "A bug report says 'it failed on my machine' and nobody else can reproduce it.",
+      fix: "Check whether the test data involved was actually fixed and reproducible, or partly randomized (a generated email, a shifting ID). If the data itself was different between runs, the bug may be genuinely tied to a specific data value nobody's pinned down yet.",
+    },
+    {
+      symptom: "Someone suggested copying a slice of production data into the test environment to make tests more realistic.",
+      fix: "Flag this before it happens - production data very often contains real personal information, and 'realistic-looking' synthetic data can usually achieve the same test value without the privacy and compliance risk.",
+    },
+    {
+      symptom: "Two tests that should be independent seem to interfere with each other when run together.",
+      fix: "Check whether they're sharing the same underlying data records instead of each preparing its own isolated set - this is exactly the isolation problem this note describes, and usually the fix is giving each test its own dedicated seed data rather than a shared pool.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+Where deliberate data preparation actually matters:
+
+- **Any test involving a database or persistent state** — the most common place ambient, leftover data quietly creeps in.
+- **CI pipelines running tests in parallel or in varying order** — order-dependent data is where "works locally, fails in CI" often comes from.
+- **Anywhere production data might be tempting to reuse for realism** — the moment to insist on synthetic data instead, before it becomes a habit.
+- **Debugging a flaky or hard-to-reproduce failure** — check the data setup before assuming the bug is in the application code.
+- **NOT a reason to over-engineer trivial, stateless tests** — a pure function with no external state doesn't need this ceremony; the discipline matters where real state is genuinely involved.
+
+The habit: **a test should create or reset the exact data it needs itself - never assume, inherit, or hope for a particular starting state.**
+</WhereToCheck>
+
+<WorkedExample title="a flaky test traced back to unprepared, order-dependent data">
+1. **A team's checkout test suite has one test that intermittently fails** - roughly one run in ten, with no obvious pattern.
+2. **The failing test's setup**: "find any user with items already in their cart" - it doesn't create this state itself, it just queries for whatever happens to match.
+3. **Investigating the failure pattern** reveals the test passes reliably when run after a specific EARLIER test (which happens to leave a cart-with-items behind) and fails when that earlier test is skipped, reordered, or run in a different CI shard.
+4. **This is a textbook ambient-data dependency** - the "failing" test was never actually broken; it was borrowing state it never explicitly prepared, and that borrowed state wasn't always there.
+5. **The fix**: the test gets its own explicit setup step - create a fresh user, add a specific, fixed set of items to their cart, run the checkout assertion against that guaranteed state.
+6. **After the fix, the test passes or fails consistently based on the actual checkout logic being tested** - not on which other tests happened to run first.
+7. **The flakiness disappears entirely**, not because the underlying checkout code changed, but because the test's data was finally prepared deliberately instead of inherited by accident.
+8. **The broader lesson**: a flaky test is often not a flaky test at all - it's a well-behaved test being fed an unprepared, inconsistent data foundation.
+</WorkedExample>
+
+<Callout type="mistake">
+Writing a test that queries for "any" matching record instead of explicitly creating the exact record it
+needs. The worked example above shows the real cost - an intermittent, hard-to-diagnose failure that had
+nothing to do with the actual feature being tested, and everything to do with unprepared, order-dependent
+data. If a test needs specific data to exist, the test (or its setup step) should be the thing that makes
+it exist.
+</Callout>
+
+<Quiz
+  question="A test suite has intermittent failures that seem to depend on which order tests run in. What does this note suggest investigating first?"
+  options={[
+    "Whether the failing test(s) explicitly prepare their own required data, or instead assume/query for 'whatever's currently there' - which may have been left behind by an earlier, unrelated test",
+    "Whether the test framework itself has a bug, since order-dependent failures are almost always caused by defects in the testing tool rather than in how tests are written",
+    "Whether the tests should simply be rewritten to always run in one fixed, unchangeable order going forward, since that would reliably eliminate the symptom",
+    "Whether the application code has a race condition, since data-related flakiness in a test suite is essentially always a sign of a concurrency bug in the underlying system"
+  ]}
+  answer={0}
+  explain="This note's worked example walks through exactly this diagnostic path: an intermittently failing test traced directly to querying for 'any user with items in cart' instead of explicitly creating its own known data, with the failure pattern correlating precisely with whether an unrelated earlier test happened to leave suitable data behind. This is presented as the FIRST and most direct thing to check, not a framework bug - blaming the test tool skips over the much more common and directly diagnosable cause this note focuses on. Locking tests into one fixed run order might mask the symptom by accident, but it doesn't fix the underlying lack of data isolation, and most CI setups need tests to be safely runnable in any order or in parallel anyway. And while application-level race conditions are real and worth investigating in other contexts, this note's entire worked example demonstrates the flakiness came from the TEST's own unprepared data setup, not from the underlying checkout logic - the fix required no changes to application code at all."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What 'preparing' test data actually means", back: "Deliberately creating or resetting data into a known state BEFORE a test runs, rather than relying on whatever's currently there." },
+    { front: "The three qualities well-prepared test data needs", back: "Reproducible (same state every time), isolated (doesn't depend on other tests), and safe (synthetic, never real customer data)." },
+    { front: "Why 'find any user matching X' is a risky test setup pattern", back: "It silently depends on ambient state possibly left behind by other tests - a dependency that isn't visible until it breaks." },
+    { front: "Why production data is risky to reuse in test environments", back: "It frequently contains real personal information - a genuine privacy and compliance liability the moment it lands in a test environment." },
+    { front: "The most common real-world symptom of unprepared, order-dependent data", back: "Tests that pass when run as part of the full suite but fail (or vice versa) when run alone or in a different order." },
+    { front: "The core habit this note teaches", back: "A test should create or reset the exact data it needs itself - never assume, inherit, or hope for a particular starting state." },
+  ]}
+/>
+
+<Challenge>
+Find a test (yours or an existing one) that implicitly assumes some data already exists rather than
+creating it explicitly. Rewrite its setup so it deliberately prepares a known, fixed, isolated data state
+from scratch. Run it twice in a row and confirm you get an identical starting state both times.
+</Challenge>
+
+<AskCommunity prompt="Data-prep pattern check: how does your team seed/reset test data before a run - fixtures, factory functions, a reset script, something else? What broke before you landed on that approach?">
+The most useful replies name a SPECIFIC approach and the specific flakiness or bug it fixed, rather than
+a general "we use fixtures" comment with no context.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://gomask.ai/glossary/test-data-seeding", title: "GoMask — Test Data Seeding: Definition, Examples & Best Practices", kind: "read" },
+    { href: "https://neon.com/blog/database-testing-with-fixtures-and-seeding", title: "Neon — Database Testing with Fixtures and Seeding", kind: "read" },
+    { href: "https://www.softwaretestinghelp.com/tips-to-design-test-data-before-executing-your-test-cases/", title: "Software Testing Help — What is Test Data? Test Data Preparation Examples", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=8w5CKu5JK9w", title: "Mukesh Otwani — How to Generate Test Data in 3 Steps", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=8w5CKu5JK9w" title="How to Generate Test Data for Automation and Manual Testing" minutes={5} />
+
+<Takeaways
+  points={[
+    "Preparing test data means deliberately creating or resetting it into a known state before a test runs - not assuming or inheriting whatever's currently there.",
+    "Well-prepared data is reproducible (same state every time), isolated (no hidden dependency on other tests), and safe (synthetic, never real customer data).",
+    "Order-dependent, intermittent test failures are a signature symptom of unprepared, ambient data - not necessarily a bug in the feature being tested.",
+    "A test should create or reset the exact data it needs itself, rather than querying for 'whatever matches.'",
+    "Real production data is tempting for realism but frequently a genuine privacy and compliance risk - synthetic data usually achieves the same test value safely.",
+  ]}
+/>
+
+<Complete xp={10} />
