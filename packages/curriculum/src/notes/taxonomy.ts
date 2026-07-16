@@ -1045,7 +1045,7 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "edge-case-and-form-data",
         title: "Edge-case & form data",
         topics: [
-          { slug: "bug-magnet-tricky-inputs", title: "Bug Magnet & tricky inputs", planned: true },
+          { slug: "bug-magnet-tricky-inputs", title: "Bug Magnet & tricky inputs" },
           { slug: "form-fillers", title: "Form fillers", planned: true },
           { slug: "test-credit-cards-and-emails", title: "Test credit cards & emails", planned: true },
           { slug: "generating-data-mockaroo-and-faker", title: "Generating data: Mockaroo & Faker", planned: true },
@@ -1114,6 +1114,64 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
     ],
   },
   // END testers-toolbox
+  {
+    slug: "playwright",
+    title: "Playwright",
+    summary: "Modern end-to-end browser automation in TypeScript — auto-waiting instead of manual sleeps, resilient user-facing locators, first-class tracing and debugging, real parallel/cross-browser runs, and visual regression testing.",
+    chapters: [
+      {
+        slug: "setup-and-auto-waiting",
+        title: "Setup & auto-waiting",
+        topics: [
+          { slug: "installing-playwright", title: "Installing Playwright", planned: true },
+          { slug: "typescript-setup", title: "TypeScript setup", planned: true },
+          { slug: "first-test", title: "First test", planned: true },
+          { slug: "auto-waiting-explained", title: "Auto-waiting explained", planned: true },
+        ],
+      },
+      {
+        slug: "locators-and-fixtures",
+        title: "Locators & fixtures",
+        topics: [
+          { slug: "user-facing-locators", title: "User-facing locators", planned: true },
+          { slug: "getbyrole-label-testid", title: "getByRole / Label / TestId", planned: true },
+          { slug: "fixtures", title: "Fixtures", planned: true },
+          { slug: "test-isolation", title: "Test isolation", planned: true },
+        ],
+      },
+      {
+        slug: "tracing-and-debugging",
+        title: "Tracing & debugging",
+        topics: [
+          { slug: "trace-viewer", title: "Trace viewer", planned: true },
+          { slug: "codegen", title: "Codegen", planned: true },
+          { slug: "debugging", title: "Debugging", planned: true },
+          { slug: "screenshots-and-video", title: "Screenshots & video", planned: true },
+        ],
+      },
+      {
+        slug: "parallel-and-cross-browser",
+        title: "Parallel & cross-browser",
+        topics: [
+          { slug: "projects-and-browsers", title: "Projects & browsers", planned: true },
+          { slug: "parallelism-and-sharding", title: "Parallelism & sharding", planned: true },
+          { slug: "retries", title: "Retries", planned: true },
+          { slug: "config", title: "Config", planned: true },
+        ],
+      },
+      {
+        slug: "visual-regression-testing",
+        title: "Visual regression testing",
+        topics: [
+          { slug: "pixel-vs-ai-diffing", title: "Pixel vs AI diffing", planned: true },
+          { slug: "playwright-snapshots", title: "Playwright snapshots", planned: true },
+          { slug: "percy-applitools-backstopjs", title: "Percy / Applitools / BackstopJS", planned: true },
+          { slug: "taming-false-positives", title: "Taming false positives", planned: true },
+        ],
+      },
+    ],
+  },
+  // END playwright
   {
     slug: "foundations",
     title: "QA Foundations",
