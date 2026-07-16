@@ -1153,10 +1153,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "design-qa-in-practice",
         title: "Design QA in practice",
         topics: [
-          { slug: "reading-a-figma-spec", title: "Reading a Figma spec", planned: true },
-          { slug: "pixel-perfect-vs-pragmatic", title: "Pixel-perfect vs pragmatic", planned: true },
-          { slug: "checking-spacing-states-and-breakpoints", title: "Checking spacing, states & breakpoints", planned: true },
-          { slug: "design-bugs-devs-respect", title: "Design bugs devs respect", planned: true },
+          { slug: "reading-a-figma-spec", title: "Reading a Figma spec" },
+          { slug: "pixel-perfect-vs-pragmatic", title: "Pixel-perfect vs pragmatic" },
+          { slug: "checking-spacing-states-and-breakpoints", title: "Checking spacing, states & breakpoints" },
+          { slug: "design-bugs-devs-respect", title: "Design bugs devs respect" },
         ],
       },
       {
