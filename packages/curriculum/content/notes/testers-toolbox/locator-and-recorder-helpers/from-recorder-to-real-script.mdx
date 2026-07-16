@@ -1,0 +1,300 @@
+---
+title: "From recorder to real script"
+summary: "Playwright codegen doesn't just record clicks - it prioritizes role, text, and test-id locators over brittle CSS position, and refines a selector automatically when multiple elements match. The difference between a recording that decays with every unrelated page change and one that doesn't."
+tags: ["testers-toolbox", "locator-and-recorder-helpers", "track-c"]
+updated: "2026-07-16"
+related:
+  - "testers-toolbox/locator-and-recorder-helpers/recorder-extensions"
+  - "testers-toolbox/locator-and-recorder-helpers/selectorshub"
+  - "playwright-fundamentals-and-locators/locator-strategy/getbyrole-and-friends"
+---
+
+<Hook>
+The previous note showed a recording is a starting draft, never a finished test — true of every
+recorder. But not all recorders draft equally well. Playwright's `codegen` command records the same
+clicks and typing as any other tool, with one deliberate difference: it prefers locators built from
+what a real user actually PERCEIVES (a button's role and visible label) over locators built from
+where an element happens to sit in the DOM tree. That one design choice is the difference between a
+recording that decays with every unrelated page edit, and one that mostly doesn't.
+</Hook>
+
+<Callout type="analogy">
+The type bars of an old mechanical typewriter each strike a fixed position — move the paper carriage
+even slightly and every character lands somewhere different, position by position, all shifted
+together. A modern, structure-aware transcription doesn't care where a word sits on the page at
+all — it recognizes the LETTERS, wherever they land. Playwright codegen's locators work the second
+way: anchored to what a button MEANS (its role, its label), not the coordinate it happens to occupy
+in today's markup.
+</Callout>
+
+<Term define="Playwright codegen is Playwright's built-in test-recording command (playwright codegen <url>), opening a real browser window you interact with while a companion Inspector window generates matching test code live. Its defining feature: it analyzes the rendered page and prioritizes role-, text-, and test-id-based locators over brittle CSS/XPath position paths, and automatically refines a locator further when multiple elements would otherwise match - producing code meaningfully more resilient to unrelated page changes than a naive DOM-position recorder.">Playwright codegen</Term>
+
+## What makes codegen's output different, concretely
+
+- **Locator priority order**: role + accessible name first (`getByRole('button', {'{'} name: 'Submit' {'}'})`),
+  then text content, then test IDs, falling back to CSS/structural selectors only when nothing more
+  meaningful is available.
+- **Automatic disambiguation**: if a first-choice locator would match more than one element, codegen
+  strengthens it (adding more context) automatically, rather than shipping an ambiguous selector and
+  leaving disambiguation to you.
+- **Multi-language, multi-browser output**: generates equivalent code in JavaScript/TypeScript,
+  Python, Java, or C#, and can target Chromium, Firefox, or WebKit — useful when your actual test
+  suite is in a different language than whatever you used to explore the flow.
+- **Still just a starting point**: everything the previous note said about assertions applies
+  identically here — codegen records actions beautifully; it still never knows what you expected to
+  happen as a result.
+
+<Callout type="tip">
+When codegen offers a locator, read WHAT it chose, not just whether it recorded successfully. A
+`getByRole` locator based on visible text is telling you something real: that element has a stable,
+accessible label a real user (and a screen reader) also relies on — which is exactly why it's a good
+foundation for a durable test.
+</Callout>
+
+<Callout type="mistake">
+Assuming any tool labeled "codegen" or "recorder" produces equally durable locators. Older
+recorders (and even Playwright codegen itself, in edge cases with poorly-labeled UI) can still fall
+back to fragile CSS paths when a page genuinely lacks accessible roles, text, or test IDs — which is
+itself a finding worth raising with developers: if codegen can't find a stable locator, a screen
+reader user likely can't find that control easily either.
+</Callout>
+
+{/* IMAGE: an extreme close-up looking directly into the type-bar mechanism of an old mechanical typewriter, showing dozens of curved metal type arms arranged in a fan pattern with letters visible on the character slugs */}
+<HotspotImage
+  src="/notes/testers-toolbox/locator-and-recorder-helpers/from-recorder-to-real-script.jpg"
+  alt="An extreme close-up looking directly into the type-bar mechanism of an old mechanical typewriter, showing dozens of curved metal type arms arranged in a fan pattern with visible letters on the character slugs"
+  credit="Clickety Clackety — Wikimedia Commons, CC BY 2.0 (Thad Zajdowicz)"
+  creditHref="https://commons.wikimedia.org/wiki/File:Clickety_Clackety_-_in_Explore_-_Flickr_-_Thad_Zajdowicz.jpg"
+  pins={[
+    { x: 50, y: 30, label: "Each type bar's fixed strike position — a position-based locator", desc: "Every arm's letter lands at a specific, unchanging spot in the mechanism. That's exactly how a brittle CSS-position selector works: tied to WHERE something sits, not WHAT it is." },
+    { x: 30, y: 55, label: "The letters themselves, legible on each type slug", desc: "The actual MEANING - what letter this is - regardless of which physical arm carries it. This is what a role+accessible-name locator anchors to: the button's real identity, not its position." },
+    { x: 70, y: 45, label: "The dense fan of overlapping arms", desc: "Many similar-looking mechanisms crowded close together - the same ambiguity risk a locator faces when several similar buttons or links sit near each other in a page's structure." },
+    { x: 45, y: 70, label: "The worn metal, decades of repeated identical strikes", desc: "Built to keep working the same way, strike after strike, regardless of anything else in the room changing - the durability goal a resilient locator is meant to achieve across unrelated page updates." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Recording a flow with Playwright codegen"
+  intervalMs={1800}
+  nodes={[
+    { label: "Run: playwright codegen <your-app-url>", desc: "Opens a real browser window plus the Inspector window, side by side - no separate extension install needed if Playwright's already set up." },
+    { label: "Interact with the app normally", desc: "Click, type, navigate - codegen analyzes the rendered page LIVE as you go, choosing the best locator for each action." },
+    { label: "Watch the Inspector generate code in real time", desc: "See the locator it chose for each step - role/name-based when possible, falling back only when the page gives it nothing better." },
+    { label: "Copy the generated code into your test file", desc: "Choose your target language during the initial codegen command, or switch languages in the Inspector's dropdown." },
+    { label: "Add assertions and clean up before committing", desc: "Same mandatory step as any recorder - codegen's better LOCATORS don't remove the need for real verification logic." },
+  ]}
+/>
+
+The core difference — a locator anchored to meaning vs. one anchored to position — is easy to show
+directly:
+
+<CodePlayground
+  language="python"
+  title="Run it - position-based vs role-based locators for the same button (Python)"
+  code={`class RecordedAction:
+    def __init__(self, kind, target_type, target_value, text=None):
+        self.kind = kind
+        self.target_type = target_type
+        self.target_value = target_value
+        self.text = text
+
+recorded_by_dom_position = [
+    RecordedAction("click", "css", "body > div:nth-child(3) > button:nth-child(2)"),
+]
+
+recorded_by_playwright_codegen = [
+    RecordedAction("click", "role", "button", text="Add to cart"),
+]
+
+def render_selenium_style(action):
+    return f'driver.find_element(By.CSS_SELECTOR, "{action.target_value}").click()'
+
+def render_playwright_style(action):
+    return f'page.get_by_role("{action.target_value}", name="{action.text}").click()'
+
+print("The SAME user action, captured two different ways:")
+print()
+print("Old-style recorder (DOM-position CSS selector):")
+print(f"  {render_selenium_style(recorded_by_dom_position[0])}")
+print()
+print("Playwright codegen (role + accessible name):")
+print(f"  {render_playwright_style(recorded_by_playwright_codegen[0])}")
+print()
+print("Add an unrelated wrapper <div> anywhere before this button and the")
+print("nth-child selector silently targets a DIFFERENT element. The role+name")
+print("locator is unaffected - it depends on what a REAL USER perceives")
+print("(a button labeled 'Add to cart'), not the button's position in the tree.")
+
+# The SAME user action, captured two different ways:
+#
+# Old-style recorder (DOM-position CSS selector):
+#   driver.find_element(By.CSS_SELECTOR, "body > div:nth-child(3) > button:nth-child(2)").click()
+#
+# Playwright codegen (role + accessible name):
+#   page.get_by_role("button", name="Add to cart").click()
+#
+# Add an unrelated wrapper <div> anywhere before this button and the
+# nth-child selector silently targets a DIFFERENT element. The role+name
+# locator is unaffected - it depends on what a REAL USER perceives
+# (a button labeled 'Add to cart'), not the button's position in the tree.`}
+/>
+
+Same comparison in Java syntax — this is genuinely what Playwright's Java bindings generate:
+
+<CodePlayground
+  language="java"
+  title="Run it - the same locator contrast in Java (Java)"
+  code={`public class Main {
+    public static void main(String[] args) {
+        String nthChildSelector = "body > div:nth-child(2) > form > button:nth-child(3)";
+        String roleLocatorRole = "button";
+        String roleLocatorName = "Submit application";
+
+        System.out.println("Same button, two ways a recorder might have captured it:");
+        System.out.println();
+        System.out.println("Legacy position-based (fragile to unrelated DOM changes):");
+        System.out.println("  driver.findElement(By.cssSelector(\\"" + nthChildSelector + "\\")).click();");
+        System.out.println();
+        System.out.println("Playwright codegen output (role + accessible name):");
+        System.out.println("  page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName(\\"" + roleLocatorName + "\\")).click();");
+
+        System.out.println();
+        System.out.println("Insert one new <div> anywhere earlier in the page and every");
+        System.out.println("nth-child index downstream shifts - a maintenance-free change");
+        System.out.println("for a real user, a silent breakage for the position-based script.");
+        System.out.println("The role+name locator only breaks if the button's actual label changes -");
+        System.out.println("which is exactly when a test SHOULD be updated anyway.");
+    }
+}
+
+/* Same button, two ways a recorder might have captured it:
+
+   Legacy position-based (fragile to unrelated DOM changes):
+     driver.findElement(By.cssSelector("body > div:nth-child(2) > form > button:nth-child(3)")).click();
+
+   Playwright codegen output (role + accessible name):
+     page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Submit application")).click();
+
+   Insert one new <div> anywhere earlier in the page and every
+   nth-child index downstream shifts - a maintenance-free change
+   for a real user, a silent breakage for the position-based script.
+   The role+name locator only breaks if the button's actual label changes -
+   which is exactly when a test SHOULD be updated anyway. */`}
+/>
+
+<FirstTime title="Your mission: record with codegen and compare its locator choices">
+<StepChecklist
+  steps={[
+    { text: "With Playwright installed (or via npx), run: npx playwright codegen <your-local-app-url>", detail: "Two windows open: the browser to interact with, and the Inspector showing generated code live." },
+    { text: "Perform a short flow: click a button, fill a field, click submit", detail: "Watch the Inspector populate code in real time as you act - notice each locator choice as it appears." },
+    { text: "Read each generated locator and identify what it's anchored to", detail: "Role+name? Text content? A test-id? Only fall back to noting a CSS/structural one if that's genuinely what codegen chose." },
+    { text: "Deliberately click one element with no visible text or accessible label (an icon-only button, if one exists)", detail: "Watch what codegen falls back to when there's nothing better - this is the moment worth flagging as an accessibility gap, not just a testing inconvenience." },
+    { text: "Copy the generated code and add one real assertion", detail: "Codegen's better locators don't remove this step - it's still mandatory, exactly as the previous note described." },
+  ]}
+/>
+You've now directly observed codegen's core advantage: locators anchored to meaning survive change
+in a way position-based ones structurally cannot.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "Codegen falls back to a CSS/structural selector for an element you thought had a clear label.",
+      fix: "Check the element's actual accessible name in DevTools' Accessibility panel - a visually obvious label doesn't always translate to an accessible one (missing aria-label, a label not properly associated with its input). This is often a real accessibility bug worth reporting, not just a codegen limitation.",
+    },
+    {
+      symptom: "A generated role-based locator matches multiple elements and codegen's auto-disambiguation still isn't quite right.",
+      fix: "Codegen strengthens ambiguous locators automatically, but its heuristic isn't infallible - manually add more specific context (a parent container, an additional attribute) if the auto-generated disambiguation still doesn't uniquely and correctly identify your intended element.",
+    },
+    {
+      symptom: "You need a specific language/framework's output and codegen defaulted to something else.",
+      fix: "Codegen accepts a --target flag (or an Inspector dropdown) for JavaScript, Python, Java, C#, and Pytest specifically - check the exact command-line syntax for your Playwright version rather than manually translating the default output by hand.",
+    },
+    {
+      symptom: "Codegen's browser window and Inspector window get out of sync or codegen won't launch at all.",
+      fix: "Confirm Playwright's browsers are actually installed (npx playwright install) - a missing browser binary is the most common cause of codegen failing to launch cleanly, separate from any locator-related issue.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **DevTools' Accessibility panel** — the ground truth for an element's actual accessible name/role, useful when codegen's locator choice seems surprising.
+- **The Inspector window's live-generated code**, read as you act — the fastest way to catch a fallback to a fragile selector at the exact moment it happens, rather than after the fact.
+- **Playwright's own locator documentation** — the definitive list of locator priority and disambiguation behavior for the exact version you're running, since this has evolved across releases.
+- **A second run of codegen after an unrelated page change** — the real test of whether a role/name-based locator held up, versus a position-based one that likely didn't.
+</WhereToCheck>
+
+<WorkedExample title="an icon-only button that codegen couldn't name — and neither could a screen reader">
+1. Recording a "remove item from cart" flow with codegen. Clicking the trash-can icon button
+   produces a fallback locator: `page.locator('.cart-item:nth-child(2) button.remove-icon')` —
+   noticeably more fragile-looking than every other locator in the same recording session.
+2. Investigating why: DevTools' Accessibility panel shows this button has NO accessible name at
+   all — it's an icon with no `aria-label`, so there's nothing for codegen to build a `getByRole`
+   locator from.
+3. This isn't just a testing inconvenience — a screen reader user encountering this button hears
+   only "button," with no indication of what it does. The exact same gap that made codegen fall
+   back to a fragile selector is a genuine accessibility bug.
+4. Report filed to developers: "Remove-item button lacks an accessible name (no aria-label) -
+   affects both screen-reader users and automated test locator quality. Add aria-label='Remove
+   [item name] from cart'." One finding, two real audiences it helps.
+5. Once fixed, re-running codegen on the same flow produces a clean
+   `page.getByRole('button', {'{'} name: 'Remove item from cart' {'}'})` — proof the fix worked, for both
+   the test suite and real users.
+</WorkedExample>
+
+<Quiz
+  question="While recording with Playwright codegen, one button in the flow produces a noticeably more fragile-looking locator than every other button recorded in the same session. What is the MOST likely explanation, and what should the tester do?"
+  options={[
+    "Codegen is malfunctioning for that one element and the recording session should be restarted from scratch",
+    "The button most likely lacks a proper accessible role/name (e.g. an icon-only button with no aria-label) - the tester should check DevTools' Accessibility panel, and if confirmed, report it as a real accessibility bug, since the same gap affecting locator quality also affects screen-reader users",
+    "Fragile locators are randomly distributed across any recording session and this one is simply bad luck, not worth investigating further",
+    "The tester should switch to a completely different recording tool, since Playwright codegen has demonstrated it cannot reliably handle this page"
+  ]}
+  answer={1}
+  explain="This note's worked example demonstrates exactly this pattern: codegen's locator-priority logic ONLY falls back to a fragile selector when the page genuinely provides nothing better (no role, no accessible name, no test ID) - which is precisely the situation of a poorly-labeled interactive element. That gap is a real, dual-audience finding: the same missing accessible name that produces a bad test locator also produces a bad experience for assistive-technology users. Option one assumes tool malfunction with zero evidence, when the explanation is a genuine, checkable property of the page itself. Option three dismisses a diagnosable pattern as noise, which this note's whole framing argues against. Option four is a costly overreaction - one weak locator in an otherwise good session says nothing about the tool's overall reliability, and switching tools would miss the actual accessibility bug entirely."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Playwright codegen — what makes it different from a generic recorder", back: "It prioritizes role + accessible name, then text, then test IDs over brittle CSS/structural position paths, and auto-strengthens a locator when multiple elements would match - producing meaningfully more durable test code than position-based recording." },
+    { front: "Why role+name locators survive unrelated page changes that position-based ones don't", back: "They're anchored to what a real user PERCEIVES (a button's role and visible label), which rarely changes - versus a CSS position path, which shifts the moment any earlier structural element is added or removed." },
+    { front: "What it means when codegen falls back to a fragile CSS/structural selector", back: "The page genuinely lacks a proper accessible role/name/test-id for that element - often a real accessibility bug (missing aria-label), not just a testing inconvenience, since the same gap affects screen-reader users too." },
+    { front: "What codegen still can't do, same as every recorder", back: "Generate assertions - it captures actions with better locators, but never knows what outcome you expected. Every codegen recording still needs manual verification logic added." },
+    { front: "How to get codegen's output in your test suite's actual language", back: "Pass a --target flag (or use the Inspector's language dropdown) for JavaScript/TypeScript, Python, Java, C#, or Pytest - rather than manually translating the default output." },
+    { front: "The diagnostic value of a surprisingly fragile locator mid-recording", back: "It's a signal worth investigating in DevTools' Accessibility panel - often reveals a missing aria-label or accessible name, worth reporting as a bug independent of the automation work." },
+  ]}
+/>
+
+<Challenge>
+Run Playwright codegen against BuggyShop and record a flow with at least four distinct interactions.
+For each generated locator, note what it's anchored to (role/name, text, test-id, or a fallback
+position path). If any fell back to a position-based selector, investigate why in DevTools'
+Accessibility panel and note whether it points to a real accessibility gap worth reporting.
+</Challenge>
+
+<AskCommunity prompt="I recorded `[flow]` with Playwright codegen and one locator (`[selector]`) fell back to a position-based selector instead of role/name. I checked DevTools' Accessibility panel and found `[what you found - missing aria-label / no accessible name]`. Is this worth reporting as an accessibility bug, or a known limitation of this specific component?">
+A fallback to a fragile locator is often diagnostic of a real accessibility gap — the most useful
+answers will confirm whether this specific pattern is already a known, tracked issue on this project.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://playwright.dev/docs/codegen-intro", title: "Playwright — Generating tests (official codegen introduction)", kind: "read" },
+    { href: "https://playwright.dev/docs/codegen", title: "Playwright — Test generator reference (full command options)", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=-F0eCZK_vxE", title: "Automation Step by Step — Playwright Beginner Tutorial: How To Record Tests", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=EDqo0vo2SXs" title="CodeGen in Playwright to Record Test Case — Absolute Beginners (PrinceAutomationDestination)" minutes={6} />
+
+<Takeaways
+  points={[
+    "Playwright codegen records the same actions as any recorder, but prioritizes role/accessible-name, text, and test-id locators over brittle CSS/structural position paths.",
+    "It auto-strengthens a locator when multiple elements would match, reducing (not eliminating) the manual disambiguation work other recorders leave entirely to you.",
+    "A locator that falls back to a fragile position-based selector is diagnostic: the element likely lacks a proper accessible role/name - often a real accessibility bug, not just a testing inconvenience.",
+    "Codegen still never generates assertions - the mandatory manual editing pass from the previous note applies identically here.",
+    "Generates equivalent code across JS/TS, Python, Java, and C#, matching whatever language your actual test suite uses.",
+  ]}
+/>
+
+<Complete xp={10} />

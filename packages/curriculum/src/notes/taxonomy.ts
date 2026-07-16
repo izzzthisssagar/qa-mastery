@@ -1075,10 +1075,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "locator-and-recorder-helpers",
         title: "Locator & recorder helpers",
         topics: [
-          { slug: "selectorshub", title: "SelectorsHub", planned: true },
-          { slug: "css-selector-helpers", title: "CSS selector helpers", planned: true },
-          { slug: "recorder-extensions", title: "Recorder extensions", planned: true },
-          { slug: "from-recorder-to-real-script", title: "From recorder to real script", planned: true },
+          { slug: "selectorshub", title: "SelectorsHub" },
+          { slug: "css-selector-helpers", title: "CSS selector helpers" },
+          { slug: "recorder-extensions", title: "Recorder extensions" },
+          { slug: "from-recorder-to-real-script", title: "From recorder to real script" },
         ],
       },
       {
