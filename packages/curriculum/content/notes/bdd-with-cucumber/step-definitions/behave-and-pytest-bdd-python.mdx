@@ -1,0 +1,314 @@
+---
+title: "behave / pytest-bdd (Python)"
+summary: "Python's two dominant BDD frameworks read the same Gherkin but run it differently: behave is a standalone runner with step decorators and a shared context object; pytest-bdd folds scenarios into pytest's own collection and fixture system. The right pick depends on what your suite already runs on."
+tags: ["bdd-with-cucumber", "step-definitions", "track-d"]
+updated: "2026-07-16"
+related:
+  - "bdd-with-cucumber/step-definitions/glue-code-java"
+  - "bdd-with-cucumber/step-definitions/data-tables"
+  - "bdd-with-cucumber/step-definitions/hooks-and-context"
+---
+
+<Hook>
+Hand the same `.feature` file to two Python teams and you may watch it executed by two entirely
+different engines. One team types `behave` and a dedicated BDD runner takes over - its own discovery,
+its own hooks, its own `context` object threading state between steps. The other team types `pytest`
+and the scenarios appear in the run alongside every ordinary unit test, wired into fixtures like any
+other test. Same Gherkin, two frameworks - and the choice between them is less about features than
+about which world your tests already live in.
+</Hook>
+
+<Callout type="analogy">
+Approaching a major rail junction, two trains bound for the same terminus can be running on two
+separate tracks - parallel steel, different signals, different platforms, one destination. Neither
+track is "the wrong way in"; which one a train takes is decided by where it's coming from, at the
+points behind it, not at the station. behave and pytest-bdd are those two tracks: both carry the same
+Gherkin scenarios to the same place - executed, verified behavior - and which one a team rides is
+decided almost entirely by the line their test suite is already running on.
+</Callout>
+
+<Term define="behave and pytest-bdd are Python's two dominant BDD frameworks, both executing Gherkin .feature files against Python step functions. behave is a self-contained runner: you invoke the behave command, it discovers features/ and steps/ directories itself, steps are plain functions under @given/@when/@then decorators, every step receives a context object for sharing state within a scenario, and setup/teardown lives in environment.py hooks. pytest-bdd is not a runner at all - it's a pytest plugin that turns each scenario into a pytest test (via the @scenario decorator or a scenarios() call), so collection, reporting, markers, parallelization, and the whole plugin ecosystem come from pytest itself, and state between steps is shared through ordinary pytest fixtures instead of a context object. The trade: behave offers a clean, purpose-built BDD experience out of the box; pytest-bdd offers BDD without leaving the pytest world a team already lives in.">behave / pytest-bdd</Term>
+
+## Two frameworks, one Gherkin
+
+The same step - "When the customer adds 3 items to the cart" - glued in each framework:
+
+```python
+# behave: steps/cart_steps.py — the runner passes 'context' to every step
+from behave import when
+
+@when("the customer adds {quantity:d} items to the cart")
+def step_add_items(context, quantity):
+    context.cart.add(quantity)          # state rides on the context object
+
+# pytest-bdd: test_cart.py — scenarios become pytest tests, state rides on fixtures
+from pytest_bdd import scenario, when, parsers
+
+@scenario("cart.feature", "Adding items updates the total")
+def test_adding_items():
+    pass                                # the steps below do the work
+
+@when(parsers.parse("the customer adds {quantity:d} items to the cart"))
+def add_items(cart, quantity):          # 'cart' is an ordinary pytest fixture
+    cart.add(quantity)
+```
+
+- **behave owns the whole run** - its command discovers `features/*.feature` and `features/steps/`,
+  matches decorated step functions by parse-style patterns (`{quantity:d}` extracts a typed int),
+  and injects `context` as every step's first argument. Scenario-level state, hooks
+  (`environment.py`), tags, and reporting are all behave's own machinery.
+- **pytest-bdd hands the run to pytest** - `@scenario(...)` (or `scenarios("cart.feature")` to bind
+  a whole file) produces real pytest test functions. That means `pytest -k`, markers, `-n auto`
+  parallelism via pytest-xdist, coverage, HTML reports, and every conftest fixture you already have
+  apply to scenarios with zero extra wiring.
+- **State: context object vs fixtures** - behave gives every scenario a fresh `context` you attach
+  attributes to; it's simple but stringly-typed and invisible to IDEs. pytest-bdd steps instead
+  declare fixtures as parameters - explicit dependencies, reusable across BDD and non-BDD tests
+  alike, torn down by pytest's own fixture finalization.
+- **When a team picks behave** - a standalone, BDD-first suite (often QA-owned), no existing pytest
+  investment, and a preference for the conventional features/steps layout that mirrors Cucumber in
+  other languages.
+- **When a team picks pytest-bdd** - an existing pytest suite with fixtures, plugins, and CI wiring
+  already in place; adding BDD scenarios as just more pytest tests keeps one runner, one report, one
+  set of conventions.
+
+<Callout type="tip">
+Make the choice by inventory, not by feature comparison: list what your suite already depends on -
+conftest fixtures, pytest plugins, CI commands, report formats. If that list is long, pytest-bdd
+inherits all of it for free and behave inherits none of it. If the list is empty because this is a
+fresh, dedicated BDD suite, behave's out-of-the-box structure is the simpler start.
+</Callout>
+
+<Callout type="mistake">
+Running both: adopting behave for "the BDD tests" alongside an existing pytest suite for everything
+else. Now the team maintains two runners, two configuration files, two reporting pipelines, and two
+ways to share state - and every engineer context-switches between `context.cart` and fixture
+injection depending on which directory they're in. Unless there's a deliberate organizational reason
+for a separate suite, one team should converge on one runner.
+</Callout>
+
+{/* IMAGE: a real photograph looking down a wide railway junction at Clapham Junction on a sunny day - many parallel and converging tracks with points, yellow walkway boards between rails, three track workers in orange hi-vis, two trains approaching in the distance, platforms and a signal box building at the edges */}
+<HotspotImage
+  src="/notes/bdd-with-cucumber/step-definitions/behave-and-pytest-bdd-python.jpg"
+  alt="A wide railway junction at Clapham Junction with many parallel and converging tracks, points, yellow walkway boards, three track workers in orange hi-vis, two trains approaching in the distance, and platforms at the edges"
+  credit="Railway tracks and points at Clapham Junction — Wikimedia Commons, CC BY-SA 2.0 (Bill Boaden)"
+  creditHref="https://commons.wikimedia.org/wiki/File:Railway_tracks_and_points_at_Clapham_Junction_-_geograph.org.uk_-_2552768.jpg"
+  pins={[
+    { x: 52, y: 23, label: "Two trains, two tracks, one terminus ahead", desc: "Both are arriving; neither track is the wrong way in. behave and pytest-bdd both deliver the same executed Gherkin - the destination doesn't differ, the route does." },
+    { x: 48, y: 66, label: "The points — where the route is actually decided", desc: "A train's track is set behind it, by where it's already running - the same way a team's framework choice is really decided by the suite and tooling they already have." },
+    { x: 8, y: 36, label: "The signal box — one dedicated controller for this junction", desc: "behave is this: purpose-built machinery that owns discovery, hooks, and reporting for its own line, self-contained and conventional." },
+    { x: 88, y: 42, label: "The shared station platforms — existing infrastructure every arrival reuses", desc: "pytest-bdd is this: scenarios pull into the platforms pytest already built - markers, fixtures, plugins, reports - no separate station required." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One feature file, two execution paths"
+  intervalMs={1800}
+  nodes={[
+    { label: "A .feature file says: When the customer adds 3 items to the cart", desc: "Identical Gherkin either way - the fork happens below it." },
+    { label: "Path A: the behave command discovers features/ and steps/", desc: "behave's own runner matches the step to a @when-decorated function." },
+    { label: "Path A: the step receives context, state rides on context.cart", desc: "behave hands every step the same per-scenario context object." },
+    { label: "Path B: pytest collects the scenario as a test via @scenario", desc: "pytest-bdd turns the scenario into an ordinary pytest test item." },
+    { label: "Path B: the step declares a cart fixture, pytest injects and finalizes it", desc: "Same verified behavior as Path A - delivered by pytest's own machinery." },
+  ]}
+/>
+
+Strip away the branding and the real difference is how state reaches each step: one framework passes
+a shared context object into every step function; the other resolves each step's declared
+dependencies from a fixture registry. Here's that difference as a small, generic simulation.
+
+<CodePlayground
+  language="python"
+  title="Run it - one scenario executed by a context-object runner and a fixture-injection runner (Python)"
+  code={`import inspect
+
+steps = ["given an empty cart", "when 3 items are added", "then the cart holds 3"]
+
+# --- Style A: a behave-like runner passes one shared context object ---
+class Context: pass
+
+def run_with_context(steps):
+    context = Context()  # fresh per scenario
+    for step in steps:
+        if step.startswith("given"): context.cart = []
+        elif step.startswith("when"): context.cart.extend(["item"] * 3)
+        else: print(f"context runner:  cart holds {len(context.cart)} -> PASS")
+
+# --- Style B: a pytest-bdd-like runner injects declared fixtures ---
+fixtures = {"cart": lambda: []}
+resolved = {}
+
+def inject(func):
+    wanted = inspect.signature(func).parameters
+    args = {name: resolved.setdefault(name, fixtures[name]()) for name in wanted}
+    func(**args)
+
+def given_step(cart): pass                       # fixture created on first use
+def when_step(cart): cart.extend(["item"] * 3)
+def then_step(cart): print(f"fixture runner:  cart holds {len(cart)} -> PASS")
+
+run_with_context(steps)
+for fn in (given_step, when_step, then_step):
+    inject(fn)`}
+/>
+
+The same two state-sharing styles, sketched in Java.
+
+<CodePlayground
+  language="java"
+  title="Run it - one scenario executed by a context-object runner and a fixture-injection runner (Java)"
+  code={`import java.util.*;
+import java.util.function.*;
+
+public class Main {
+    // --- Style A: one shared context object handed to every step ---
+    static void runWithContext() {
+        Map<String, Object> context = new HashMap<>(); // fresh per scenario
+        context.put("cart", new ArrayList<String>());
+        @SuppressWarnings("unchecked")
+        List<String> cart = (List<String>) context.get("cart");
+        cart.addAll(List.of("item", "item", "item"));
+        System.out.println("context runner:  cart holds " + cart.size() + " -> PASS");
+    }
+
+    // --- Style B: steps declare what they need; a registry resolves it ---
+    static final Map<String, Supplier<Object>> FIXTURES = Map.of("cart", ArrayList::new);
+    static final Map<String, Object> RESOLVED = new HashMap<>();
+
+    static Object fixture(String name) {
+        return RESOLVED.computeIfAbsent(name, n -> FIXTURES.get(n).get());
+    }
+
+    static void runWithFixtures() {
+        @SuppressWarnings("unchecked")
+        List<String> cart = (List<String>) fixture("cart"); // created on first use
+        cart.addAll(List.of("item", "item", "item"));
+        @SuppressWarnings("unchecked")
+        List<String> same = (List<String>) fixture("cart"); // same instance, injected again
+        System.out.println("fixture runner:  cart holds " + same.size() + " -> PASS");
+    }
+
+    public static void main(String[] args) {
+        runWithContext();
+        runWithFixtures();
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: run the same scenario on both tracks">
+<StepChecklist
+  steps={[
+    { text: "Write one tiny cart.feature file with a single three-step scenario", detail: "Given an empty cart, When 3 items are added, Then the cart holds 3 items." },
+    { text: "Install behave, create features/steps/cart_steps.py with @given/@when/@then functions, and run the behave command", detail: "Attach the cart to context in the given step and read it back in the then step." },
+    { text: "In a second folder, install pytest-bdd, bind the same feature with scenarios(), and share state via a cart fixture", detail: "Run it with plain pytest and notice the scenario appear as an ordinary collected test." },
+    { text: "Compare the two step files side by side and write one sentence on which felt more natural for YOUR current project", detail: "That sentence - not a feature checklist - is the actual selection criterion this note is about." },
+  ]}
+/>
+You've now ridden both tracks with the same Gherkin, and the trade-off is personal experience instead
+of a comparison table.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "behave reports steps as undefined even though the step functions exist.",
+      fix: "Check the directory convention - behave only discovers step files inside the steps/ directory beneath your features/ directory, and the decorator's parse pattern must match the step text exactly (including the {name:d} type suffix versus the literal text).",
+    },
+    {
+      symptom: "pytest runs but your scenarios silently don't appear in the collected tests.",
+      fix: "pytest-bdd only collects scenarios bound by an @scenario decorator or a scenarios() call in a test module pytest actually discovers - an unbound .feature file is invisible. Add the binding and confirm the module name matches pytest's test discovery pattern.",
+    },
+    {
+      symptom: "In pytest-bdd, a value set in the when step is gone by the then step.",
+      fix: "Steps share state only through fixtures - a local variable in one step function never reaches another. Return or mutate a fixture (e.g. a dict or object fixture) rather than assigning locals, or use target_fixture on a given step.",
+    },
+    {
+      symptom: "A team migrating behave steps to pytest-bdd finds every function signature wrong.",
+      fix: "behave's mandatory context first-argument does not exist in pytest-bdd - each step instead declares the fixtures it needs by name. Budget the migration as rewriting state access, not just swapping decorator imports.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The project's existing test invocation in CI** — if the pipeline already runs pytest with plugins
+  and reports, that's the strongest single signal pointing at pytest-bdd over behave.
+- **behave's directory layout** (`features/`, `features/steps/`, `environment.py`) — most behave
+  discovery problems are layout problems, checkable at a glance.
+- **The pytest collection report** (`pytest --collect-only`) — the fastest way to confirm whether
+  pytest-bdd scenarios are actually bound and being picked up as tests.
+- **The official docs for each** — behave.readthedocs.io and pytest-bdd.readthedocs.io — for the
+  exact decorator, parser, and hook semantics, which differ in small ways that matter mid-migration.
+</WhereToCheck>
+
+<WorkedExample title="a team that picked the framework by inventory instead of by debate">
+1. A QA team with an established pytest suite - 400 unit and API tests, a conftest.py full of
+   fixtures, pytest-xdist parallelism, HTML reports in CI - decides to add BDD scenarios for
+   checkout flows.
+2. Initial instinct is behave, because most Cucumber tutorials and their Java-side colleagues use a
+   dedicated BDD runner with the classic features/steps layout.
+3. Someone runs the inventory check: the new scenarios would need the existing authenticated API
+   client fixture, the seeded database fixture, and the CI report pipeline - all of which behave
+   would have to re-implement or wrap.
+4. They choose pytest-bdd: scenarios bind via scenarios("checkout.feature"), the steps declare the
+   existing fixtures by name, and the new BDD tests appear in the same parallel run and same report
+   as everything else on day one.
+5. Six months later a sister team with NO existing suite starts a greenfield acceptance project and
+   picks behave - and both choices are right, because the deciding input was each team's existing
+   track, not the frameworks' feature lists.
+</WorkedExample>
+
+<Quiz
+  question="A team has a mature pytest suite - shared fixtures in conftest.py, pytest-xdist parallel runs, HTML reporting wired into CI - and wants to add Gherkin-based BDD scenarios. Based on this note, what's the strongest-fit choice and why?"
+  options={[
+    "behave, because it's a dedicated BDD runner and therefore always the more correct tool for Gherkin",
+    "pytest-bdd, because it folds scenarios into pytest's own collection - so the team's existing fixtures, parallelism, and reporting apply to the new BDD tests with no second runner to maintain",
+    "Either, run side by side - behave for the BDD scenarios and pytest for everything else, keeping both pipelines",
+    "Neither - Gherkin scenarios can only be executed from Java via Cucumber-JVM"
+  ]}
+  answer={1}
+  explain="The note's selection rule is inventory-based: an existing pytest investment is exactly what pytest-bdd inherits for free (fixtures, plugins, xdist, reports) and behave inherits none of. Option one treats 'dedicated runner' as automatically better, which the note explicitly rejects - behave's fit is greenfield, standalone suites. Option three is the note's named mistake: two runners, two configs, two reporting pipelines for one team. Option four is simply false - behave and pytest-bdd exist precisely to execute Gherkin in Python."
+/>
+
+<Flashcards
+  cards={[
+    { front: "behave in one sentence", back: "A standalone Python BDD runner: the behave command discovers features/ and steps/, matches @given/@when/@then decorated functions, and passes every step a shared per-scenario context object." },
+    { front: "pytest-bdd in one sentence", back: "A pytest plugin that binds Gherkin scenarios (via @scenario or scenarios()) into pytest's own test collection, with state shared through ordinary pytest fixtures instead of a context object." },
+    { front: "How steps share state in each framework", back: "behave: attach attributes to the injected context object. pytest-bdd: declare fixtures as step parameters (or use target_fixture) - explicit dependencies pytest resolves and finalizes." },
+    { front: "The inventory rule for choosing between them", back: "List what the suite already depends on (fixtures, plugins, CI commands, reports). Long list: pytest-bdd inherits it all. Empty list / greenfield BDD-first suite: behave's out-of-the-box structure is simpler." },
+    { front: "The two-runner trap", back: "Adopting behave next to an existing pytest suite means two runners, two configs, two reporting pipelines, and two state-sharing styles for one team - converge on one unless there's a deliberate reason not to." },
+  ]}
+/>
+
+<Challenge>
+Do a real inventory for a project you know: list every pytest plugin, conftest fixture, CI command,
+and report format its test suite currently uses (if it has no suite, write "none"). Based only on
+that list, write a three-sentence recommendation - behave or pytest-bdd - as if advising the team,
+including the single strongest item from your inventory as the deciding evidence.
+</Challenge>
+
+<AskCommunity prompt="We're choosing between behave and pytest-bdd. Our current test setup is: `[describe your runner, fixtures/plugins, and CI reporting]`. Which fits better and what migration pain should we expect?">
+Sharing the actual inventory (runner, plugins, reporting) turns this from a framework popularity
+debate into a concrete fit question - answers will differ sharply depending on whether that list is
+empty or extensive, which is exactly the point.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://behave.readthedocs.io/en/stable/tutorial.html", title: "behave — official tutorial (features, steps, context)", kind: "read" },
+    { href: "https://pytest-bdd.readthedocs.io/en/stable/", title: "pytest-bdd — official documentation", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=MiHYIwQN4i4" title="Behavior-Driven Testing in Selenium Python | BDD with PyTest & Behave — Test Automation 101" minutes={24} />
+
+<Takeaways
+  points={[
+    "behave and pytest-bdd both execute the same Gherkin - the difference is the engine: a standalone BDD runner versus a plugin that folds scenarios into pytest itself.",
+    "behave steps are @given/@when/@then decorated functions that all receive a per-scenario context object; discovery, hooks, and reporting are behave's own machinery.",
+    "pytest-bdd turns scenarios into real pytest tests, so fixtures, markers, xdist parallelism, and existing CI reporting apply with no extra wiring - state is shared via fixtures, not a context object.",
+    "Choose by inventory: a team already invested in pytest inherits everything through pytest-bdd; a greenfield, BDD-first suite is behave's natural home.",
+    "Avoid running both side by side - two runners, two configs, and two state-sharing styles for one team is maintenance cost with no offsetting benefit.",
+  ]}
+/>
+
+<Complete xp={10} />

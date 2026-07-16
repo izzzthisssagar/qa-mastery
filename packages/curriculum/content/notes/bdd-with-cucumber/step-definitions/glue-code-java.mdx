@@ -1,0 +1,309 @@
+---
+title: "Glue code (Java)"
+summary: "A Gherkin step is plain English - something has to connect it to executable Java. Glue code is that connection: an annotated method whose Cucumber expression (or regex) matches the step text and receives its extracted parameters as arguments."
+tags: ["bdd-with-cucumber", "step-definitions", "track-d"]
+updated: "2026-07-16"
+related:
+  - "bdd-with-cucumber/step-definitions/behave-and-pytest-bdd-python"
+  - "bdd-with-cucumber/step-definitions/data-tables"
+  - "bdd-with-cucumber/step-definitions/hooks-and-context"
+---
+
+<Hook>
+"When the customer adds 3 copies of 'Clean Code' to the cart" is a sentence, not a program. Nothing
+about those words can click a button or call an API. Cucumber's entire trick is a matching layer that
+takes that plain-English line, finds the one Java method registered to handle text of exactly that
+shape, pulls the 3 and the 'Clean Code' out of the sentence, and calls the method with them as
+arguments. That layer is the glue code - and how thin you keep it decides whether your suite stays
+maintainable.
+</Hook>
+
+<Callout type="analogy">
+A travel adapter has two completely different faces: a socket shaped to accept one specific style of
+plug, and pins shaped to fit one specific style of wall outlet. The plug and the wall never touch -
+the adapter is the only thing that understands both shapes, and it only works when the incoming plug
+matches its socket exactly. A step definition is the same object in code: one face is a text pattern
+shaped to accept one specific style of Gherkin sentence, the other face is an ordinary Java method
+the test framework can execute. The sentence and the executable code never meet directly - the glue
+is the only thing that speaks both.
+</Callout>
+
+<Term define="Glue code (in Cucumber-JVM) is the layer of annotated Java methods - step definitions - that connects a Gherkin step's plain-English text to executable code. Each method carries a @Given, @When, or @Then annotation holding either a Cucumber expression (readable placeholders like {int} and {string}) or a regular expression (capture groups). At runtime Cucumber compares every step line in the .feature file against every registered expression; on a match it extracts the values the placeholders captured, converts them to the method's declared parameter types, and invokes the method with them as arguments. The annotation keyword itself is irrelevant to matching - a @When-annotated pattern will happily match a Given line - only the text pattern decides. Well-disciplined glue stays thin: it translates the step into a call to a page object or helper class and holds no business logic of its own.">Glue code</Term>
+
+## How a sentence becomes a method call
+
+```java
+public class CartSteps {
+
+    private final CartPage cartPage = new CartPage();
+
+    @When("the customer adds {int} copies of {string} to the cart")
+    public void addCopiesToCart(int quantity, String title) {
+        cartPage.addItem(title, quantity);  // thin glue: delegate, don't implement
+    }
+}
+```
+
+- **The annotation carries the pattern, not the behavior** - `@When("the customer adds {int} copies
+  of {string} to the cart")` registers a text shape with Cucumber. When a `.feature` file contains a
+  step whose text fits that shape, this method runs. No match, and Cucumber reports the step as
+  *undefined* (and offers you a snippet to implement).
+- **Cucumber expressions are the readable default** - `{int}`, `{string}`, `{word}`, `{float}` are
+  typed placeholders. `{int}` matches `3` and hands the method an actual `int`; `{string}` matches a
+  quoted phrase and hands over its contents. The pattern stays legible to anyone who can read the
+  Gherkin it matches.
+- **Regular expressions are the escape hatch** - an annotation whose text starts with `^` or is
+  otherwise regex-shaped is treated as a regex, with capture groups becoming arguments:
+  `@When("^the customer adds (\\d+) copies? of \"([^\"]*)\" to the cart$")`. Full power (optional
+  characters, alternations), much less readable - reach for it only when a Cucumber expression
+  genuinely can't express the variation you need.
+- **The keyword doesn't participate in matching** - Cucumber matches on text alone, so one
+  definition can serve a line whether it appears after Given, When, And, or But. Pick the annotation
+  that documents intent, but don't rely on it to disambiguate two similar patterns.
+- **One pattern, one method, everywhere** - the same step text in five scenarios runs the same one
+  method. That reuse is the payoff of the matching layer, and it's why the method must not quietly
+  depend on which scenario called it.
+
+<Callout type="tip">
+Default to Cucumber expressions and let `{int}`/`{string}` do the extraction - then treat any urge to
+drop into raw regex as a prompt to first try rewording the Gherkin step. A step whose text needs
+regex gymnastics to match is often a step written in an awkward, over-variable way, and tightening
+the sentence is cheaper than maintaining the pattern.
+</Callout>
+
+<Callout type="mistake">
+Fat glue: writing the WebDriver calls, waits, assertions, and business rules directly inside the step
+method. Now the same logic gets copy-pasted into every similar step, a UI change means editing dozens
+of step definitions instead of one page object, and the step method - the one layer whose whole job
+is translation - has become an untestable dumping ground. The step method should read like one line
+of delegation: extract the parameters, hand them to a page object or helper, done.
+</Callout>
+
+{/* IMAGE: a real close-up photograph of two white AC travel plug adapters on a light wooden table - a small round-pinned adapter on the left with flat-blade socket openings on its face, and a larger squarish adapter on the right with differently shaped socket holes, each converting one plug standard into another */}
+<HotspotImage
+  src="/notes/bdd-with-cucumber/step-definitions/glue-code-java.jpg"
+  alt="Two white AC travel plug adapters on a light wooden table - a small round-pinned adapter on the left with flat-blade socket openings on its face, and a larger squarish adapter on the right with differently shaped socket holes"
+  credit="Two AC Converter Adapters — Wikimedia Commons, CC0 (Fructibus)"
+  creditHref="https://commons.wikimedia.org/wiki/File:Two_AC_Converter_Adapters.jpg"
+  pins={[
+    { x: 16, y: 46, label: "The metal pins — the executable side", desc: "This face fits the wall outlet: real, standardized, powered. In glue code this is the ordinary Java method body - the part the framework can actually execute." },
+    { x: 31, y: 62, label: "The socket face — a pattern shaped for ONE kind of plug", desc: "Only a plug of exactly this shape fits. A step definition's Cucumber expression is the same: it accepts step text of exactly one shape and rejects everything else as undefined." },
+    { x: 74, y: 50, label: "A second adapter with differently shaped holes", desc: "A different pairing needs its own adapter - the same way each distinct step-text shape needs its own annotated method. One adapter per shape, one step definition per pattern." },
+    { x: 51, y: 32, label: "The pin emerging from the second adapter's other side", desc: "Both adapters do the identical job - connect two things that don't fit directly - despite serving different shapes. All glue code shares one job description: translate, then delegate." },
+  ]}
+/>
+
+<FlowAnimation
+  title="From plain-English step to executed Java method"
+  intervalMs={1800}
+  nodes={[
+    { label: "Cucumber reads: When the customer adds 3 copies of 'Clean Code' to the cart", desc: "Just text - nothing executable yet." },
+    { label: "It compares the line against every registered expression", desc: "All @Given/@When/@Then patterns are candidates - the keyword itself is ignored during matching." },
+    { label: "One pattern matches: 'the customer adds {int} copies of {string} to the cart'", desc: "Exactly one, ideally - two matches is an ambiguity error, zero is an undefined step." },
+    { label: "Parameters are extracted and converted: 3 becomes int, 'Clean Code' becomes String", desc: "The placeholders' captures are typed to fit the method's signature." },
+    { label: "The method runs and delegates: cartPage.addItem(title, quantity)", desc: "Thin glue hands off to a page object - the step definition itself stays one line of translation." },
+  ]}
+/>
+
+Underneath the annotations, this is just pattern matching against a registry: hold a list of
+patterns, find the one that fits an incoming sentence, pull out the captured values, call the paired
+function. Here's that whole machine as a small, generic simulation.
+
+<CodePlayground
+  language="python"
+  title="Run it - match step text against registered patterns and extract parameters (Python)"
+  code={`import re
+
+registry = []
+
+def register(pattern, func):
+    registry.append((re.compile(pattern), func))
+
+def add_to_cart(quantity, title):
+    print(f"  -> cartPage.addItem(title='{title}', quantity={quantity})")
+
+def apply_promo(code):
+    print(f"  -> checkoutPage.applyPromo(code='{code}')")
+
+register(r"^the customer adds (\d+) copies of '([^']*)' to the cart$", add_to_cart)
+register(r"^the promo code '([^']*)' is applied$", apply_promo)
+
+def run_step(text):
+    matches = [(p, f) for p, f in registry if p.match(text)]
+    if not matches:
+        print(f"UNDEFINED: {text}")
+    elif len(matches) > 1:
+        print(f"AMBIGUOUS: {text} matched {len(matches)} patterns")
+    else:
+        pattern, func = matches[0]
+        args = pattern.match(text).groups()
+        print(f"MATCHED: {text}")
+        func(*args)
+
+run_step("the customer adds 3 copies of 'Clean Code' to the cart")
+run_step("the promo code 'SAVE10' is applied")
+run_step("the customer empties the cart")  # nothing registered for this shape`}
+/>
+
+The same registry-and-match machine, in the language Cucumber-JVM glue actually lives in.
+
+<CodePlayground
+  language="java"
+  title="Run it - match step text against registered patterns and extract parameters (Java)"
+  code={`import java.util.*;
+import java.util.regex.*;
+import java.util.function.Consumer;
+
+public class Main {
+    record StepDef(Pattern pattern, Consumer<String[]> action) {}
+
+    static final List<StepDef> REGISTRY = new ArrayList<>();
+
+    static void register(String regex, Consumer<String[]> action) {
+        REGISTRY.add(new StepDef(Pattern.compile(regex), action));
+    }
+
+    static void runStep(String text) {
+        List<StepDef> hits = new ArrayList<>();
+        for (StepDef def : REGISTRY) {
+            if (def.pattern().matcher(text).matches()) hits.add(def);
+        }
+        if (hits.isEmpty()) { System.out.println("UNDEFINED: " + text); return; }
+        if (hits.size() > 1) { System.out.println("AMBIGUOUS: " + text); return; }
+        Matcher m = hits.get(0).pattern().matcher(text);
+        m.matches();
+        String[] args = new String[m.groupCount()];
+        for (int i = 0; i < m.groupCount(); i++) args[i] = m.group(i + 1);
+        System.out.println("MATCHED: " + text);
+        hits.get(0).action().accept(args);
+    }
+
+    public static void main(String[] args) {
+        register("^the customer adds (\\\\d+) copies of '([^']*)' to the cart$",
+            a -> System.out.println("  -> cartPage.addItem(title='" + a[1] + "', quantity=" + a[0] + ")"));
+        register("^the promo code '([^']*)' is applied$",
+            a -> System.out.println("  -> checkoutPage.applyPromo(code='" + a[0] + "')"));
+
+        runStep("the customer adds 3 copies of 'Clean Code' to the cart");
+        runStep("the promo code 'SAVE10' is applied");
+        runStep("the customer empties the cart"); // nothing registered for this shape
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: trace one step from sentence to method by hand">
+<StepChecklist
+  steps={[
+    { text: "Write one Gherkin step containing a number and a quoted phrase", detail: "For example: When the customer adds 3 copies of 'Clean Code' to the cart." },
+    { text: "Write the Cucumber expression that would match it, on paper, before touching an IDE", detail: "Decide which words are fixed and which parts become {int} and {string} placeholders." },
+    { text: "Write the Java method signature the expression implies", detail: "One parameter per placeholder, in order, with the types the placeholders promise (int, String)." },
+    { text: "Now change one fixed word in the step text and confirm the match would break", detail: "This is the core discipline: the pattern and the sentence are a contract - either side drifting breaks the glue." },
+  ]}
+/>
+You've now done manually exactly what Cucumber does on every step of every scenario - the annotations
+just automate the lookup you performed by eye.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "Cucumber reports a step as undefined even though a step definition for it clearly exists.",
+      fix: "Compare the step text and the expression character by character - a changed word, a missing quote around the {string} value, or glue code living in a package Cucumber isn't configured to scan (the glue option) are the usual causes.",
+    },
+    {
+      symptom: "Cucumber throws an ambiguous step error naming two step definitions.",
+      fix: "Two registered patterns both match the same line - remember the Given/When/Then keyword does NOT disambiguate. Tighten one pattern's fixed text (or merge the two definitions if they genuinely do the same thing).",
+    },
+    {
+      symptom: "A step matches but the method receives mangled or wrongly-typed values.",
+      fix: "Check placeholder-to-parameter alignment: placeholders bind to parameters strictly in order, and {int} into a String parameter (or an extra capture group in a regex) shifts everything after it.",
+    },
+    {
+      symptom: "A small UI change forces edits across dozens of step definition methods.",
+      fix: "That's fat glue - the selectors and interaction logic belong in one page object the steps delegate to, so the next UI change is a one-file fix instead of a sweep through the glue layer.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The runner's glue configuration** (`@CucumberOptions(glue = ...)` or the equivalent in
+  `junit-platform.properties`) — the first thing to verify when definitions exist but aren't found.
+- **Cucumber's own undefined-step snippet output** — when a step doesn't match, Cucumber prints the
+  exact annotated method it expected; diffing that against your definition reveals the mismatch.
+- **The step definition classes themselves** — scan for methods longer than a few lines; length in
+  the glue layer is the most reliable smell of business logic that belongs in a page object or helper.
+- **Cucumber's official step definitions and Cucumber expressions docs** — the definitive references
+  for placeholder types, custom parameter types, and regex fallback rules.
+</WhereToCheck>
+
+<WorkedExample title="a fat step definition that made one UI change cost a full afternoon">
+1. A team's `@When("the customer logs in as {string}")` method contains fifteen lines: find the
+   username field, type, find the password field, type, click, wait for the dashboard - raw WebDriver
+   calls, all inline.
+2. Over months, four more login-flavored steps get written ("logs in as an admin", "logs in with a
+   remembered session"...), each copy-pasting and lightly editing those fifteen lines.
+3. The login page's submit button gets a new identifier. Every copy breaks at once - five step
+   definitions to hunt down, edit, and re-verify, and one copy gets missed and fails only in CI.
+4. The fix: a `LoginPage` class owns the fields, the click, and the wait; every login step definition
+   shrinks to one line - `loginPage.loginAs(username)` - and the five patterns keep only their
+   distinct text shapes.
+5. The next selector change is a one-line edit in one file, and the glue layer goes back to doing its
+   only real job: translating sentences into calls.
+</WorkedExample>
+
+<Quiz
+  question="A .feature file contains the line 'Given the customer adds 3 copies of 'Clean Code' to the cart'. The only matching pattern in the glue code is on a method annotated @When. What happens when the scenario runs?"
+  options={[
+    "The step fails as undefined, because a @When annotation can only match a When step",
+    "The method runs normally - Cucumber matches on the step text alone, and the Given/When/Then keyword plays no part in matching",
+    "Cucumber throws an ambiguous step error because the keywords disagree",
+    "The method runs, but its extracted parameters arrive empty as a penalty for the keyword mismatch"
+  ]}
+  answer={1}
+  explain="Cucumber matches step text against registered expressions and ignores which annotation keyword registered them - the note calls this out directly, which is also why the keyword can't be used to disambiguate two similar patterns. Option one describes an intuitive rule Cucumber deliberately does not have. Option three misuses 'ambiguous', which means two PATTERNS matched one line, not a keyword disagreement. Option four invents a half-failure mode that doesn't exist - parameter extraction depends only on the pattern's placeholders, not on the keyword."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What is glue code in Cucumber-JVM?", back: "The layer of @Given/@When/@Then-annotated Java methods whose expressions match Gherkin step text and receive the extracted values as typed method arguments - the connection between plain English and executable code." },
+    { front: "Cucumber expressions vs regular expressions in a step annotation", back: "Cucumber expressions use readable typed placeholders ({int}, {string}, {word}) and are the default; regex (capture groups, anchors) is the escape hatch for shapes placeholders can't express - more powerful, much less readable." },
+    { front: "Does the annotation keyword (@Given vs @When) affect matching?", back: "No - Cucumber matches on step text alone. A @When-annotated pattern matches an identical line after Given. Choose the keyword for documentation, never for disambiguation." },
+    { front: "What does 'thin glue' mean?", back: "The step method only translates: extract parameters, delegate to a page object or helper class, done. Business logic, selectors, waits, and assertions live in those delegated classes, not in the step definition." },
+    { front: "What happens when zero or two patterns match a step line?", back: "Zero: the step is reported undefined and Cucumber prints a suggested snippet. Two or more: an ambiguous-step error naming the colliding definitions - fixed by tightening one pattern's text." },
+  ]}
+/>
+
+<Challenge>
+Take three Gherkin steps from any real `.feature` file (or write three of your own that carry a
+number, a quoted string, and a plain word respectively). For each, write the Cucumber expression and
+the one-line Java method that would glue it - delegating to an imaginary page object. Then write one
+of the three as a regular expression instead, and note in one sentence what the regex version can
+express that the Cucumber expression couldn't, and what it cost in readability.
+</Challenge>
+
+<AskCommunity prompt="My step definition isn't matching my Gherkin step even though they look identical to me. The step is: `[paste the step line]` and the annotation is: `[paste the expression]`.">
+Pasting both lines verbatim is the whole game here - nearly every "identical" non-match is a
+one-character difference (a quote, a plural, a double space) that a second pair of eyes spots in
+seconds but the author reads past every time.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://cucumber.io/docs/cucumber/step-definitions/", title: "Cucumber — official step definitions documentation", kind: "read" },
+    { href: "https://github.com/cucumber/cucumber-expressions", title: "Cucumber Expressions — syntax and parameter types reference", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=C6FtduWYGkg" title="2 | Cucumber Tutorial Feature File | Step Definitions — Saravanan Seenivasan" minutes={22} />
+
+<Takeaways
+  points={[
+    "Glue code is the matching layer: an annotated Java method whose Cucumber expression or regex matches a Gherkin step's text and receives the extracted values as typed arguments.",
+    "Cucumber expressions ({int}, {string}, {word}) are the readable default; regular expressions are the escape hatch for shapes placeholders can't express.",
+    "Matching is by text alone - the @Given/@When/@Then keyword documents intent but plays no part in which pattern matches.",
+    "Zero matches means an undefined step (Cucumber suggests a snippet); two matches means an ambiguous-step error - both are pattern problems, not keyword problems.",
+    "Keep glue thin: the step method translates and delegates to page objects or helpers - business logic embedded in step definitions multiplies every future change across the whole glue layer.",
+  ]}
+/>
+
+<Complete xp={10} />
