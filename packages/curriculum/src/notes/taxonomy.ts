@@ -1011,15 +1011,6 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
     summary: "Exploratory testing, test cases, and defect reporting done well.",
     chapters: [
       {
-        slug: "artifacts",
-        title: "Test artifacts",
-        topics: [
-          { slug: "writing-test-cases", title: "Writing great test cases" },
-          { slug: "bug-reports", title: "Anatomy of a bug report" },
-          { slug: "test-plans", title: "Test plans & strategy" },
-        ],
-      },
-      {
         slug: "exploratory",
         title: "Exploratory testing",
         topics: [
