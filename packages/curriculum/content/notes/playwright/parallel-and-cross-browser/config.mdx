@@ -1,0 +1,272 @@
+---
+title: "Config"
+summary: "playwright.config.ts is the single file where baseURL, projects, timeouts, retries, tracing, and even an auto-started dev server all live - every setting covered in this module in one place, not scattered across test files."
+tags: ["playwright", "parallel-and-cross-browser", "track-d"]
+updated: "2026-07-16"
+related:
+  - "playwright/parallel-and-cross-browser/projects-and-browsers"
+  - "playwright/parallel-and-cross-browser/parallelism-and-sharding"
+  - "playwright/parallel-and-cross-browser/retries"
+---
+
+<Hook>
+Every setting covered in this module so far - which browsers run, how many workers, how many
+retries, when to trace - lives in exactly one file. Not scattered across test files as repeated
+options, not passed as a wall of CLI flags every single run: one `playwright.config.ts`, read once,
+applied consistently to every test.
+</Hook>
+
+<Callout type="analogy">
+A mixing console doesn't make an audio engineer set the volume, EQ, and effects level separately for
+every single song played through it. Each channel strip holds its own settings, dialed in once, and
+every signal passed through that channel automatically gets treated the same way - consistent,
+predictable, adjustable in one place instead of re-configured take after take.
+</Callout>
+
+<Term define="playwright.config.ts is the single configuration file Playwright's test runner reads before any test executes, defining everything covered in this module: the projects array (which browsers/devices to run), workers and retries (parallelism and failure handling), the use block (baseURL, trace, screenshot, video defaults shared across all tests), timeout, and reporter. It can also define webServer, which automatically starts (and tears down) a local dev server before the test run begins, so tests never need to assume one is already running. Command-line flags (--project, --workers, --shard) can override specific config values per invocation without editing the file.">playwright.config.ts</Term>
+
+## The pieces this module has already covered, now in one place
+
+```
+export default defineConfig({
+  testDir: './tests',
+  timeout: 30_000,
+  retries: process.env.CI ? 2 : 0,
+  workers: process.env.CI ? 4 : undefined,
+  reporter: 'html',
+  use: {
+    baseURL: 'http://localhost:3000',
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
+  },
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+  ],
+  webServer: {
+    command: 'npm run start',
+    url: 'http://localhost:3000',
+    reuseExistingServer: !process.env.CI,
+  },
+});
+```
+
+- **`baseURL`** — lets every test call `page.goto('/login')` instead of the full URL every time; also
+  makes switching environments (local, staging) a one-line config change instead of a find-and-replace
+  across test files.
+- **`webServer`** — starts the app under test automatically before the run and shuts it down after,
+  so CI (and a fresh clone) never needs a manually-started server running in another terminal first.
+- **`reuseExistingServer: !process.env.CI`** — locally, reuse a dev server you already have running
+  (faster iteration); in CI, always start fresh (correctness over speed, since nothing else should be
+  running there).
+
+<Callout type="tip">
+Command-line flags override config values for a single run without touching the file -
+`npx playwright test --project=chromium --workers=1` is a fast way to narrow a run for local
+debugging while leaving the committed config's defaults untouched for everyone else.
+</Callout>
+
+<Callout type="mistake">
+Repeating the same option (a `baseURL`, a `timeout`) inside individual test files instead of setting
+it once in config. Beyond the duplication, it invites drift - one test file quietly pointing at a
+different URL or timeout than the rest of the suite, discovered only when it behaves unexpectedly.
+</Callout>
+
+{/* IMAGE: a real close-up photograph of an audio mixing console viewed at an angle, showing many parallel rows of individual channel faders and rotary knobs with color-coded caps, patch cables plugged into connectors along the top edge, and a pair of yellow master output faders set apart from the individual channel strips */}
+<HotspotImage
+  src="/notes/playwright/parallel-and-cross-browser/config.jpg"
+  alt="An audio mixing console viewed at an angle, showing many parallel rows of individual channel faders and rotary knobs with color-coded caps, patch cables plugged into connectors along the top edge, and a pair of yellow master output faders set apart from the individual channel strips"
+  credit="Mixing console — Wikimedia Commons, public domain (Rodrigo César)"
+  creditHref="https://commons.wikimedia.org/wiki/File:Mixing_console.jpg"
+  pins={[
+    { x: 35, y: 50, label: "One channel strip, its own dedicated settings", desc: "Every fader in this row belongs to one specific input, configured once - the same way each entry in the projects array is one browser's own, self-contained configuration." },
+    { x: 75, y: 80, label: "The master faders, set apart from individual channels", desc: "Settings that apply across everything passing through the console - the role top-level options like timeout, retries, and baseURL play, shared by every project rather than repeated per-channel." },
+    { x: 55, y: 15, label: "Cables plugged in at the top — external inputs wired in once", desc: "Connected once, feeding the console continuously - close to what webServer does: wire up the running app once at the start, not re-launched per test." },
+    { x: 10, y: 30, label: "One console, every channel treated consistently", desc: "Nobody re-configures gain and EQ separately for every song - the console's settings apply uniformly. One playwright.config.ts applies its settings to every test file the same way." },
+  ]}
+/>
+
+<FlowAnimation
+  title="What playwright.config.ts actually does before a single test runs"
+  intervalMs={1800}
+  nodes={[
+    { label: "npx playwright test is run", desc: "Playwright reads playwright.config.ts first, before touching any test file." },
+    { label: "webServer starts the app (if configured)", desc: "Waits until the given url actually responds before continuing." },
+    { label: "Projects, workers, and retries are resolved", desc: "How many browsers, how many parallel processes, how many retry attempts - all decided here." },
+    { label: "Every test file inherits the use: {} defaults", desc: "baseURL, trace, screenshot, video - set once, applied everywhere." },
+    { label: "Tests actually run", desc: "Consistently configured, with CLI flags able to override specific values for this run only." },
+  ]}
+/>
+
+Centralizing settings so every unit of work inherits the same configuration, with the option to
+override just one value for a single run, is really just: define defaults once, apply them broadly,
+allow a targeted override on top. Here's that shape as a small, generic simulation.
+
+<CodePlayground
+  language="python"
+  title="Run it - centralized defaults, applied to every task, with a per-run override (Python)"
+  code={`base_config = {"timeout": 30, "retries": 2, "browser": "chromium"}
+
+def resolve_config(base, overrides=None):
+    config = dict(base)
+    if overrides:
+        config.update(overrides)
+    return config
+
+tasks = ["login_test", "checkout_test", "search_test"]
+
+print("--- default run ---")
+for task in tasks:
+    print(f"{task}: {resolve_config(base_config)}")
+
+print("\\n--- one-off override: browser=webkit only ---")
+print(f"login_test: {resolve_config(base_config, {'browser': 'webkit'})}")`}
+/>
+
+Same centralized-defaults-with-override shape in Java.
+
+<CodePlayground
+  language="java"
+  title="Run it - centralized defaults, applied to every task, with a per-run override (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static Map<String, Object> resolveConfig(Map<String, Object> base, Map<String, Object> overrides) {
+        Map<String, Object> config = new LinkedHashMap<>(base);
+        if (overrides != null) config.putAll(overrides);
+        return config;
+    }
+
+    public static void main(String[] args) {
+        Map<String, Object> baseConfig = new LinkedHashMap<>();
+        baseConfig.put("timeout", 30);
+        baseConfig.put("retries", 2);
+        baseConfig.put("browser", "chromium");
+
+        List<String> tasks = List.of("login_test", "checkout_test", "search_test");
+
+        System.out.println("--- default run ---");
+        for (String task : tasks) {
+            System.out.println(task + ": " + resolveConfig(baseConfig, null));
+        }
+
+        System.out.println("\\n--- one-off override: browser=webkit only ---");
+        System.out.println("login_test: " + resolveConfig(baseConfig, Map.of("browser", "webkit")));
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: wire up baseURL and webServer, and prove they actually work">
+<StepChecklist
+  steps={[
+    { text: "Add baseURL to your scratch project's config, pointed at a local dev server's address", detail: "Rewrite one test's page.goto call to use a relative path instead of the full URL." },
+    { text: "Add a webServer block that starts that dev server automatically", detail: "command, url, and reuseExistingServer: !process.env.CI." },
+    { text: "Stop any manually-running dev server, then run npx playwright test", detail: "Confirm Playwright starts the server itself and waits for it before running tests." },
+    { text: "Run npx playwright test --project=chromium once", detail: "Confirm the CLI flag narrows the run without needing to edit the config file at all." },
+  ]}
+/>
+You've now centralized settings that would otherwise be repeated (or drift) across every test file.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "Tests time out immediately with a connection error, and webServer is configured.",
+      fix: "Check whether the webServer's url actually matches what the command starts, and whether the server takes longer to boot than Playwright's default wait - a slow-starting app may need an explicit timeout added to the webServer config.",
+    },
+    {
+      symptom: "A test passes locally but fails in CI with what looks like a wrong URL.",
+      fix: "Confirm baseURL isn't hardcoded to a local-only address - environment-specific config (via an environment variable feeding into baseURL) is the common fix for local vs CI vs staging differences.",
+    },
+    {
+      symptom: "A CLI flag like --project=firefox seems to be ignored.",
+      fix: "Confirm the project name passed matches exactly what's defined in the projects array (case-sensitive) - a typo here silently runs zero matching tests rather than erroring loudly.",
+    },
+    {
+      symptom: "Two team members get different local results for the exact same test run.",
+      fix: "Compare their actual resolved config (environment variables like CI, and any locally overridden flags) - config that branches on process.env.CI can behave differently for someone accidentally running with CI=true set locally.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **`playwright.config.ts` itself** — the definitive source of truth for every default this whole
+  module has discussed.
+- **`npx playwright test --list`** — shows exactly which tests and projects a given config/CLI
+  combination would actually run, without running anything.
+- **Environment variables referenced in the config** (`process.env.CI`, a custom base URL variable) —
+  confirms what's actually driving environment-specific behavior.
+- **The webServer's own startup logs** (visible in the terminal during `npx playwright test`) —
+  confirms whether it's genuinely starting cleanly or silently failing before tests even begin.
+</WhereToCheck>
+
+<WorkedExample title="one config change that ended a recurring 'works on my machine' argument">
+1. A team's test suite hardcodes `http://localhost:3000` inside dozens of individual `page.goto()`
+   calls across many files.
+2. A new CI environment runs the app on a different port, and every single test needs editing to
+   match - tedious, and the exact class of change that's easy to get only partially right.
+3. The fix: add `baseURL` to `playwright.config.ts`, driven by `process.env.BASE_URL ??
+   'http://localhost:3000'`, and rewrite every `page.goto('http://localhost:3000/x')` call to
+   `page.goto('/x')`.
+4. CI now sets `BASE_URL` to its own address as an environment variable; local development keeps the
+   default with zero changes needed.
+5. The next environment change (a staging URL, a different port) is a one-line environment variable
+   change, not a multi-file find-and-replace across the whole suite.
+</WorkedExample>
+
+<Quiz
+  question="A team's test suite has http://localhost:3000 hardcoded inside dozens of individual page.goto() calls. What's the recommended fix, based on this note?"
+  options={[
+    "Write a script that find-and-replaces the URL across every test file whenever it needs to change",
+    "Set baseURL once in playwright.config.ts (driven by an environment variable), and rewrite each page.goto call to use a relative path instead - centralizing the setting so an environment change becomes a one-line config update, not a multi-file edit",
+    "Leave it as-is since page.goto() calls are supposed to contain the full URL",
+    "Move the URL into a shared constants file that every test file imports"
+  ]}
+  answer={1}
+  explain="The note's worked example demonstrates exactly this fix - centralizing the URL in config via baseURL, driven by an environment variable, so relative paths in test files never need to change regardless of environment. Option one treats the symptom repeatedly instead of fixing the underlying duplication. Option three contradicts the note's explicit guidance that baseURL exists precisely so tests don't need full URLs. Option four (a shared constants file) is a real improvement over pure duplication, but still requires every test file to reference it explicitly, where baseURL in config applies automatically to every relative page.goto call with zero per-file wiring."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What does baseURL let a test do?", back: "Use page.goto('/login') instead of a full URL - and switch environments (local/staging/CI) via one config value instead of editing every test file." },
+    { front: "What does webServer solve?", back: "Starting (and tearing down) the app under test automatically before/after the run, so CI and fresh clones never need a manually-started server." },
+    { front: "reuseExistingServer: !process.env.CI - why that specific value?", back: "Locally, reuse an already-running dev server for faster iteration; in CI, always start fresh for correctness, since nothing else should already be running there." },
+    { front: "How do CLI flags relate to the config file?", back: "They override specific config values for one invocation only (--project, --workers, --shard) without editing the committed file." },
+    { front: "The mixing-console analogy for config", back: "Each channel strip (project) holds its own settings, dialed in once; master controls (top-level options like timeout/retries) apply across everything - consistent, not re-configured per test." },
+  ]}
+/>
+
+<Challenge>
+Audit a real test file (yours or an open-source project's) for any hardcoded URL, timeout, or browser
+assumption that duplicates something that could live in playwright.config.ts instead. Move at least
+one of them into the config (as baseURL, timeout, or a project setting) and confirm the test still
+passes using the centralized value instead of its own hardcoded one.
+</Challenge>
+
+<AskCommunity prompt="My playwright.config.ts has `[describe the relevant section]` but `[describe the unexpected behavior]` is happening. Here's the actual config: `[paste it]`.">
+Pasting the actual config (not a description of it) is usually enough for someone to spot a
+mismatched project name, an unresolved environment variable, or a webServer timing issue immediately.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://playwright.dev/docs/test-configuration", title: "Playwright — official Configuration docs", kind: "read" },
+    { href: "https://playwright.dev/docs/test-webserver", title: "Playwright — official Web server docs", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=YfaF9hOA7M4" title="Playwright Config File Settings Explained — BaseURL, Browser, Projects — MasterQAAutomation" minutes={6} />
+
+<Takeaways
+  points={[
+    "playwright.config.ts centralizes everything this module covers - projects, workers, retries, tracing defaults, and more - in one file instead of repeated per test.",
+    "baseURL lets tests use relative paths and makes switching environments a one-line config change instead of a multi-file edit.",
+    "webServer automatically starts (and tears down) the app under test, so CI and fresh clones never need a manually-started server.",
+    "reuseExistingServer: !process.env.CI reuses a local dev server for speed, while always starting fresh in CI for correctness.",
+    "CLI flags (--project, --workers, --shard) override specific config values for a single run without touching the committed file.",
+  ]}
+/>
+
+<Complete xp={10} />

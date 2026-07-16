@@ -1153,10 +1153,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "parallel-and-cross-browser",
         title: "Parallel & cross-browser",
         topics: [
-          { slug: "projects-and-browsers", title: "Projects & browsers", planned: true },
-          { slug: "parallelism-and-sharding", title: "Parallelism & sharding", planned: true },
-          { slug: "retries", title: "Retries", planned: true },
-          { slug: "config", title: "Config", planned: true },
+          { slug: "projects-and-browsers", title: "Projects & browsers" },
+          { slug: "parallelism-and-sharding", title: "Parallelism & sharding" },
+          { slug: "retries", title: "Retries" },
+          { slug: "config", title: "Config" },
         ],
       },
       {
