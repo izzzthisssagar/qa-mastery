@@ -1,0 +1,316 @@
+---
+title: "Managing multi-account testing"
+summary: "Testing a permissions boundary means having two roles logged in AT ONCE - Chrome Profiles and Firefox Multi-Account Containers isolate cookies per container so a seller and a buyer, or an admin and a customer, can stay logged in side by side in the same browser window."
+tags: ["testers-toolbox", "cookies-json-sessions", "track-c"]
+updated: "2026-07-16"
+related:
+  - "testers-toolbox/cookies-json-sessions/cookie-editors"
+  - "testers-toolbox/cookies-json-sessions/clear-cache"
+  - "defect-management/severity-vs-priority/severity"
+---
+
+<Hook>
+Testing "can a customer see another customer's order" or "does a message from the seller actually
+reach the buyer" requires something a single normal browser tab structurally can't do: being logged
+in as TWO people at once. Log into a second account in the same tab and the first one gets silently
+logged out — cookies are shared per browser, not per tab. Isolation is how you fix that, and it's the
+difference between testing a permissions boundary properly and just assuming it works.
+</Hook>
+
+<Callout type="analogy">
+A masquerade ball works because every guest's mask is a fully separate identity — nobody's face
+paint smears onto anybody else's, and you can look at ten different masks side by side without any
+of them blending into one. A browser's cookies, without isolation, do NOT work this way by default:
+logging into a second identity in the same "face" (browser profile) overwrites the first. Isolated
+containers give each identity its own mask, worn simultaneously, fully distinct.
+</Callout>
+
+<Term define="Multi-account isolation lets a browser hold multiple, independent logged-in sessions at the same time, instead of one shared cookie jar where a new login overwrites the previous one. Chrome/Edge Profiles (built into the browser, free) and Firefox Multi-Account Containers (a free Mozilla extension, color-coded tabs) are the two standard 2026 approaches - each isolates cookies, storage, and login state per profile/container, letting you be an admin and a customer, or a buyer and a seller, in the same browser window simultaneously.">multi-account isolation</Term>
+
+## Why "just use two browsers" isn't the real answer
+
+- **Browser profiles (Chrome/Edge, built-in, free)** — each profile is a fully separate browser
+  identity: its own cookies, extensions, bookmarks, history. Switching between them (or opening
+  windows for two different profiles side by side) gives you two fully independent sessions with
+  zero extra tooling.
+- **Firefox Multi-Account Containers (free extension)** — a lighter-weight approach: color-coded
+  tabs within the SAME window, each with isolated cookies. Faster to set up for a quick two-role
+  check than switching entire browser profiles.
+- **Why not just use two different browsers (Chrome + Firefox)?** — that works too, and is a
+  perfectly valid quick option, but doesn't scale past two roles as cleanly, and doesn't let you use
+  your normal, fully-configured browser (extensions, saved settings) for both sides of the test.
+
+<Callout type="tip">
+For any feature involving two DIFFERENT roles interacting (buyer/seller messaging, admin actions a
+customer should see reflected, a shared document two users edit) — set up isolated sessions for
+BOTH roles before you start testing, not partway through when you realize you need to check the
+other side. Half the value is being able to flip back and forth instantly, mid-test.
+</Callout>
+
+<Callout type="mistake">
+Testing a permissions boundary ("customer A shouldn't see customer B's data") by logging out and
+back in as a different user between checks, rather than having both sessions live simultaneously.
+Sequential testing like this can miss real-time bugs — a notification that should update live, a
+websocket message that should arrive instantly — that only show up when both sessions are actually
+active at the same moment.
+</Callout>
+
+{/* IMAGE: an elaborate display of ornate Venetian carnival masks in gold, red, blue, pink, and purple, each with distinct decorative patterns, hanging together in a shop window in Venice */}
+<HotspotImage
+  src="/notes/testers-toolbox/cookies-json-sessions/multi-account-testing.jpg"
+  alt="An elaborate display of ornate Venetian carnival masks in gold, red, blue, pink, and purple, each with a distinct decorative pattern, hanging together in a shop window"
+  credit="Venetian masks - shop in Venice — Wikimedia Commons, CC BY-SA 3.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Venetian_masks_-_shop_in_Venice.jpg"
+  pins={[
+    { x: 30, y: 20, label: "One gold mask — one isolated session", desc: "A complete, self-contained identity - its own colors, its own pattern, fully distinct from its neighbor. Exactly what one browser profile or container holds: one full login state, untouched by any other." },
+    { x: 60, y: 45, label: "Multiple masks displayed together, at once", desc: "Every identity is simultaneously visible and available - not one at a time, one after another. This is the entire point of isolation: an admin session and a customer session, both live, side by side, right now." },
+    { x: 20, y: 65, label: "The pink mask, distinct from its gold neighbor", desc: "No blending, no overwriting - each identity keeps its own full, undiluted character even hanging inches from another. That's what cookie isolation guarantees a browser profile or container will do." },
+    { x: 80, y: 55, label: "The full collection, none of them interfering", desc: "A whole shop's worth of separate identities, coexisting without conflict - scale this same idea to as many test roles (admin, seller, buyer, moderator) as a feature actually needs to verify." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Testing a two-role interaction with isolated sessions"
+  intervalMs={1800}
+  nodes={[
+    { label: "Set up two isolated contexts BEFORE starting", desc: "Two Chrome profiles, or two Firefox containers - one for each role you need live at once." },
+    { label: "Log into role A in context 1", desc: "e.g. the seller account - this session now persists independently of anything happening elsewhere." },
+    { label: "Log into role B in context 2", desc: "e.g. the buyer account - role A's session is UNTOUCHED, still fully logged in in its own context." },
+    { label: "Perform an action as role A", desc: "Send a message, change a setting, place an order - whatever the feature under test actually does." },
+    { label: "Immediately check role B's context for the effect", desc: "No logout/login gap - real-time behavior (notifications, live updates) gets tested exactly as a real user would experience it." },
+  ]}
+/>
+
+The core problem isolation solves — a single shared cookie jar where the second login destroys the
+first — is easy to demonstrate directly:
+
+<CodePlayground
+  language="python"
+  title="Run it - shared cookies vs isolated containers (Python)"
+  code={`class BrowserContext:
+    def __init__(self, name):
+        self.name = name
+        self.cookies = {}
+
+    def login_as(self, user_id, session_token):
+        self.cookies["session_id"] = session_token
+        self.cookies["user_id"] = user_id
+
+    def current_user(self):
+        return self.cookies.get("user_id", "not logged in")
+
+no_isolation_tab = BrowserContext("single-tab-no-containers")
+
+print("WITHOUT isolation - one shared cookie jar:")
+no_isolation_tab.login_as("admin-42", "tok-admin-abc")
+print(f"  Logged in as: {no_isolation_tab.current_user()}")
+no_isolation_tab.login_as("customer-7", "tok-cust-xyz")
+print(f"  Logged in as: {no_isolation_tab.current_user()} (the ADMIN session just got overwritten)")
+
+print()
+print("WITH isolation - separate containers/profiles:")
+admin_context = BrowserContext("container: admin-testing")
+customer_context = BrowserContext("container: customer-testing")
+
+admin_context.login_as("admin-42", "tok-admin-abc")
+customer_context.login_as("customer-7", "tok-cust-xyz")
+
+print(f"  {admin_context.name:<28} -> {admin_context.current_user()}")
+print(f"  {customer_context.name:<28} -> {customer_context.current_user()}")
+print()
+print("Both sessions stay valid simultaneously - exactly what's needed to test")
+print("a permissions boundary between two roles side by side, in real time.")
+
+# WITHOUT isolation - one shared cookie jar:
+#   Logged in as: admin-42
+#   Logged in as: customer-7 (the ADMIN session just got overwritten)
+#
+# WITH isolation - separate containers/profiles:
+#   container: admin-testing     -> admin-42
+#   container: customer-testing  -> customer-7
+#
+# Both sessions stay valid simultaneously - exactly what's needed to test
+# a permissions boundary between two roles side by side, in real time.`}
+/>
+
+Same idea in Java, applied to a realistic two-role feature — buyer/seller messaging, tested the way
+isolation actually makes possible:
+
+<CodePlayground
+  language="java"
+  title="Run it - isolated sessions for a buyer/seller messaging test (Java)"
+  code={`import java.util.*;
+
+class BrowserContainer {
+    String name;
+    Map<String, String> cookies = new HashMap<>();
+
+    BrowserContainer(String name) { this.name = name; }
+
+    void loginAs(String userId, String token) {
+        cookies.put("user_id", userId);
+        cookies.put("session_token", token);
+    }
+
+    String currentUser() {
+        return cookies.getOrDefault("user_id", "not logged in");
+    }
+}
+
+public class Main {
+    public static void main(String[] args) {
+        System.out.println("Testing a marketplace's buyer/seller messaging feature:");
+        System.out.println();
+
+        BrowserContainer sellerTab = new BrowserContainer("container: seller-view");
+        BrowserContainer buyerTab = new BrowserContainer("container: buyer-view");
+
+        sellerTab.loginAs("seller-101", "tok-seller-abc");
+        buyerTab.loginAs("buyer-205", "tok-buyer-xyz");
+
+        System.out.printf("  %-24s logged in as %s%n", sellerTab.name, sellerTab.currentUser());
+        System.out.printf("  %-24s logged in as %s%n", buyerTab.name, buyerTab.currentUser());
+
+        System.out.println();
+        System.out.println("Seller sends a message (in seller's container), buyer checks");
+        System.out.println("their inbox (in buyer's container) - BOTH sessions stay live");
+        System.out.println("in the SAME browser window, side by side, in real time.");
+        System.out.println();
+        System.out.println("Without isolation, logging into one account would silently");
+        System.out.println("log the other one out - making this exact test impossible");
+        System.out.println("without two entirely separate browsers or incognito windows.");
+    }
+}
+
+/* Testing a marketplace's buyer/seller messaging feature:
+
+     container: seller-view   logged in as seller-101
+     container: buyer-view    logged in as buyer-205
+
+   Seller sends a message (in seller's container), buyer checks
+   their inbox (in buyer's container) - BOTH sessions stay live
+   in the SAME browser window, side by side, in real time.
+
+   Without isolation, logging into one account would silently
+   log the other one out - making this exact test impossible
+   without two entirely separate browsers or incognito windows. */`}
+/>
+
+<FirstTime title="Your mission: run one real two-role test with isolated sessions">
+<StepChecklist
+  steps={[
+    { text: "Set up two Chrome profiles, OR install Firefox Multi-Account Containers", detail: "Profiles: click your avatar icon, 'Add profile.' Containers: install the extension, right-click a tab to open it in a new colored container." },
+    { text: "Log into two different roles in BuggyShop, one per profile/container", detail: "An admin account in one, a regular customer account in the other - both should show as logged in simultaneously." },
+    { text: "Confirm both sessions are genuinely independent", detail: "Refresh each - both should stay logged in as their own distinct user, with no interference from the other." },
+    { text: "Perform an action in one that should have a visible effect in the other", detail: "An admin changing an order status that the customer should then see reflected, for example." },
+    { text: "Check the second session IMMEDIATELY, without logging out/in", detail: "This is the exact capability isolation buys you - real-time verification, not a delayed re-check after switching accounts manually." },
+  ]}
+/>
+You've tested a genuine two-role interaction the way it actually happens for real users — both
+sides live at once, not simulated one after another.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "Logging into a second account in a new profile/container still seems to affect the first session.",
+      fix: "Confirm you're ACTUALLY in a different profile/container - check the visible indicator (profile avatar in the corner, or the colored container tab border) before assuming isolation failed. A shared login can also happen if the app itself uses a mechanism outside cookies (like a server-side single-session-per-account policy) that legitimately logs out the other session - which would itself be a finding worth noting, not a tool failure.",
+    },
+    {
+      symptom: "A feature that should update in real time (a notification, a live status change) doesn't appear in the second session without a manual refresh.",
+      fix: "This could be a genuine bug (missing websocket/polling implementation) rather than a testing-setup issue - confirm by checking whether the SAME behavior also fails to update live for two separate real users in two separate real browsers, which would confirm it's an app bug, not an artifact of your test setup.",
+    },
+    {
+      symptom: "Firefox containers show cross-container cookie leakage - one container seems to know about the other's login.",
+      fix: "Check whether a third-party cookie or a shared parent domain (a site and its subdomains, or an SSO provider both roles authenticate through) is legitimately meant to be shared - some leakage is by design for SSO flows. If it's genuinely unexpected, it may be an extension configuration issue rather than the app's fault.",
+    },
+    {
+      symptom: "You need more than two or three simultaneous roles and profiles/containers are getting unwieldy.",
+      fix: "For larger-scale multi-role testing (five+ simultaneous roles), consider whether the scenario is better served by an automated test script driving multiple sessions programmatically, rather than manually juggling many browser profiles - manual isolation tools are built for a handful of roles at a time, not dozens.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The visible profile/container indicator** — always confirm which identity you're actually in before acting, especially with several open at once; acting in the wrong context invalidates the test.
+- **DevTools' Application panel, per container/profile** — inspect cookies directly to confirm they're actually isolated (different session tokens) rather than trusting the UI alone.
+- **Server-side session logs, if available** — the definitive record of whether two sessions were truly concurrent and independent, useful when a real-time bug's timing is in question.
+- **Whether a "leak" between contexts is actually an SSO/shared-domain design choice** — before reporting cross-container bleed as a bug, confirm it isn't intentional shared authentication.
+</WhereToCheck>
+
+<WorkedExample title="catching a real-time notification bug only isolation could reveal">
+1. Task: verify that when a seller marks an order as shipped, the buyer sees a "Your order has
+   shipped" notification without needing to refresh the page.
+2. Two Firefox containers set up: one logged in as the seller, one as the buyer, viewing the order
+   page in each simultaneously.
+3. In the seller's container, mark the order as shipped. Switch immediately to the buyer's
+   container — no notification appears. Wait ten seconds — still nothing. Manually refresh — NOW
+   the shipped status appears.
+4. This is a real, reproducible finding: the notification isn't delivered in real time as the
+   feature presumably intends; it only appears on a full page reload. Something sequential testing
+   (logging in as buyer only AFTER acting as seller) would have completely missed, since a fresh
+   login always shows current state regardless of real-time delivery.
+5. Report: "Marking an order shipped (seller action) does not trigger a live notification for the
+   buyer's already-open order page — requires a manual refresh to see the updated status. Tested
+   with both sessions live simultaneously via isolated browser containers; confirmed the delay is
+   NOT a network/timing fluke by repeating three times." A finding that only exists because both
+   roles were genuinely live at once.
+</WorkedExample>
+
+<Quiz
+  question="A tester verifies a permissions boundary ('customer A cannot see customer B's order history') by logging in as customer A, checking their orders, logging out, then logging in as customer B and checking their orders separately. What class of bug can this SEQUENTIAL approach miss that isolated, simultaneous sessions would catch?"
+  options={[
+    "None - sequential testing is equally thorough since each account's data is checked individually either way",
+    "Real-time/concurrency bugs that only manifest when both sessions are genuinely live at the same moment - a notification meant to update instantly, a websocket message, or a race condition between two users acting on shared data at once",
+    "Sequential testing is actually MORE thorough because it avoids any risk of cross-contamination between the two accounts",
+    "This only matters for messaging features specifically, not for permissions boundaries like order visibility"
+  ]}
+  answer={1}
+  explain="Sequential testing (login, check, logout, login again) genuinely can catch STATIC boundary violations (can customer A's static order data be seen while logged in as B) but structurally cannot exercise anything that depends on both sessions being simultaneously active - a live notification, a real-time status update, a race condition when two users act on the same resource at once. This note's worked example (the shipped-order notification) is exactly this class of bug, invisible to sequential checking since a fresh login always shows current state regardless of whether real-time delivery actually works. Option one ignores this entire concurrency-bug category. Option three inverts the tradeoff - isolation via containers/profiles is deliberately designed to PREVENT cross-contamination while still allowing true simultaneity, so there's no contamination benefit to sacrificing concurrency for. Option four is an unsupported, overly narrow claim - concurrency bugs can occur in any feature involving two roles interacting, not just messaging."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Why a normal single browser tab can't hold two logged-in sessions", back: "Cookies are shared per browser profile by default - logging into a second account overwrites the first account's session cookies, silently logging it out." },
+    { front: "The two standard 2026 isolation approaches", back: "Chrome/Edge Profiles (built-in, fully separate browser identities) and Firefox Multi-Account Containers (free extension, color-coded tabs with isolated cookies in the same window) - both free, both verified alive." },
+    { front: "The core testing capability isolation unlocks", back: "Two (or more) roles logged in and fully active AT THE SAME TIME - enabling real-time, concurrent-interaction testing (buyer/seller messaging, live notifications) that sequential login/logout/login cycles cannot exercise." },
+    { front: "Why sequential testing misses real-time bugs", back: "Logging out and back in always shows CURRENT state on the fresh login, regardless of whether live/real-time delivery (notifications, websockets) actually works - the bug is invisible unless both sessions are genuinely live simultaneously." },
+    { front: "A legitimate cause of apparent cross-container 'leakage'", back: "Shared-domain or SSO authentication design (a site and its subdomains, or a common identity provider) can legitimately share some state across contexts - confirm this isn't intentional before reporting it as an isolation bug." },
+    { front: "When manual profiles/containers stop being the right tool", back: "Beyond a handful of simultaneous roles (five+), manually juggling browser profiles gets unwieldy - that's the point to consider an automated script driving multiple sessions programmatically instead." },
+  ]}
+/>
+
+<Challenge>
+Set up two isolated sessions (Chrome profiles or Firefox containers) logged into two different
+BuggyShop roles. Find one feature where an action by one role should produce a visible effect for
+the other, and test it with BOTH sessions genuinely live at once — checking the second session
+immediately after the action, with no logout/login gap. Write up whatever you find, explicitly
+noting that both sessions were simultaneously active as part of your repro steps.
+</Challenge>
+
+<AskCommunity prompt="I'm testing `[feature]` which involves two roles (`[role A]` and `[role B]`) interacting. I set up isolated sessions for both, and observed `[what happened / didn't update in real time]`. Is this expected to update live, or is a manual refresh the intended design here?">
+Whether a cross-role update is supposed to be instant or refresh-dependent is a real design
+question — the most useful answers will tell you what this specific feature was actually built to do.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://addons.mozilla.org/en-US/firefox/addon/multi-account-containers/", title: "Firefox Multi-Account Containers — official Mozilla add-on page", kind: "read" },
+    { href: "https://support.google.com/chrome/answer/2364824", title: "Google — Chrome Profiles support documentation", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=xa4l03HAg_0", title: "Mark Repp — How to Switch Between Multiple Profiles in Google Chrome", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=P3DLKmx8W_A" title="Firefox Multi-Account Containers (TWiT Tech Podcast Network)" minutes={5} />
+
+<Takeaways
+  points={[
+    "A single browser tab shares one cookie jar - logging into a second account overwrites the first, making true simultaneous multi-role testing impossible without isolation.",
+    "Chrome/Edge Profiles (built-in) and Firefox Multi-Account Containers (free extension) are the two standard 2026 approaches to isolated, simultaneous sessions.",
+    "Isolation's real value is testing REAL-TIME, concurrent interactions - notifications, live updates, race conditions - that sequential login/logout/login testing structurally cannot exercise.",
+    "Always confirm which profile/container you're actually acting in via its visible indicator before testing - acting in the wrong context invalidates the result.",
+    "Some apparent cross-context 'leakage' is legitimate shared-domain or SSO design - confirm before reporting it as an isolation bug.",
+  ]}
+/>
+
+<Complete xp={10} />

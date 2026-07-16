@@ -1065,10 +1065,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "cookies-json-sessions",
         title: "Cookies, JSON & sessions",
         topics: [
-          { slug: "cookie-editors", title: "Cookie editors", planned: true },
-          { slug: "json-formatters", title: "JSON formatters", planned: true },
-          { slug: "clear-cache", title: "Clear Cache", planned: true },
-          { slug: "multi-account-testing", title: "Managing multi-account testing", planned: true },
+          { slug: "cookie-editors", title: "Cookie editors" },
+          { slug: "json-formatters", title: "JSON formatters" },
+          { slug: "clear-cache", title: "Clear Cache" },
+          { slug: "multi-account-testing", title: "Managing multi-account testing" },
         ],
       },
       {
