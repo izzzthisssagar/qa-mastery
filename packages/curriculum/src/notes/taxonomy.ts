@@ -989,6 +989,54 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   },
   // END exploratory-testing
   {
+    slug: "defect-management",
+    title: "Defect Management",
+    summary: "How a reported problem becomes a tracked, resolved defect — the named states and workflow it moves through, how to write a report a developer trusts, how severity and priority get decided, and the tools teams run it all in.",
+    chapters: [
+      {
+        slug: "the-bug-life-cycle",
+        title: "The bug life cycle",
+        topics: [
+          { slug: "states-of-a-bug", title: "States of a bug" },
+          { slug: "the-workflow", title: "The workflow" },
+          { slug: "reopen-and-duplicate", title: "Reopen & duplicate" },
+          { slug: "triage", title: "Triage" },
+        ],
+      },
+      {
+        slug: "writing-bug-reports",
+        title: "Writing bug reports",
+        topics: [
+          { slug: "anatomy-of-a-report", title: "Anatomy of a report", planned: true },
+          { slug: "repro-steps", title: "Repro steps", planned: true },
+          { slug: "evidence", title: "Evidence", planned: true },
+          { slug: "clarity", title: "Clarity", planned: true },
+        ],
+      },
+      {
+        slug: "severity-vs-priority",
+        title: "Severity vs priority",
+        topics: [
+          { slug: "severity", title: "Severity", planned: true },
+          { slug: "priority", title: "Priority", planned: true },
+          { slug: "combinations", title: "Combinations", planned: true },
+          { slug: "who-sets-what", title: "Who sets what", planned: true },
+        ],
+      },
+      {
+        slug: "tools",
+        title: "Tools",
+        topics: [
+          { slug: "jira-basics", title: "JIRA basics", planned: true },
+          { slug: "bugzilla", title: "Bugzilla", planned: true },
+          { slug: "test-management-tools", title: "Test management tools", planned: true },
+          { slug: "dashboards", title: "Dashboards", planned: true },
+        ],
+      },
+    ],
+  },
+  // END defect-management
+  {
     slug: "foundations",
     title: "QA Foundations",
     summary: "The vocabulary and mental models every tester needs.",
