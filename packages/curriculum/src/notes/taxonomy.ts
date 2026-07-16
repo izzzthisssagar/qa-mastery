@@ -1095,10 +1095,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "beyond-the-browser",
         title: "Beyond the browser",
         topics: [
-          { slug: "debugging-proxies", title: "Debugging proxies", planned: true },
-          { slug: "email-testing", title: "Email testing", planned: true },
-          { slug: "tunnels-and-sharing-localhost", title: "Tunnels & sharing localhost", planned: true },
-          { slug: "screen-recorders-for-bug-repro", title: "Screen recorders for bug repro", planned: true },
+          { slug: "debugging-proxies", title: "Debugging proxies" },
+          { slug: "email-testing", title: "Email testing" },
+          { slug: "tunnels-and-sharing-localhost", title: "Tunnels & sharing localhost" },
+          { slug: "screen-recorders-for-bug-repro", title: "Screen recorders for bug repro" },
         ],
       },
       {

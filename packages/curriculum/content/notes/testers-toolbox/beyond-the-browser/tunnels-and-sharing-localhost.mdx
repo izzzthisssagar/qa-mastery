@@ -1,0 +1,303 @@
+---
+title: "Tunnels & sharing localhost"
+summary: "Webhooks, OAuth callbacks, and integrations need a real public URL - localhost means nothing outside your machine. ngrok's 2026 free tier got cut hard (1GB/month, 2-hour sessions); Cloudflare Tunnel is the better default beyond a quick demo."
+tags: ["testers-toolbox", "beyond-the-browser", "track-c"]
+updated: "2026-07-16"
+related:
+  - "testers-toolbox/beyond-the-browser/debugging-proxies"
+  - "api-testing-fundamentals/auth-manually/oauth2-what-a-tester-needs"
+  - "test-artifacts/test-data/preparing-test-data"
+---
+
+<Hook>
+A payment provider's servers need to send your app a real webhook when a charge succeeds. An OAuth
+provider needs to redirect back to your app after a user logs in. Neither of these can happen if
+your app only exists at `localhost:3000` — that address means literally nothing to anything outside
+your own machine. A tunnel gives your local server a real, public URL for exactly as long as you
+need one, without deploying anywhere.
+</Hook>
+
+<Callout type="analogy">
+Standing in a lit tunnel, you can see all the way through to daylight at the far end — a direct,
+uninterrupted path connecting two points that would otherwise be sealed off from each other by solid
+rock. A network tunnel does exactly this for your local machine: it punches a real, usable path from
+the public internet straight through to a server that would otherwise be completely unreachable
+from outside your own network.
+</Callout>
+
+<Term define="A tunnel is a service that gives a local development server (running on localhost) a real, public URL, forwarding incoming public traffic straight to your machine - no deployment, no port forwarding, no public IP required. ngrok is the best-known name but its free tier was cut hard in early 2026 (1GB monthly bandwidth, 2-hour sessions, 3 endpoints). Cloudflare Tunnel (free, unlimited HTTP bandwidth, requires a domain on Cloudflare DNS) and localtunnel (free, npm-installable, no signup, less reliable under load) are the leading 2026 alternatives.">tunnel</Term>
+
+## Why "just test it locally" doesn't work for these specific cases
+
+- **Webhooks** — a payment provider, a chat platform, a CI system: all of them need to send YOUR
+  server an HTTP request when something happens on THEIR end. They can only do that if your server
+  has a real, internet-reachable URL.
+- **OAuth callbacks** — logging in via Google/GitHub/etc. requires the provider to redirect the
+  browser back to a URL YOU registered in advance — and that URL has to be reachable, not
+  `localhost`.
+- **Client demos and mobile device testing** — sharing a work-in-progress build with someone on a
+  different network, or testing from a real phone on cellular data, both need a real URL a local
+  server alone can't provide.
+- **The 2026 landscape**: ngrok's free tier is now genuinely limited (1GB/month, 2-hour sessions) —
+  fine for a five-minute demo, not for a real testing session. Cloudflare Tunnel's free tier has
+  unlimited HTTP bandwidth but needs upfront domain/DNS setup; localtunnel needs zero setup but is
+  less production-reliable.
+
+<Callout type="tip">
+Match the tunnel to the task: ngrok's free tier for a quick, one-off five-minute demo; Cloudflare
+Tunnel when you need a stable, reusable URL for repeated webhook testing over hours or days;
+localtunnel for the fastest possible zero-setup share when reliability matters less than speed.
+</Callout>
+
+<Callout type="mistake">
+Leaving a tunnel running and forgetting about it, exposing a local dev server (often running with
+weaker security than production) to the public internet indefinitely. Always close a tunnel the
+moment the specific testing session is done — treat it as a temporary window, not a permanent door.
+</Callout>
+
+{/* IMAGE: a black-and-white photograph looking through a dark stone railway tunnel toward a bright circle of daylight and green foliage at the far end, with small lights strung along the tunnel's ceiling */}
+<HotspotImage
+  src="/notes/testers-toolbox/beyond-the-browser/tunnels-and-sharing-localhost.jpg"
+  alt="A black-and-white photograph looking through a dark stone railway tunnel toward a bright circle of daylight and green foliage at the far end, with small lights strung along the ceiling"
+  credit="Innocent Railway tunnel — Wikimedia Commons, CC BY 2.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Innocent_Railway_tunnel_(20091707234).jpg"
+  pins={[
+    { x: 50, y: 45, label: "The bright opening at the far end — the public internet", desc: "The destination a tunnel actually connects you to - real, reachable, visible from outside. Before the tunnel exists, that opening (a public URL) simply isn't there at all." },
+    { x: 20, y: 60, label: "The dark stone walls — everything the tunnel does NOT expose", desc: "The tunnel is a single defined path, not an open field - only traffic routed through it reaches your local server. Everything else about your machine stays exactly as sealed off as before." },
+    { x: 65, y: 20, label: "The small lights along the ceiling — the tunnel's own controlled access", desc: "A managed, purpose-built path, not a random hole in the rock - the same way a tunneling TOOL manages the connection deliberately, not an accidental network exposure." },
+    { x: 35, y: 75, label: "The straight, direct line of sight, start to finish", desc: "One continuous path with no detours - a tunnel's whole job: forward traffic from the public URL straight through to your local server's exact port, nothing more circuitous than that." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Receiving a real webhook on a local dev server"
+  intervalMs={1800}
+  nodes={[
+    { label: "Start your local server", desc: "e.g. localhost:3000 - runs fine for anything you access from your own machine, invisible to everyone else." },
+    { label: "Start a tunnel pointing at that local port", desc: "Cloudflare Tunnel or ngrok - the tool generates a real, public URL forwarding straight to localhost:3000." },
+    { label: "Register that public URL with the third-party service", desc: "Paste it into Stripe's webhook config, or your OAuth provider's callback URL setting." },
+    { label: "Trigger the real event on the provider's side", desc: "A test charge, a real login flow - the provider's servers now send a genuine request to your public tunnel URL." },
+    { label: "Watch it arrive on your local server, exactly as if deployed", desc: "The tunnel forwarded it transparently - your code runs exactly as it would in a real deployed environment." },
+  ]}
+/>
+
+The core reason tunnels exist is simple: `localhost` is invisible outside your own machine, and a
+webhook provider needs a real address. Here's that exact gap made explicit:
+
+<CodePlayground
+  language="python"
+  title="Run it - comparing 2026 free tunnel tiers against a real scenario (Python)"
+  code={`class TunnelSession:
+    def __init__(self, provider, bandwidth_limit_gb, session_hours, endpoints):
+        self.provider = provider
+        self.bandwidth_limit_gb = bandwidth_limit_gb
+        self.session_hours = session_hours
+        self.endpoints = endpoints
+
+    def simulate_usage(self, requested_gb, requested_hours):
+        bandwidth_ok = requested_gb <= self.bandwidth_limit_gb
+        time_ok = self.session_hours is None or requested_hours <= self.session_hours
+        return bandwidth_ok and time_ok
+
+providers = [
+    TunnelSession("ngrok (2026 free tier)", bandwidth_limit_gb=1, session_hours=2, endpoints=3),
+    TunnelSession("Cloudflare Tunnel (free)", bandwidth_limit_gb=float("inf"), session_hours=None, endpoints=None),
+    TunnelSession("localtunnel (free, npm)", bandwidth_limit_gb=float("inf"), session_hours=None, endpoints=1),
+]
+
+scenario_gb, scenario_hours = 3, 5
+
+print(f"Scenario: a demo needs {scenario_gb}GB transferred over {scenario_hours} hours.")
+print()
+for p in providers:
+    fits = p.simulate_usage(scenario_gb, scenario_hours)
+    bw_display = "unlimited" if p.bandwidth_limit_gb == float("inf") else f"{p.bandwidth_limit_gb}GB"
+    hr_display = "unlimited" if p.session_hours is None else f"{p.session_hours}h"
+    print(f"  {p.provider:<28} limit={bw_display:<10} session={hr_display:<10} -> {'FITS' if fits else 'EXCEEDS LIMIT'}")
+
+print()
+print("ngrok's 2026 free-tier cuts (1GB, 2-hour sessions) make it the wrong")
+print("choice for anything beyond a quick five-minute demo - a longer or")
+print("heavier-traffic session needs Cloudflare Tunnel or localtunnel instead.")
+
+# Scenario: a demo needs 3GB transferred over 5 hours.
+#
+#   ngrok (2026 free tier)       limit=1GB        session=2h         -> EXCEEDS LIMIT
+#   Cloudflare Tunnel (free)     limit=unlimited  session=unlimited  -> FITS
+#   localtunnel (free, npm)      limit=unlimited  session=unlimited  -> FITS
+#
+# ngrok's 2026 free-tier cuts (1GB, 2-hour sessions) make it the wrong
+# choice for anything beyond a quick five-minute demo - a longer or
+# heavier-traffic session needs Cloudflare Tunnel or localtunnel instead.`}
+/>
+
+Same lesson in Java, applied to the canonical use case — a real payment provider's webhook trying
+to reach a local server:
+
+<CodePlayground
+  language="java"
+  title="Run it - why a webhook needs a tunnel, made explicit (Java)"
+  code={`public class Main {
+    static boolean canReceiveWebhook(String localAddress, boolean tunnelActive) {
+        return tunnelActive;
+    }
+
+    public static void main(String[] args) {
+        String localApp = "http://localhost:3000/webhooks/stripe";
+        String publicTunnelUrl = "https://a1b2-c3d4.trycloudflare.com/webhooks/stripe";
+
+        System.out.println("Testing a Stripe webhook against a local dev server:");
+        System.out.println();
+
+        System.out.println("WITHOUT a tunnel:");
+        System.out.println("  Local address: " + localApp);
+        System.out.println("  Reachable from the public internet: " + canReceiveWebhook(localApp, false));
+        System.out.println("  Stripe's servers cannot reach 'localhost' - it means nothing outside your machine.");
+
+        System.out.println();
+        System.out.println("WITH a tunnel active:");
+        System.out.println("  Public URL: " + publicTunnelUrl);
+        System.out.println("  Reachable from the public internet: " + canReceiveWebhook(publicTunnelUrl, true));
+        System.out.println("  Stripe's servers send the real webhook event to this public URL,");
+        System.out.println("  the tunnel forwards it straight to your local server's port 3000.");
+
+        System.out.println();
+        System.out.println("This is the exact reason tunnels exist for testing: webhooks, OAuth");
+        System.out.println("callbacks, and third-party integrations all need a REAL public URL -");
+        System.out.println("localhost is invisible to anything outside your own machine.");
+    }
+}
+
+/* Testing a Stripe webhook against a local dev server:
+
+   WITHOUT a tunnel:
+     Local address: http://localhost:3000/webhooks/stripe
+     Reachable from the public internet: false
+     Stripe's servers cannot reach 'localhost' - it means nothing outside your machine.
+
+   WITH a tunnel active:
+     Public URL: https://a1b2-c3d4.trycloudflare.com/webhooks/stripe
+     Reachable from the public internet: true
+     Stripe's servers send the real webhook event to this public URL,
+     the tunnel forwards it straight to your local server's port 3000.
+
+   This is the exact reason tunnels exist for testing: webhooks, OAuth
+   callbacks, and third-party integrations all need a REAL public URL -
+   localhost is invisible to anything outside your own machine. */`}
+/>
+
+<FirstTime title="Your mission: expose a local server and receive one real external request">
+<StepChecklist
+  steps={[
+    { text: "Start BuggyShop's dev server locally (e.g. localhost:3000)", detail: "Confirm you can reach it normally from your own browser first." },
+    { text: "Install and run a tunnel tool pointing at that port", detail: "cloudflared tunnel --url http://localhost:3000 (Cloudflare's Quick Tunnel needs no account for a temporary URL) or ngrok http 3000 for a fast five-minute demo." },
+    { text: "Note the generated public URL and open it from a DIFFERENT network", detail: "Your phone on cellular data, or a friend's machine - confirm it's genuinely reachable from outside your own network." },
+    { text: "Register that public URL somewhere that needs a real callback", detail: "A webhook testing site (like webhook.site as a receiver you control) or an OAuth app's callback settings, if you have one to test against." },
+    { text: "Close the tunnel when you're done", detail: "The mandatory cleanup habit - a local dev server shouldn't stay publicly reachable longer than the specific test requires." },
+  ]}
+/>
+You've given a local server a real public identity for exactly as long as you needed one, and
+experienced firsthand why this capability exists.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "The tunnel's public URL loads, but shows a connection error instead of your app.",
+      fix: "Confirm the local server is ACTUALLY running on the port you pointed the tunnel at - a tunnel forwarding to a port with nothing listening produces exactly this kind of connection failure, unrelated to the tunnel tool itself.",
+    },
+    {
+      symptom: "ngrok's free tier session expired mid-test (2-hour limit) or you hit the 1GB bandwidth cap.",
+      fix: "This is the expected 2026 free-tier behavior, not a bug - restart the session for a quick continuation, or switch to Cloudflare Tunnel for anything needing a longer, uninterrupted session.",
+    },
+    {
+      symptom: "A webhook provider reports it can't reach your tunnel URL at all.",
+      fix: "Confirm the tunnel is still actively running (check its own terminal/log output) and that you registered the EXACT current URL - many tunnel tools generate a new random URL each time they restart, silently invalidating a previously-registered callback.",
+    },
+    {
+      symptom: "You're unsure whether it's safe to leave a tunnel running overnight for a long-running test.",
+      fix: "Treat this as a real security question, not just convenience - a local dev server is often configured with weaker auth/debug settings than production, and an overnight public exposure is a real risk. Prefer closing it and re-opening fresh each session unless you've specifically hardened what's being exposed.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The tunnel tool's own terminal/log output** — confirms it's still actively running and shows the exact current public URL, which can change on restart.
+- **The local server's own logs** — confirms whether a forwarded request actually arrived, versus a connection error happening before it ever reached your app.
+- **The third-party provider's webhook/callback delivery log** (most payment/OAuth providers have one) — shows exactly what they attempted to send and whether it succeeded or failed.
+- **Whether the registered callback URL still matches the tunnel's CURRENT URL** — the most common silent-failure cause after any tunnel restart.
+</WhereToCheck>
+
+<WorkedExample title="catching a webhook signature-verification bug using a real tunnel">
+1. Testing a Stripe integration's webhook handler: does it correctly verify the signature Stripe
+   attaches to every real webhook event, rejecting anything that doesn't match?
+2. Using Cloudflare Tunnel to expose the local dev server, the tester registers the public tunnel
+   URL as the webhook endpoint in Stripe's TEST-mode dashboard (using this chapter's test-card
+   techniques to trigger a real test event).
+3. Triggering a test charge: the real webhook arrives at the local server via the tunnel, complete
+   with Stripe's genuine signature header — something a manually-crafted fake request could never
+   authentically replicate.
+4. The handler correctly verifies the real signature and processes the event. Then, deliberately
+   sending a manually-crafted request with a WRONG signature (bypassing the tunnel, hitting the
+   local server directly) — the handler should reject it, and does.
+5. This test required a REAL external service delivering a REAL signed payload — something only
+   possible because the local server had a genuine public URL during the test window, made possible
+   entirely by the tunnel.
+</WorkedExample>
+
+<Quiz
+  question="A tester wants to verify that their app correctly handles a real webhook from a payment provider's TEST mode, including validating the provider's authentic cryptographic signature on the request. Why can't this be tested by just manually crafting a fake HTTP request to the local server directly, without a tunnel?"
+  options={[
+    "It can be tested identically either way - a manually crafted request and a real webhook delivery are functionally the same thing for this purpose",
+    "A manually crafted request cannot authentically replicate the provider's real cryptographic signature, which depends on the provider's own private signing process - only an actual webhook delivery from the real provider (requiring a real, tunnel-provided public URL) produces a genuinely signed request to verify against",
+    "Tunnels are required for ALL local testing, not just this specific signature-verification case, since localhost never works for any kind of API testing",
+    "The local server needs to be deployed to a real hosting provider first - tunnels cannot substitute for actual deployment in this scenario"
+  ]}
+  answer={1}
+  explain="This note's worked example demonstrates precisely why: the signature is generated by the PROVIDER's own signing process using a shared secret and the actual payload - a tester manually crafting a request has no way to authentically reproduce that signature without literally knowing the provider's private signing logic. Only a genuine webhook delivery, from the real provider to a real reachable URL (which only a tunnel can provide for a local server), produces a signature actually worth verifying against. Option one misses this exact cryptographic distinction. Option three overgeneralizes - most local API testing works fine without any public exposure; tunnels matter specifically for inbound connections FROM external services. Option four is unnecessary - a tunnel is explicitly the lighter-weight alternative to full deployment for exactly this kind of temporary, real-external-service testing need."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Why webhooks/OAuth callbacks can't be tested with localhost alone", back: "External services (payment providers, OAuth providers) need to send a real HTTP request TO your server - localhost is invisible outside your own machine, so a tunnel provides the real, temporary public URL they need to reach." },
+    { front: "The 2026 tunnel landscape, briefly", back: "ngrok's free tier was cut hard (1GB/month, 2-hour sessions) - fine for a five-minute demo only. Cloudflare Tunnel (free, unlimited HTTP bandwidth, needs domain/DNS setup) and localtunnel (free, zero setup, less reliable) are the better 2026 defaults for real testing sessions." },
+    { front: "Why leaving a tunnel running is a real security risk", back: "Local dev servers often run with weaker auth/debug settings than production - an indefinitely-exposed tunnel makes that weaker environment publicly reachable. Always close a tunnel the moment a test session ends." },
+    { front: "The most common silent-failure cause after a tunnel restart", back: "Many tunnel tools generate a NEW random public URL on each restart - a previously-registered webhook/callback URL silently becomes invalid unless updated to match." },
+    { front: "Why a manually-crafted fake webhook request isn't equivalent to a real one", back: "A real webhook carries the provider's authentic cryptographic signature, generated by their own private signing process - impossible to accurately fake manually, and only testable via a genuine delivery through a real public URL (a tunnel)." },
+    { front: "Matching the tunnel tool to the task", back: "ngrok free tier: quick 5-minute demo. Cloudflare Tunnel: stable, longer/repeated webhook testing sessions. localtunnel: fastest zero-setup share when reliability matters less than speed." },
+  ]}
+/>
+
+<Challenge>
+Expose BuggyShop's local dev server with a tunnel tool (Cloudflare Tunnel or ngrok). Confirm it's
+reachable from a genuinely different network (your phone on cellular, or a friend's device). If
+BuggyAPI has a webhook-style endpoint, register the tunnel URL somewhere that would call it and
+trigger one real external request, confirming it arrives on your local server via the tunnel's own logs.
+</Challenge>
+
+<AskCommunity prompt="I'm testing `[webhook/OAuth flow]` and used `[ngrok/Cloudflare Tunnel]` to expose my local server. I ran into `[issue - session expired / URL changed on restart / provider couldn't reach it]`. Is there a standard team setup for this kind of testing that avoids the issue?">
+Tunnel setup quirks are common enough that most teams doing webhook-heavy work have settled
+conventions — the most useful answers will share what this team already relies on.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developers.cloudflare.com/pages/how-to/preview-with-cloudflare-tunnel/", title: "Cloudflare — Preview local projects with Cloudflare Tunnel", kind: "read" },
+    { href: "https://developers.cloudflare.com/tunnel/setup/", title: "Cloudflare — Tunnel setup documentation", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=BnWfbv7Fy-k", title: "How to Expose Local Host using Cloudflare Tunnels", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=etluT8UC-nw" title="Cloudflare Tunnel: Make Localhost Public Without Port Forwarding — 2026 Guide (logicBase Labs)" minutes={18} />
+
+<Takeaways
+  points={[
+    "Webhooks, OAuth callbacks, and third-party integrations need a REAL public URL - localhost is invisible outside your own machine, and a tunnel provides that URL temporarily.",
+    "ngrok's 2026 free tier is genuinely limited (1GB/month, 2-hour sessions) - fine only for a quick demo, not a real testing session.",
+    "Cloudflare Tunnel (free, unlimited HTTP bandwidth) and localtunnel (free, zero setup) are the better free defaults for real 2026 testing needs.",
+    "Always close a tunnel the moment its specific test session ends - an indefinitely-exposed local dev server (often weaker-secured than production) is a real risk.",
+    "A real webhook's cryptographic signature can't be authentically faked manually - genuine external delivery through a real tunnel URL is the only way to test signature verification properly.",
+  ]}
+/>
+
+<Complete xp={10} />
