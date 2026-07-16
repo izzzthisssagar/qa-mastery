@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MDXRemote } from "next-mdx-remote/rsc";
-import { listNoteFiles, getNote, findNoteModule } from "@qa-mastery/curriculum";
+import { listNoteFiles, getNote, findNoteModule, findNoteLeaf } from "@qa-mastery/curriculum";
 import { mdxComponents } from "@/app/(app)/learn/[slug]/mdx-components";
 import {
   AskCommunity,
@@ -84,6 +84,17 @@ export default async function NoteTopicPage({
   if (!note) notFound();
   const mod = findNoteModule(moduleSlug);
 
+  // Related notes are authored as "module/chapter/topic" triples; resolve each
+  // against the taxonomy + disk so a stale or planned-only reference never 404s.
+  const related = note.frontmatter.related
+    .map((triple) => {
+      const [m, c, t] = triple.split("/");
+      const leaf = findNoteLeaf(m, c, t);
+      if (!leaf || leaf.planned || !getNote(m, c, t)) return null;
+      return { moduleSlug: m, chapterSlug: c, topicSlug: t, title: leaf.title };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+
   return (
     <main className="mx-auto max-w-2xl px-4 py-10">
       <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -117,6 +128,24 @@ export default async function NoteTopicPage({
           options={{ blockJS: false }}
         />
       </article>
+
+      {related.length > 0 && (
+        <div className="mt-10 border-t border-border pt-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Related notes</h2>
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {related.map((r) => (
+              <li key={`${r.moduleSlug}/${r.chapterSlug}/${r.topicSlug}`}>
+                <Link
+                  href={`/notes/${r.moduleSlug}/${r.chapterSlug}/${r.topicSlug}`}
+                  className="rounded-full border border-border px-3 py-1 text-sm text-foreground/90 hover:border-accent hover:text-accent"
+                >
+                  {r.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </main>
   );
 }

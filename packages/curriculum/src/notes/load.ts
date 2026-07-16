@@ -22,6 +22,10 @@ export const noteFrontmatterSchema = z.object({
     .union([z.string(), z.date()])
     .transform((v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v))
     .optional(),
+  /** Other notes this one is meant to be read alongside, as "module/chapter/topic" triples. */
+  related: z
+    .array(z.string().regex(/^[a-z0-9-]+\/[a-z0-9-]+\/[a-z0-9-]+$/, 'related entries must look like "module/chapter/topic"'))
+    .default([]),
 });
 
 export type NoteFrontmatter = z.infer<typeof noteFrontmatterSchema>;
