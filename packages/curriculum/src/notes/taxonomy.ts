@@ -1123,10 +1123,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "bdd-in-plain-words",
         title: "BDD in plain words",
         topics: [
-          { slug: "what-bdd-solves", title: "What BDD solves", planned: true },
-          { slug: "given-when-then", title: "Given / When / Then", planned: true },
-          { slug: "bdd-vs-test-scripts", title: "BDD vs test scripts", planned: true },
-          { slug: "the-three-amigos", title: "The three amigos", planned: true },
+          { slug: "what-bdd-solves", title: "What BDD solves" },
+          { slug: "given-when-then", title: "Given / When / Then" },
+          { slug: "bdd-vs-test-scripts", title: "BDD vs test scripts" },
+          { slug: "the-three-amigos", title: "The three amigos" },
         ],
       },
       {
