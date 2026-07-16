@@ -1,0 +1,245 @@
+---
+title: "TypeScript setup"
+summary: "Playwright's scaffolded tsconfig.json and built-in type checking catch a wrong locator, a mistyped option, or a bad return-value assumption at write time instead of mid test run."
+tags: ["playwright", "setup-and-auto-waiting", "track-d"]
+updated: "2026-07-16"
+related:
+  - "playwright/setup-and-auto-waiting/installing-playwright"
+  - "playwright/setup-and-auto-waiting/first-test"
+  - "playwright/setup-and-auto-waiting/auto-waiting-explained"
+---
+
+<Hook>
+A JavaScript Playwright test that calls a method with a typo, or passes a string where a number is
+expected, doesn't fail until that exact line actually executes - possibly minutes into a long suite.
+The TypeScript project `npm init playwright@latest` scaffolds by default catches that same mistake
+the moment it's typed, before the test ever runs once.
+</Hook>
+
+<Callout type="analogy">
+A shape-sorter toy doesn't need a rulebook explaining which piece goes where - a star-shaped piece
+simply will not pass through a round hole, full stop, no matter how hard it's pushed. The mismatch is
+caught at the opening, physically, before it ever reaches the inside. TypeScript's type checker plays
+the same role for a test file: a value of the wrong shape gets stopped at the boundary, before it can
+land inside a running test.
+</Callout>
+
+<Term define="TypeScript setup for Playwright means the tsconfig.json (or the one auto-scaffolded by npm init playwright@latest) that enables type checking across test files - so the API's own type definitions (from @playwright/test) validate every locator call, option object, and returned value as the file is written, catching typos and wrong-shaped arguments before a test ever runs, without requiring a separate manual compile step since the Playwright test runner transpiles TypeScript on the fly.">TypeScript setup</Term>
+
+## What the scaffolded config actually gives you
+
+The `tsconfig.json` that `npm init playwright@latest` creates is intentionally small - Playwright
+only reads a handful of its options (`allowJs`, `baseUrl`, `paths`, `references`) and otherwise
+delegates to sensible defaults. What actually does the work is `@playwright/test` shipping its own
+full type definitions:
+
+- **Autocomplete on every API call** - an editor knows `page.getByRole(...)` takes a specific set of
+  role strings, not any arbitrary text.
+- **Compile-time errors for wrong-shaped values** - passing a string where a `{ timeout: number }`
+  option object is expected is flagged immediately, not discovered when that line finally executes.
+- **No separate build step** - the Playwright test runner (`npx playwright test`) transpiles
+  TypeScript through esbuild on the fly; there's no `tsc` compile step to remember to run first.
+- **JavaScript still works** - saying no to TypeScript at the `npm init` prompt scaffolds the exact
+  same project shape in plain `.js` files, just without the compile-time checks.
+
+<Callout type="tip">
+Run `npx tsc --noEmit` occasionally (or wire it into CI) even though the test runner doesn't require
+it - it type-checks the whole project in one pass and surfaces mistakes in files that haven't been run
+yet, which the test runner alone won't catch until each specific file executes.
+</Callout>
+
+<Callout type="mistake">
+Sprinkling `as any` onto values just to silence a type error instead of fixing the actual mismatch.
+That defeats the entire point of the setup - the shape-sorter's whole opening gets pried off, and
+whatever error TypeScript was about to catch at write time now waits to surface as a runtime failure
+instead, exactly where the JavaScript version would have caught it: mid test run.
+</Callout>
+
+{/* IMAGE: a real photograph of a transparent plastic shape-sorter toy bucket with a cyan lid that has four distinct cutout holes (triangle, diamond, circle, pentagon), colorful plastic blocks visible inside, with one pink block wedged partway into a hole that doesn't quite match its shape */}
+<HotspotImage
+  src="/notes/playwright/setup-and-auto-waiting/typescript-setup.jpg"
+  alt="A transparent plastic shape-sorter toy bucket with a cyan lid that has four distinct cutout holes - triangle, diamond, circle, and pentagon - with colorful plastic blocks visible inside and one pink block wedged partway into a hole that doesn't quite match its shape"
+  credit="Shape sorter — Wikimedia Commons, CC0 (Mvolz)"
+  creditHref="https://commons.wikimedia.org/wiki/File:Shape_sorter.jpg"
+  pins={[
+    { x: 55, y: 20, label: "Each hole only accepts its matching shape", desc: "The circle hole takes the round piece and nothing else - the same way a typed function parameter only accepts the shape of value it declares." },
+    { x: 45, y: 35, label: "The pink block, stuck at the opening", desc: "Wedged partway in, shape not quite matching the hole - caught right at the boundary before it ever drops inside. This is exactly where a type error surfaces: at the edge, before the value enters the running test." },
+    { x: 30, y: 75, label: "Pieces that already made it through, sitting loose inside", desc: "Every block already inside passed its shape check on the way in - once inside, nothing about them needs re-checking, the same way a correctly-typed value just works once it clears the compiler." },
+    { x: 75, y: 45, label: "The lid — the type boundary itself", desc: "One rigid layer sits between 'outside, unchecked' and 'inside, verified' - tsconfig.json plus @playwright/test's type definitions play that exact role for a test file." },
+  ]}
+/>
+
+<FlowAnimation
+  title="A wrong-shaped value, with and without TypeScript"
+  intervalMs={1800}
+  nodes={[
+    { label: "The mistake is typed", desc: "page.click({ timeout: \"5000\" }) - a string where a number is expected." },
+    { label: "JavaScript: nothing happens yet", desc: "The file saves cleanly. The error waits, silent, until this exact line executes." },
+    { label: "JavaScript: the test runs", desc: "Minutes into a long suite, this specific click call finally executes and fails - or worse, silently coerces and misbehaves." },
+    { label: "TypeScript: caught immediately", desc: "The editor underlines the line the moment it's typed - number expected, string given." },
+    { label: "TypeScript: fixed before the first run", desc: "The mistake never reaches a running test at all - it's fixed at the point of writing, the cheapest possible point to fix anything." },
+  ]}
+/>
+
+Type checking is really just validating that a value's shape matches what's expected before letting
+it through. Here's that same idea as a small, generic simulation of a boundary check.
+
+<CodePlayground
+  language="python"
+  title="Run it - reject a value whose shape doesn't match what's expected, before it's used (Python)"
+  code={`def expects_number(value):
+    if not isinstance(value, (int, float)):
+        raise TypeError(f"expected a number, got {type(value).__name__}: {value!r}")
+    return value * 2
+
+test_values = [5000, "5000", 3.5, "not a number"]
+
+for v in test_values:
+    try:
+        result = expects_number(v)
+        print(f"{v!r}: accepted, result={result}")
+    except TypeError as e:
+        print(f"{v!r}: rejected - {e}")`}
+/>
+
+Same shape-boundary check in Java, where the compiler itself does this work for you at compile time
+rather than needing an explicit runtime check - the closer parallel to what TypeScript does for a
+Playwright test file.
+
+<CodePlayground
+  language="java"
+  title="Run it - a typed method signature rejects the wrong shape at compile time (Java)"
+  code={`public class Main {
+    static int doubleIt(int value) {
+        return value * 2;
+    }
+
+    public static void main(String[] args) {
+        int[] testValues = {5000, 7, 100};
+
+        for (int v : testValues) {
+            System.out.println(v + ": accepted, result=" + doubleIt(v));
+        }
+
+        // The line below would not compile if uncommented - a String cannot be
+        // passed where an int is expected. That rejection happens before this
+        // program ever runs, exactly where TypeScript rejects a Playwright
+        // test file with a wrong-shaped argument.
+        // doubleIt("5000");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: watch TypeScript catch a mistake before a test ever runs">
+<StepChecklist
+  steps={[
+    { text: "Open the example test file from your scratch Playwright project in an editor with TypeScript support", detail: "VS Code works out of the box - no extra extension needed for a Playwright TypeScript project." },
+    { text: "Deliberately introduce a wrong-shaped value", detail: "Try page.waitForTimeout(\"1000\") instead of a number, or page.getByRole(\"buttton\") with a typo'd role string." },
+    { text: "Watch the editor flag it immediately, before saving or running anything", detail: "A red underline should appear under the mistake as soon as it's typed." },
+    { text: "Run npx tsc --noEmit from the project root", detail: "Confirm the same error is reported on the command line, not just in the editor - this is what CI would catch too." },
+  ]}
+/>
+You've now seen the same class of mistake caught at write time instead of waiting to surface mid test
+run.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A type error appears in a file you haven't touched in weeks.",
+      fix: "Someone likely changed a shared type or a Playwright dependency version upgraded its own type definitions. Run npx tsc --noEmit locally to see the full list before assuming it's unrelated to your current change.",
+    },
+    {
+      symptom: "The editor shows no red underlines, but npx tsc --noEmit reports errors.",
+      fix: "The editor's TypeScript server can get out of sync with the actual project config - restart it (in VS Code: Cmd/Ctrl+Shift+P, \"TypeScript: Restart TS Server\") rather than trusting a stale in-editor view.",
+    },
+    {
+      symptom: "A teammate's PR is full of `as any` to silence errors instead of fixing them.",
+      fix: "Treat as any the same as deleting the type check entirely for that value - ask for the actual type mismatch to be fixed, or for a narrower, honest type assertion if the value's real shape genuinely can't be known statically.",
+    },
+    {
+      symptom: "Playwright runs the test fine locally in JavaScript-flavored .js files with no type checking at all, and a teammate wants to migrate.",
+      fix: "Migrating file-by-file works - Playwright's allowJs config option lets .js and .ts files coexist in the same project during a gradual migration.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **`tsconfig.json`** — confirms which options are actually active; remember Playwright only reads
+  `allowJs`, `baseUrl`, `paths`, and `references` from it.
+- **Your editor's Problems panel** — the fastest place to see every current type error across the
+  whole project, not just the open file.
+- **`npx tsc --noEmit` output in CI logs** — the ground truth for whether the project actually type
+  checks cleanly, independent of any one editor's state.
+- **`@playwright/test`'s installed version** in `package.json` — newer versions occasionally refine
+  their type definitions, which can surface new (correct) errors after an upgrade.
+</WhereToCheck>
+
+<WorkedExample title="a typo caught before it ever became a failing test">
+1. A tester writes `await page.getByRole("buttton", { name: "Submit" }).click();` - the role string
+   has an extra "t".
+2. In a JavaScript project, this line saves cleanly. Nothing complains until the test actually runs,
+   the locator fails to resolve to any element, and the test times out with a generic "element not
+   found" message minutes later.
+3. In the TypeScript project scaffolded by `npm init playwright@latest`, the editor underlines
+   `"buttton"` the instant it's typed - `getByRole`'s type definitions constrain the first argument
+   to a fixed set of valid ARIA role strings, and this one isn't in the set.
+4. The tester fixes the typo before ever running the test once. No timeout, no confusing "element not
+   found" message to debug - the mistake never became a runtime problem at all.
+</WorkedExample>
+
+<Quiz
+  question="Why does a Playwright TypeScript project catch a typo'd role string like getByRole('buttton') before the test ever runs, while the JavaScript version of the same file does not?"
+  options={[
+    "TypeScript files run faster, so the typo is caught by a timing check",
+    "@playwright/test ships type definitions that constrain getByRole's argument to a fixed set of valid role strings, so a value outside that set is flagged by the type checker at write time - JavaScript has no such compile-time check and only discovers the problem when that line executes",
+    "JavaScript cannot use getByRole at all",
+    "The tsconfig.json file automatically corrects typos"
+  ]}
+  answer={1}
+  explain="The note is explicit that the type checking comes from @playwright/test's own type definitions constraining valid inputs, not from any special runtime behavior. Option one invents an unrelated timing mechanism. Option three is false - JavaScript Playwright projects use the exact same getByRole API, just without compile-time argument checking. Option four misunderstands what tsconfig.json does - it configures which checks run, it does not fix anything automatically; the tester still has to correct the typo themselves once it's flagged."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What does Playwright's scaffolded tsconfig.json actually control?", back: "A small set of options Playwright reads (allowJs, baseUrl, paths, references) - the real type checking comes from @playwright/test's own shipped type definitions." },
+    { front: "Does TypeScript require a separate compile step before running tests?", back: "No - npx playwright test transpiles TypeScript through esbuild on the fly. npx tsc --noEmit is still worth running separately (e.g. in CI) to type-check files that haven't executed yet." },
+    { front: "Why is `as any` a red flag in a Playwright TypeScript file?", back: "It silences the type checker instead of fixing the actual mismatch, pushing the error back to runtime - exactly where the JavaScript version of the same file would have caught it, defeating the point of the setup." },
+    { front: "Can JavaScript and TypeScript test files coexist in one Playwright project?", back: "Yes - the allowJs tsconfig option supports a gradual, file-by-file migration rather than an all-or-nothing switch." },
+    { front: "The shape-sorter analogy for TypeScript's type checker", back: "A wrong-shaped piece gets stopped at the opening (the type boundary) before it reaches the inside (a running test) - the mismatch is caught early, at the edge, not deep inside." },
+  ]}
+/>
+
+<Challenge>
+In your scratch Playwright TypeScript project, deliberately write three different type mistakes: a
+wrong-shaped option object, a typo'd role string, and a value used as the wrong type entirely (for
+example, treating a Promise as if it were already resolved). For each one, note whether your editor
+catches it immediately or only npx tsc --noEmit does. Then fix all three and confirm both go clean.
+</Challenge>
+
+<AskCommunity prompt="npx tsc --noEmit is reporting `[the exact error text]` in my Playwright TypeScript project, but my editor shows no red underline for it. Playwright/TypeScript versions: `[your versions]`.">
+This specific editor-vs-command-line mismatch usually comes down to a stale TypeScript server or a
+tsconfig.json the editor isn't picking up correctly - naming your exact versions helps someone spot
+a known version-specific quirk fast.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://playwright.dev/docs/test-typescript", title: "Playwright — official TypeScript docs", kind: "read" },
+    { href: "https://www.browserstack.com/guide/playwright-typescript", title: "BrowserStack — Getting Started with Playwright and TypeScript", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=ziuIDwX18h4" title="Playwright with TypeScript — Setup Environment & Writing Tests (Session 1) — SDET-QA" minutes={98} />
+
+<Takeaways
+  points={[
+    "Playwright's scaffolded tsconfig.json only controls a handful of options - the real type checking comes from @playwright/test's own shipped type definitions.",
+    "TypeScript catches wrong-shaped values (typo'd role strings, string-instead-of-number options) at write time, before a test ever runs - JavaScript only discovers the same mistake when that exact line executes.",
+    "No separate compile step is required: npx playwright test transpiles on the fly, though npx tsc --noEmit is still worth running (e.g. in CI) to check files that haven't executed yet.",
+    "Using `as any` to silence a type error pushes the mistake back to runtime, defeating the entire point of the setup.",
+    "JavaScript and TypeScript files can coexist in one project via the allowJs option, supporting a gradual, file-by-file migration.",
+  ]}
+/>
+
+<Complete xp={10} />

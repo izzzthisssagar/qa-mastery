@@ -1123,10 +1123,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "setup-and-auto-waiting",
         title: "Setup & auto-waiting",
         topics: [
-          { slug: "installing-playwright", title: "Installing Playwright", planned: true },
-          { slug: "typescript-setup", title: "TypeScript setup", planned: true },
-          { slug: "first-test", title: "First test", planned: true },
-          { slug: "auto-waiting-explained", title: "Auto-waiting explained", planned: true },
+          { slug: "installing-playwright", title: "Installing Playwright" },
+          { slug: "typescript-setup", title: "TypeScript setup" },
+          { slug: "first-test", title: "First test" },
+          { slug: "auto-waiting-explained", title: "Auto-waiting explained" },
         ],
       },
       {
