@@ -1115,6 +1115,54 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   },
   // END testers-toolbox
   {
+    slug: "bdd-with-cucumber",
+    title: "BDD with Cucumber",
+    summary: "Turning shared understanding into executable specification — Given/When/Then, Gherkin feature files, step definitions in Java and Python, and when living documentation actually earns its keep versus when it becomes overhead.",
+    chapters: [
+      {
+        slug: "bdd-in-plain-words",
+        title: "BDD in plain words",
+        topics: [
+          { slug: "what-bdd-solves", title: "What BDD solves", planned: true },
+          { slug: "given-when-then", title: "Given / When / Then", planned: true },
+          { slug: "bdd-vs-test-scripts", title: "BDD vs test scripts", planned: true },
+          { slug: "the-three-amigos", title: "The three amigos", planned: true },
+        ],
+      },
+      {
+        slug: "gherkin-and-feature-files",
+        title: "Gherkin & feature files",
+        topics: [
+          { slug: "writing-scenarios", title: "Writing scenarios", planned: true },
+          { slug: "scenario-outlines-and-examples", title: "Scenario outlines & examples", planned: true },
+          { slug: "backgrounds-and-tags", title: "Backgrounds & tags", planned: true },
+          { slug: "good-vs-bad-gherkin", title: "Good vs bad Gherkin", planned: true },
+        ],
+      },
+      {
+        slug: "step-definitions",
+        title: "Step definitions",
+        topics: [
+          { slug: "glue-code-java", title: "Glue code (Java)", planned: true },
+          { slug: "behave-and-pytest-bdd-python", title: "behave / pytest-bdd (Python)", planned: true },
+          { slug: "data-tables", title: "Data tables", planned: true },
+          { slug: "hooks-and-context", title: "Hooks & context", planned: true },
+        ],
+      },
+      {
+        slug: "bdd-in-a-framework",
+        title: "BDD in a framework",
+        topics: [
+          { slug: "cucumber-and-selenium", title: "Cucumber + Selenium", planned: true },
+          { slug: "reports-and-living-documentation", title: "Reports & living documentation", planned: true },
+          { slug: "when-bdd-helps", title: "When BDD helps", planned: true },
+          { slug: "when-it-hurts", title: "When it hurts", planned: true },
+        ],
+      },
+    ],
+  },
+  // END bdd-with-cucumber
+  {
     slug: "playwright",
     title: "Playwright",
     summary: "Modern end-to-end browser automation in TypeScript — auto-waiting instead of manual sleeps, resilient user-facing locators, first-class tracing and debugging, real parallel/cross-browser runs, and visual regression testing.",
