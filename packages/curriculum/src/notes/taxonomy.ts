@@ -1115,6 +1115,64 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   },
   // END testers-toolbox
   {
+    slug: "ui-ux-design-qa",
+    title: "UI/UX Design QA",
+    summary: "Verifying the design, not just the function — the laws of usability that explain WHY something feels wrong, the color and type rules that make an interface readable, and the concrete discipline of checking a build against its Figma spec and flagging what devs will actually respect.",
+    chapters: [
+      {
+        slug: "design-principles-and-the-laws-of-ux",
+        title: "Design principles & the laws of UX",
+        topics: [
+          { slug: "nielsens-10-usability-heuristics", title: "Nielsen's 10 usability heuristics", planned: true },
+          { slug: "fitts-hick-miller-and-jakob", title: "Fitts, Hick, Miller & Jakob", planned: true },
+          { slug: "gestalt-principles", title: "Gestalt principles", planned: true },
+          { slug: "heuristics-vs-laws", title: "Heuristics vs laws", planned: true },
+        ],
+      },
+      {
+        slug: "color-theory-for-testers",
+        title: "Color theory for testers",
+        topics: [
+          { slug: "hue-saturation-and-value", title: "Hue, saturation & value", planned: true },
+          { slug: "color-harmony", title: "Color harmony", planned: true },
+          { slug: "contrast-and-wcag-ratios", title: "Contrast & WCAG ratios", planned: true },
+          { slug: "color-blindness-and-semantic-color", title: "Color blindness & semantic color", planned: true },
+        ],
+      },
+      {
+        slug: "typography-and-spacing",
+        title: "Typography & spacing",
+        topics: [
+          { slug: "type-hierarchy", title: "Type hierarchy", planned: true },
+          { slug: "readable-line-lengths", title: "Readable line lengths", planned: true },
+          { slug: "grids-and-the-8pt-system", title: "Grids & the 8pt system", planned: true },
+          { slug: "alignment-and-white-space", title: "Alignment & white space", planned: true },
+        ],
+      },
+      {
+        slug: "design-qa-in-practice",
+        title: "Design QA in practice",
+        topics: [
+          { slug: "reading-a-figma-spec", title: "Reading a Figma spec", planned: true },
+          { slug: "pixel-perfect-vs-pragmatic", title: "Pixel-perfect vs pragmatic", planned: true },
+          { slug: "checking-spacing-states-and-breakpoints", title: "Checking spacing, states & breakpoints", planned: true },
+          { slug: "design-bugs-devs-respect", title: "Design bugs devs respect", planned: true },
+        ],
+      },
+      {
+        slug: "usability-evaluation",
+        title: "Usability evaluation",
+        topics: [
+          { slug: "running-a-heuristic-evaluation", title: "Running a heuristic evaluation", planned: true },
+          { slug: "usability-testing-basics", title: "Usability testing basics", planned: true },
+          { slug: "microcopy-and-ux-writing-checks", title: "Microcopy & UX-writing checks", planned: true },
+          { slug: "dark-patterns-to-flag", title: "Dark patterns to flag", planned: true },
+        ],
+      },
+    ],
+  },
+  // END ui-ux-design-qa
+  {
     slug: "bdd-with-cucumber",
     title: "BDD with Cucumber",
     summary: "Turning shared understanding into executable specification — Given/When/Then, Gherkin feature files, step definitions in Java and Python, and when living documentation actually earns its keep versus when it becomes overhead.",
