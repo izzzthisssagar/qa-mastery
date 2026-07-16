@@ -1133,10 +1133,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "color-theory-for-testers",
         title: "Color theory for testers",
         topics: [
-          { slug: "hue-saturation-and-value", title: "Hue, saturation & value", planned: true },
-          { slug: "color-harmony", title: "Color harmony", planned: true },
-          { slug: "contrast-and-wcag-ratios", title: "Contrast & WCAG ratios", planned: true },
-          { slug: "color-blindness-and-semantic-color", title: "Color blindness & semantic color", planned: true },
+          { slug: "hue-saturation-and-value", title: "Hue, saturation & value" },
+          { slug: "color-harmony", title: "Color harmony" },
+          { slug: "contrast-and-wcag-ratios", title: "Contrast & WCAG ratios" },
+          { slug: "color-blindness-and-semantic-color", title: "Color blindness & semantic color" },
         ],
       },
       {
