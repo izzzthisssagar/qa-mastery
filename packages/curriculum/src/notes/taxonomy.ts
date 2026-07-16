@@ -1037,6 +1037,84 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   },
   // END defect-management
   {
+    slug: "testers-toolbox",
+    title: "The Tester's Toolbox",
+    summary: "The browser extensions and small free tools working testers actually reach for — organized by tool family (specific tools rotate, the families don't), each taught as how, what, when and why, with its 2026 status verified.",
+    chapters: [
+      {
+        slug: "edge-case-and-form-data",
+        title: "Edge-case & form data",
+        topics: [
+          { slug: "bug-magnet-tricky-inputs", title: "Bug Magnet & tricky inputs", planned: true },
+          { slug: "form-fillers", title: "Form fillers", planned: true },
+          { slug: "test-credit-cards-and-emails", title: "Test credit cards & emails", planned: true },
+          { slug: "generating-data-mockaroo-and-faker", title: "Generating data: Mockaroo & Faker", planned: true },
+        ],
+      },
+      {
+        slug: "link-page-ui-checks",
+        title: "Link, page & UI checks",
+        topics: [
+          { slug: "check-my-links", title: "Check My Links", planned: true },
+          { slug: "gofullpage-and-screenshots", title: "GoFullPage & screenshot tools", planned: true },
+          { slug: "window-resizer-responsive-checks", title: "Window Resizer & responsive checks", planned: true },
+          { slug: "whatfont-perfectpixel-page-ruler", title: "WhatFont, PerfectPixel & Page Ruler", planned: true },
+        ],
+      },
+      {
+        slug: "cookies-json-sessions",
+        title: "Cookies, JSON & sessions",
+        topics: [
+          { slug: "cookie-editors", title: "Cookie editors", planned: true },
+          { slug: "json-formatters", title: "JSON formatters", planned: true },
+          { slug: "clear-cache", title: "Clear Cache", planned: true },
+          { slug: "multi-account-testing", title: "Managing multi-account testing", planned: true },
+        ],
+      },
+      {
+        slug: "locator-and-recorder-helpers",
+        title: "Locator & recorder helpers",
+        topics: [
+          { slug: "selectorshub", title: "SelectorsHub", planned: true },
+          { slug: "css-selector-helpers", title: "CSS selector helpers", planned: true },
+          { slug: "recorder-extensions", title: "Recorder extensions", planned: true },
+          { slug: "from-recorder-to-real-script", title: "From recorder to real script", planned: true },
+        ],
+      },
+      {
+        slug: "accessibility-and-quality",
+        title: "Accessibility & quality",
+        topics: [
+          { slug: "wave", title: "WAVE", planned: true },
+          { slug: "axe-devtools", title: "axe DevTools", planned: true },
+          { slug: "contrast-and-screen-reader-checks", title: "Contrast & screen-reader checks", planned: true },
+          { slug: "lighthouse", title: "Lighthouse as an extension of QA", planned: true },
+        ],
+      },
+      {
+        slug: "beyond-the-browser",
+        title: "Beyond the browser",
+        topics: [
+          { slug: "debugging-proxies", title: "Debugging proxies", planned: true },
+          { slug: "email-testing", title: "Email testing", planned: true },
+          { slug: "tunnels-and-sharing-localhost", title: "Tunnels & sharing localhost", planned: true },
+          { slug: "screen-recorders-for-bug-repro", title: "Screen recorders for bug repro", planned: true },
+        ],
+      },
+      {
+        slug: "choosing-tools-wisely",
+        title: "Choosing tools wisely",
+        topics: [
+          { slug: "how-what-when-why-framework", title: "The how / what / when / why framework", planned: true },
+          { slug: "free-vs-paid-honestly", title: "Free vs paid, honestly", planned: true },
+          { slug: "tool-sprawl-and-when-to-stop", title: "Tool sprawl & when to stop", planned: true },
+          { slug: "keeping-your-kit-current", title: "Keeping your kit current", planned: true },
+        ],
+      },
+    ],
+  },
+  // END testers-toolbox
+  {
     slug: "foundations",
     title: "QA Foundations",
     summary: "The vocabulary and mental models every tester needs.",
