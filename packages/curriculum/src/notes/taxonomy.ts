@@ -1143,10 +1143,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "typography-and-spacing",
         title: "Typography & spacing",
         topics: [
-          { slug: "type-hierarchy", title: "Type hierarchy", planned: true },
-          { slug: "readable-line-lengths", title: "Readable line lengths", planned: true },
-          { slug: "grids-and-the-8pt-system", title: "Grids & the 8pt system", planned: true },
-          { slug: "alignment-and-white-space", title: "Alignment & white space", planned: true },
+          { slug: "type-hierarchy", title: "Type hierarchy" },
+          { slug: "readable-line-lengths", title: "Readable line lengths" },
+          { slug: "grids-and-the-8pt-system", title: "Grids & the 8pt system" },
+          { slug: "alignment-and-white-space", title: "Alignment & white space" },
         ],
       },
       {
