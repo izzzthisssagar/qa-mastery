@@ -1173,6 +1173,64 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   },
   // END ui-ux-design-qa
   {
+    slug: "api-testing-fundamentals",
+    title: "API Testing Fundamentals",
+    summary: "Manual API testing as a core skill, not an automation prerequisite — reading HTTP itself, the status-code/REST vocabulary, driving requests by hand with curl and Postman, the four auth shapes a tester actually meets, and hunting bugs with no UI in front of you.",
+    chapters: [
+      {
+        slug: "http-for-testers",
+        title: "HTTP for testers",
+        topics: [
+          { slug: "request-and-response-anatomy", title: "Request & response anatomy", planned: true },
+          { slug: "http-methods", title: "Methods (GET/POST/PUT/DELETE)", planned: true },
+          { slug: "headers-and-bodies", title: "Headers & bodies", planned: true },
+          { slug: "json-and-xml", title: "JSON & XML", planned: true },
+        ],
+      },
+      {
+        slug: "status-codes-and-rest",
+        title: "Status codes & REST",
+        topics: [
+          { slug: "status-code-families", title: "2xx / 4xx / 5xx families", planned: true },
+          { slug: "rest-in-plain-words", title: "REST in plain words", planned: true },
+          { slug: "idempotency-and-safety", title: "Idempotency & safety", planned: true },
+          { slug: "reading-api-docs-and-swagger", title: "Reading API docs & Swagger", planned: true },
+        ],
+      },
+      {
+        slug: "postman-and-curl",
+        title: "Postman & curl",
+        topics: [
+          { slug: "curl-basics", title: "curl basics", planned: true },
+          { slug: "postman-requests", title: "Postman requests", planned: true },
+          { slug: "collections-and-environments", title: "Collections & environments", planned: true },
+          { slug: "postman-tests-and-variables", title: "Postman tests & variables", planned: true },
+        ],
+      },
+      {
+        slug: "auth-manually",
+        title: "Auth, manually",
+        topics: [
+          { slug: "api-keys", title: "API keys", planned: true },
+          { slug: "basic-auth", title: "Basic auth", planned: true },
+          { slug: "bearer-and-jwt", title: "Bearer / JWT", planned: true },
+          { slug: "oauth2-for-testers", title: "OAuth2, what a tester needs", planned: true },
+        ],
+      },
+      {
+        slug: "finding-api-bugs",
+        title: "Finding API bugs",
+        topics: [
+          { slug: "testing-without-a-ui", title: "Testing without a UI", planned: true },
+          { slug: "negative-api-tests", title: "Negative API tests", planned: true },
+          { slug: "validating-against-the-spec", title: "Validating against the spec", planned: true },
+          { slug: "your-first-api-bug-hunt", title: "Your first API bug hunt (BuggyAPI)", planned: true },
+        ],
+      },
+    ],
+  },
+  // END api-testing-fundamentals
+  {
     slug: "test-frameworks",
     title: "Test frameworks",
     summary: "The runner-level scaffolding underneath any automation suite — lifecycle hooks and annotations, real assertions vs soft ones, grouping and parameterizing tests, and feeding the same test real data from outside the code.",
