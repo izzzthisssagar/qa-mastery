@@ -1173,6 +1173,102 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   },
   // END ui-ux-design-qa
   {
+    slug: "test-frameworks",
+    title: "Test frameworks",
+    summary: "The runner-level scaffolding underneath any automation suite — lifecycle hooks and annotations, real assertions vs soft ones, grouping and parameterizing tests, and feeding the same test real data from outside the code.",
+    chapters: [
+      {
+        slug: "lifecycle-and-annotations",
+        title: "Lifecycle & annotations",
+        topics: [
+          { slug: "setup-and-teardown-hooks", title: "Setup / teardown hooks", planned: true },
+          { slug: "test-annotation", title: "@Test", planned: true },
+          { slug: "testng-vs-junit", title: "TestNG vs JUnit", planned: true },
+          { slug: "pytest-fixtures", title: "pytest fixtures", planned: true },
+        ],
+      },
+      {
+        slug: "assertions",
+        title: "Assertions",
+        topics: [
+          { slug: "assertions-basics", title: "Assertions", planned: true },
+          { slug: "soft-assertions", title: "Soft assertions", planned: true },
+          { slug: "custom-messages", title: "Custom messages", planned: true },
+          { slug: "matchers", title: "Matchers", planned: true },
+        ],
+      },
+      {
+        slug: "groups-and-parameters",
+        title: "Groups & parameters",
+        topics: [
+          { slug: "grouping-tests", title: "Grouping tests", planned: true },
+          { slug: "parameters", title: "Parameters", planned: true },
+          { slug: "ordering", title: "Ordering", planned: true },
+          { slug: "suites", title: "Suites", planned: true },
+        ],
+      },
+      {
+        slug: "data-driven-testing",
+        title: "Data-driven testing",
+        topics: [
+          { slug: "data-providers", title: "Data providers", planned: true },
+          { slug: "parameterized-tests", title: "Parameterized tests", planned: true },
+          { slug: "external-data-csv-excel", title: "External data (CSV/Excel)", planned: true },
+          { slug: "reuse", title: "Reuse", planned: true },
+        ],
+      },
+    ],
+  },
+  // END test-frameworks
+  {
+    slug: "framework-design",
+    title: "Framework design",
+    summary: "Structuring an automation suite so it survives contact with a real, changing application — the Page Object Model, reusable base classes and driver factories, externalized config and test data, and logging/reporting that actually helps when a test fails.",
+    chapters: [
+      {
+        slug: "page-object-model",
+        title: "Page Object Model",
+        topics: [
+          { slug: "the-pom-pattern", title: "The POM pattern", planned: true },
+          { slug: "page-classes", title: "Page classes", planned: true },
+          { slug: "returning-pages", title: "Returning pages", planned: true },
+          { slug: "component-objects", title: "Component objects", planned: true },
+        ],
+      },
+      {
+        slug: "reusable-components",
+        title: "Reusable components",
+        topics: [
+          { slug: "base-classes", title: "Base classes", planned: true },
+          { slug: "utilities", title: "Utilities", planned: true },
+          { slug: "waits-wrapper", title: "Waits wrapper", planned: true },
+          { slug: "driver-factory", title: "Driver factory", planned: true },
+        ],
+      },
+      {
+        slug: "config-and-data",
+        title: "Config & data",
+        topics: [
+          { slug: "config-files", title: "Config files", planned: true },
+          { slug: "environments", title: "Environments", planned: true },
+          { slug: "test-data", title: "Test data", planned: true },
+          { slug: "secrets", title: "Secrets", planned: true },
+        ],
+      },
+      {
+        slug: "logging-and-reporting",
+        title: "Logging & reporting",
+        topics: [
+          { slug: "logging-log4j", title: "Logging (Log4j)", planned: true },
+          { slug: "extentreports", title: "ExtentReports", planned: true },
+          { slug: "allure", title: "Allure", planned: true },
+          { slug: "screenshots-on-failure", title: "Screenshots on failure", planned: true },
+        ],
+      },
+    ],
+  },
+  // END framework-design
+  {
     slug: "bdd-with-cucumber",
     title: "BDD with Cucumber",
     summary: "Turning shared understanding into executable specification — Given/When/Then, Gherkin feature files, step definitions in Java and Python, and when living documentation actually earns its keep versus when it becomes overhead.",
