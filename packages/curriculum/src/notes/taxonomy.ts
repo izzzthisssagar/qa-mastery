@@ -1133,10 +1133,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "locators-and-fixtures",
         title: "Locators & fixtures",
         topics: [
-          { slug: "user-facing-locators", title: "User-facing locators", planned: true },
-          { slug: "getbyrole-label-testid", title: "getByRole / Label / TestId", planned: true },
-          { slug: "fixtures", title: "Fixtures", planned: true },
-          { slug: "test-isolation", title: "Test isolation", planned: true },
+          { slug: "user-facing-locators", title: "User-facing locators" },
+          { slug: "getbyrole-label-testid", title: "getByRole / Label / TestId" },
+          { slug: "fixtures", title: "Fixtures" },
+          { slug: "test-isolation", title: "Test isolation" },
         ],
       },
       {

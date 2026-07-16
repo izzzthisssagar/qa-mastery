@@ -1,0 +1,251 @@
+---
+title: "Test isolation"
+summary: "Every Playwright test runs in its own fresh browser context - separate cookies, storage, and cache - so one test's login, cart, or crash can never leak into the next test's starting state."
+tags: ["playwright", "locators-and-fixtures", "track-d"]
+updated: "2026-07-16"
+related:
+  - "playwright/locators-and-fixtures/user-facing-locators"
+  - "playwright/locators-and-fixtures/getbyrole-label-testid"
+  - "playwright/locators-and-fixtures/fixtures"
+---
+
+<Hook>
+Older Selenium suites often reused one browser session across an entire test file to save startup
+time - which meant test three could pass or fail depending on what test two happened to leave logged
+in, added to a cart, or stuck in a modal. Playwright's default behavior makes that whole category of
+bug structurally impossible: every single test gets its own fresh browser context, gone the moment the
+test ends.
+</Hook>
+
+<Callout type="analogy">
+An egg carton doesn't hold twelve eggs loose in one shared compartment. Each egg sits in its own
+molded cell, walled off from its neighbors - if one cracks, nothing spills into the cell next to it.
+A dozen fresh eggs and a dozen already-broken ones could sit in the same carton and never touch. A
+Playwright test's browser context works the same way: whatever happens inside one test's cell stays
+in that cell.
+</Callout>
+
+<Term define="Test isolation in Playwright means every test runs inside its own fresh BrowserContext - the equivalent of a brand-new incognito window - with its own cookies, localStorage, sessionStorage, cache, and permissions, created automatically before the test and discarded after it. Nothing written by one test (a login session, cart contents, a stuck dialog) is visible to any other test, which is what makes tests safe to run in parallel and in any order, and what stops one test's failure from cascading into unrelated failures downstream.">Test isolation</Term>
+
+## What actually gets a clean slate between tests
+
+Each test's browser context starts empty in every one of these:
+
+- **Cookies** — no session or auth cookie survives from a previous test.
+- **localStorage / sessionStorage / IndexedDB** — no leftover client-side state.
+- **Cache and service workers** — no stale cached response silently reused.
+- **Permissions** — geolocation, notifications, camera/mic grants reset to Playwright's defaults.
+
+The **browser process itself** may be reused across tests for speed (Playwright starts it once and
+keeps it warm), but the **context** - the actual incognito-like profile a test runs inside - is always
+new. Two tests never share one.
+
+<Callout type="tip">
+If a test genuinely needs to start already logged in, don't disable isolation to "save time" by
+reusing another test's session - use `storageState` to save a real login's cookies/storage once and
+load that saved state into each fresh context instead. Every test still gets its own isolated context;
+it just starts pre-populated rather than starting from a real login flow every time.
+</Callout>
+
+<Callout type="mistake">
+Writing tests that depend on execution order - test B assuming test A already created an account, or
+left a specific item in a cart. Test isolation means that assumption is false by design: nothing test
+A did persists into test B's context. Order-dependent tests are a sign the actual setup a test needs
+should be an explicit fixture, not an accidental side effect of whichever test happened to run first.
+</Callout>
+
+{/* IMAGE: a real photograph of an open styrofoam egg carton viewed from above, containing twelve intact white eggs, each sitting in its own separate molded compartment with visible partition walls between them */}
+<HotspotImage
+  src="/notes/playwright/locators-and-fixtures/test-isolation.jpg"
+  alt="An open styrofoam egg carton viewed from above containing twelve intact white eggs, each sitting in its own separate molded compartment with visible partition walls between them"
+  credit="An open carton of Grade A chicken eggs — Wikimedia Commons, CC BY-SA 4.0 (Famartin)"
+  creditHref="https://commons.wikimedia.org/wiki/File:2020-05-05_19_28_00_An_open_carton_of_a_dozen_Large_Grade_A_Chicken_Eggs_from_Egg-land's_Best_in_the_Franklin_Farm_section_of_Oak_Hill,_Fairfax_County,_Virginia.jpg"
+  pins={[
+    { x: 22, y: 60, label: "One egg, one sealed cell", desc: "Whatever happens to this one egg - fine or cracked - stays inside its own molded compartment. This is a test's browser context: its own cookies, storage, and cache, walled off from every other test." },
+    { x: 50, y: 55, label: "The partition wall between two eggs", desc: "The physical barrier that makes cross-contamination structurally impossible, not just unlikely - the same role a fresh BrowserContext plays between two tests." },
+    { x: 15, y: 15, label: "The whole carton — one browser process, many contexts", desc: "All twelve eggs travel in the same outer carton, the way many test contexts can run inside one warm, reused browser process for speed - shared transport, still fully separate compartments." },
+    { x: 75, y: 65, label: "Eggs that look identical from the outside", desc: "Nothing about one egg's compartment reveals what state a neighboring egg is in - the same reason a passing test tells you nothing about whether an earlier test polluted shared state, because it structurally can't have." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Two tests, two fully separate contexts"
+  intervalMs={1800}
+  nodes={[
+    { label: "Test A starts", desc: "A brand-new BrowserContext is created - empty cookies, empty storage." },
+    { label: "Test A logs in, adds an item to a cart", desc: "All of this state lives only inside Test A's context." },
+    { label: "Test A finishes", desc: "Its context is torn down completely - the login and cart contents cease to exist anywhere." },
+    { label: "Test B starts", desc: "A different, brand-new BrowserContext - no memory of Test A's login or cart, even if run right after it." },
+    { label: "Test B's own state is equally invisible to Test C", desc: "The pattern repeats for every test, in any order, run serially or in parallel." },
+  ]}
+/>
+
+Isolation is really just: give each unit of work its own private storage, and guarantee nothing
+written to one unit's storage is ever visible from another's. Here's that shape as a small, generic
+simulation.
+
+<CodePlayground
+  language="python"
+  title="Run it - two isolated contexts, proving state never crosses between them (Python)"
+  code={`def new_context():
+    return {"cookies": {}, "local_storage": {}}
+
+def log_in(context, user):
+    context["cookies"]["session"] = f"token-for-{user}"
+    context["local_storage"]["cart"] = ["item-1"]
+
+context_a = new_context()
+context_b = new_context()
+
+log_in(context_a, "alice")
+
+print(f"context_a cookies: {context_a['cookies']}")
+print(f"context_b cookies: {context_b['cookies']}")
+print(f"context_b ever saw alice's session? {'session' in context_b['cookies']}")`}
+/>
+
+Same isolation guarantee in Java - two independent contexts, no shared reference between them.
+
+<CodePlayground
+  language="java"
+  title="Run it - two isolated contexts, proving state never crosses between them (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static Map<String, String> newCookies() {
+        return new HashMap<>();
+    }
+
+    static void logIn(Map<String, String> cookies, String user) {
+        cookies.put("session", "token-for-" + user);
+    }
+
+    public static void main(String[] args) {
+        Map<String, String> contextA = newCookies();
+        Map<String, String> contextB = newCookies();
+
+        logIn(contextA, "alice");
+
+        System.out.println("contextA cookies: " + contextA);
+        System.out.println("contextB cookies: " + contextB);
+        System.out.println("contextB ever saw alice's session? " + contextB.containsKey("session"));
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: prove isolation directly by trying to break it">
+<StepChecklist
+  steps={[
+    { text: "Write a test that logs in and confirms a logged-in element is visible", detail: "e.g. a \"Welcome back\" message or account menu." },
+    { text: "Write a second, completely separate test that only navigates to the same page and checks whether it appears already logged in", detail: "Don't have it perform any login step itself." },
+    { text: "Run both tests together, in the order that puts the login test first", detail: "Confirm the second test still sees a logged-OUT state." },
+    { text: "Run the whole file again with --workers=1 vs the default parallel workers", detail: "Confirm the result is identical either way - isolation doesn't depend on execution order or parallelism." },
+  ]}
+/>
+You've now directly proven that one test's login never bleeds into another test's starting state, no
+matter the order or parallelism.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A test passes alone but fails when run as part of the full suite.",
+      fix: "This is almost always an order dependency - the test is implicitly relying on setup another test happened to perform first. Make the real dependency explicit as a fixture instead of relying on execution order.",
+    },
+    {
+      symptom: "A test needs to start already logged in and re-running the full login flow every single test is slow.",
+      fix: "Use storageState to save a real login's cookies once (often in a setup project) and load it into each fresh context - still fully isolated per test, just pre-populated instead of starting from a live login form every time.",
+    },
+    {
+      symptom: "Two tests using the SAME real backend/database interfere with each other even though their browser contexts are isolated.",
+      fix: "Browser context isolation doesn't isolate a shared backend database - that needs its own strategy (unique test accounts per test, a reset endpoint, or a sandboxed environment per run) covered separately from browser-level isolation.",
+    },
+    {
+      symptom: "A flaky test seems to depend on whether it runs first or last in a file.",
+      fix: "Treat this as a strong signal of a hidden order dependency, not random flakiness - isolate the flaky test with test.only temporarily and confirm whether it passes reliably alone, which usually confirms the diagnosis immediately.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **`playwright.config.ts`'s `use.storageState`** — where a shared pre-authenticated state (if any)
+  gets loaded into every fresh context, project-wide.
+- **A setup project's output file** (commonly `playwright/.auth/user.json`) — the actual saved
+  cookies/storage a `storageState`-based login shortcut loads.
+- **The `workers` config option** — confirms how many tests genuinely run in parallel; isolation holds
+  regardless, but this affects how quickly an order-dependency bug surfaces.
+- **Trace viewer's network/storage tabs** (covered later in this module) — can confirm, for a specific
+  test run, exactly what cookies and storage that test's context actually had.
+</WhereToCheck>
+
+<WorkedExample title="a flaky failure that was actually a hidden order dependency">
+1. A 40-test suite passes reliably in CI running serially, but fails intermittently - always the same
+   test - once parallel workers are enabled.
+2. Investigating with `test.only` on just the failing test shows it passes every time run alone.
+3. Reading the test closely reveals it navigates straight to `/account` and asserts a specific
+   username is shown - it never logs in itself, silently assuming an earlier test in the file already
+   did.
+4. In serial execution, that earlier test happened to always run first by file order, so the
+   assumption held by accident. In parallel execution, no such ordering guarantee exists - contexts
+   run independently, and the earlier test isn't guaranteed to finish first, or even run in the same
+   worker.
+5. The real fix: the "failing" test gets its own explicit `loggedInPage` fixture instead of relying on
+   another test's side effect. It passes reliably afterward, in any order, at any worker count -
+   because it no longer depends on isolation being violated to work.
+</WorkedExample>
+
+<Quiz
+  question="A 40-test suite passes reliably when run serially but fails intermittently on one specific test once parallel workers are enabled. What does this pattern most strongly suggest?"
+  options={[
+    "Playwright's browser context isolation is unreliable under parallel execution",
+    "The failing test has a hidden dependency on another test's side effects (like being logged in) that happened to hold by accident under serial, file-ordered execution, but breaks once tests run independently in parallel",
+    "Parallel workers require a different, less strict isolation mode that must be manually enabled",
+    "The test file needs more workers configured, not fewer"
+  ]}
+  answer={1}
+  explain="The note's worked example describes exactly this pattern and diagnosis: browser context isolation holds identically whether serial or parallel, so a test that only breaks under parallelism was never actually isolated-safe to begin with - it was silently relying on file-order-dependent side effects from another test. Option one has it backwards; isolation is what EXPOSES the bug once ordering can no longer paper over it. Option three is false - isolation is Playwright's consistent default regardless of worker count, not a mode that changes. Option four doesn't address the root cause at all - more or fewer workers wouldn't fix a genuine order dependency, since the dependency shouldn't exist in the first place."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What does a fresh BrowserContext reset between tests?", back: "Cookies, localStorage, sessionStorage, IndexedDB, cache, service workers, and permissions - a full incognito-equivalent clean slate." },
+    { front: "What's shared across tests for speed, if not the context?", back: "The underlying browser PROCESS may stay warm and be reused; the context (the actual isolated profile) is always new per test." },
+    { front: "The right way to start a test already logged in", back: "storageState - save a real login's cookies/storage once, load it into each fresh context. Still fully isolated per test, just pre-populated." },
+    { front: "What does a test passing alone but failing in the full suite usually mean?", back: "A hidden order dependency - the test implicitly relies on setup another test happened to perform first, which isolation doesn't guarantee." },
+    { front: "The egg-carton analogy for test isolation", back: "Each egg sits in its own walled molded compartment - one cracking never spills into its neighbor, the same way one test's state can never leak into another's context." },
+  ]}
+/>
+
+<Challenge>
+Deliberately write two tests with a hidden order dependency: Test 1 sets a value via localStorage
+(using page.evaluate), and Test 2 reads that same localStorage key and asserts it exists - without
+Test 2 ever setting it itself. Run them together and observe Test 2 fail, proving isolation directly.
+Then fix Test 2 properly, using an explicit fixture or its own setup rather than depending on Test 1's
+side effect.
+</Challenge>
+
+<AskCommunity prompt="A test in my suite passes alone but fails intermittently when run with the rest of the suite / in parallel. Here's the test and what it asserts: `[paste it]`.">
+Pasting the actual test is usually enough for someone to spot an implicit dependency on another
+test's side effect - the single most common cause of exactly this pattern.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://playwright.dev/docs/browser-contexts", title: "Playwright — official Isolation / browser contexts docs", kind: "read" },
+    { href: "https://qaskills.sh/blog/playwright-browser-contexts-isolation-guide", title: "QASkills.sh — Playwright Browser Contexts & Isolation Guide", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=0mfLHPLZ7_k" title="BrowserContext in Playwright — Handle Two Different User Sessions — Naveen AutomationLabs" minutes={18} />
+
+<Takeaways
+  points={[
+    "Every Playwright test runs in its own fresh BrowserContext by default - separate cookies, storage, cache, and permissions, gone the moment the test ends.",
+    "The underlying browser process may be reused across tests for speed; the context itself never is.",
+    "A test that needs to start logged in should use storageState to load a saved login, not skip isolation by reusing another test's session.",
+    "A test that passes alone but fails in the full suite (especially under parallel workers) almost always has a hidden order dependency, not a Playwright reliability problem.",
+    "Isolation covers the browser context only - a shared backend database still needs its own isolation strategy (unique accounts, reset endpoints, sandboxing).",
+  ]}
+/>
+
+<Complete xp={10} />
