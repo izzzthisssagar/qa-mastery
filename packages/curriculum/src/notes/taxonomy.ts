@@ -1085,10 +1085,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "accessibility-and-quality",
         title: "Accessibility & quality",
         topics: [
-          { slug: "wave", title: "WAVE", planned: true },
-          { slug: "axe-devtools", title: "axe DevTools", planned: true },
-          { slug: "contrast-and-screen-reader-checks", title: "Contrast & screen-reader checks", planned: true },
-          { slug: "lighthouse", title: "Lighthouse as an extension of QA", planned: true },
+          { slug: "wave", title: "WAVE" },
+          { slug: "axe-devtools", title: "axe DevTools" },
+          { slug: "contrast-and-screen-reader-checks", title: "Contrast & screen-reader checks" },
+          { slug: "lighthouse", title: "Lighthouse as an extension of QA" },
         ],
       },
       {
