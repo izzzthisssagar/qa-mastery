@@ -1007,10 +1007,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "writing-bug-reports",
         title: "Writing bug reports",
         topics: [
-          { slug: "anatomy-of-a-report", title: "Anatomy of a report", planned: true },
-          { slug: "repro-steps", title: "Repro steps", planned: true },
-          { slug: "evidence", title: "Evidence", planned: true },
-          { slug: "clarity", title: "Clarity", planned: true },
+          { slug: "anatomy-of-a-report", title: "Anatomy of a report" },
+          { slug: "repro-steps", title: "Repro steps" },
+          { slug: "evidence", title: "Evidence" },
+          { slug: "clarity", title: "Clarity" },
         ],
       },
       {
