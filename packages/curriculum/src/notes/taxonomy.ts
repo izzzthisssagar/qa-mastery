@@ -1055,10 +1055,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "link-page-ui-checks",
         title: "Link, page & UI checks",
         topics: [
-          { slug: "check-my-links", title: "Check My Links", planned: true },
-          { slug: "gofullpage-and-screenshots", title: "GoFullPage & screenshot tools", planned: true },
-          { slug: "window-resizer-responsive-checks", title: "Window Resizer & responsive checks", planned: true },
-          { slug: "whatfont-perfectpixel-page-ruler", title: "WhatFont, PerfectPixel & Page Ruler", planned: true },
+          { slug: "check-my-links", title: "Check My Links" },
+          { slug: "gofullpage-and-screenshots", title: "GoFullPage & screenshot tools" },
+          { slug: "window-resizer-responsive-checks", title: "Window Resizer & responsive checks" },
+          { slug: "whatfont-perfectpixel-page-ruler", title: "WhatFont, PerfectPixel & Page Ruler" },
         ],
       },
       {
