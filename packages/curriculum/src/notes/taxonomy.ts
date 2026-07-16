@@ -1123,10 +1123,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "design-principles-and-the-laws-of-ux",
         title: "Design principles & the laws of UX",
         topics: [
-          { slug: "nielsens-10-usability-heuristics", title: "Nielsen's 10 usability heuristics", planned: true },
-          { slug: "fitts-hick-miller-and-jakob", title: "Fitts, Hick, Miller & Jakob", planned: true },
-          { slug: "gestalt-principles", title: "Gestalt principles", planned: true },
-          { slug: "heuristics-vs-laws", title: "Heuristics vs laws", planned: true },
+          { slug: "nielsens-10-usability-heuristics", title: "Nielsen's 10 usability heuristics" },
+          { slug: "fitts-hick-miller-and-jakob", title: "Fitts, Hick, Miller & Jakob" },
+          { slug: "gestalt-principles", title: "Gestalt principles" },
+          { slug: "heuristics-vs-laws", title: "Heuristics vs laws" },
         ],
       },
       {
