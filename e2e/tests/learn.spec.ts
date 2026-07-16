@@ -63,7 +63,9 @@ test.describe("learn — boundary-value-analysis", () => {
     await expect(page.getByTestId("boundary-bug-found")).toBeVisible();
 
     // quiz: submit is disabled until every question is answered
-    const quiz = page.getByTestId("quiz-panel");
+    // .first(): hydration can transiently double-render the freshly-navigated
+    // page under CI concurrency (docs/known-issues/hydration-double-render.md)
+    const quiz = page.getByTestId("quiz-panel").first();
     await expect(quiz).toBeVisible();
     const submit = page.getByTestId("quiz-submit");
     await expect(submit).toBeDisabled();
@@ -291,7 +293,9 @@ test.describe("learn — locator lab (B1)", () => {
     await signUpFreshLearner(page);
     await page.goto("http://localhost:3000/learn/locators-and-the-dom");
 
-    const lab = page.getByTestId("locator-lab");
+    // .first(): hydration can transiently double-render the freshly-navigated
+    // page under CI concurrency (docs/known-issues/hydration-double-render.md)
+    const lab = page.getByTestId("locator-lab").first();
     await expect(lab).toBeVisible();
     // Challenge 1 wants exactly the Sign in button.
     await expect(page.getByTestId("locator-prompt")).toContainText(/Sign in button/i);
@@ -320,7 +324,9 @@ test.describe("learn — locator lab (B1)", () => {
   test("empty and invalid locators surface a clear, non-passing message", async ({ page }) => {
     await signUpFreshLearner(page);
     await page.goto("http://localhost:3000/learn/locators-and-the-dom");
-    await expect(page.getByTestId("locator-lab")).toBeVisible();
+    // .first(): hydration can transiently double-render the freshly-navigated
+    // page under CI concurrency (docs/known-issues/hydration-double-render.md)
+    await expect(page.getByTestId("locator-lab").first()).toBeVisible();
 
     // Empty input prompts for one.
     await page.getByTestId("locator-run").click();
@@ -354,7 +360,9 @@ test.describe("dashboard — progress & XP", () => {
 
     // the dashboard now reflects it
     await page.goto("http://localhost:3000/dashboard");
-    await expect(page.getByTestId("stat-xp")).toContainText("50");
+    // .first(): hydration can transiently double-render the freshly-navigated
+    // page under CI concurrency (docs/known-issues/hydration-double-render.md)
+    await expect(page.getByTestId("stat-xp").first()).toContainText("50");
     await expect(page.getByTestId("stat-completed")).toContainText("1");
     await expect(page.getByTestId(`lesson-done-${SLUG}`)).toBeVisible();
     // BVA is in Track A, so that track's progress reflects 1 of 30
@@ -443,8 +451,10 @@ test.describe("certificate — track completion", () => {
   test("a fresh learner sees the certificate locked until the track is done", async ({ page }) => {
     await signUpFreshLearner(page);
     await page.goto("http://localhost:3000/certificate/track-a");
-    await expect(page.getByTestId("certificate-locked")).toBeVisible();
-    await expect(page.getByTestId("certificate-locked")).toContainText(/0 \/ \d+ lessons/);
+    // .first(): hydration can transiently double-render the freshly-navigated
+    // page under CI concurrency (docs/known-issues/hydration-double-render.md)
+    await expect(page.getByTestId("certificate-locked").first()).toBeVisible();
+    await expect(page.getByTestId("certificate-locked").first()).toContainText(/0 \/ \d+ lessons/);
     await expect(page.getByTestId("certificate-earned")).toHaveCount(0);
   });
 });
@@ -529,8 +539,10 @@ test.describe("learn — all Track A lessons render", () => {
     for (const slug of TRACK_A_SLUGS) {
       await page.goto(`http://localhost:3000/learn/${slug}`);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-      await expect(page.getByTestId("quiz-panel")).toBeVisible();
-      await expect(page.getByTestId("quiz-submit")).toBeVisible();
+      // .first(): hydration can transiently double-render the freshly-navigated
+      // page under CI concurrency (docs/known-issues/hydration-double-render.md)
+      await expect(page.getByTestId("quiz-panel").first()).toBeVisible();
+      await expect(page.getByTestId("quiz-submit").first()).toBeVisible();
     }
   });
 });

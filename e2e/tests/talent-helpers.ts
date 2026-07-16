@@ -37,7 +37,9 @@ export async function publishTester(page: Page, handle: string): Promise<void> {
     await chip.click();
     await expect(chip).toHaveAttribute("aria-pressed", "true", { timeout: 1_000 });
   }).toPass({ timeout: 20_000 });
-  await page.getByLabel("Handle").fill(handle);
+  // .first(): hydration can transiently double-render the freshly-navigated
+  // page under CI concurrency (docs/known-issues/hydration-double-render.md)
+  await page.getByLabel("Handle").first().fill(handle);
 
   // Save runs a server action against the live DB; give the confirmation
   // cold-start headroom, and fail fast with the real message if the action

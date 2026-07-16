@@ -23,7 +23,9 @@ test.describe("tasks", () => {
     await expect(page.getByRole("heading", { name: /^tasks$/i })).toBeVisible();
 
     // Personal planner: add a to-do.
-    await page.getByTestId("planner-input").fill("write boundary tests");
+    // .first(): hydration can transiently double-render the freshly-navigated
+    // page under CI concurrency (docs/known-issues/hydration-double-render.md)
+    await page.getByTestId("planner-input").first().fill("write boundary tests");
     await page.getByRole("button", { name: /^add$/i }).click();
     const row = page.getByTestId("planner-row").filter({ hasText: "write boundary tests" });
     await expect(row).toBeVisible();
