@@ -1143,10 +1143,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "tracing-and-debugging",
         title: "Tracing & debugging",
         topics: [
-          { slug: "trace-viewer", title: "Trace viewer", planned: true },
-          { slug: "codegen", title: "Codegen", planned: true },
-          { slug: "debugging", title: "Debugging", planned: true },
-          { slug: "screenshots-and-video", title: "Screenshots & video", planned: true },
+          { slug: "trace-viewer", title: "Trace viewer" },
+          { slug: "codegen", title: "Codegen" },
+          { slug: "debugging", title: "Debugging" },
+          { slug: "screenshots-and-video", title: "Screenshots & video" },
         ],
       },
       {
