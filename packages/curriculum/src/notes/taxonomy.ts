@@ -1017,10 +1017,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "severity-vs-priority",
         title: "Severity vs priority",
         topics: [
-          { slug: "severity", title: "Severity", planned: true },
-          { slug: "priority", title: "Priority", planned: true },
-          { slug: "combinations", title: "Combinations", planned: true },
-          { slug: "who-sets-what", title: "Who sets what", planned: true },
+          { slug: "severity", title: "Severity" },
+          { slug: "priority", title: "Priority" },
+          { slug: "combinations", title: "Combinations" },
+          { slug: "who-sets-what", title: "Who sets what" },
         ],
       },
       {
