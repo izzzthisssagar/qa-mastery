@@ -1046,9 +1046,9 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         title: "Edge-case & form data",
         topics: [
           { slug: "bug-magnet-tricky-inputs", title: "Bug Magnet & tricky inputs" },
-          { slug: "form-fillers", title: "Form fillers", planned: true },
-          { slug: "test-credit-cards-and-emails", title: "Test credit cards & emails", planned: true },
-          { slug: "generating-data-mockaroo-and-faker", title: "Generating data: Mockaroo & Faker", planned: true },
+          { slug: "form-fillers", title: "Form fillers" },
+          { slug: "test-credit-cards-and-emails", title: "Test credit cards & emails" },
+          { slug: "generating-data-mockaroo-and-faker", title: "Generating data: Mockaroo & Faker" },
         ],
       },
       {

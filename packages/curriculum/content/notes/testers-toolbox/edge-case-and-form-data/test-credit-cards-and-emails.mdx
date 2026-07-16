@@ -1,0 +1,301 @@
+---
+title: "Test credit cards & emails"
+summary: "Payment gateways publish designated test card numbers (Stripe's 4242 4242 4242 4242 succeeds, 4000 0000 0000 0002 declines) that only work in test mode - plus reserved domains and plus-addressing give you unlimited safe email identities. The tester's rule: never real cards, never real inboxes."
+tags: ["testers-toolbox", "edge-case-and-form-data", "track-c"]
+updated: "2026-07-16"
+related:
+  - "testers-toolbox/edge-case-and-form-data/bug-magnet-tricky-inputs"
+  - "testers-toolbox/edge-case-and-form-data/form-fillers"
+  - "testers-toolbox/beyond-the-browser/email-testing"
+  - "test-artifacts/test-data/preparing-test-data"
+---
+
+<Hook>
+Sooner or later every tester faces a checkout form, and the worst possible instinct is the one that
+feels most natural: "I'll just use my own card and refund it." No. Payment providers publish entire
+catalogs of fake-but-valid card numbers that behave in precisely scripted ways — one always
+succeeds, one always declines, one fails with insufficient funds — and none of them can ever move a
+cent. Same story for emails: you don't need fifty Gmail accounts to test fifty signups. You need
+one inbox and two tricks.
+</Hook>
+
+<Callout type="analogy">
+Monopoly money is shaped exactly like currency — printed denominations, engraved-style borders,
+serial-number aesthetics — and the game works BECAUSE everyone agrees it's fake. Hand it over the
+counter at a supermarket and it buys nothing; inside the board game's world it buys hotels. Test
+credit cards are Monopoly money with a contract: structurally valid card numbers that the payment
+provider's TEST MODE honors in scripted ways, and that the real payment network will never accept.
+</Callout>
+
+<Term define="Test cards are card numbers a payment provider designates for its test/sandbox mode. Stripe's canon: 4242 4242 4242 4242 always succeeds; 4000 0000 0000 0002 always declines (generic); 4000 0000 0000 9995 declines with insufficient_funds; 4000 0025 0000 3155 triggers a 3D Secure authentication dialog. Any FUTURE expiry (like 12/34) and any CVC work with them. They function only against test-mode API keys - in live mode they are rejected, and real cards should never appear in test systems.">test cards</Term>
+
+## The two halves of the kit
+
+**Cards (Stripe's set, the de-facto standard for learning):**
+- `4242 4242 4242 4242` — the famous one; payment succeeds.
+- `4000 0000 0000 0002` — always declines, generic `card_declined`.
+- `4000 0000 0000 9995` — declines with `insufficient_funds`; different decline reason, different
+  user message to verify.
+- `4000 0025 0000 3155` — triggers the 3D Secure authentication step, so you can test BOTH the
+  approve and cancel paths of that dialog.
+- Expiry: any future date. CVC: any 3 digits. That's by design — the scenario lives in the card
+  NUMBER.
+
+**Emails:**
+- **Reserved domains** — `example.com`, `example.org`, `example.net` are reserved by internet
+  standard (RFC 2606) and never deliver anywhere: perfect for records nobody should ever email.
+- **Plus-addressing** — `you+anything@gmail.com` delivers to `you@gmail.com` on most providers, but
+  the app under test treats each variant as a unique address: unlimited signups, one inbox.
+- **Disposable inboxes** (Mailinator and friends) get their own note in the beyond-the-browser
+  chapter — that's for when you need to actually RECEIVE and open the email.
+
+<Callout type="mistake">
+Using your own real card "just once" in a test environment — or worse, putting REAL customer card
+numbers into test data. The first risks a very real charge the moment someone flips an environment
+variable to live keys; the second is a compliance violation (PCI DSS) that can genuinely end
+careers. The whole point of designated test data is that neither accident is possible.
+</Callout>
+
+<Callout type="tip">
+Test cards double as an environment smoke test: if `4242 4242 4242 4242` gets REJECTED in what you
+believe is the staging environment, stop — either the environment is wired to live keys (a
+five-alarm config bug worth filing immediately) or it isn't the environment you think it is. The
+fake money not working is how you discover the register is real.
+</Callout>
+
+{/* IMAGE: extreme close-up of a light-blue Monopoly 10 banknote lying across other play banknotes, with the game board and houses blurred in the background */}
+<HotspotImage
+  src="/notes/testers-toolbox/edge-case-and-form-data/test-credit-cards-and-emails.jpg"
+  alt="Close-up of a light-blue Monopoly 10 banknote lying across other play banknotes, with the game board and pieces blurred in the background"
+  credit="Monopoly — Wikimedia Commons, CC BY-SA 2.0 (James Petts)"
+  creditHref="https://commons.wikimedia.org/wiki/File:Monopoly_(12004622744).jpg"
+  pins={[
+    { x: 42, y: 50, label: "The engraved '10' — structurally convincing", desc: "Real-looking denomination, ornate border, currency styling. Test cards are the same: 4242 4242 4242 4242 passes every structural check a real Visa number passes - the format is genuinely valid." },
+    { x: 56, y: 47, label: "The word MONOPOLY — the designation", desc: "The one marking that makes it safe. For test cards the designation isn't printed on the number - it lives in the provider's test mode, which is why the same number is 'money' in sandbox and worthless in production." },
+    { x: 50, y: 10, label: "The board behind — the sandbox", desc: "Play money only works inside the game's world. Test cards only work against test-mode API keys - outside that boundary (live keys), the network rejects them outright." },
+    { x: 86, y: 50, label: "Other notes — a catalog of denominations", desc: "The kit isn't one fake bill; it's a set with defined values. Stripe's catalog works the same way: one number per SCENARIO - success, generic decline, insufficient funds, 3D Secure challenge." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Testing a checkout's failure handling with designated cards"
+  intervalMs={1800}
+  nodes={[
+    { label: "Confirm you're in test mode", desc: "Test-mode keys (Stripe's start pk_test_/sk_test_), sandbox banner, staging URL. If unsure - STOP and verify before any card number gets typed." },
+    { label: "Happy path: 4242 4242 4242 4242", desc: "Any future expiry, any CVC. Verify the success page, the order record, and the confirmation email trigger." },
+    { label: "Generic decline: 4000 0000 0000 0002", desc: "Does the user get a clear, non-technical message? Does the order stay un-created? No half-charged ghost orders?" },
+    { label: "Specific decline: 4000 0000 0000 9995", desc: "insufficient_funds is a DIFFERENT reason - check whether the app surfaces it differently, and whether retry guidance makes sense." },
+    { label: "3D Secure: 4000 0025 0000 3155", desc: "The auth dialog appears - test BOTH branches: complete it (payment proceeds) and cancel it (graceful failure, no stuck order)." },
+  ]}
+/>
+
+Why do fake numbers pass a real form's validation? Because the frontend only checks *structure* —
+the Luhn checksum every card number satisfies. Run it:
+
+<CodePlayground
+  language="python"
+  title="Run it - the Luhn check that test cards deliberately pass (Python)"
+  code={`def luhn_valid(card_number):
+    digits = [int(d) for d in card_number.replace(" ", "")]
+    checksum = 0
+    for i, d in enumerate(reversed(digits)):
+        if i % 2 == 1:
+            d *= 2
+            if d > 9:
+                d -= 9
+        checksum += d
+    return checksum % 10 == 0
+
+cards = {
+    "4242 4242 4242 4242": "Stripe: always succeeds",
+    "4000 0000 0000 0002": "Stripe: always declines (generic)",
+    "4000 0000 0000 9995": "Stripe: declines, insufficient funds",
+    "4242 4242 4242 4241": "typo in the last digit",
+    "1234 5678 9012 3456": "keyboard mash",
+}
+
+print("Luhn checksum vs designated test cards:")
+print()
+for number, meaning in cards.items():
+    verdict = "VALID shape" if luhn_valid(number) else "INVALID shape"
+    print(f"  {number}  {verdict:<13}  ({meaning})")
+
+print()
+print("The first three are all VALID by checksum - the frontend can't tell")
+print("them apart. Their MEANING (succeed/decline) lives in Stripe's test")
+print("mode, which is exactly why they're safe: real money never moves.")
+
+# Luhn checksum vs designated test cards:
+#
+#   4242 4242 4242 4242  VALID shape    (Stripe: always succeeds)
+#   4000 0000 0000 0002  VALID shape    (Stripe: always declines (generic))
+#   4000 0000 0000 9995  VALID shape    (Stripe: declines, insufficient funds)
+#   4242 4242 4242 4241  INVALID shape  (typo in the last digit)
+#   1234 5678 9012 3456  INVALID shape  (keyboard mash)
+#
+# The first three are all VALID by checksum - the frontend can't tell
+# them apart. Their MEANING (succeed/decline) lives in Stripe's test
+# mode, which is exactly why they're safe: real money never moves.`}
+/>
+
+And the email half of the kit — one real inbox becoming as many test identities as you need:
+
+<CodePlayground
+  language="java"
+  title="Run it - unlimited test emails from one inbox (Java)"
+  code={`public class Main {
+    public static void main(String[] args) {
+        String inbox = "sajan.qa@example.com";
+        String[] scenarios = {
+            "signup-happy-path",
+            "password-reset",
+            "declined-payment",
+            "duplicate-account-check",
+            "unsubscribe-flow"
+        };
+
+        System.out.println("One real inbox, unlimited test identities (plus-addressing):");
+        System.out.println();
+        String local = inbox.substring(0, inbox.indexOf('@'));
+        String domain = inbox.substring(inbox.indexOf('@'));
+        for (String scenario : scenarios) {
+            System.out.println("  " + local + "+" + scenario + domain);
+        }
+        System.out.println();
+        System.out.println("Most mail providers deliver every one of these to the SAME");
+        System.out.println("inbox, but the app under test sees five DIFFERENT addresses -");
+        System.out.println("five accounts, one place to read the emails they trigger.");
+        System.out.println("Caveat: some apps strip or reject '+' - which is itself");
+        System.out.println("a validation behavior worth testing and reporting.");
+    }
+}
+
+/* One real inbox, unlimited test identities (plus-addressing):
+
+     sajan.qa+signup-happy-path@example.com
+     sajan.qa+password-reset@example.com
+     sajan.qa+declined-payment@example.com
+     sajan.qa+duplicate-account-check@example.com
+     sajan.qa+unsubscribe-flow@example.com
+
+   Most mail providers deliver every one of these to the SAME
+   inbox, but the app under test sees five DIFFERENT addresses -
+   five accounts, one place to read the emails they trigger.
+   Caveat: some apps strip or reject '+' - which is itself
+   a validation behavior worth testing and reporting. */`}
+/>
+
+<FirstTime title="Your mission: run the four-card sweep on a sandbox checkout">
+<StepChecklist
+  steps={[
+    { text: "Find a test-mode checkout you're allowed to use", detail: "BuggyShop's checkout is wired for this. Stripe's own docs also host interactive test forms if you want the vendor's reference behavior." },
+    { text: "Bookmark the provider's test-card page", detail: "docs.stripe.com/testing is the canonical list - never memorize beyond 4242; scenarios and codes are looked up, not recalled." },
+    { text: "Run the success card and verify THREE things", detail: "The UI success state, the created order/record, and the triggered email. A payment that 'succeeds' but creates no order is a classic integration bug." },
+    { text: "Run both decline cards and compare the user-facing messages", detail: "Generic decline vs insufficient funds - if the app shows the identical message for both, note it; it may be intentional (privacy) or lazy (no reason mapping)." },
+    { text: "Run the 3D Secure card twice - complete once, cancel once", detail: "The cancel path is where bugs hide: stuck 'processing' orders, double-submission on retry, or a charge record with no order." },
+  ]}
+/>
+You've just tested a payment integration more thoroughly than most checkout bugs ever require —
+without a single real card number existing anywhere in your notes.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "4242 4242 4242 4242 is rejected with a real-sounding decline.",
+      fix: "Treat this as an environment alarm, not a test failure. Either the environment is running LIVE keys (report immediately - real cards would be charged here) or a different payment provider/mock is behind the form. Verify which keys the environment uses before continuing any payment testing.",
+    },
+    {
+      symptom: "A test card works, but no confirmation email ever arrives.",
+      fix: "First check where staging email GOES - many test environments trap all outbound mail (a good practice, covered in the email-testing note) rather than delivering it. Ask where the mail trap UI is before filing a 'missing email' bug that's actually correct environment behavior.",
+    },
+    {
+      symptom: "The app rejects your plus-addressed email as invalid.",
+      fix: "The '+' character is legal in email addresses - rejection is an (extremely common) overzealous validation. You've found a real, fileable bug that blocks real users with plus-addressed inboxes. Meanwhile, switch to dot-variants or a reserved-domain address to keep your own testing moving.",
+    },
+    {
+      symptom: "You need to test a signup flow's ACTUAL received email (link, rendering) but example.com obviously never delivers.",
+      fix: "Reserved domains are for records that shouldn't email anyone. For flows where you must OPEN the email, use plus-addressing on a real inbox or a disposable-inbox service - the beyond-the-browser chapter's email-testing note covers that tool family properly.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **docs.stripe.com/testing** — the canonical, maintained test-card catalog (scenario cards for declines, disputes, international cards, and more).
+- **The payment provider's dashboard in test mode** — every test transaction is logged there with its decline code; compare what the app SHOWED against what the provider RETURNED.
+- **The environment's API keys/config** — test keys have recognizable prefixes (Stripe: `pk_test_`/`sk_test_`); confirming them is confirming you're safe.
+- **Your app's order records after each card** — success and failure should leave clean, opposite traces; half-created records are the bug class this kit exists to catch.
+</WhereToCheck>
+
+<WorkedExample title="the decline that revealed a ghost-order bug">
+1. Regression on a checkout: the tester runs the happy path with `4242 4242 4242 4242` — order
+   created, email fired. Fine.
+2. Then the generic-decline card `4000 0000 0000 0002`: UI shows "payment failed" correctly...
+   but the WhereToCheck habit says look at the records too.
+3. In the admin panel: an order EXISTS for the declined payment, status "pending payment," inventory
+   reserved. Every declined checkout is silently eating stock.
+4. The insufficient-funds card `9995` confirms it's not specific to one decline type — same ghost
+   order. Two runs, one pattern: order creation happens BEFORE payment confirmation instead of after.
+5. The report writes itself with exact repro data anyone can rerun: card numbers included openly
+   (they're published test values — the one kind of card number that's SAFE to paste into a ticket),
+   plus the admin-panel evidence. Severity: High — customer-invisible, business-critical.
+</WorkedExample>
+
+<Quiz
+  question="A tester needs to verify a checkout's decline handling in staging. A teammate suggests: 'Just use your own card with a 1-cent charge and refund it after.' What's the strongest reason this is wrong?"
+  options={[
+    "It's wasteful - refunds take days to process and the tester loses interest on the money",
+    "Designated decline cards exist precisely for this: they produce the exact scripted failure scenario needed, work only in test mode, and remove BOTH the risk of a real charge and the presence of real card data in test systems",
+    "It would work fine, but only if the tester remembers to use a small amount",
+    "Real cards always get declined in staging environments anyway, so the test would prove nothing"
+  ]}
+  answer={1}
+  explain="The teammate's approach can't even do the job: a real card produces a real SUCCESS (then a refund) - it never produces the decline scenarios the tester needs to verify, which scripted cards like 4000 0000 0000 0002 exist to generate on demand. On top of the functional gap, it introduces two risks the designated kit eliminates by design: a genuine charge if the environment's keys turn out to be live, and real card data circulating in test systems (a PCI-DSS compliance problem, not just an oops). Option one is trivia next to that. Option three treats risk size as the issue when the issue is risk EXISTENCE. Option four is simply false - staging behavior depends entirely on which keys it's wired to, which is exactly why the assumption is dangerous."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Stripe's four essential test cards", back: "4242 4242 4242 4242 = success; 4000 0000 0000 0002 = generic decline; 4000 0000 0000 9995 = insufficient funds; 4000 0025 0000 3155 = 3D Secure challenge. Any future expiry, any CVC - the scenario lives in the number." },
+    { front: "Why test cards pass real frontend validation", back: "They're structurally valid - correct format and Luhn checksum. The frontend can't distinguish them from real cards; their scripted meaning exists only in the provider's TEST MODE." },
+    { front: "The two email tricks for test identities", back: "Reserved domains (example.com/.org/.net, RFC 2606 - never deliver, for records that shouldn't email anyone) and plus-addressing (you+scenario@provider - unique to the app, same real inbox to you)." },
+    { front: "What a rejected 4242 card in staging means", back: "Environment alarm: staging may be wired to LIVE keys (report immediately) or a different provider/mock. Never keep testing payments until the keys are verified." },
+    { front: "The two things you must never do with cards in testing", back: "Never use your own real card (one env-var flip from a real charge), and never put real customer card numbers in test data (PCI-DSS compliance violation)." },
+    { front: "Why declined-payment tests must check records, not just messages", back: "The classic bug class is the half-completed side effect: an order created or inventory reserved before payment confirmed. The UI message can be perfect while the data is wrong." },
+  ]}
+/>
+
+<Challenge>
+Run the full four-card sweep (success, two declines, 3D Secure with both branches) against
+BuggyShop's checkout. For each run, record a three-column result: what the UI showed, what the
+order data shows, what email (if any) was triggered. You're specifically hunting the ghost-order
+class from this note's worked example — any run where the three columns tell different stories is
+a finding.
+</Challenge>
+
+<AskCommunity prompt="I'm testing payments on `[app/environment]` with designated test cards. `[Card X]` produced `[unexpected behavior - e.g. rejected in staging / created a pending order on decline]`. Before I file: is this an app bug, an environment wiring issue, or expected provider behavior?">
+Payment findings are environment-sensitive — the most useful answers will ask which keys the
+environment uses and what the provider's dashboard logged, so check both before posting.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://docs.stripe.com/testing", title: "Stripe — official test card catalog (the canonical reference)", kind: "read" },
+    { href: "https://docs.stripe.com/testing-use-cases", title: "Stripe — testing use cases (disputes, refunds, authentication)", kind: "read" },
+    { href: "https://www.rfc-editor.org/rfc/rfc2606", title: "RFC 2606 — the reserved example.com/.org/.net domains", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=lnHVileqcMs" title="How to Test Stripe Payments in 2026 — Step by Step Developer Guide (HMD Tech)" minutes={4} />
+
+<Takeaways
+  points={[
+    "Payment providers publish designated test cards with scripted behaviors - Stripe's 4242 (success), 0002 (decline), 9995 (insufficient funds), 3155 (3D Secure) cover most checkout testing; any future expiry and CVC.",
+    "Test cards are structurally valid (they pass Luhn), but their meaning lives in test mode - they're rejected outright against live keys, which makes them doubly safe.",
+    "A rejected 4242 in 'staging' is an environment alarm - possibly live keys - not a test failure.",
+    "Emails: reserved domains (example.com, RFC 2606) for never-delivered records; plus-addressing for unlimited unique-to-the-app identities landing in one real inbox.",
+    "Never your own card, never real customer card data in test systems - the kit exists so neither is ever necessary.",
+    "Decline tests check three stories: UI message, order data, triggered email - half-completed side effects are the bug class that pays for this whole note.",
+  ]}
+/>
+
+<Complete xp={10} />
