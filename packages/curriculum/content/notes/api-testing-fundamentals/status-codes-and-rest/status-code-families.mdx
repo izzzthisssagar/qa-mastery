@@ -1,0 +1,283 @@
+---
+title: "2xx / 4xx / 5xx families"
+summary: "Status codes aren't a memorization list of 60 numbers - they're five families (1xx/2xx/3xx/4xx/5xx), and knowing the FAMILY tells you who's at fault before you even look up the specific code."
+tags: ["api-testing-fundamentals", "status-codes-and-rest", "track-c"]
+updated: "2026-07-17"
+related:
+  - "api-testing-fundamentals/http-for-testers/request-and-response-anatomy"
+  - "api-testing-fundamentals/status-codes-and-rest/rest-in-plain-words"
+  - "api-testing-fundamentals/status-codes-and-rest/idempotency-and-safety"
+---
+
+<Hook>
+A response comes back with status `418`. Nobody memorizes that number - it's the "I'm a teapot"
+joke code from an April Fools' RFC, and it's real, and some APIs actually return it on purpose. You
+don't need to know what `418` means from memory to know roughly what's going on: it starts with 4,
+so it's the CLIENT's fault, somehow. That's the entire trick to reading status codes fast - you
+almost never need the specific three-digit number first. You need the family.
+</Hook>
+
+<Callout type="analogy">
+A traffic light, three lamps stacked in a fixed order, top to bottom: red, amber, green. You don't
+need to read a manual to know what each COLOR means in general, even before you know the specific
+local rule for this particular intersection (turn on red allowed? right-on-red only?). Status code
+families work the same way: five colors, in a fixed numeric range, and you can read the family (the
+first digit) instantly, the same way you read "red" from across an intersection - long before you'd
+ever need to look up the exact meaning of, say, `429` versus `403`.
+</Callout>
+
+<Term define="An HTTP status code's FAMILY is determined by its first digit, grouping the ~60 individual codes into five broad categories with a consistent meaning: 1xx (Informational — request received, processing continues, rare in typical API testing), 2xx (Success — the request was received, understood, and accepted), 3xx (Redirection — further action is needed to complete the request, usually following a Location header), 4xx (Client Error — the request itself has a problem: bad syntax, missing auth, a resource that doesn't exist), and 5xx (Server Error — the server failed to fulfill an otherwise valid request). Reading the family first, before the specific code, is the single fastest way to triage 'whose fault is this' in the first second of looking at any response.">Status code family</Term>
+
+## The five families, and who's holding the bag in each
+
+- **1xx — Informational.** The request was received, processing continues. Rare to see directly in
+  typical REST API testing (`100 Continue` shows up in some large-body upload flows); mostly a
+  "you'll recognize it if it appears" category rather than one to memorize deeply.
+- **2xx — Success.** The request was received, understood, and accepted. `200 OK` (generic
+  success), `201 Created` (a new resource now exists, often with a `Location` header), `204 No
+  Content` (succeeded, nothing to send back) are the three a tester sees constantly.
+- **3xx — Redirection.** Further action needed, almost always "go look at this other URL instead"
+  via a `Location` header. `301`/`308` (permanent) vs `302`/`307` (temporary) matters for caching and
+  for whether a client should keep using the old URL next time.
+- **4xx — Client Error.** Something about THIS request is the problem: bad syntax (`400`), missing
+  or invalid auth (`401`), valid auth but not allowed (`403`), resource doesn't exist (`404`), wrong
+  method (`405`), too many requests (`429`). The fix is almost always "send a different request,"
+  not "wait for the server to get fixed."
+- **5xx — Server Error.** The request was fine; the SERVER failed to handle it (`500` generic,
+  `502`/`503`/`504` usually mean an upstream/proxy/timeout problem). The fix is on the server side,
+  and retrying the identical request may or may not help depending on whether the failure was
+  transient.
+
+<Callout type="tip">
+When triaging a fresh bug report with no other context, read the family first and ask exactly one
+question: "is this describable as 'I sent something wrong' (4xx) or 'the server choked on something
+that should've worked' (5xx)?" That one framing decision changes where you look next far more than
+knowing the exact three-digit code up front.
+</Callout>
+
+<Callout type="mistake">
+Treating all 4xx codes as "the user's fault" in the blame sense, rather than "the request's" fault
+in the protocol sense. A `401 Unauthorized` returned because the SERVER'S token-validation logic has
+a bug (rejecting genuinely valid tokens) is still, correctly, a 4xx-family response by HTTP's rules -
+but it's very much a real bug worth filing, just not a "5xx, server crashed" kind of bug. Family
+tells you the HTTP-level category, not automatically who wrote the buggy code.
+</Callout>
+
+{/* IMAGE: a traffic light mounted on a pole against a partly cloudy blue sky, showing three lamp housings stacked vertically (red at top, illuminated bright red; the middle and bottom lamp housings dark/unlit), with a street lamp visible on a separate shorter pole behind it */}
+<HotspotImage
+  src="/notes/api-testing-fundamentals/status-codes-and-rest/status-code-families.jpg"
+  alt="A traffic light on a pole against a blue sky with scattered clouds, showing three stacked lamp housings with the top (red) lamp lit brightly and the middle and bottom lamps dark"
+  credit="Traffic light — Wikimedia Commons, public domain / CC0"
+  creditHref="https://commons.wikimedia.org/wiki/Category:Traffic_lights"
+  pins={[
+    { x: 47, y: 27, label: "Top lamp, lit red — the 4xx/5xx feeling", desc: "Something stopped. In HTTP terms this is the 4xx/5xx zone: either you (the request) did something wrong, or the server choked. Either way, whatever you were trying to do did NOT complete." },
+    { x: 47, y: 45, label: "Middle position — where 3xx sits", desc: "Amber, in a real traffic light, means 'transition, more is coming.' 3xx is exactly that: not done yet, follow the Location header to where this is actually headed." },
+    { x: 47, y: 63, label: "Bottom position — where 2xx sits", desc: "Green means go, and in this specific photo it's unlit - a reminder that a response family isn't about which lamp happens to be glowing in one snapshot, it's about which fixed POSITION (which range of numbers) a given code falls into." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Reading five real responses by family first - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Response: 201 Created", desc: "First digit 2 - success family. A new resource was made. Don't even need the rest of the number to know the request worked." },
+    { label: "Response: 401 Unauthorized", desc: "First digit 4 - client error family. Something about the REQUEST (missing/invalid credentials) is the issue - check the Authorization header before touching anything server-side." },
+    { label: "Response: 503 Service Unavailable", desc: "First digit 5 - server error family. The request was probably fine; the server (or something in front of it) couldn't handle it right now. Worth an immediate retry-with-backoff, unlike most 4xx cases." },
+    { label: "Response: 302 Found", desc: "First digit 3 - redirection family. Check the Location header for where this is actually pointing before assuming the original request 'failed.'" },
+    { label: "Verdict habit", desc: "First digit, every time, before the rest of the number: 2 = worked, 3 = look elsewhere, 4 = fix the request, 5 = the server's problem right now. The specific code refines the story; the family tells it." },
+  ]}
+/>
+
+A tiny family classifier - the exact one-line rule a tester should have memorized cold:
+
+<CodePlayground
+  language="python"
+  title="Run it - classifying status codes into families (Python)"
+  code={`def family(status_code):
+    first_digit = status_code // 100
+    names = {
+        1: "1xx Informational",
+        2: "2xx Success",
+        3: "3xx Redirection",
+        4: "4xx Client Error",
+        5: "5xx Server Error",
+    }
+    return names.get(first_digit, "Unknown/non-standard")
+
+codes = [100, 200, 201, 204, 301, 302, 400, 401, 403, 404, 429, 500, 502, 503, 418]
+for code in codes:
+    print(f"{code} -> {family(code)}")
+
+# 100 -> 1xx Informational
+# 200 -> 2xx Success
+# 201 -> 2xx Success
+# 204 -> 2xx Success
+# 301 -> 3xx Redirection
+# 302 -> 3xx Redirection
+# 400 -> 4xx Client Error
+# 401 -> 4xx Client Error
+# 403 -> 4xx Client Error
+# 404 -> 4xx Client Error
+# 429 -> 4xx Client Error
+# 500 -> 5xx Server Error
+# 502 -> 5xx Server Error
+# 503 -> 5xx Server Error
+# 418 -> 4xx Client Error`}
+/>
+
+Same classifier, Java - and a quick tally showing how a batch of real responses breaks down by
+family, which is often the first thing worth checking on a flaky test run:
+
+<CodePlayground
+  language="java"
+  title="Run it - classifying a batch of responses into families and tallying them (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static String family(int statusCode) {
+        int firstDigit = statusCode / 100;
+        return switch (firstDigit) {
+            case 1 -> "1xx Informational";
+            case 2 -> "2xx Success";
+            case 3 -> "3xx Redirection";
+            case 4 -> "4xx Client Error";
+            case 5 -> "5xx Server Error";
+            default -> "Unknown/non-standard";
+        };
+    }
+
+    public static void main(String[] args) {
+        int[] responses = {200, 201, 200, 404, 200, 500, 200, 401, 200, 503};
+        Map<String, Integer> tally = new LinkedHashMap<>();
+        for (int code : responses) {
+            String fam = family(code);
+            tally.merge(fam, 1, Integer::sum);
+        }
+        System.out.println("Batch of " + responses.length + " responses:");
+        for (Map.Entry<String, Integer> e : tally.entrySet()) {
+            System.out.println("  " + e.getKey() + ": " + e.getValue());
+        }
+        double errorRate = (tally.getOrDefault("4xx Client Error", 0) + tally.getOrDefault("5xx Server Error", 0)) * 100.0 / responses.length;
+        System.out.printf("Error rate (4xx+5xx): %.1f%%%n", errorRate);
+    }
+}
+
+// Batch of 10 responses:
+//   2xx Success: 6
+//   4xx Client Error: 2
+//   5xx Server Error: 2
+// Error rate (4xx+5xx): 40.0%`}
+/>
+
+<FirstTime title="Your mission: sort ten real responses by family before looking anything up">
+<StepChecklist
+  steps={[
+    { text: "Hit ten different real endpoints (BuggyAPI or a public sandbox), including some you expect to fail", detail: "Try a bad ID, a wrong method, an expired/missing token, and a few normal successful calls." },
+    { text: "Write down just the first digit of each response's status code, nothing else yet", detail: "This is the triage step - resist the urge to look up the full meaning immediately." },
+    { text: "Group them: how many 2xx, how many 4xx, how many 5xx did you get", detail: "This single tally is often the fastest health check of a test run, before reading a single response body." },
+    { text: "NOW look up the specific code for each 4xx and 5xx", detail: "Confirm the specific meaning matches what you expected given what request you actually sent." },
+    { text: "Say the verdict sentence for one 4xx and one 5xx from your batch", detail: "'[Code] is 4xx, meaning [what was wrong with my request]' vs '[code] is 5xx, meaning [what likely failed server-side].'" },
+  ]}
+/>
+You've triaged by family before drilling into specifics - the exact habit that makes reading a big,
+noisy batch of API responses fast instead of overwhelming.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "An endpoint returns 200 OK but the response body clearly describes an error (e.g. `{\"error\": \"not found\"}`).",
+      fix: "This is a real, filable API design bug: the status code family should match the actual outcome. A 'not found' condition belongs in the 4xx family (404), not 2xx - returning 200 for an error condition breaks every tool and client that triages by status code first, which per this note is nearly everyone.",
+    },
+    {
+      symptom: "A test suite treats every non-200 response as a hard failure, including legitimate 3xx redirects and 4xx responses the test was specifically checking for (like verifying a 404 on a deleted resource).",
+      fix: "This is a test-design bug, not an API bug: 'not 200' isn't the same as 'broken.' The test should assert the SPECIFIC expected status/family for each scenario (expect 404 here, expect 201 there) rather than a blanket 200-or-fail check.",
+    },
+    {
+      symptom: "The same request sometimes returns 502/503/504 and sometimes succeeds, with no code change on either side.",
+      fix: "This is squarely a 5xx-family signal pointing at infrastructure (a proxy, load balancer, or upstream timing out) rather than application logic - check server/infra logs and retry timing before assuming the endpoint's own code is at fault.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The response's status line itself** — `curl -i` or any tool's summary view; the family is the very first thing to read, before headers or body.
+- **The API's OpenAPI/Swagger spec** — documents which specific codes are EXPECTED for a given endpoint; see [[api-testing-fundamentals/status-codes-and-rest/reading-api-docs-and-swagger]].
+- **Server/infra logs** — for repeated 5xx-family responses, since the client side alone usually can't tell you WHY the server failed.
+- **BuggyAPI (TaskFlight)** — deliberately trigger at least one code from each family (a valid GET, a bad ID, a missing auth header, an unsupported method) and confirm each lands in the family you expect.
+</WhereToCheck>
+
+<WorkedExample title="a monitoring dashboard blind spot found purely from status-code families">
+1. A team's uptime dashboard alerts only on 5xx responses, on the theory that "5xx means our server
+   is broken, that's the real emergency."
+2. A tester notices user complaints about a broken checkout flow, but the dashboard shows zero
+   alerts - all green.
+3. Investigating the actual traffic: the checkout endpoint has been returning `422 Unprocessable
+   Entity` (a 4xx code) on a large fraction of requests, due to a validation rule that started
+   rejecting a previously-valid input format after a recent deploy.
+4. Because 422 is a 4xx, not a 5xx, the alerting rule (5xx-only) never fired - the team's own
+   monitoring philosophy ("4xx = the client's fault, not worth paging on") became a genuine blind
+   spot for a real, self-inflicted regression.
+5. Finding: "Checkout's 4xx rate spiked from ~1% to ~40% starting at [deploy time], invisible to
+   current alerting because it only watches 5xx. Recommend alerting on 4xx-rate spikes for
+   business-critical flows too, not just 5xx." Found by knowing exactly which family a monitoring
+   rule was and wasn't watching.
+</WorkedExample>
+
+<Quiz
+  question="A test run against ten endpoints returns these status codes: 200, 200, 201, 404, 404, 500, 200, 401, 200, 503. A teammate says 'looks mostly fine, only two failures.' Using status-code families, what's the more accurate read?"
+  options={[
+    "The teammate is right - only the two 500/503 responses count as failures, since 4xx codes are just client-side issues and don't count as real problems",
+    "There are 4 non-2xx responses total (two 4xx: 404/404/401 is actually three 4xx, plus two 5xx: 500/503) - a more accurate read is 3 client-error responses and 2 server-error responses, five non-success responses out of ten, not two",
+    "All ten responses should be treated as failures since only 200 (not 201) counts as true success",
+    "The status codes alone can't tell you anything about pass/fail without reading each response body first"
+  ]}
+  answer={1}
+  explain="Counting first digits: 200, 200, 201, 200, 200 are five 2xx-family successes; 404, 404, 401 are three 4xx-family client errors; 500, 503 are two 5xx-family server errors. That's 5 successes and 5 non-2xx responses - not 'only two failures.' This note's whole point is that 4xx codes are just as real a signal as 5xx ones (the worked example above is exactly this mistake, at monitoring scale) - dismissing 4xx as 'not real problems' is precisely the blind spot to avoid. Option one repeats that exact undercount. Option three wrongly excludes 201 from the success family - 201 Created is emphatically a 2xx success. Option four is wrong because the status code alone DOES tell you the family/outcome category, even before reading any body."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The five status code families", back: "1xx Informational, 2xx Success, 3xx Redirection, 4xx Client Error, 5xx Server Error - read the first digit before anything else." },
+    { front: "4xx vs 5xx, the fast triage question", back: "Is this 'I sent something wrong' (4xx - fix the request) or 'the server choked on something that should've worked' (5xx - server/infra-side problem)?" },
+    { front: "The three 2xx codes a tester sees constantly", back: "200 OK (generic success), 201 Created (new resource, often with a Location header), 204 No Content (succeeded, nothing to return)." },
+    { front: "Why '200 with an error in the body' is a real bug", back: "It breaks every tool/client that triages by status-code family first (which is nearly all of them) - the family should always match the actual outcome." },
+    { front: "The monitoring blind spot this note's worked example teaches", back: "Alerting only on 5xx misses real regressions that surface as a 4xx spike (like validation suddenly rejecting valid input) - 4xx rate deserves monitoring too on business-critical flows." },
+  ]}
+/>
+
+<Challenge>
+Using BuggyAPI or a public sandbox, deliberately trigger one response from at least four of the five
+families (skip 1xx if your target doesn't produce one easily) - for example: a normal GET (2xx), a
+request to a nonexistent resource (4xx: 404), a request with bad/missing auth (4xx: 401), and if you
+can find or simulate one, a genuine server error (5xx). Write down the family AND the specific code
+for each, and one sentence on what in the request caused that specific outcome.
+</Challenge>
+
+<AskCommunity prompt="I got a `[code]` back from `[endpoint]` after sending `[brief description of request]`. That puts it in the `[family]` family, which I'd expect to mean `[your read of what's wrong]` - does that match what a `[code]` is actually supposed to signal here, or am I misreading the specific code?">
+The most useful replies confirm or correct your FAMILY-level read first, then refine with the
+specific code's documented meaning - that order tends to produce faster, more accurate answers than
+asking about the specific three-digit code cold.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status", title: "MDN — HTTP response status codes, the full reference", kind: "read" },
+    { href: "https://www.rfc-editor.org/rfc/rfc9110.html#name-status-codes", title: "RFC 9110 — HTTP Semantics, Section 15: Status Codes", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=lIIq09MEFsE", title: "browserless — HTTP Status Codes Explained in 12 minutes (200, 404, 500 & More)", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=lIIq09MEFsE" title="browserless — HTTP Status Codes Explained in 12 minutes (200, 404, 500 & More)" minutes={12} />
+
+<Takeaways
+  points={[
+    "Five families, by first digit: 1xx Informational, 2xx Success, 3xx Redirection, 4xx Client Error, 5xx Server Error - read this before the specific code.",
+    "4xx means fix the request; 5xx means the server/infra choked on something that should have worked - different next steps, not interchangeable 'it failed' signals.",
+    "A 200 with an error described in the body is a real bug - the status-code family should always match the actual outcome, since most tools triage by family first.",
+    "4xx-only complaints are just as real as 5xx ones - monitoring that only watches 5xx can miss serious regressions that surface as a 4xx spike.",
+    "Triage by family first on any batch of responses; drill into the specific three-digit code only after you know which broad category you're dealing with.",
+  ]}
+/>
+
+<Complete xp={10} />

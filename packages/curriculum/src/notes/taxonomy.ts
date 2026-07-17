@@ -1191,10 +1191,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "status-codes-and-rest",
         title: "Status codes & REST",
         topics: [
-          { slug: "status-code-families", title: "2xx / 4xx / 5xx families", planned: true },
-          { slug: "rest-in-plain-words", title: "REST in plain words", planned: true },
-          { slug: "idempotency-and-safety", title: "Idempotency & safety", planned: true },
-          { slug: "reading-api-docs-and-swagger", title: "Reading API docs & Swagger", planned: true },
+          { slug: "status-code-families", title: "2xx / 4xx / 5xx families" },
+          { slug: "rest-in-plain-words", title: "REST in plain words" },
+          { slug: "idempotency-and-safety", title: "Idempotency & safety" },
+          { slug: "reading-api-docs-and-swagger", title: "Reading API docs & Swagger" },
         ],
       },
       {
