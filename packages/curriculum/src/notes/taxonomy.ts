@@ -1471,10 +1471,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "gitlab-ci-and-quality-gates",
         title: "GitLab CI & quality gates",
         topics: [
-          { slug: "stages-jobs-and-runners", title: "Stages, jobs & runners", planned: true },
-          { slug: "gitlab-ci-yml", title: ".gitlab-ci.yml", planned: true },
-          { slug: "quality-gates-coverage-and-sonar", title: "Quality gates (coverage, Sonar)", planned: true },
-          { slug: "blocking-a-merge-on-failure", title: "Blocking a merge on failure", planned: true },
+          { slug: "stages-jobs-and-runners", title: "Stages, jobs & runners" },
+          { slug: "gitlab-ci-yml", title: ".gitlab-ci.yml" },
+          { slug: "quality-gates-coverage-and-sonar", title: "Quality gates (coverage, Sonar)" },
+          { slug: "blocking-a-merge-on-failure", title: "Blocking a merge on failure" },
         ],
       },
       {
