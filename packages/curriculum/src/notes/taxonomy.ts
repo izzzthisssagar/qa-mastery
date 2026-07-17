@@ -1876,10 +1876,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "architecture-styles",
         title: "Architecture styles",
         topics: [
-          { slug: "monolith-vs-microservices", title: "Monolith vs microservices", planned: true },
-          { slug: "layers-and-mvc-gently", title: "Layers & MVC, gently", planned: true },
-          { slug: "apis-as-the-glue", title: "APIs as the glue", planned: true },
-          { slug: "third-party-services-and-webhooks", title: "Third-party services & webhooks", planned: true },
+          { slug: "monolith-vs-microservices", title: "Monolith vs microservices" },
+          { slug: "layers-and-mvc-gently", title: "Layers & MVC, gently" },
+          { slug: "apis-as-the-glue", title: "APIs as the glue" },
+          { slug: "third-party-services-and-webhooks", title: "Third-party services & webhooks" },
         ],
       },
       {

@@ -1,0 +1,312 @@
+---
+title: "Monolith vs microservices"
+summary: "A monolith is one deployable unit holding every feature; microservices split the same features into many small, independently deployable services talking over a network. Same capabilities, completely different blast radius when one part breaks."
+tags: ["system-design-for-testers", "architecture-styles", "track-c"]
+updated: "2026-07-17"
+related:
+  - "system-design-for-testers/the-big-picture/frontend-backend-and-the-database"
+  - "system-design-for-testers/architecture-styles/apis-as-the-glue"
+  - "system-design-for-testers/where-bugs-live-by-layer/infra-and-config-bug-families"
+---
+
+<Hook>
+A deploy goes out. Every feature in the entire app goes down for ninety seconds while it restarts -
+login, checkout, search, all of it, together. Compare that to a different system where the SAME
+kind of deploy takes down only the email-sending feature, and everything else keeps working
+completely normally. Same event (a deploy), wildly different blast radius - and that difference is
+entirely explained by one architectural choice made long before this deploy: monolith, or
+microservices.
+</Hook>
+
+<Callout type="analogy">
+A single Swiss Army knife versus a toolbox of separate tools. The knife has a blade, scissors, a
+corkscrew, and a screwdriver - genuinely different tools, but every one of them is riveted into the
+SAME handle. Damage the hinge and every tool on the knife stops folding out, all at once, together -
+you can't lose just the corkscrew and keep the scissors. A toolbox holding a separate knife,
+separate scissors, and a separate screwdriver has the opposite property: break the scissors and the
+knife in the next compartment is completely unaffected. Same set of capabilities, two totally
+different failure shapes.
+</Callout>
+
+<Term define="A monolith is an architecture where an application's features - user accounts, orders, search, notifications, and more - all live in ONE codebase, and are built and deployed as a SINGLE unit. Microservices split those same features into multiple independently deployable services, each typically owning its own piece of the data and communicating with the others over a network (often HTTP or a message queue) rather than through in-process function calls. Neither approach changes WHAT the application can do - both can implement identical features - but they change the BLAST RADIUS of a failure: in a monolith, a bug or crash in one feature's code can bring down the entire deployed unit (everything shares one process); in microservices, a failure is normally contained to the one service that failed, while the others keep running, though a truly critical shared service failing can still cascade if other services depend on it heavily.">Monolith vs microservices</Term>
+
+## Same features, different blast radius
+
+- **A monolith deploys as one unit.** Every feature ships together, restarts together, and (this is
+  the key part) can CRASH together - an unhandled exception in one obscure feature's code can, in
+  the worst case, take the whole process down with it.
+- **Microservices deploy as many independent units.** The orders service can be redeployed, restart,
+  or even crash without directly restarting the search service - they're genuinely separate
+  processes, often on separate machines.
+- **The tradeoff is real, in both directions.** A monolith is simpler to run (one thing to deploy,
+  one place to look in logs) but couples everything's uptime together. Microservices isolate
+  failures but introduce a NEW failure category that doesn't exist in a monolith at all: network
+  calls between services, each one another thing that can time out, drop, or return a partial result.
+- **Neither is "correct" universally.** Plenty of successful, well-tested systems are monoliths;
+  plenty are microservices; many are somewhere in between (a "modular monolith," or a few big
+  services rather than dozens of tiny ones). What matters for testing is knowing WHICH one you're
+  looking at, because it changes where a given bug's blast radius can possibly reach.
+
+<Callout type="tip">
+When one feature breaking seems to be affecting an UNRELATED feature, that correlation itself is a
+clue about the architecture. In a true microservices setup, two unrelated features breaking together
+usually means they share a critical dependency (a shared database, a shared auth service) - worth
+identifying explicitly, since "unrelated features breaking together" in a monolith might just mean
+"it's a monolith," while in microservices it's a specific, findable shared dependency.
+</Callout>
+
+<Callout type="mistake">
+Assuming microservices automatically means "more resilient" without checking whether the SPECIFIC
+service that broke is one everything else depends on. A microservices system where every request
+must first call a central auth service has effectively re-created a monolith's blast radius for
+JUST that one critical path - the architecture label alone doesn't guarantee failure isolation;
+which services are actually load-bearing does.
+</Callout>
+
+{/* IMAGE: rows of open Swiss Army knives on display in a shop, each knife fully extended showing all its riveted tools (blades, scissors, corkscrews, screwdrivers, files) fanned out from the same central handle, red white and black knife handles visible, mounted on angled display boards */}
+<HotspotImage
+  src="/notes/system-design-for-testers/architecture-styles/monolith-vs-microservices.jpg"
+  alt="Rows of open Swiss Army knives on display, each one fully extended showing all its tools fanned out from a single central handle"
+  credit="Swiss army knives, exposition — Coolcaesar, Wikimedia Commons, CC BY-SA 3.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Swiss_army_knives_-_exposition.jpg"
+  pins={[
+    { x: 25, y: 60, label: "One knife, every tool riveted to the same handle — a monolith", desc: "Blade, scissors, corkscrew, screwdriver - genuinely different capabilities, but every single one shares the same hinge and the same handle. Damage the hinge and EVERY tool on this knife is affected, together, no matter which one you actually needed." },
+    { x: 45, y: 35, label: "A different knife nearby, same idea, separate object", desc: "This knife's hinge failing has zero effect on the FIRST knife's tools - they're physically separate units, the way one microservice's crash doesn't directly restart a completely different, independently-deployed service." },
+    { x: 60, y: 55, label: "One specific tool folded out on a knife — one feature, temporarily exposed", desc: "This corkscrew being extended (in use) doesn't stop this SAME knife's blade from also being available - but it's still all one physical object. A monolith can run several features 'at once' in one process; it just can't fail just one of them in isolation." },
+    { x: 75, y: 45, label: "The whole tray of knives — a fleet of independent units", desc: "Dozens of separate knives on one tray, each independently complete, none sharing a hinge with any other. This is closer to microservices at scale: many independently-deployable units, each capable of failing without necessarily taking its neighbors down." },
+  ]}
+/>
+
+<FlowAnimation
+  title="The same crash, in a monolith vs in microservices - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "A bug: the email-notification code throws an unhandled exception", desc: "Identical bug, identical code mistake, in both scenarios below." },
+    { label: "In a MONOLITH: one shared process", desc: "The exception can crash the single process handling EVERYTHING - login, checkout, search - because they all run inside the same running program." },
+    { label: "In MICROSERVICES: an isolated notification-service", desc: "The exception crashes only the notification-service's own process. Login, checkout, and search run in entirely separate processes and keep working." },
+    { label: "The user experience differs completely", desc: "Monolith: the whole app is down. Microservices: users can still log in and check out; they just don't get an email notification right now." },
+    { label: "Verdict", desc: "Same bug, same root cause - the blast radius was decided by the architecture, long before this specific bug ever existed." },
+  ]}
+/>
+
+The entire difference, reduced to its essence: does one failing piece take the whole system's
+availability with it, or just its own?
+
+<CodePlayground
+  language="python"
+  title="Run it - the same crashing feature, monolith vs microservices blast radius (Python)"
+  code={`class MonolithProcess:
+    """One process. Everything shares its fate."""
+    def __init__(self):
+        self.alive = True
+
+    def handle(self, feature, should_crash=False):
+        if not self.alive:
+            return f"{feature}: UNAVAILABLE (whole process is down)"
+        if should_crash:
+            self.alive = False  # the ENTIRE process dies
+            return f"{feature}: CRASHED - and took the whole process down with it"
+        return f"{feature}: OK"
+
+
+class MicroserviceFleet:
+    """Separate processes. Each feature's fate is its own."""
+    def __init__(self):
+        self.services = {"login": True, "checkout": True, "search": True, "email": True}
+
+    def handle(self, feature, should_crash=False):
+        if not self.services[feature]:
+            return f"{feature}: UNAVAILABLE (this service is down)"
+        if should_crash:
+            self.services[feature] = False  # ONLY this service dies
+            return f"{feature}: CRASHED - but only this service"
+        return f"{feature}: OK"
+
+
+print("--- Monolith: a bug crashes the 'email' feature ---")
+mono = MonolithProcess()
+for feature in ["login", "checkout", "search", "email"]:
+    crash = (feature == "email")
+    print(" ", mono.handle(feature, should_crash=crash))
+print("  Requesting 'login' again, AFTER the email crash:")
+print("   ", mono.handle("login"))
+
+print()
+print("--- Microservices: the SAME bug crashes only the 'email' service ---")
+micro = MicroserviceFleet()
+for feature in ["login", "checkout", "search", "email"]:
+    crash = (feature == "email")
+    print(" ", micro.handle(feature, should_crash=crash))
+print("  Requesting 'login' again, AFTER the email crash:")
+print("   ", micro.handle("login"))`}
+/>
+
+Same blast-radius comparison in Java:
+
+<CodePlayground
+  language="java"
+  title="Run it - the same crashing feature, monolith vs microservices blast radius (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static class MonolithProcess {
+        boolean alive = true;
+
+        String handle(String feature, boolean shouldCrash) {
+            if (!alive) return feature + ": UNAVAILABLE (whole process is down)";
+            if (shouldCrash) {
+                alive = false;
+                return feature + ": CRASHED - and took the whole process down with it";
+            }
+            return feature + ": OK";
+        }
+    }
+
+    static class MicroserviceFleet {
+        Map<String, Boolean> services = new LinkedHashMap<>(Map.of(
+            "login", true, "checkout", true, "search", true, "email", true));
+
+        String handle(String feature, boolean shouldCrash) {
+            if (!services.get(feature)) return feature + ": UNAVAILABLE (this service is down)";
+            if (shouldCrash) {
+                services.put(feature, false);
+                return feature + ": CRASHED - but only this service";
+            }
+            return feature + ": OK";
+        }
+    }
+
+    public static void main(String[] args) {
+        System.out.println("--- Monolith: a bug crashes the 'email' feature ---");
+        MonolithProcess mono = new MonolithProcess();
+        for (String feature : List.of("login", "checkout", "search", "email")) {
+            boolean crash = feature.equals("email");
+            System.out.println("  " + mono.handle(feature, crash));
+        }
+        System.out.println("  Requesting 'login' again, AFTER the email crash:");
+        System.out.println("    " + mono.handle("login", false));
+
+        System.out.println();
+        System.out.println("--- Microservices: the SAME bug crashes only the 'email' service ---");
+        MicroserviceFleet micro = new MicroserviceFleet();
+        for (String feature : List.of("login", "checkout", "search", "email")) {
+            boolean crash = feature.equals("email");
+            System.out.println("  " + micro.handle(feature, crash));
+        }
+        System.out.println("  Requesting 'login' again, AFTER the email crash:");
+        System.out.println("    " + micro.handle("login", false));
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: figure out which architecture a real system uses">
+<StepChecklist
+  steps={[
+    { text: "Pick an app you can test (BuggyShop/BuggyAPI, or ask about a real project's architecture)", detail: "Note how many genuinely different backend URLs/hosts the app's Network tab shows across several different features." },
+    { text: "If you can, deliberately trigger an error in ONE feature (a malformed request, a deliberately broken input)", detail: "Then immediately test a completely unrelated feature. Did it keep working?" },
+    { text: "Ask (or check deployment docs) how the app is actually deployed", detail: "One process/container for everything, or several independently deployable services? This is the ground truth, not a guess from behavior alone." },
+    { text: "Write down which architecture you found evidence for, and what specific observation convinced you", detail: "'Feature A broke and B kept working' is real evidence for isolation; 'everything went down together' is real evidence for a monolith." },
+  ]}
+/>
+You've now used actual observed behavior (not just an assumption) to identify which architecture a
+real system uses - the foundation the rest of this module builds on.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "One feature failing seems to take down several OTHER, apparently unrelated features at the same time.",
+      fix: "In a monolith, this is simply how the architecture works - one shared process means one crash can affect everything. In a system CLAIMED to be microservices, this pattern instead points at a shared critical dependency (a shared database, auth service, or config service) that multiple 'independent' services all rely on - worth identifying by name, since the architecture label alone didn't prevent this coupling.",
+    },
+    {
+      symptom: "A microservices system's overall response time is much worse than expected, even though no single service reports being slow.",
+      fix: "This is the network-call tax microservices introduce: a single user action might now require several services calling each other in sequence, and each hop adds latency even when each service individually responds quickly. Check how many service-to-service calls one user action actually triggers, not just each service's own speed.",
+    },
+    {
+      symptom: "Nobody can say which specific service actually owns a piece of data when investigating a bug.",
+      fix: "This is a real microservices-specific risk: unclear data ownership across services. Worth escalating as a design/documentation gap rather than trying to guess - ask directly which service is the source of truth for the data in question.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Deliberately breaking one feature and testing an unrelated one** — the most direct behavioral evidence for or against failure isolation, more reliable than assuming from the architecture's reputation.
+- **The Network tab, across several different features** — genuinely different backend hosts/ports for different features is real evidence of separate services; everything hitting the same origin is more consistent with a monolith (though not proof by itself).
+- **Deployment/infrastructure documentation or dashboards** — the actual ground truth for how many independently deployable units exist, rather than inferring it from behavior alone.
+- **[[system-design-for-testers/where-bugs-live-by-layer/infra-and-config-bug-families]]** — the deeper catalog of failure types that show up differently depending on which architecture a system uses.
+</WhereToCheck>
+
+<WorkedExample title="an outage that revealed a 'microservices' system was really one big shared dependency">
+1. A team's system is described in its documentation as "microservices" - a dozen independently
+   deployable services, each with its own name and repository.
+2. A routine deploy of the "recommendations" service goes wrong and starts crashing on startup.
+   Within minutes, login, checkout, and search ALSO start failing - not just recommendations.
+3. A tester's first instinct, given the "microservices" label, is to assume this must be a
+   coincidence or a separate, simultaneous issue - but the timing lines up too precisely.
+4. Investigating further: all twelve services share ONE central configuration service, and the
+   recommendations service's crash-on-startup was actually a crash loop hammering that shared
+   config service with retries, exhausting its connection pool - which every OTHER service also
+   depends on to even start handling requests.
+5. Finding: "This system's services are independently deployable but NOT independently available -
+   a crash loop in any one service can exhaust the shared config service's capacity, cascading to
+   all services. This is a monolith's blast radius wearing a microservices architecture's labels."
+   Found by testing the actual failure behavior instead of trusting the architecture's name.
+</WorkedExample>
+
+<Quiz
+  question="A system is described as 'microservices,' with 15 independently deployable services. A tester deliberately breaks one low-traffic service (a 'related products' widget) and finds that checkout, login, and search all immediately fail too. What does this indicate?"
+  options={[
+    "The system must actually be a monolith, since the label 'microservices' was clearly incorrect",
+    "This is normal, expected microservices behavior - all services are supposed to depend on each other",
+    "Regardless of the architecture's label, this specific service (or something it shares with the others) is a critical, load-bearing dependency for the whole system - worth identifying explicitly rather than assuming the microservices label alone guarantees isolation",
+    "The tester made a testing mistake, since breaking one service should never affect others in any correctly-built system"
+  ]}
+  answer={2}
+  explain="This note is explicit that microservices as a LABEL doesn't automatically guarantee failure isolation - what matters is whether the specific service (or a dependency it shares with others) is load-bearing for the whole system. A low-traffic widget bringing down checkout and login points at a shared critical dependency worth naming specifically (a shared auth check, a shared config/database call), not at the architecture being mislabeled or the tester having made an error. Option one over-concludes from one data point - the system might genuinely be independently-deployable services that all happen to share one critical dependency. Option two normalizes a real risk as 'expected' when it's exactly the kind of finding worth escalating. Option four assumes correctness that hasn't been established - this IS the kind of behavior a tester should actively go looking for, not something 'should never' need testing."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Monolith, in one line", back: "Every feature lives in one codebase, deployed as a single unit - simple to run, but a crash in one part can take everything down together." },
+    { front: "Microservices, in one line", back: "Features split into independently deployable services communicating over a network - failures are normally contained to one service, but network calls between services are a new failure category." },
+    { front: "Why 'microservices' as a label doesn't guarantee isolation", back: "If multiple 'independent' services all depend on one shared critical resource (a shared database, auth service, or config service), that shared dependency can still cascade failures across all of them." },
+    { front: "The real, direct test for failure isolation", back: "Deliberately break one feature and immediately test an unrelated one - actual observed behavior, not the architecture's reputation or documentation label." },
+    { front: "The Swiss Army knife analogy", back: "One knife, every tool riveted to the same hinge (monolith: shared fate) vs. many separate knives on a tray, each independently complete (microservices: isolated fate, in principle)." },
+  ]}
+/>
+
+<Challenge>
+Using any app you can test, deliberately trigger a failure in one specific feature (a malformed
+request, an invalid input that should error). Immediately test 2-3 completely unrelated features.
+Write down what happened: did the unrelated features keep working normally, or were they also
+affected? Then, if you can find deployment documentation or ask a developer, compare your
+behavioral finding against how the system is actually described architecturally.
+</Challenge>
+
+<AskCommunity prompt="I broke `[feature A]` on purpose and found that `[feature B, seemingly unrelated]` also stopped working. The system is described as `[monolith / microservices]`. Is this expected for this architecture, or does it point at a specific shared dependency worth naming?">
+Useful replies usually ask what specifically both features have in common (a shared database table,
+a shared auth check, a shared third-party call) - naming the actual shared dependency is more useful
+than debating the architecture label in the abstract.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://martinfowler.com/articles/microservices.html", title: "Martin Fowler — Microservices, the original definitional article", kind: "read" },
+    { href: "https://aws.amazon.com/microservices/", title: "AWS — What are Microservices? (with monolith comparison)", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=6giotJL8bzc", title: "Java Guides — Monolithic vs. Microservices Architecture", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=6giotJL8bzc" title="Java Guides — Monolithic vs. Microservices Architecture" minutes={8} />
+
+<Takeaways
+  points={[
+    "A monolith deploys every feature as one unit; microservices split features into independently deployable services over a network - same capabilities, different blast radius.",
+    "A crash in a monolith can take the whole process down; a crash in microservices is normally contained to the one service that failed.",
+    "Microservices trade failure isolation for a new failure category: network calls between services, each one more thing that can time out or fail.",
+    "The 'microservices' label doesn't guarantee isolation - a shared critical dependency across 'independent' services can still cascade failures like a monolith.",
+    "Test this directly: deliberately break one feature and check whether unrelated features keep working - real behavior beats assuming from a label.",
+  ]}
+/>
+
+<Complete xp={10} />

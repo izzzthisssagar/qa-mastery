@@ -1,0 +1,288 @@
+---
+title: "Layers & MVC, gently"
+summary: "MVC splits an application into three layers with three separate jobs: Model (data + rules), View (what's displayed), Controller (traffic cop between them). Knowing the split means knowing which layer a given bug's fix actually belongs in, instead of patching the nearest visible symptom."
+tags: ["system-design-for-testers", "architecture-styles", "track-c"]
+updated: "2026-07-17"
+related:
+  - "system-design-for-testers/the-big-picture/frontend-backend-and-the-database"
+  - "system-design-for-testers/architecture-styles/monolith-vs-microservices"
+  - "system-design-for-testers/where-bugs-live-by-layer/ui-layer-bug-families"
+---
+
+<Hook>
+A discount isn't applying correctly at checkout. One engineer's fix changes the number displayed on
+the receipt template. Another engineer's fix changes the calculation that decides the discount
+amount in the first place. Only one of those fixes actually solves the bug for every screen that
+shows this total - the other one just hides the wrong number on ONE screen while every other place
+that reads the same data stays wrong. Knowing which layer actually OWNS "what the discount is" is
+the difference between those two fixes.
+</Hook>
+
+<Callout type="analogy">
+A slice of layered cake. Cut straight down through it and you see three distinct bands: a frosting
+layer on top, cake in the middle, and (in some cakes) a filling layer holding it together. Each layer
+has one job and a clean boundary with its neighbors - the frosting doesn't run down and mix into the
+cake crumb, the filling doesn't leak out the sides. If a slice tastes wrong, you can usually tell
+WHICH layer is the problem by tasting each one separately - too-sweet frosting is a different fix
+than a dry cake layer, even though both show up as "this slice tastes off."
+</Callout>
+
+<Term define="MVC (Model-View-Controller) is a way of splitting an application into three layers with distinct responsibilities. The MODEL holds data and the business rules for that data - what a discount actually calculates to, what counts as a valid order - independent of how it's displayed. The VIEW is responsible only for presentation - rendering the model's data as HTML, JSON, or any other output format, without containing business logic itself. The CONTROLLER receives incoming requests, decides which model operations to invoke, and chooses which view to render with the result - it's the traffic cop connecting the other two. The value of this split is that each layer can change independently: redesigning how something LOOKS (the view) shouldn't require touching the calculation that decides the underlying value (the model), and vice versa - and a bug's fix belongs in whichever layer actually owns the fact that's wrong.">MVC (Model-View-Controller)</Term>
+
+## Three layers, three jobs, one clean rule
+
+- **Model — owns the data and the rules.** "What is this order's total, after discounts?" is a
+  MODEL question. The model doesn't know or care whether the answer will be shown in HTML, JSON, or
+  a PDF receipt - it just computes the correct value.
+- **View — owns presentation only.** Given a value the model already computed, the view decides how
+  it LOOKS: formatting, layout, which template. A view should never independently recalculate a
+  business value - it displays what the model already decided.
+- **Controller — owns the traffic.** Receives the request, asks the model to do whatever the
+  request requires, then picks a view to render the result. It's coordination, not calculation or
+  presentation.
+- **The rule that makes this useful: fix the bug where the WRONG FACT lives.** A wrong number
+  showing up on screen might be a model bug (the calculation itself is wrong - EVERY view showing
+  this value is wrong) or a view bug (the model computed correctly, but the display logic formats or
+  reads it incorrectly - only THIS view is wrong). Confusing the two means patching a symptom while
+  the actual wrong fact keeps causing trouble elsewhere.
+
+<Callout type="tip">
+When the same underlying value is wrong on TWO OR MORE different screens (a cart summary and an
+email receipt both show the wrong total), that's strong evidence the bug lives in the model - both
+views are presumably reading the same underlying (wrong) fact. When only ONE screen is wrong while
+others showing the identical value are correct, that's a view-layer bug specific to that one
+presentation.
+</Callout>
+
+<Callout type="mistake">
+"Fixing" a wrong value by patching the template/view that happens to display it, when the underlying
+model calculation is actually wrong. This makes ONE screen look right while every other screen,
+export, email, or API response reading the same underlying (still-wrong) value stays broken - and
+the next screen that reads it will need the identical patch applied all over again.
+</Callout>
+
+{/* IMAGE: a triangular slice of chocolate layer cake with raspberries and chocolate curls on top, viewed from the side showing distinct horizontal layers of dark chocolate cake separated by thin bands of frosting/filling, served on a blue birthday-themed paper plate */}
+<HotspotImage
+  src="/notes/system-design-for-testers/architecture-styles/layers-and-mvc-gently.jpg"
+  alt="A triangular slice of chocolate layer cake with raspberries on top, viewed from the side showing distinct horizontal layers of cake separated by thin bands of frosting"
+  credit="Chocolate raspberry 3-layer cake slice — Famartin, Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:2025-01-26_16_53_04_A_slice_of_chocolate_raspberry_3-layer_cake_in_the_Mountainview_section_of_Ewing_Township,_Mercer_County,_New_Jersey.jpg"
+  pins={[
+    { x: 50, y: 15, label: "The glossy frosting on top — the View", desc: "What you actually see and taste first. It's presentation, applied on top of everything else - changing the frosting's recipe doesn't touch what's baked inside the cake layers beneath it." },
+    { x: 45, y: 45, label: "The dark cake layers themselves — the Model", desc: "The actual substance - what the slice fundamentally IS, independent of how it's frosted or plated. If the cake itself is under-baked, no amount of frosting fixes that; the problem is in this layer, not the one on top." },
+    { x: 55, y: 65, label: "The thin band between layers — the Controller's coordination", desc: "A structural connector holding distinct layers together in the right order, without being the substance of either one - the Controller's job is exactly this: routing and coordinating, not being the data or the display itself." },
+    { x: 60, y: 8, label: "The raspberries and chocolate curls on top — view-only decoration", desc: "Purely presentational additions with no bearing on what's baked into the layers below - the same way a view can add formatting, labels, or styling without changing the underlying model value at all." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One request, through Model, View, and Controller - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "A request arrives: 'show me my cart total'", desc: "The Controller receives this - its job is to figure out what needs to happen next, not to compute anything itself." },
+    { label: "Controller asks the Model to compute the total", desc: "The Model applies the actual business rules - item prices, discounts, tax - and returns one correct value. This is where the real calculation lives." },
+    { label: "Controller picks a View and hands it the Model's result", desc: "Which template renders this - the mobile app's screen, a web page, an email receipt - is the Controller's choice, made AFTER the value is already correct." },
+    { label: "The View renders ONLY presentation", desc: "Formatting the number, choosing a layout, adding currency symbols - all display logic, none of it re-deciding what the total actually is." },
+    { label: "Verdict", desc: "If the number itself is wrong everywhere, the bug is in the Model. If it's wrong on only ONE specific screen, the bug is in that screen's View." },
+  ]}
+/>
+
+The layer-ownership rule reduces to one question: does the SAME underlying value read correctly
+from a second, independent presentation? Here's that check simulated directly:
+
+<CodePlayground
+  language="python"
+  title="Run it - a wrong total: is it the model or one specific view? (Python)"
+  code={`class OrderModel:
+    """Owns the actual calculation - the single source of truth."""
+    def __init__(self, subtotal, discount_percent):
+        self.subtotal = subtotal
+        self.discount_percent = discount_percent
+
+    def total(self):
+        # deliberately WRONG: applies the discount as if it were a flat amount, not a percent
+        return self.subtotal - self.discount_percent  # BUG lives here, in the model
+
+
+def cart_view(model):
+    """One presentation of the model's total."""
+    return f"Cart total: \${model.total():.2f}"
+
+
+def email_receipt_view(model):
+    """A COMPLETELY SEPARATE presentation of the SAME model."""
+    return f"Your order came to \${model.total():.2f} - thank you!"
+
+
+order = OrderModel(subtotal=150.00, discount_percent=20)  # expect $120.00 after a 20% discount
+
+print("Two independent views of the SAME model:")
+print(" ", cart_view(order))
+print(" ", email_receipt_view(order))
+print()
+print(f"Expected total (150 - 20%% off): \$120.00")
+print(f"Actual total from the model:   \${order.total():.2f}")
+print()
+print("BOTH views show the same wrong number - because the bug is in the MODEL, not either view.")
+print("Patching just the cart view's template would leave the email receipt equally wrong.")`}
+/>
+
+The same diagnostic in Java - one shared model, two independent views, one bug source:
+
+<CodePlayground
+  language="java"
+  title="Run it - a wrong total: is it the model or one specific view? (Java)"
+  code={`public class Main {
+    static class OrderModel {
+        double subtotal;
+        double discountPercent;
+
+        OrderModel(double subtotal, double discountPercent) {
+            this.subtotal = subtotal;
+            this.discountPercent = discountPercent;
+        }
+
+        double total() {
+            // deliberately WRONG: applies the discount as if it were a flat amount, not a percent
+            return subtotal - discountPercent; // BUG lives here, in the model
+        }
+    }
+
+    static String cartView(OrderModel model) {
+        return String.format("Cart total: $%.2f", model.total());
+    }
+
+    static String emailReceiptView(OrderModel model) {
+        return String.format("Your order came to $%.2f - thank you!", model.total());
+    }
+
+    public static void main(String[] args) {
+        OrderModel order = new OrderModel(150.00, 20); // expect $120.00 after a 20% discount
+
+        System.out.println("Two independent views of the SAME model:");
+        System.out.println("  " + cartView(order));
+        System.out.println("  " + emailReceiptView(order));
+        System.out.println();
+        System.out.println("Expected total (150 - 20% off): $120.00");
+        System.out.printf("Actual total from the model:   $%.2f%n", order.total());
+        System.out.println();
+        System.out.println("BOTH views show the same wrong number - because the bug is in the MODEL, not either view.");
+        System.out.println("Patching just the cart view's template would leave the email receipt equally wrong.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: localize one wrong value to its actual owning layer">
+<StepChecklist
+  steps={[
+    { text: "Find one calculated value shown in an app you can test (a total, a count, a computed status)", detail: "Note every place in the app this SAME underlying value appears - a summary, a detail page, an export, an email." },
+    { text: "Compare the value across at least two of those places", detail: "If they agree, either both are correct or both share the same underlying bug - either way, the story is consistent." },
+    { text: "If you can find a place where it disagrees, that's your evidence", detail: "Note which place shows the 'different' value - that's the more likely location of a view-specific bug, while the value repeated everywhere else points at the model." },
+    { text: "Write the one-sentence verdict", detail: "'[Value] is wrong on [N of M] surfaces that display it, which points at [a view bug on the odd one out / a model bug, since it's wrong everywhere].'" },
+  ]}
+/>
+You've now used the actual pattern of WHERE a wrong value appears to localize a bug to its real
+owning layer - the single fastest way to avoid patching a symptom instead of a cause.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A value was 'fixed' on one screen, but the exact same wrong value still shows up somewhere else.",
+      fix: "This is the signature of a model bug that got patched at the view layer instead - the underlying calculation is still wrong, and every OTHER presentation reading it inherits the same mistake. Trace the value back to whatever computes it, not just the template that happened to get patched first.",
+    },
+    {
+      symptom: "Two views showing what should be the same value disagree, and both claim to be reading from the model correctly.",
+      fix: "Check whether they're actually calling the SAME model logic, or whether one view has its own separate (and subtly different) calculation duplicated into it - a common anti-pattern where 'view logic' quietly grows into a second, drifting copy of business rules that belong only in the model.",
+    },
+    {
+      symptom: "A bug only reproduces through one specific interface (the web app) but not another (the mobile app, or a public API) for what should be identical underlying data.",
+      fix: "If the underlying model is shared correctly, this points squarely at that one view's own presentation logic - confirm by checking whether the OTHER interface's raw data (via its own API response) shows the correct value even while this one view displays it wrong.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Every surface that displays the same underlying value** — comparing across surfaces is the fastest signal for which layer actually owns a bug.
+- **The raw API response or data payload, separate from any rendered page** — the closest thing to "what the model actually computed," bypassing view-layer formatting entirely.
+- **Whether view code contains its own calculation logic** — a red flag; views should format and display values the model already computed, not recompute them independently.
+- **[[system-design-for-testers/where-bugs-live-by-layer/ui-layer-bug-families]]** — the deeper catalog of bug types that specifically live in the view/presentation layer, versus ones that don't.
+</WhereToCheck>
+
+<WorkedExample title="a 'fixed' discount bug that came back on every screen but one">
+1. A bug report: the cart page shows a $20 discount as a flat subtraction instead of the documented
+   20% off. A developer, working quickly, edits the cart page's template to display the correct
+   number for this one specific test case.
+2. A week later, a NEW bug report: the email order confirmation shows the wrong discount amount -
+   different symptom, same underlying math error.
+3. A tester, having seen the first report, checks: is this the SAME root cause? Comparing the cart
+   page (now "fixed") against the email receipt for an identical order shows the cart page and email
+   DISAGREE - meaning the cart's fix was cosmetic, applied at the view layer, while the actual
+   calculation (the model) is still wrong.
+4. Investigating the model code confirms it: the discount calculation itself still treats the
+   percentage as a flat dollar amount. The cart page's "fix" was a hardcoded display adjustment for
+   ONE order pattern, not a correction to the underlying formula.
+5. Finding: "The discount calculation bug was patched at the view layer (cart page template) instead
+   of the model layer (the actual calculation) - every other view reading the same model, including
+   the email receipt, remains wrong. Recommend fixing OrderModel.total() directly and removing the
+   cart page's display-layer workaround." Found by comparing two independent views of the same
+   underlying value.
+</WorkedExample>
+
+<Quiz
+  question="A discount total is wrong on a cart summary page. A developer fixes it by changing the cart page's display template to subtract the correct amount before rendering. A tester then checks the order confirmation email for the same order and finds it STILL shows the old, wrong total. What does this indicate?"
+  options={[
+    "The email template is a separate bug, unrelated to the cart page fix",
+    "The fix was applied at the View layer (the cart page's template) rather than the Model layer (the actual discount calculation) - the underlying value is still wrong, and every other view reading it, including the email, inherits the same mistake",
+    "Email receipts are generated by a completely different system and can't be expected to match the cart page",
+    "This is expected - cart pages and email receipts commonly show different totals for legitimate business reasons"
+  ]}
+  answer={1}
+  explain="This note's core diagnostic is exactly this pattern: when the same underlying value is wrong on multiple independent surfaces, and 'fixing' one surface doesn't fix the others, the fix was applied at the wrong layer - patching the View's presentation instead of correcting the Model's actual calculation. The email still being wrong is direct evidence the underlying total was never actually corrected. Option one wrongly treats a shared root cause as two unrelated bugs. Option three and four both invent excuses (a different system, an expected discrepancy) without evidence, when the much simpler and better-supported explanation is a view-layer-only fix leaving the model bug intact."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What the Model owns", back: "Data and business rules - the actual calculation of what a value IS, independent of how or where it will be displayed." },
+    { front: "What the View owns", back: "Presentation only - formatting and displaying a value the Model already computed, never recalculating it independently." },
+    { front: "What the Controller owns", back: "Traffic coordination - receiving a request, invoking the right Model operation, and choosing which View renders the result." },
+    { front: "The fastest signal for which layer a bug lives in", back: "Compare the SAME underlying value across two or more independent views. Wrong everywhere = Model bug. Wrong on only one surface = that surface's View bug." },
+    { front: "The layer-cake analogy for MVC", back: "Frosting on top = View (presentation); the cake layers themselves = Model (the actual substance); the band holding layers together = Controller (coordination, not substance)." },
+  ]}
+/>
+
+<Challenge>
+Find one calculated value in an app you can test that appears on at least two different
+surfaces (a summary and a detail view, or a UI and an API response for the same data). Compare them
+for an identical case. If they match, note that as healthy. If you can find or construct a case
+where they DON'T match, write down which layer (Model or View) the mismatch pattern points to, and
+why.
+</Challenge>
+
+<AskCommunity prompt="I found `[value]` is wrong on `[surface A]`. I checked `[surface B]`, which shows the same underlying data, and it's `[correct / also wrong]`. Does this point at a Model-layer bug or a View-layer bug, and what would you check next?">
+Sharing which OTHER surfaces you already checked (and their results) gets a much faster answer than
+describing just the one broken screen - the cross-surface comparison is usually most of the
+diagnosis already.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.mozilla.org/en-US/docs/Glossary/MVC", title: "MDN — MVC (Model-View-Controller), glossary definition", kind: "read" },
+    { href: "https://www.freecodecamp.org/news/model-view-controller-mvc-explained-through-ordering-drinks-at-the-bar977dae5a9bf8/", title: "freeCodeCamp — MVC Explained Through Ordering Drinks at a Bar", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=DUg2SWWK18I", title: "Web Dev Simplified — MVC Explained in 4 Minutes", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=DUg2SWWK18I" title="Web Dev Simplified — MVC Explained in 4 Minutes" minutes={4} />
+
+<Takeaways
+  points={[
+    "MVC splits an app into three layers: Model (data + business rules), View (presentation only), Controller (coordination between them).",
+    "A wrong value's fix belongs in whichever layer actually owns the fact that's wrong - patching the wrong layer just hides the symptom on one surface.",
+    "The same wrong value appearing on multiple independent surfaces is strong evidence the bug lives in the Model, not any one View.",
+    "Views should never independently recalculate a business value - if they do, that duplicated logic is itself a maintenance risk worth flagging.",
+    "The Controller's job is coordination only - receiving requests and routing between Model and View, never computing or displaying anything itself.",
+  ]}
+/>
+
+<Complete xp={10} />
