@@ -1647,6 +1647,54 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   },
   // END relational-databases-engineer-level
   {
+    slug: "nosql-and-modern-data",
+    title: "NoSQL & Modern Data",
+    summary: "Choose and test non-relational data models honestly: document, key-value, graph, and wide-column trade-offs; MongoDB modeling; Redis cache failure modes; and distributed-data behavior.",
+    chapters: [
+      {
+        slug: "the-nosql-landscape",
+        title: "The NoSQL landscape",
+        topics: [
+          { slug: "document-key-value-graph-columnar", title: "Document, key-value, graph & columnar" },
+          { slug: "sql-vs-nosql-choosing-honestly", title: "SQL vs NoSQL: choosing honestly" },
+          { slug: "cap-theorem-in-plain-words", title: "CAP theorem in plain words" },
+          { slug: "where-each-shines", title: "Where each shines" },
+        ],
+      },
+      {
+        slug: "mongodb-hands-on",
+        title: "MongoDB hands-on",
+        topics: [
+          { slug: "documents-and-collections", title: "Documents & collections", planned: true },
+          { slug: "crud-and-query-operators", title: "CRUD & query operators", planned: true },
+          { slug: "embedding-vs-referencing", title: "Embedding vs referencing", planned: true },
+          { slug: "aggregation-pipeline-gently", title: "Aggregation pipeline, gently", planned: true },
+        ],
+      },
+      {
+        slug: "redis-and-caching-bugs",
+        title: "Redis & caching bugs",
+        topics: [
+          { slug: "what-caching-solves", title: "What caching solves", planned: true },
+          { slug: "ttls-and-eviction", title: "TTLs & eviction", planned: true },
+          { slug: "stale-data-bugs-and-cache-invalidation", title: "Stale-data bugs & cache invalidation", planned: true },
+          { slug: "testing-around-a-cache", title: "Testing around a cache", planned: true },
+        ],
+      },
+      {
+        slug: "distributed-data-gently",
+        title: "Distributed data, gently",
+        topics: [
+          { slug: "replication-and-sharding", title: "Replication & sharding", planned: true },
+          { slug: "eventual-consistency-bugs", title: "Eventual-consistency bugs", planned: true },
+          { slug: "backups-and-recovery-checks", title: "Backups & recovery checks", planned: true },
+          { slug: "testing-data-pipelines", title: "Testing data pipelines", planned: true },
+        ],
+      },
+    ],
+  },
+  // END nosql-and-modern-data
+  {
     slug: "foundations",
     title: "QA Foundations",
     summary: "The vocabulary and mental models every tester needs.",

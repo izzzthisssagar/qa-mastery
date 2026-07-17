@@ -1,0 +1,170 @@
+---
+title: "CAP theorem in plain words"
+summary: "Understand what distributed databases can promise during a network partition—and turn consistency and availability language into concrete tests."
+tags: ["cap-theorem", "distributed-systems", "consistency", "availability", "track-d"]
+updated: "2026-07-17"
+related:
+  - "nosql-and-modern-data/distributed-data-gently/eventual-consistency-bugs"
+  - "nosql-and-modern-data/distributed-data-gently/replication-and-sharding"
+  - "relational-databases-engineer-level/transactions-and-concurrency/isolation-levels-and-anomalies"
+---
+
+<Hook>
+CAP is not a menu where an architect circles two letters for all time. It describes a harder moment:
+replicas cannot communicate, yet clients keep asking them to read and write. Does the system reject
+some work to preserve one agreed answer, or accept work that may temporarily disagree?
+</Hook>
+
+<Callout type="analogy">
+Two ticket booths lose their radio link. If both keep selling the last seat, customers get service but
+the records can conflict. If one booth stops selling until contact returns, the seat remains singular
+but some customers are refused. The broken radio—not normal operation—creates the forced choice.
+</Callout>
+
+<Term define="A network partition is a failure in which parts of a distributed system remain running but cannot reliably exchange messages. Under a partition, a system cannot guarantee both linearizable consistency—every operation appears to use one current copy—and availability—every request to a non-failing node receives a non-error response. CAP does not say databases can permanently choose only two of three independent features.">CAP theorem</Term>
+
+## Translate the letters carefully
+
+- **Consistency (C):** in CAP, clients observe behavior equivalent to one up-to-date copy. This is not
+  the same word as constraint consistency in ACID.
+- **Availability (A):** every request reaching a non-failing node eventually receives a non-error
+  response. A timeout or explicit rejection sacrifices this strict property.
+- **Partition tolerance (P):** the system continues with a defined behavior despite lost or delayed
+  messages between groups. Real distributed systems must plan for this condition.
+
+CAP narrows one failure trade-off. It does not settle latency, durability, isolation, read freshness,
+conflict resolution, or what the system does when the network is healthy. Many databases offer
+operation-level consistency choices, so testers need exact read/write settings.
+
+<Callout type="tip">
+Replace “this database is AP” with a scenario: which nodes are separated, which operation is issued,
+which consistency level is configured, what response is allowed, and how convergence is observed.
+</Callout>
+
+<Callout type="mistake">
+Testing CAP by killing a process. A node crash and a communication partition are different failures.
+Use a fault that drops or delays traffic while both sides remain alive and can accept requests.
+</Callout>
+
+<HotspotImage
+  src="/notes/nosql-and-modern-data/the-nosql-landscape/cap-theorem-in-plain-words.jpg"
+  alt="A rural road splitting around a grassy triangular junction"
+  credit="Road junction and grass triangle — Michael Trolove, CC BY-SA 2.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Road_junction_and_grass_triangle_-_geograph.org.uk_-_5324642.jpg"
+  pins={[
+    { x: 50, y: 86, label: "Partition begins", desc: "At the split, two sides can no longer coordinate reliably even though both roads remain usable." },
+    { x: 27, y: 54, label: "Preserve one answer", desc: "One side may reject work it cannot safely coordinate, favoring consistency over strict availability." },
+    { x: 76, y: 54, label: "Keep serving", desc: "Both sides may accept work, favoring availability while allowing temporary divergence." },
+    { x: 51, y: 47, label: "Reconciliation", desc: "When communication returns, divergent writes need a documented merge, winner, or conflict workflow." },
+  ]}
+/>
+
+<FlowAnimation title="Test behavior during a real partition" intervalMs={1800} nodes={[
+  { label: "Establish one value", desc: "Write and read a known record through all relevant client paths before fault injection." },
+  { label: "Partition replicas", desc: "Drop communication while keeping nodes and clients alive." },
+  { label: "Issue conflicting work", desc: "Read and write through both sides with precise timestamps and request IDs." },
+  { label: "Observe the trade", desc: "Record accepted, rejected, timed-out, and stale operations against the promised policy." },
+  { label: "Heal communication", desc: "Restore the link without manually repairing data." },
+  { label: "Verify convergence", desc: "Check final value, conflict handling, durability, and user-visible compensation." },
+]}/>
+
+<CodePlayground language="python" title="Run it — two partition policies (Python)" code={```def write(policy, can_reach_quorum, value):
+    if policy == "consistent" and not can_reach_quorum:
+        return "REJECTED"
+    return f"ACCEPTED:{value}"
+
+for policy in ("consistent", "available"):
+    left = write(policy, False, "seat=Alice")
+    right = write(policy, False, "seat=Bob")
+    print(policy, left, right)
+
+assert write("consistent", False, "x") == "REJECTED"```}/>
+
+<CodePlayground language="java" title="Run it — two partition policies (Java)" code={```public class Main {
+    static String write(String policy, boolean quorum, String value) {
+        if (policy.equals("consistent") && !quorum) return "REJECTED";
+        return "ACCEPTED:" + value;
+    }
+    public static void main(String[] args) {
+        for (String policy : new String[]{"consistent", "available"}) {
+            System.out.println(policy + " " + write(policy, false, "seat=Alice")
+                + " " + write(policy, false, "seat=Bob"));
+        }
+        if (!write("consistent", false, "x").equals("REJECTED")) throw new AssertionError();
+    }
+}```}/>
+
+<FirstTime title="Your mission: specify one partition test">
+<StepChecklist steps={[
+  { text: "Draw nodes and client routes", detail: "Mark exactly which link fails; do not use the vague phrase network issue." },
+  { text: "Write the promised behavior", detail: "For each side, state whether reads and writes return, reject, time out, or may be stale." },
+  { text: "Create a conflicting operation", detail: "Use a business invariant such as one seat, one username, or one inventory unit." },
+  { text: "Define recovery evidence", detail: "Name the expected winner, merge, conflict record, alert, and maximum convergence time." },
+]}/>
+You now have an executable failure contract instead of a CAP label.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Both sides accept a supposedly unique value.", fix: "Confirm whether uniqueness is globally enforceable during the configured availability policy; test compensation or conflict exposure." },
+  { symptom: "Healthy requests stall after the partition heals.", fix: "Inspect leader election, quorum membership, connection pools, and retry storms." },
+  { symptom: "Replicas converge but a client keeps seeing the old value.", fix: "Check read routing, session guarantees, client cache, and consistency-level configuration." },
+  { symptom: "The test kills nodes instead of isolating them.", fix: "Inject directional traffic loss or latency so both sides remain alive and the partition trade-off is observable." },
+]}/>
+
+<WhereToCheck>
+- **Consistency-level configuration** — defaults may differ per operation or client.
+- **Quorum and topology logs** — confirm which side believed it could accept work.
+- **Request IDs and timestamps** — reconstruct operations without trusting wall-clock order alone.
+- **Conflict records or resolution metrics** — silent last-write-wins can hide lost intent.
+- **Client routing and caches** — stale reads may occur above the database.
+</WhereToCheck>
+
+<WorkedExample title="two successful reservations for one seat">
+1. Two regions lose their link while both booking APIs remain healthy.
+2. Each accepts a request for seat 12A under an availability-first policy.
+3. Replication later selects one write by the configured resolver.
+4. Database convergence does not repair the rejected customer's payment and confirmation email.
+5. The complete test therefore checks conflict detection, refund or rebooking, notification, and audit—not only the final row.
+</WorkedExample>
+
+<Quiz question="During a network partition, what trade-off does CAP force?" options={[
+  "Choose SQL or NoSQL",
+  "Guarantee both low latency and low cost",
+  "Either reject some operations to preserve one current view, or remain available while allowing possible divergence",
+  "Disable all replicas permanently"
+]} answer={2} explain="When replicas cannot coordinate, strict consistency and strict availability cannot both be guaranteed. The exact behavior depends on operation and configuration." />
+
+<Flashcards cards={[
+  { front: "Partition", back: "Running parts of a system cannot reliably exchange messages." },
+  { front: "CAP consistency", back: "Operations behave as though there is one current copy; it is not ACID's constraint meaning." },
+  { front: "CAP availability", back: "Every request to a non-failing node eventually receives a non-error response." },
+  { front: "Why not kill a node?", back: "A crash removes a participant; a partition leaves separated participants alive and exposes conflicting choices." },
+  { front: "What happens after healing?", back: "Replicas reconcile, but the product may also need compensation for user-visible conflicting actions." },
+]}/>
+
+<Challenge>
+Design a partition test for a supposedly unique username across two regions. Include the fault direction,
+two concurrent requests, allowed responses, healing, convergence deadline, and user-facing resolution.
+</Challenge>
+
+<AskCommunity prompt="During partition [topology], our [operation] uses [consistency setting]. Side A returns [result] and side B returns [result]. After healing we observe [state]. Does this match the documented contract?">
+Include the engine version, replication topology, client settings, and actual fault injection.
+</AskCommunity>
+
+<Resources links={[
+  { href: "https://www.ibm.com/think/topics/cap-theorem", title: "IBM — CAP theorem", kind: "read" },
+  { href: "https://jepsen.io/consistency", title: "Jepsen — Consistency models", kind: "read" },
+  { href: "https://www.mongodb.com/docs/manual/core/read-isolation-consistency-recency/", title: "MongoDB Manual — Read isolation, consistency, and recency", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=eWMgsk7mpFc" title="What is CAP Theorem? — IBM Technology" minutes={9} />
+
+<Takeaways points={[
+  "CAP describes behavior when communication between running parts is partitioned.",
+  "Its consistency term is not the same as ACID consistency.",
+  "The useful test names topology, operation, configuration, and allowed response.",
+  "A node crash is not a substitute for a partition experiment.",
+  "Database convergence may still require product-level compensation and audit.",
+]}/>
+
+<Complete xp={10} />
