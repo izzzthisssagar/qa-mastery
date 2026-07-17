@@ -1659,6 +1659,265 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
       },
     ],
   },
+  // ── Approved-map modules #22–26 (Curriculum/generator-master-map.py), never
+  // built when the codebase jumped ahead to Test frameworks → Playwright.
+  // Appended here (not inserted at map position) to avoid renumbering any
+  // in-flight session's "repository M<n>" labels — identity is by slug.
+  {
+    slug: "system-design-for-testers",
+    title: "How systems are built — system design for testers",
+    summary: "Testers must know the system they test, not just its screens — the big picture, architecture styles, scaling building blocks, where bugs live by layer, and turning architecture into test strategy.",
+    chapters: [
+      {
+        slug: "the-big-picture",
+        title: "The big picture",
+        topics: [
+          { slug: "frontend-backend-and-the-database", title: "Frontend, backend & the database", planned: true },
+          { slug: "life-of-a-request-end-to-end", title: "Life of a request, end to end", planned: true },
+          { slug: "client-side-vs-server-side-rendering", title: "Client-side vs server-side rendering", planned: true },
+          { slug: "reading-an-architecture-diagram", title: "Reading an architecture diagram", planned: true },
+        ],
+      },
+      {
+        slug: "architecture-styles",
+        title: "Architecture styles",
+        topics: [
+          { slug: "monolith-vs-microservices", title: "Monolith vs microservices", planned: true },
+          { slug: "layers-and-mvc-gently", title: "Layers & MVC, gently", planned: true },
+          { slug: "apis-as-the-glue", title: "APIs as the glue", planned: true },
+          { slug: "third-party-services-and-webhooks", title: "Third-party services & webhooks", planned: true },
+        ],
+      },
+      {
+        slug: "scaling-building-blocks",
+        title: "Scaling building blocks",
+        topics: [
+          { slug: "load-balancers", title: "Load balancers", planned: true },
+          { slug: "caching-redis-and-its-bugs", title: "Caching (Redis) & its bugs", planned: true },
+          { slug: "message-queues-and-async-work", title: "Message queues & async work", planned: true },
+          { slug: "cdns-and-static-assets", title: "CDNs & static assets", planned: true },
+        ],
+      },
+      {
+        slug: "where-bugs-live-by-layer",
+        title: "Where bugs live, layer by layer",
+        topics: [
+          { slug: "ui-layer-bug-families", title: "UI-layer bug families", planned: true },
+          { slug: "api-and-integration-bug-families", title: "API & integration bug families", planned: true },
+          { slug: "data-layer-bug-families", title: "Data-layer bug families", planned: true },
+          { slug: "infra-and-config-bug-families", title: "Infra & config bug families", planned: true },
+        ],
+      },
+      {
+        slug: "from-architecture-to-test-strategy",
+        title: "From architecture to test strategy",
+        topics: [
+          { slug: "what-to-test-at-which-layer", title: "What to test at which layer", planned: true },
+          { slug: "integration-points-are-risk", title: "Integration points = risk", planned: true },
+          { slug: "asking-devs-the-right-questions", title: "Asking devs the right questions", planned: true },
+          { slug: "drawing-the-system-before-testing-it", title: "Drawing the system before testing it", planned: true },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "sql-and-databases-for-testers",
+    title: "SQL & databases for testers",
+    summary: "SQL comes before automation — verifying data is daily manual-QA work. Reading data, verifying the app against the DB, and the tools/habits that keep a tester's queries safe.",
+    chapters: [
+      {
+        slug: "databases-in-plain-words",
+        title: "Databases in plain words",
+        topics: [
+          { slug: "what-a-database-is", title: "What a database is", planned: true },
+          { slug: "tables-rows-and-columns", title: "Tables, rows, columns", planned: true },
+          { slug: "relational-vs-nosql", title: "Relational vs NoSQL", planned: true },
+          { slug: "where-your-apps-data-lives", title: "Where your app's data lives", planned: true },
+        ],
+      },
+      {
+        slug: "reading-data",
+        title: "Reading data",
+        topics: [
+          { slug: "select-and-where", title: "SELECT & WHERE", planned: true },
+          { slug: "sorting-and-limits", title: "Sorting & limits", planned: true },
+          { slug: "joins-gently", title: "JOINs, gently", planned: true },
+          { slug: "aggregates-and-group-by", title: "Aggregates & GROUP BY", planned: true },
+        ],
+      },
+      {
+        slug: "verifying-the-app-against-the-db",
+        title: "Verifying the app against the DB",
+        topics: [
+          { slug: "ui-action-to-db-check", title: "UI action → DB check", planned: true },
+          { slug: "crud-verification", title: "CRUD verification", planned: true },
+          { slug: "finding-data-bugs", title: "Finding data bugs", planned: true },
+          { slug: "test-data-setup-and-cleanup", title: "Test data setup & cleanup", planned: true },
+        ],
+      },
+      {
+        slug: "tools-and-habits",
+        title: "Tools & habits",
+        topics: [
+          { slug: "db-clients", title: "DB clients (DBeaver, TablePlus)", planned: true },
+          { slug: "connecting-safely", title: "Connecting safely", planned: true },
+          { slug: "read-only-discipline", title: "Read-only discipline", planned: true },
+          { slug: "query-snippets-library", title: "Query snippets library", planned: true },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "non-functional-testing-intro",
+    title: "Non-functional testing (intro)",
+    summary: "Beyond does-it-work: performance, security, usability & accessibility, compatibility, and localization — the five non-functional dimensions every tester should recognize even before specializing in one.",
+    chapters: [
+      {
+        slug: "performance",
+        title: "Performance",
+        topics: [
+          { slug: "what-it-measures", title: "What it measures", planned: true },
+          { slug: "load-vs-stress", title: "Load vs stress", planned: true },
+          { slug: "key-metrics", title: "Key metrics", planned: true },
+          { slug: "tools-overview", title: "Tools overview", planned: true },
+        ],
+      },
+      {
+        slug: "security",
+        title: "Security",
+        topics: [
+          { slug: "why-it-matters", title: "Why it matters", planned: true },
+          { slug: "common-risks", title: "Common risks", planned: true },
+          { slug: "a-testers-role", title: "A tester's role", planned: true },
+          { slug: "owasp-preview", title: "OWASP preview", planned: true },
+        ],
+      },
+      {
+        slug: "usability-and-accessibility",
+        title: "Usability & accessibility",
+        topics: [
+          { slug: "usability-testing", title: "Usability testing", planned: true },
+          { slug: "ux-heuristics", title: "UX heuristics", planned: true },
+          { slug: "accessibility-wcag", title: "Accessibility (WCAG)", planned: true },
+          { slug: "assistive-tech", title: "Assistive tech", planned: true },
+        ],
+      },
+      {
+        slug: "compatibility",
+        title: "Compatibility",
+        topics: [
+          { slug: "cross-browser", title: "Cross-browser", planned: true },
+          { slug: "cross-device", title: "Cross-device", planned: true },
+          { slug: "os-and-versions", title: "OS / versions", planned: true },
+          { slug: "responsive-checks", title: "Responsive checks", planned: true },
+        ],
+      },
+      {
+        slug: "localization-and-i18n",
+        title: "Localization & i18n",
+        topics: [
+          { slug: "i18n-vs-l10n-in-plain-words", title: "i18n vs l10n in plain words", planned: true },
+          { slug: "text-expansion-truncation-and-rtl", title: "Text expansion, truncation & RTL", planned: true },
+          { slug: "dates-currencies-and-formats", title: "Dates, currencies & formats", planned: true },
+          { slug: "pseudo-localization-tricks", title: "Pseudo-localization tricks", planned: true },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "automation-foundations",
+    title: "Automation foundations",
+    summary: "Turning manual know-how into code starts before the first script: why and when to automate, the automation pyramid, the tool landscape, and the pitfalls that sink suites early.",
+    chapters: [
+      {
+        slug: "why-and-when-to-automate",
+        title: "Why & when to automate",
+        topics: [
+          { slug: "benefits", title: "Benefits", planned: true },
+          { slug: "what-to-automate", title: "What to automate", planned: true },
+          { slug: "what-not-to-automate", title: "What NOT to", planned: true },
+          { slug: "manual-vs-automated", title: "Manual vs automated", planned: true },
+        ],
+      },
+      {
+        slug: "the-automation-pyramid",
+        title: "The automation pyramid",
+        topics: [
+          { slug: "unit-integration-e2e", title: "Unit / integration / E2E", planned: true },
+          { slug: "ice-cream-cone-anti-pattern", title: "Ice-cream-cone anti-pattern", planned: true },
+          { slug: "balancing-the-suite", title: "Balancing the suite", planned: true },
+          { slug: "roi", title: "ROI", planned: true },
+        ],
+      },
+      {
+        slug: "the-tool-landscape",
+        title: "The tool landscape",
+        topics: [
+          { slug: "selenium", title: "Selenium", planned: true },
+          { slug: "playwright-tool", title: "Playwright", planned: true },
+          { slug: "cypress", title: "Cypress", planned: true },
+          { slug: "choosing-a-tool", title: "Choosing a tool", planned: true },
+        ],
+      },
+      {
+        slug: "pitfalls",
+        title: "Pitfalls",
+        topics: [
+          { slug: "flaky-tests", title: "Flaky tests", planned: true },
+          { slug: "maintenance-cost", title: "Maintenance cost", planned: true },
+          { slug: "over-automation", title: "Over-automation", planned: true },
+          { slug: "false-confidence", title: "False confidence", planned: true },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "selenium-webdriver",
+    title: "Selenium WebDriver",
+    summary: "WebDriver architecture, locators, waits and synchronization, and the actions/navigation API — the hands-on core every Java/Python automation engineer builds on.",
+    chapters: [
+      {
+        slug: "setup-and-architecture",
+        title: "Setup & architecture",
+        topics: [
+          { slug: "webdriver-architecture", title: "WebDriver architecture", planned: true },
+          { slug: "drivers-and-selenium-manager", title: "Drivers & Selenium Manager", planned: true },
+          { slug: "first-script-java", title: "First script (Java)", planned: true },
+          { slug: "first-script-python", title: "First script (Python)", planned: true },
+        ],
+      },
+      {
+        slug: "locators",
+        title: "Locators",
+        topics: [
+          { slug: "id-name-css-xpath", title: "id / name / css / xpath", planned: true },
+          { slug: "locator-strategy", title: "Locator strategy", planned: true },
+          { slug: "relative-locators", title: "Relative locators", planned: true },
+          { slug: "robust-selectors", title: "Robust selectors", planned: true },
+        ],
+      },
+      {
+        slug: "waits-and-sync",
+        title: "Waits & sync",
+        topics: [
+          { slug: "implicit-vs-explicit", title: "Implicit vs explicit", planned: true },
+          { slug: "fluent-waits", title: "Fluent waits", planned: true },
+          { slug: "avoiding-sleeps", title: "Avoiding sleeps", planned: true },
+          { slug: "handling-async", title: "Handling async", planned: true },
+        ],
+      },
+      {
+        slug: "actions-and-navigation",
+        title: "Actions & navigation",
+        topics: [
+          { slug: "clicks-and-input", title: "Clicks & input", planned: true },
+          { slug: "dropdowns-and-alerts", title: "Dropdowns & alerts", planned: true },
+          { slug: "frames-and-windows", title: "Frames & windows", planned: true },
+          { slug: "actions-api", title: "Actions API", planned: true },
+        ],
+      },
+    ],
+  },
 ] as const;
 
 /** Flat list of every (module, chapter, topic) leaf with its URL parts. */
