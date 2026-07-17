@@ -1,0 +1,327 @@
+---
+title: "Negative API tests"
+summary: "A positive test proves the API works when you play along - a negative test proves it doesn't fall over the moment you don't. Sending the wrong shape on purpose and checking for a clean, informative rejection is the entire skill."
+tags: ["api-testing-fundamentals", "finding-api-bugs", "track-c"]
+updated: "2026-07-17"
+related:
+  - "api-testing-fundamentals/finding-api-bugs/testing-without-a-ui"
+  - "api-testing-fundamentals/finding-api-bugs/validating-against-the-spec"
+  - "defect-management/severity-vs-priority/severity"
+---
+
+<Hook>
+A toddler jamming a square block at a round hole isn't failing at the toy - they're finding out,
+piece by piece, exactly which shapes the board accepts and which it doesn't, and the board is
+designed to make that safe to discover. A well-built API should behave the same way: send it the
+wrong shape of request on purpose, and it should refuse cleanly, not jam, crack, or silently accept
+a piece that doesn't belong.
+</Hook>
+
+<Callout type="analogy">
+A shape-sorting toy only has one interesting failure mode worth testing: does a piece that doesn't
+belong actually get rejected by the board, or does it wedge in somewhere it shouldn't? Nobody learns
+anything by only ever placing the round peg in the round hole - the real information comes from
+trying the wrong shape and watching what happens. Negative API testing is the exact same move,
+aimed at a request body instead of a wooden block: send the shape that shouldn't fit, and watch
+whether the API's "board" holds its edges.
+</Callout>
+
+<Term define="A negative test deliberately sends invalid, malformed, missing, or out-of-range input to see whether the system rejects it correctly - a clean 4xx status code with a useful error body - rather than accepting bad data (a validation bug) or crashing (a 500, an availability bug). It's the mirror of a positive test, which only proves the API works when everything sent to it is already correct.">Negative API test</Term>
+
+## What actually counts as a negative test
+
+- **Missing a required field** — the simplest case: send a create request with the required field
+  just left out entirely, and confirm the API notices.
+- **Wrong type** — a string where a number is expected (or the reverse), a number where the spec
+  says a UUID. This category catches a specific, common gap: validators that check a field is
+  PRESENT but never check its shape.
+- **Value outside an enum or a boundary** — a `priority` that isn't one of the documented values, a
+  `per_page` above the documented max. [[api-testing-fundamentals/finding-api-bugs/validating-against-the-spec]]
+  is where the documented boundary itself comes from.
+- **Wrong auth, or none at all** — an expired token, a malformed API key, no `Authorization` header
+  whatsoever. These should fail with `401`/`403`, not a `500` or, worse, a quiet `200`.
+- **Right shape, wrong relationship** — a `project_id` that's a syntactically valid UUID but points
+  at a project that doesn't exist (or belongs to someone else's sandbox). Structurally fine,
+  logically invalid — a different failure mode from a malformed field.
+
+<Callout type="tip">
+A negative test only "passes" when the rejection is BOTH correct (a 4xx, not a 500 or a 200) AND
+informative (an error body a developer could actually act on, not just a bare status code). A 422
+with no explanation of which field was wrong is a partial pass at best — it proves the API defended
+itself, but not that it's pleasant to work against.
+</Callout>
+
+<Callout type="mistake">
+Treating any 4xx as "the negative test passed" without checking it's the RIGHT 4xx. A missing
+required field returning `401 Unauthorized` instead of `422 Unprocessable Entity` is still a bug -
+it tells the caller the wrong thing is wrong, which can send a real integration down a completely
+unrelated debugging path.
+</Callout>
+
+{/* IMAGE: a hand placing a small blue triangular-prism wooden block into a shape-sorting
+    board, with rows of already-seated green/red/blue/yellow triangular prism pieces and round
+    peg holes (some filled, some empty) at the bottom of the board */}
+<HotspotImage
+  src="/notes/api-testing-fundamentals/finding-api-bugs/negative-api-tests.jpg"
+  alt="A hand placing a wooden shape-sorting piece into a board, with rows of already-seated triangular prism pieces and round peg holes"
+  credit="Child engaging in colorful wooden block sorting activity — Wikimedia Commons, CC BY 2.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Child_engaging_in_colorful_wooden_block_sorting_activity.jpg"
+  pins={[
+    { x: 42, y: 58, label: "The hand testing whether this piece fits here", desc: "The deliberate act of trying a shape against a slot it might not belong in — exactly what sending a negative-test payload is: not an accident, a specific attempt to find the board's edges." },
+    { x: 22, y: 70, label: "The row of pieces already correctly seated", desc: "Your positive tests — proof the board accepts what it should. Necessary, but on their own they say nothing about what happens when the wrong shape shows up." },
+    { x: 15, y: 86, label: "The empty round holes — untested shapes", desc: "A hole nobody has tried a piece against yet is a gap in coverage, not a pass. The same is true of a negative-test category (a wrong type, a bad enum value, missing auth) nobody has actually sent yet." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Turning one valid request into a negative test"
+  intervalMs={1700}
+  nodes={[
+    { label: "Start from a known-valid request", desc: "You need a working baseline before you can mutate it — a negative test built from a request that was already broken proves nothing." },
+    { label: "Mutate exactly one thing", desc: "Drop a required field, swap a type, push a value past a documented boundary — one change at a time, so a failure points at a specific cause." },
+    { label: "Send it and read the status code family", desc: "4xx is the hoped-for outcome. A 2xx means bad data was accepted. A 5xx means the API crashed instead of validating." },
+    { label: "Check the error body is actually useful", desc: "Does it say WHICH field was wrong and why, or just 'bad request'? Both are technically a 4xx — only one is a good error contract." },
+    { label: "Repeat for the next category", desc: "Missing field, wrong type, bad enum, boundary violation, bad auth — each is a separate test, not one test done once." },
+  ]}
+/>
+
+The check itself is simple: build a small set of deliberately-wrong payloads and confirm every one
+gets rejected cleanly, not accepted and not crashed on:
+
+<CodePlayground
+  language="python"
+  title="Run it — a validator meeting a batch of negative test cases (Python)"
+  code={`def validate_ticket_create(payload):
+    """A minimal stand-in for a real API's request validator."""
+    errors = []
+    if "project_id" not in payload:
+        errors.append("project_id is required")
+    if "title" not in payload or not isinstance(payload.get("title"), str) or not payload.get("title", "").strip():
+        errors.append("title is required and must be a non-empty string")
+    if "priority" in payload and payload["priority"] not in ("low", "medium", "high", "urgent"):
+        errors.append(f"priority must be one of low/medium/high/urgent, got {payload['priority']!r}")
+    if errors:
+        return 422, {"error": {"code": "validation_failed", "message": "; ".join(errors)}}
+    return 201, {"id": "generated", **payload}
+
+negative_cases = [
+    ("missing required title", {"project_id": "p1"}),
+    ("title is an empty string", {"project_id": "p1", "title": "   "}),
+    ("priority outside the enum", {"project_id": "p1", "title": "Broken toggle", "priority": "urgentish"}),
+    ("title is the wrong type (a number)", {"project_id": "p1", "title": 42}),
+]
+
+print("=== Negative test pass: every one of these SHOULD be rejected ===")
+for name, payload in negative_cases:
+    status, body = validate_ticket_create(payload)
+    verdict = "correctly rejected" if 400 <= status < 500 else "BUG -- did not reject cleanly"
+    print(f"{name}: HTTP {status} -> {verdict}")
+
+print()
+print("A negative test only 'passes' when the API rejects politely (4xx + a")
+print("useful error body) -- a 500 crash or a 200 that quietly accepted bad")
+print("data both count as findings, not passes.")
+
+# === Negative test pass: every one of these SHOULD be rejected ===
+# missing required title: HTTP 422 -> correctly rejected
+# title is an empty string: HTTP 422 -> correctly rejected
+# priority outside the enum: HTTP 422 -> correctly rejected
+# title is the wrong type (a number): HTTP 422 -> correctly rejected
+#
+# A negative test only 'passes' when the API rejects politely (4xx + a
+# useful error body) -- a 500 crash or a 200 that quietly accepted bad
+# data both count as findings, not passes.`}
+/>
+
+Same idea in Java, but this time the validator is deliberately weaker — watch what a shallow
+"is it present" check misses that a real shape check wouldn't:
+
+<CodePlayground
+  language="java"
+  title="Run it — a weaker validator exposes exactly what negative testing is for (Java)"
+  code={`import java.util.LinkedHashMap;
+import java.util.Map;
+
+public class Main {
+    // A NAIVE validator -- checks only that fields are present, not their
+    // shape. Deliberately weaker than the Python playground's validator, to
+    // show what a shallow negative test reveals.
+    static int status;
+
+    static Map<String, Object> validate(Map<String, Object> payload) {
+        StringBuilder errors = new StringBuilder();
+        if (!payload.containsKey("project_id")) errors.append("project_id is required; ");
+        if (!payload.containsKey("title")) errors.append("title is required; ");
+        // No type check on title, no enum check on priority -- that gap is
+        // exactly what this playground exposes.
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (errors.length() > 0) {
+            status = 422;
+            result.put("error", errors.toString().trim());
+        } else {
+            status = 201;
+            result.putAll(payload);
+            result.put("id", "generated");
+        }
+        return result;
+    }
+
+    static Map<String, Object> mapOf(Object... kv) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        for (int i = 0; i < kv.length; i += 2) m.put((String) kv[i], kv[i + 1]);
+        return m;
+    }
+
+    public static void main(String[] args) {
+        Object[][] cases = {
+            {"missing required title", mapOf("project_id", "p1")},
+            {"priority outside the enum", mapOf("project_id", "p1", "title", "Broken toggle", "priority", "urgentish")},
+            {"title is the wrong type (an Integer, not a String)", mapOf("project_id", "p1", "title", 42)},
+        };
+
+        System.out.println("=== Same idea, a weaker validator -- watch what it misses ===");
+        for (Object[] c : cases) {
+            String name = (String) c[0];
+            @SuppressWarnings("unchecked")
+            Map<String, Object> payload = (Map<String, Object>) c[1];
+            validate(payload);
+            String verdict = (status >= 400 && status < 500) ? "correctly rejected" : "BUG -- accepted invalid input";
+            System.out.println(name + ": HTTP " + status + " -> " + verdict);
+        }
+
+        System.out.println();
+        System.out.println("The 'wrong type' and 'bad enum value' cases slipped through as 201s --");
+        System.out.println("this validator only checks presence, never shape. That gap is exactly");
+        System.out.println("what a real negative-testing pass against an API is looking for: does a");
+        System.out.println("field that's present but WRONG still get rejected, or does the API only");
+        System.out.println("bother checking that something was sent at all.");
+    }
+}
+
+/* === Same idea, a weaker validator -- watch what it misses ===
+   missing required title: HTTP 422 -> correctly rejected
+   priority outside the enum: HTTP 201 -> BUG -- accepted invalid input
+   title is the wrong type (an Integer, not a String): HTTP 201 -> BUG -- accepted invalid input
+
+   The 'wrong type' and 'bad enum value' cases slipped through as 201s --
+   this validator only checks presence, never shape. That gap is exactly
+   what a real negative-testing pass against an API is looking for: does a
+   field that's present but WRONG still get rejected, or does the API only
+   bother checking that something was sent at all. */`}
+/>
+
+<FirstTime title="Your mission: negative-test one real write endpoint">
+<StepChecklist
+  steps={[
+    { text: "Find a working POST or PATCH request (BuggyAPI's ticket/project create endpoints work well) and confirm it succeeds once, normally", detail: "This is your known-valid baseline — you'll mutate copies of it, not the API's happy path." },
+    { text: "Drop one required field entirely and resend", detail: "Expect a 4xx with an error naming that field." },
+    { text: "Swap one field's type (send a number where a string is expected, or vice versa)", detail: "This is the category shallow validators miss most often." },
+    { text: "Send a value outside a documented enum or numeric boundary", detail: "e.g. a status value that isn't in the documented list, or a page size above the documented max." },
+    { text: "Remove or corrupt the auth header and resend the original valid body", detail: "Expect 401/403 specifically — not a 500, and not a 200." },
+  ]}
+/>
+Five categories, five deliberate mutations, five checks that each rejection was both correct AND
+informative — that's the whole discipline, repeated per field and per endpoint.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A malformed request returns a 500 Internal Server Error instead of a 4xx.",
+      fix: "This is one of the more serious negative-test findings, not a minor one — it usually means the API crashed while trying to process bad input rather than validating it up front, which is a stability risk beyond just a wrong status code. Report it as its own finding, separate from any 4xx-vs-4xx mismatches nearby.",
+    },
+    {
+      symptom: "The rejection is a 4xx, but the error body doesn't say which field was the problem.",
+      fix: "Still worth flagging, just at lower severity than a wrong status family — see [[defect-management/severity-vs-priority/severity]] for how to reason about that distinction. A vague error body is a real cost to whoever integrates against this API next, even though the validation itself technically worked.",
+    },
+    {
+      symptom: "You're not sure whether an unexpected extra field in the request body (one the spec never asks for) should be rejected or just ignored.",
+      fix: "Check what the spec actually says before assuming either answer is 'the bug' — some APIs intentionally ignore unknown fields for forward compatibility. If the spec is silent, that's itself worth flagging: see [[api-testing-fundamentals/finding-api-bugs/validating-against-the-spec]] for how to word a finding about undocumented behavior.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The API's own OpenAPI/Swagger docs** — required fields, types, and enums are usually documented
+  explicitly; that's your source of truth for what SHOULD be rejected, not a guess.
+- **Postman's pre-request scripts or a simple loop in code** — useful for firing the same mutated
+  payload shape repeatedly without hand-editing the body each time.
+- **The API's documented error schema** (BuggyAPI's is visible at `/api/docs`) — tells you what a
+  "good" error body is supposed to look like, so you can judge whether an actual one meets that bar.
+- **[[api-testing-fundamentals/finding-api-bugs/testing-without-a-ui]]** — the underlying discipline
+  of reading a raw response correctly, which negative testing depends on just as much as positive
+  testing does.
+</WhereToCheck>
+
+<WorkedExample title="a negative test that finds a real severity question">
+1. Testing `PATCH /v1/tickets/{id}` against BuggyAPI, a tester sends `{"priority": "critical"}` —
+   deliberately outside the documented enum (`low`/`medium`/`high`/`urgent`).
+2. The response comes back `200 OK`, and the ticket's `priority` field in the body now reads
+   `"critical"` — the invalid value was accepted and stored, not rejected.
+3. This is a real negative-test finding: the API's own documented contract says `priority` is a
+   closed enum, and this response proves the write path doesn't enforce it, even though the create
+   path (tested separately) does.
+4. Deciding severity: this isn't a crash and isn't a security issue, but it lets a client write data
+   that violates the API's own documented contract, permanently, until manually fixed — most teams
+   would call this a real (if not urgent) severity, not a cosmetic one.
+5. Reported clearly: which endpoint, which field, the exact payload sent, the exact response
+   received, and a pointer to the documented enum it violates — everything the next person needs to
+   confirm the finding without re-deriving it.
+</WorkedExample>
+
+<Quiz
+  question="You send a request with a required field missing, and the API responds with a 401 Unauthorized instead of a 422 Unprocessable Entity. Does this count as the negative test passing?"
+  options={[
+    "Yes — 401 is a 4xx status code, and any 4xx means the negative test passed",
+    "No — a 4xx code alone isn't enough; it needs to be the RIGHT 4xx for what actually went wrong, and 401 (an auth problem) tells the caller the wrong thing is broken versus 422 (a validation problem)",
+    "No, because negative tests can only ever expect a 400 status code specifically",
+    "Yes, as long as the response body is valid JSON"
+  ]}
+  answer={1}
+  explain="The note is explicit that a negative test passes only when the rejection is both correct AND informative — 'any 4xx' isn't the bar. A missing required field is a validation problem, so the correct family of response is a 422 (or 400); getting a 401 instead means the API is reporting the wrong category of failure, which can send whoever's debugging the integration down a completely unrelated path chasing an auth issue that doesn't exist. Option three is too rigid — 422 and 400 are both legitimate depending on the API's conventions, it's the CATEGORY that has to match, not one specific code. Option four checks something real (a parseable body) but doesn't address whether the STATUS CODE correctly describes the problem, which is the actual question here."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What a negative test actually proves", back: "That the API rejects invalid, missing, or out-of-range input cleanly (a 4xx with a useful error) instead of accepting it (a validation bug) or crashing (a 5xx)." },
+    { front: "The five core negative-test categories", back: "Missing required field, wrong type, value outside an enum/boundary, wrong or missing auth, and structurally-valid-but-logically-invalid references." },
+    { front: "Why 'any 4xx' isn't good enough", back: "The status code needs to name the RIGHT category of problem — a validation error reported as a 401 sends debugging effort in the wrong direction." },
+    { front: "The classic gap negative testing exposes", back: "Validators that check a field is PRESENT but never check its shape — wrong types and bad enum values slip straight through and get accepted." },
+    { front: "Why a 500 on bad input is worse than a wrong 4xx", back: "It usually means the API crashed trying to process the bad input rather than validating it up front — a stability finding, not just a wrong-status-code finding." },
+  ]}
+/>
+
+<Challenge>
+Take one write endpoint (POST or PATCH) you can reach without a UI. Build five negative test cases —
+missing required field, wrong type, value outside an enum, missing auth, and one of your own choosing.
+Send all five and record, for each: the status code you got, whether it's the RIGHT category of 4xx
+for what's actually wrong, and whether the error body would actually help someone fix it.
+</Challenge>
+
+<AskCommunity prompt="I sent `[a specific negative-test payload]` to `[endpoint]` and got back `[status + a short description of the response]`. I expected a 4xx naming the bad field specifically. Is the response I got the right category of rejection, or is this worth a finding?">
+The most useful replies will check whether the status code you got actually matches the CATEGORY of
+problem (validation vs. auth vs. not-found) before agreeing anything's wrong — a technically-4xx
+response that names the wrong category is an easy thing to accidentally wave through.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.smartbear.com/learn/automated-testing/negative-testing/", title: "SmartBear — What is Negative Testing?", kind: "read" },
+    { href: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status", title: "MDN — HTTP response status codes reference", kind: "read" },
+    { href: "https://swagger.io/docs/specification/v3_0/describing-request-body/", title: "Swagger/OpenAPI — describing request bodies (what 'required' and enums mean in a spec)", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=bbAjHPCfbss" title="Testers Talk — Postman Tutorial #7: Negative Scenarios Testing" minutes={5} />
+
+<Takeaways
+  points={[
+    "A negative test deliberately sends invalid input to confirm the API rejects it cleanly, not accepts it or crashes on it.",
+    "The core categories: missing required field, wrong type, value outside an enum/boundary, wrong or missing auth, structurally-valid-but-logically-invalid references.",
+    "A pass means BOTH the right status code family (a specific 4xx, not just any 4xx) AND a useful error body naming what was wrong.",
+    "A 500 on bad input is a more serious finding than a wrong 4xx — it usually means the API crashed instead of validating.",
+    "The classic gap this testing style exposes: validators that check presence but never shape, so wrong types and bad enum values slip straight through.",
+  ]}
+/>
+
+<Complete xp={10} />
