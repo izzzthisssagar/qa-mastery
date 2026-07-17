@@ -1,0 +1,100 @@
+---
+title: "Stored Procedures and Functions"
+summary: "Choose the right PostgreSQL routine, test its contract, and catch side effects that a happy-path CALL can hide."
+tags: ["postgresql", "stored-procedures", "functions", "database-testing"]
+updated: "2026-07-17"
+related: ["relational-databases-engineer-level/programmable-objects/triggers", "relational-databases-engineer-level/programmable-objects/testing-procedures", "relational-databases-engineer-level/programmable-objects/error-handling-in-sql"]
+---
+
+<Hook>A routine can pass its demo and still be dangerous. The useful question is not “did it run?” but “did its return value, data changes, errors, and transaction behavior match the contract?”</Hook>
+
+<Callout type="analogy">A <Term define="Named database code with a declared interface and behavior.">routine</Term> is a recipe. A function plates a value you can use in an expression; a procedure runs a kitchen operation through `CALL`. Test ingredients, result, and the state of the kitchen afterward.</Callout>
+
+## Two tools, two contracts
+
+PostgreSQL functions can be used by queries and may return scalar, row, or set values. Procedures are invoked with `CALL`. That syntax difference is only the first test: inspect parameters, privileges, volatility or side effects, failure behavior, and rows changed.
+
+<HotspotImage src="/notes/relational-databases-engineer-level/programmable-objects/stored-procedures-and-functions.jpg" alt="An open cookbook representing reusable database routines" credit="General Foods Kitchen cookbook — Wikimedia Commons, public domain" creditHref="https://commons.wikimedia.org/wiki/File:Generalfoods_kitchen_cookbook.jpg" pins={[
+  { x: 30, y: 32, label: "Inputs", desc: "Parameters are the ingredient list: types, nullability, defaults, and boundary values belong in the contract." },
+  { x: 68, y: 36, label: "Instructions", desc: "The body may read data, mutate it, raise errors, or call other routines; tests observe all promised effects." },
+  { x: 51, y: 78, label: "Outcome", desc: "A return value alone is not enough when tables, notices, or transaction state also change." },
+]}/>
+
+<Callout type="tip">Start from `pg_proc` or `\df+` in `psql`, then test the public contract. Catalog inspection catches a wrong signature before test data muddies the diagnosis.</Callout>
+
+<Callout type="mistake">Calling a routine once with typical data and declaring it tested. Duplicate calls, nulls, boundaries, missing rows, permissions, and concurrent use are where contracts fracture.</Callout>
+
+<FlowAnimation title="Routine test loop" intervalMs={1300} nodes={[
+  { label: "Read contract", desc: "Record invocation, parameter types, output, allowed state changes, and expected SQLSTATEs." },
+  { label: "Arrange", desc: "Create the smallest isolated fixture, including rows the routine must not touch." },
+  { label: "Invoke", desc: "Use SELECT for a function or CALL for a procedure with explicit test values." },
+  { label: "Assert", desc: "Check result, changed-row set, invariants, and durable state after commit or rollback." },
+]}/>
+
+<CodePlayground language="python" title="Model a routine contract" code={`def reserve(stock, requested):
+    if requested <= 0:
+        raise ValueError("requested must be positive")
+    if requested > stock:
+        return {"accepted": False, "remaining": stock}
+    return {"accepted": True, "remaining": stock - requested}
+
+cases = [(5, 2), (5, 5), (5, 6)]
+for stock, requested in cases:
+    result = reserve(stock, requested)
+    assert result["remaining"] >= 0
+    print(stock, requested, result)`}/>
+
+<CodePlayground language="java" title="Check the same routine contract in Java" code={`class Main {
+  static int remaining(int stock, int requested) {
+    if (requested <= 0) throw new IllegalArgumentException("requested must be positive");
+    return requested > stock ? stock : stock - requested;
+  }
+  public static void main(String[] args) {
+    for (int requested : new int[]{2, 5, 6}) {
+      int left = remaining(5, requested);
+      if (left < 0) throw new AssertionError("negative stock");
+      System.out.println(requested + " -> " + left);
+    }
+  }
+}`}/>
+
+<FirstTime title="Test one routine deliberately"><StepChecklist steps={[
+  { text: "Capture the signature", detail: "Record parameter modes, types, defaults, return shape, and invocation syntax." },
+  { text: "Create a disposable fixture", detail: "Include a normal row, boundary row, and unrelated sentinel row." },
+  { text: "Exercise success and refusal", detail: "Assert both outputs and exact rows changed." },
+  { text: "Repeat the call", detail: "Determine whether retry is idempotent, additive, or explicitly rejected." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "CALL succeeds but the application sees no expected value.", fix: "Confirm this is a procedure rather than a function and verify OUT parameters or result handling." },
+  { symptom: "A retry doubles balances or inventory movement.", fix: "Treat idempotency as part of the contract; use a request key or assert that retries are rejected safely." },
+  { symptom: "It works as owner but fails in production.", fix: "Execute as the application role and inspect EXECUTE privilege plus object privileges used by invoker-rights code." },
+]}/>
+
+<WhereToCheck>`pg_proc`, `information_schema.routines`, the routine definition, application-role privileges, affected tables, and the captured SQLSTATE. Compare pre/post rows by primary key—not just counts.</WhereToCheck>
+
+<WorkedExample title="A reservation procedure that protects stock">Arrange stock `5` and an unrelated product. Call `reserve_item` for `2`; assert stock `3` and one reservation. Call with `6`; assert a documented rejection and no change. Retry the first request key; assert no second reservation. The contract now covers value, side effect, refusal, and retry.</WorkedExample>
+
+<Quiz question="What is the strongest assertion after a state-changing procedure?" options={["It returned without an exception", "The expected rows changed and unrelated rows plus invariants did not", "The table row count increased", "The owner role could execute it"]} answer={1} explain="A precise changed-row set plus invariant checks detects both missing and excessive side effects." />
+
+<Flashcards cards={[
+  { front: "Function invocation", back: "Use it in a query or expression, commonly with SELECT." },
+  { front: "Procedure invocation", back: "Use CALL; test its state changes and OUT values if declared." },
+  { front: "Idempotency", back: "Repeating the same request has no additional effect, when the contract promises it." },
+]}/>
+
+<Challenge>Choose one production routine and write a six-column contract: inputs, invocation, output, allowed mutations, SQLSTATEs, and retry behavior. Add one sentinel row assertion.</Challenge>
+
+<AskCommunity prompt="Routine: [signature]. Expected contract: [result and side effects]. Case: [input]. Observed SQLSTATE/state diff: [evidence]. What assumption should I test next?">Include the exact database version and application role; routine behavior without execution context is incomplete evidence.</AskCommunity>
+
+<Resources links={[
+  { href: "https://www.postgresql.org/docs/18/xfunc-sql.html", title: "PostgreSQL 18 — SQL Functions", kind: "read" },
+  { href: "https://www.postgresql.org/docs/current/sql-createprocedure.html", title: "PostgreSQL — CREATE PROCEDURE", kind: "read" },
+  { href: "https://www.postgresql.org/docs/current/sql-call.html", title: "PostgreSQL — CALL", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=qw--VYLpxG4" title="Learn PostgreSQL — Full Course for Beginners" minutes={260} />
+
+<Takeaways points={["Functions participate in queries; procedures are invoked with CALL.", "A routine contract includes outputs, mutations, errors, privileges, and retry behavior.", "Assert exact changed rows and untouched sentinels, not success alone.", "Run tests as the real application role inside isolated fixtures."]}/>
+
+<Complete xp={10} />

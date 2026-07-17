@@ -1,0 +1,112 @@
+---
+title: "Window functions"
+summary: "Window functions calculate ranks, running totals, lagged comparisons, and partition metrics while preserving each source row—provided ordering and frames are explicit."
+tags: ["relational-databases-engineer-level", "sql-mastery", "track-e"]
+updated: "2026-07-17"
+related:
+  - "relational-databases-engineer-level/sql-mastery/subqueries-and-ctes"
+  - "relational-databases-engineer-level/sql-mastery/date-time-and-timezone-handling"
+  - "relational-databases-engineer-level/sql-mastery/set-operators"
+---
+
+<Hook>A running total without deterministic ordering is not analytics. It is a number generator with office clothes.</Hook>
+<Callout type="analogy">Each building window keeps its identity while sharing a façade and floor. Window functions keep every row while calculating across its partition and frame.</Callout>
+<Term define="A window function calculates across rows related to the current row without collapsing them into one aggregate row. The OVER clause defines partitioning, ordering, and optionally the window frame.">window function</Term>
+
+## Partition, order, frame
+
+```sql
+SELECT suite, finished_at, duration_ms,
+       row_number() OVER (PARTITION BY suite ORDER BY finished_at, id) AS run_no,
+       avg(duration_ms) OVER (
+         PARTITION BY suite ORDER BY finished_at, id
+         ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+       ) AS moving_avg
+FROM test_runs;
+```
+
+Window functions run after `WHERE`, grouping, and `HAVING`, so filter their results in an outer query
+or CTE. Add a unique tie-breaker to ordering when row sequence matters.
+
+<Callout type="tip">Spell out `ROWS` frames for running aggregates. The default frame with ordering can include peer rows and surprise anyone who assumed “current physical row.”</Callout>
+<Callout type="mistake">Using `last_value` with the default frame and expecting the last row of the partition. The default usually ends at the current row's last peer.</Callout>
+
+<HotspotImage src="/notes/relational-databases-engineer-level/sql-mastery/window-functions.jpg" alt="Repeating windows across a building facade" credit="Windows on building facade — Philip Halling, Wikimedia Commons, CC BY-SA 2.0" creditHref="https://commons.wikimedia.org/wiki/File:Windows_on_building_facade_-_geograph.org.uk_-_6854299.jpg" pins={[
+  { x: 25, y: 42, label: "Partition", desc: "A floor-like group calculated independently." },
+  { x: 53, y: 55, label: "Current row", desc: "One window remains one output row." },
+  { x: 79, y: 43, label: "Frame", desc: "The neighboring rows visible to this calculation." },
+]}/>
+
+<FlowAnimation title="Make a window deterministic" intervalMs={1500} nodes={[
+  { label: "Choose partition", desc: "Define independent business groups." },
+  { label: "Choose ordering", desc: "Add a unique tie-breaker when sequence matters." },
+  { label: "Choose frame", desc: "ROWS, RANGE, or GROUPS determines visible peers." },
+  { label: "Filter outside", desc: "Use a CTE/subquery for top-N or rank filters." },
+]}/>
+
+<CodePlayground language="python" title="Run it — row numbers within suites (Python)" code={`runs = [("api", 12, 102), ("ui", 8, 201), ("api", 12, 101), ("ui", 9, 202)]
+for suite in sorted({r[0] for r in runs}):
+    ordered = sorted((r for r in runs if r[0] == suite), key=lambda r: (r[1], r[2]))
+    for rank, row in enumerate(ordered, 1): print(suite, row[2], rank)
+
+# api 101 1
+# api 102 2
+# ui 201 1
+# ui 202 2`}/>
+
+<CodePlayground language="java" title="Run it — row numbers within suites (Java)" code={`import java.util.*;
+public class Main {
+  record Run(String suite,int time,int id){}
+  public static void main(String[] args){
+    List<Run> runs=new ArrayList<>(List.of(new Run("api",12,102),new Run("ui",8,201),new Run("api",12,101),new Run("ui",9,202)));
+    runs.sort(Comparator.comparing(Run::suite).thenComparingInt(Run::time).thenComparingInt(Run::id));
+    String last=""; int rank=0;
+    for(Run r:runs){ if(!r.suite().equals(last)){last=r.suite();rank=0;} System.out.println(r.suite()+" "+r.id()+" "+(++rank)); }
+  }
+}
+
+/* api 101 1
+   api 102 2
+   ui 201 1
+   ui 202 2 */`}/>
+
+<FirstTime title="Your mission: rank without collapsing"><StepChecklist steps={[
+  { text: "Create tied timestamps", detail: "Include unique IDs so deterministic order can be tested." },
+  { text: "Add row_number per suite", detail: "Order by timestamp and ID." },
+  { text: "Add a three-row moving average", detail: "Declare ROWS BETWEEN 2 PRECEDING AND CURRENT ROW." },
+  { text: "Filter top two in an outer query", detail: "Window outputs are not available to WHERE in the same SELECT level." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Rank changes between runs.", fix: "Add a stable unique tie-breaker to the window ORDER BY." },
+  { symptom: "Running total jumps across tied rows.", fix: "Inspect the frame; use explicit ROWS if physical row progression is intended." },
+  { symptom: "Window function is rejected in WHERE.", fix: "Calculate it in a CTE or subquery, then filter outside." },
+]}/>
+
+<WhereToCheck>
+- The full `OVER` clause: partition, order, and frame.
+- Tied ordering values in test data.
+- Outer query filters and execution plan sort nodes.
+</WhereToCheck>
+<WorkedExample title="a flaky top-two query">Two runs share `finished_at`. Ordering only by time lets their row numbers swap. Adding `id` makes rank stable, and a regression test repeats the query to prove deterministic output.</WorkedExample>
+<Quiz question="Why can a window function not be referenced in WHERE at the same SELECT level?" options={["It is text", "Window functions are logically evaluated after WHERE", "PostgreSQL lacks WHERE", "Only ranks are forbidden"]} answer={1} explain="PostgreSQL documents window functions as executing after WHERE, grouping, and HAVING." />
+<Flashcards cards={[
+  { front: "PARTITION BY", back: "Splits rows into independent calculation groups." },
+  { front: "ORDER BY in OVER", back: "Defines sequence and peers inside the partition." },
+  { front: "Window frame", back: "The subset of the partition visible to a frame-sensitive calculation." },
+  { front: "row_number vs rank", back: "row_number is unique sequence; rank gives peers the same rank and leaves gaps." },
+]}/>
+<Challenge>Return the slowest two tests per suite and a three-run moving average, including ties and deterministic ordering.</Challenge>
+<AskCommunity prompt="My window result changes around tied values; here is the OVER clause and minimal rows.">Show the unique key and expected peer behavior.</AskCommunity>
+<Resources links={[
+  { href: "https://www.postgresql.org/docs/current/tutorial-window.html", title: "PostgreSQL — window functions tutorial", kind: "read" },
+  { href: "https://www.postgresql.org/docs/current/functions-window.html", title: "PostgreSQL — window function reference", kind: "read" },
+]}/>
+<Video href="https://www.youtube.com/watch?v=HXV3zeQKqGY" title="freeCodeCamp — SQL tutorial, full database course" minutes={261} />
+<Takeaways points={[
+  "Window functions preserve rows while calculating across related rows.",
+  "Deterministic ordering needs a unique tie-breaker.",
+  "Explicit frames prevent peer-related surprises.",
+  "Filter window outputs in an outer query or CTE.",
+]}/>
+<Complete xp={10} />

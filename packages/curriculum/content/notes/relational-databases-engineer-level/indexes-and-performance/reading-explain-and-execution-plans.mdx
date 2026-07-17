@@ -1,0 +1,131 @@
+---
+title: "Reading EXPLAIN & execution plans"
+summary: "Execution plans are trees of estimates and measured work, not oracle poems. Learn PostgreSQL scan and join nodes, rows-times-loops arithmetic, BUFFERS, and safe EXPLAIN ANALYZE use."
+tags: ["relational-databases-engineer-level", "indexes-and-performance", "track-e"]
+updated: "2026-07-17"
+related:
+  - "relational-databases-engineer-level/indexes-and-performance/how-an-index-works"
+  - "relational-databases-engineer-level/indexes-and-performance/query-tuning-and-over-indexing-writes"
+  - "relational-databases-engineer-level/transactions-and-concurrency/acid-properly"
+---
+
+<Hook>A plan is a tree, not a horoscope. If your diagnosis starts with "Seq Scan bad" and ends before actual rows, loops, and buffers, the database deserves a second opinion.</Hook>
+
+<Callout type="analogy">A transit map shows how passengers flow through stations. PostgreSQL plan leaves produce rows, parent nodes transform them, and repeated loops multiply work—the crowded interchange matters more than the color of one line.</Callout>
+
+<Term define="EXPLAIN displays the plan PostgreSQL's optimizer chooses, including estimated cost and row counts. EXPLAIN ANALYZE actually executes the statement and adds measured rows, loops, and timing; BUFFERS reports shared, local, and temporary block activity, and machine-readable JSON is preferable for automation.">execution plan</Term>
+
+## Read bottom-up, then test the estimates
+
+- Leaf scans produce raw rows: sequential, index, bitmap, or other sources.
+- Parent nodes join, sort, aggregate, limit, and filter their children.
+- Estimated `cost=startup..total` uses planner cost units, not milliseconds.
+- Compare estimated rows with actual rows at each node; large divergence often misleads later choices.
+- Multiply per-loop actual rows/time by loops to understand repeated work.
+- `EXPLAIN ANALYZE` executes writes too; wrap experiments in a transaction and roll back when appropriate.
+
+<Callout type="tip">For automated comparison use `FORMAT JSON`; text is compact for humans but brittle for parsers.</Callout>
+
+<Callout type="mistake">Comparing elapsed time from one warm-cache run. Plans need row estimates, loop counts, and buffers across representative parameters and repeated conditions.</Callout>
+
+<HotspotImage src="/notes/relational-databases-engineer-level/indexes-and-performance/reading-explain-and-execution-plans.jpg" alt="A dense geographic map of London rail lines and stations" credit="London Underground full geographic map — Ed g2s and DavidCane, Wikimedia Commons, CC BY-SA 3.0" creditHref="https://commons.wikimedia.org/wiki/File:London_Underground_full_map.png" pins={[
+  { x: 22, y: 44, label: "Leaf routes", desc: "Scan nodes introduce rows from tables and indexes into the plan tree." },
+  { x: 51, y: 50, label: "Busy interchange", desc: "Join and aggregate nodes combine child flows; row-estimate mistakes amplify here." },
+  { x: 80, y: 65, label: "Repeated branch", desc: "Loops can make a cheap-looking inner node execute thousands of times." },
+]}/>
+
+<FlowAnimation title="A disciplined plan read" intervalMs={1500} nodes={[
+  { label: "Confirm query and parameters", desc: "Different values can produce different cardinalities and plans." },
+  { label: "Start at leaf scans", desc: "Identify access method, conditions, filters, and rows removed." },
+  { label: "Walk upward through the tree", desc: "Track rows through joins, sorts, aggregates, and limits." },
+  { label: "Compare estimates with actuals", desc: "Find the earliest major cardinality error rather than blaming the final node." },
+  { label: "Read loops and buffers", desc: "Quantify repeated work and I/O before proposing a change." },
+]}/>
+
+<CodePlayground language="python" title="Run it — find plan-estimate errors (Python)" code={`nodes = [
+    {"name": "Index Scan tickets_status_idx", "estimated": 10, "actual": 950, "loops": 1},
+    {"name": "Nested Loop", "estimated": 10, "actual": 950, "loops": 1},
+    {"name": "Index Scan users_pkey", "estimated": 1, "actual": 1, "loops": 950},
+]
+for node in nodes:
+    ratio = node["actual"] / max(node["estimated"], 1)
+    total_rows = node["actual"] * node["loops"]
+    print(f"{node['name']}: estimate error {ratio:.0f}x, total rows across loops {total_rows}")
+
+# Index Scan tickets_status_idx: estimate error 95x, total rows across loops 950
+# Nested Loop: estimate error 95x, total rows across loops 950
+# Index Scan users_pkey: estimate error 1x, total rows across loops 950`}/>
+
+<CodePlayground language="java" title="Run it — calculate repeated node work (Java)" code={`import java.util.*;
+public class Main {
+  record Node(String name, long estimated, long actual, long loops) {}
+  public static void main(String[] args) {
+    var nodes = List.of(new Node("Bitmap Heap Scan", 100, 120, 1), new Node("Index Scan inner", 1, 1, 120));
+    for (Node n : nodes) {
+      double ratio = (double)n.actual() / Math.max(n.estimated(), 1);
+      System.out.printf("%s: %.1fx estimate, %d total rows%n", n.name(), ratio, n.actual() * n.loops());
+    }
+  }
+}
+/* Bitmap Heap Scan: 1.2x estimate, 120 total rows
+   Index Scan inner: 1.0x estimate, 120 total rows */`}/>
+
+<FirstTime title="Your mission: narrate one plan tree">
+<StepChecklist steps={[
+  { text: "Capture EXPLAIN ANALYZE BUFFERS FORMAT JSON", detail: "Use a read-only representative query first." },
+  { text: "Draw the tree bottom-up", detail: "Name scans, joins, filters, sorts, and aggregates." },
+  { text: "Mark first estimate divergence", detail: "Compute actual/estimated row ratio at every node." },
+  { text: "Account for loops and buffers", detail: "State total repeated work and cache/disk evidence." },
+]}/>
+You can now explain the plan without worshipping its indentation.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Actual rows differ wildly from estimates.", fix: "Refresh statistics and investigate skew, correlation, expressions, or cross-column dependencies before adding an index." },
+  { symptom: "EXPLAIN ANALYZE changed data.", fix: "It executes the statement; test writes inside BEGIN/ROLLBACK or use plain EXPLAIN when execution is unsafe." },
+  { symptom: "A node time looks tiny but query is slow.", fix: "Multiply by loops and inspect child work and buffers; per-loop values can hide aggregate cost." },
+]}/>
+
+<WhereToCheck>
+- Scan `Index Cond`, `Filter`, and rows removed.
+- Estimated versus actual rows at the earliest divergence.
+- Loops, buffer hits/reads, temp blocks, and spills.
+- Planning and execution settings/statistics for reproducibility.
+</WhereToCheck>
+
+<WorkedExample title="the nested loop blamed for somebody else's estimate">
+1. Statistics estimate 10 open tickets for a project; actual data has 950.
+2. The planner chooses a nested loop expecting ten user lookups.
+3. The inner lookup runs 950 times and dominates buffers.
+4. Replacing the join blindly treats the symptom.
+5. Correcting stale/skewed cardinality information changes the upstream estimate and lets the planner compare joins honestly.
+</WorkedExample>
+
+<Quiz question="What does EXPLAIN ANALYZE do that plain EXPLAIN does not?" options={["Only changes output color", "Actually executes the statement and reports measured rows/timing", "Always creates an index", "Returns result rows to the client"]} answer={1} explain="ANALYZE runs the statement to collect actual execution statistics; data-modifying side effects therefore happen unless rolled back." />
+
+<Flashcards cards={[
+  { front: "Planner cost", back: "Arbitrary comparative cost units, not elapsed milliseconds." },
+  { front: "Cardinality error", back: "Difference between estimated and actual row counts; it can distort downstream plan choices." },
+  { front: "BUFFERS hit vs read", back: "Hit avoided a read because block was cached; read required fetching a block." },
+]}/>
+
+<Challenge>Find one plan with at least three nodes. Calculate actual/estimated ratio and rows times loops for each, then identify the first node where the plan's model diverges from reality.</Challenge>
+
+<AskCommunity prompt="Plan JSON for `[query]` first diverges at `[node]`: estimated `[n]`, actual `[n]`, loops `[n]`, buffers `[values]`. Which statistic or predicate assumption should I test next?">Share representative parameters and data distribution.</AskCommunity>
+
+<Resources links={[
+  { href: "https://www.postgresql.org/docs/current/using-explain.html", title: "PostgreSQL — Using EXPLAIN", kind: "read" },
+  { href: "https://www.postgresql.org/docs/current/sql-explain.html", title: "PostgreSQL — EXPLAIN command", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=-qNSXK7s7_w" title="Database Indexing Explained with PostgreSQL — Hussein Nasser" minutes={18} />
+
+<Takeaways points={[
+  "Plans are trees: scans produce rows and parent nodes transform them.",
+  "Estimated cost units are not milliseconds.",
+  "Compare estimated and actual cardinality before blaming a node type.",
+  "Multiply actual work by loops and inspect buffers.",
+  "EXPLAIN ANALYZE executes statements, including writes.",
+]}/>
+
+<Complete xp={10} />

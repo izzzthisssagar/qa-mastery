@@ -1,0 +1,96 @@
+---
+title: "Finding Orphans and Duplicates"
+summary: "Detect, explain, and safely repair orphaned relationships and duplicate business identities at scale."
+tags: ["sql", "data-quality", "duplicates", "referential-integrity"]
+updated: "2026-07-17"
+related: ["relational-databases-engineer-level/data-integrity-at-scale/constraints-and-referential-integrity", "relational-databases-engineer-level/data-integrity-at-scale/migrations-and-etl-verification", "relational-databases-engineer-level/data-integrity-at-scale/auditing-data-changes"]
+---
+
+<Hook>Finding bad rows is easy; proving which row is canonical and why the damage happened is the engineering work. A cleanup without a prevention step is tomorrow’s incident queue.</Hook>
+
+<Callout type="analogy">Duplicate records are look-alike buildings on one block: appearance is not identity. You need addresses, governed keys, and provenance. Orphans are records whose claimed address has no valid parent under the declared relationship.</Callout>
+
+## Detect without inventing truth
+
+Find <Term define="A row whose applicable child reference has no matching eligible parent.">orphans</Term> with `NOT EXISTS` or a left anti-join, respecting nullable relationships. Find duplicates by the normalized business key—not blindly by every column. Use `GROUP BY ... HAVING count(*) > 1` for groups and `row_number()` for deterministic review candidates.
+
+<HotspotImage src="/notes/relational-databases-engineer-level/data-integrity-at-scale/finding-orphans-and-duplicates.jpg" alt="Similar brick buildings illustrating why appearance alone cannot establish record identity" credit="Photo: Paul Sableman — Wikimedia Commons, CC BY 2.0" creditHref="https://commons.wikimedia.org/wiki/File:Identical_Twins_(30029275635).jpg" pins={[
+  { x: 34, y: 45, label: "Similar appearance", desc: "Two records may share attributes without representing the same entity, just as neighboring buildings can look alike." },
+  { x: 66, y: 45, label: "Governed identity", desc: "A stable key and provenance determine whether rows are duplicates or legitimate siblings." },
+  { x: 50, y: 76, label: "Decision evidence", desc: "Timestamps, source priority, references, and business rules choose a survivor safely." },
+]}/>
+
+<Callout type="tip">Materialize candidate keys and counts before repair. Review a stratified sample: largest groups, oldest groups, newest groups, and groups spanning source systems.</Callout>
+
+<Callout type="mistake">Deleting every row with `row_number() > 1` before repointing children. A “duplicate” may own references, history, or distinct attributes that must be merged.</Callout>
+
+<FlowAnimation title="From anomaly to prevention" intervalMs={1250} nodes={[
+  { label: "Define identity", desc: "Write the relationship or normalized business-key rule." },
+  { label: "Detect", desc: "Produce stable candidate keys, counts, and provenance without mutating data." },
+  { label: "Reconcile", desc: "Choose survivor, merge attributes, repoint children, and archive evidence." },
+  { label: "Prevent", desc: "Add a constraint, ingestion rule, and recurring monitor." },
+]}/>
+
+<CodePlayground language="python" title="Group duplicate candidates" code={`emails = ["A@EXAMPLE.COM ", "a@example.com", "b@example.com"]
+counts = {}
+for email in emails:
+    key = email.strip().lower()
+    counts[key] = counts.get(key, 0) + 1
+
+duplicates = {key: count for key, count in counts.items() if count > 1}
+assert duplicates == {"a@example.com": 2}
+print(duplicates)`}/>
+
+<CodePlayground language="java" title="Group the same candidates in Java" code={`import java.util.*;
+class Main {
+  public static void main(String[] args) {
+    List<String> emails = List.of("A@EXAMPLE.COM ", "a@example.com", "b@example.com");
+    Map<String, Integer> counts = new TreeMap<>();
+    for (String email : emails) {
+      String key = email.trim().toLowerCase(Locale.ROOT);
+      counts.put(key, counts.getOrDefault(key, 0) + 1);
+    }
+    counts.forEach((key, count) -> { if (count > 1) System.out.println(key + " -> " + count); });
+  }
+}`}/>
+
+<FirstTime title="Investigate one anomaly class"><StepChecklist steps={[
+  { text: "Define the rule", detail: "State nullable relationship semantics or exact normalization used for identity." },
+  { text: "Count and sample", detail: "Keep detection read-only and preserve candidate keys for reruns." },
+  { text: "Trace references", detail: "Identify children, history, and source ownership before selecting survivors." },
+  { text: "Repair then prevent", detail: "Repoint, merge, validate totals, and add enforceable protection." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "An orphan query flags optional relationships.", fix: "Exclude null child keys when null means no relationship; do not confuse absence with a broken reference." },
+  { symptom: "Duplicate counts change between runs.", fix: "Run on a consistent snapshot or staging copy and store candidate keys with the extraction boundary." },
+  { symptom: "Cleanup loses history.", fix: "Repoint dependent rows and preserve an old-to-survivor mapping before deleting or archiving candidates." },
+]}/>
+
+<WhereToCheck>Inspect declared keys and constraints, source-system IDs, child reference counts, created/updated timestamps, audit history, ingestion normalization, and the query plan for anti-joins or grouping.</WhereToCheck>
+
+<WorkedExample title="Reconciling duplicate customer emails">Normalize email with the approved rule and find a two-row group. Choose the verified CRM record as survivor, merge non-conflicting attributes, repoint orders in one transaction, store loser-to-survivor mapping, assert order totals unchanged, then add a matching unique expression or generated-key constraint.</WorkedExample>
+
+<Quiz question="What must happen before deleting a duplicate candidate?" options={["Sort it alphabetically", "Prove the identity rule, choose a survivor, and account for references/history", "Disable all constraints", "Trust the newest row"]} answer={1} explain="Similarity is only a candidate signal; reconciliation needs governed identity and dependency evidence." />
+
+<Flashcards cards={[
+  { front: "Orphan", back: "A non-null child reference with no matching eligible parent." },
+  { front: "Business-key duplicate", back: "Multiple rows claiming one governed identity after approved normalization." },
+  { front: "Survivor mapping", back: "Durable old-key to canonical-key evidence used to repoint and audit cleanup." },
+]}/>
+
+<Challenge>Write one orphan query and one duplicate-candidate query for your schema. Add null semantics, survivor policy, dependency checks, reconciliation invariants, and prevention DDL.</Challenge>
+
+<AskCommunity prompt="Identity/relationship rule: [definition]. Candidate count: [count]. References: [evidence]. Survivor policy: [rule]. Invariant after repair: [check]. What could this merge erase?">Share the normalization rule explicitly; “same email” is not precise enough.</AskCommunity>
+
+<Resources links={[
+  { href: "https://www.postgresql.org/docs/current/functions-subquery.html", title: "PostgreSQL — Subquery Expressions and EXISTS", kind: "read" },
+  { href: "https://www.postgresql.org/docs/current/functions-window.html", title: "PostgreSQL — Window Functions", kind: "read" },
+  { href: "https://www.postgresql.org/docs/current/ddl-constraints.html", title: "PostgreSQL — Constraints", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=qw--VYLpxG4" title="Learn PostgreSQL — Full Course for Beginners" minutes={260} />
+
+<Takeaways points={["Define identity and null semantics before labeling anomalies.", "Detection should be repeatable, read-only, and keyed.", "Repoint dependencies and preserve survivor mappings before deletion.", "Every repair needs invariant checks plus a prevention mechanism."]}/>
+
+<Complete xp={10} />

@@ -1,0 +1,125 @@
+---
+title: "Query tuning & over-indexing writes"
+summary: "Indexes accelerate chosen reads by taxing every relevant write. Tune predicates, cardinality, and access paths first; then prove each index earns its storage, WAL, cache, and maintenance cost."
+tags: ["relational-databases-engineer-level", "indexes-and-performance", "track-e"]
+updated: "2026-07-17"
+related:
+  - "relational-databases-engineer-level/indexes-and-performance/how-an-index-works"
+  - "relational-databases-engineer-level/indexes-and-performance/reading-explain-and-execution-plans"
+  - "relational-databases-engineer-level/transactions-and-concurrency/testing-concurrent-behavior"
+---
+
+<Hook>Adding indexes until reads stop complaining is like giving every document its own filing cabinet. Retrieval gets theatrical; inserts need a moving company.</Hook>
+
+<Callout type="analogy">Each filing drawer is another ordered copy that must be updated when a record changes. Useful indexes pay rent through frequent, important reads; redundant ones consume space, cache, WAL, vacuum effort, and write latency.</Callout>
+
+<Term define="Query tuning is the evidence-driven process of reducing database work while preserving results, using query shape, statistics, schema, indexes, and configuration. Over-indexing occurs when index maintenance and storage costs exceed the read benefit those indexes provide.">query tuning and over-indexing</Term>
+
+## Tune the work, not the stopwatch
+
+- Return only needed rows and columns; remove accidental fan-out before indexing it.
+- Make predicates sargable and align composite B-tree order with real equality/range/order patterns.
+- PostgreSQL multicolumn B-tree efficiency generally begins with leading-column constraints, though skip scan can help some later-column cases.
+- Every index adds work to INSERT/DELETE and to UPDATE when indexed values or tuple references change.
+- Similar indexes can overlap; usage counts alone are not proof an index is safe to drop.
+
+<Callout type="tip">Measure a balanced workload: representative reads plus write throughput, WAL, table/index size, and buffer behavior before and after.</Callout>
+
+<Callout type="mistake">Creating one index per WHERE column. Query predicates interact; four single-column indexes are not automatically equivalent to one correctly ordered composite index, and combining them also has cost.</Callout>
+
+<HotspotImage src="/notes/relational-databases-engineer-level/indexes-and-performance/query-tuning-and-over-indexing-writes.jpg" alt="A wall of metal office filing cabinet drawers" credit="Filing Cabinets — MarkBuckawicki, Wikimedia Commons, CC0 1.0" creditHref="https://commons.wikimedia.org/wiki/File:Filing_Cabinets.jpg" pins={[
+  { x: 21, y: 30, label: "One maintained order", desc: "Each index is another structure writes must keep consistent." },
+  { x: 53, y: 51, label: "Overlapping drawers", desc: "Near-duplicate indexes consume space and cache while serving similar queries." },
+  { x: 82, y: 72, label: "Write amplification", desc: "One row change can become several index-page and WAL changes." },
+]}/>
+
+<FlowAnimation title="Evidence-driven tuning loop" intervalMs={1500} nodes={[
+  { label: "Define the slow workload", desc: "Query, parameters, concurrency, result size, and latency target." },
+  { label: "Inspect plan and cardinality", desc: "Find excess rows, repeated loops, sorts, spills, and estimate errors." },
+  { label: "Reduce logical work", desc: "Fix fan-out, predicates, projections, and pagination before adding structures." },
+  { label: "Design the smallest useful index", desc: "Match equality, range, ordering, and required coverage deliberately." },
+  { label: "Re-measure reads and writes", desc: "Keep the change only when total workload economics improve." },
+]}/>
+
+<CodePlayground language="python" title="Run it — calculate index write amplification (Python)" code={`workload = {"inserts": 1000, "updates_indexed_key": 300, "deletes": 100}
+for index_count in (1, 5, 12):
+    maintenance = index_count * sum(workload.values())
+    print(f"{index_count:2} indexes -> about {maintenance:5} index maintenance events")
+
+#  1 indexes -> about  1400 index maintenance events
+#  5 indexes -> about  7000 index maintenance events
+# 12 indexes -> about 16800 index maintenance events`}/>
+
+<CodePlayground language="java" title="Run it — rank indexes by workload value (Java)" code={`import java.util.*;
+public class Main {
+  record IndexValue(String name, int readsHelped, int writeEvents, int sizeMb) {}
+  public static void main(String[] args) {
+    var indexes = List.of(new IndexValue("tickets_project_status", 9000, 1400, 80), new IndexValue("tickets_status", 40, 1400, 55));
+    for (var i : indexes) {
+      double score = (double)i.readsHelped() / (i.writeEvents() + i.sizeMb());
+      System.out.printf("%s value score: %.2f%n", i.name(), score);
+    }
+  }
+}
+/* tickets_project_status value score: 6.08
+   tickets_status value score: 0.03 */`}/>
+
+<FirstTime title="Your mission: make one index earn its keep">
+<StepChecklist steps={[
+  { text: "Capture a representative slow plan", detail: "Keep parameters, rows, loops, buffers, and result size." },
+  { text: "Propose one minimal index", detail: "Explain column order from predicates and ordering." },
+  { text: "Benchmark read and write workloads", detail: "Include insert/update/delete latency and WAL/size." },
+  { text: "Audit overlap", detail: "Compare definitions and plans before retaining both old and new indexes." },
+]}/>
+Your index now has a business case, not merely a CREATE statement.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Read plan improves but write latency spikes.", fix: "Measure index maintenance/WAL and drop or narrow low-value structures; tune total workload rather than one query." },
+  { symptom: "Composite index is ignored for its second column.", fix: "Check leading-column selectivity and query pattern; PostgreSQL can sometimes skip-scan, but it is cost-dependent, not a guarantee." },
+  { symptom: "An apparently unused index cannot be dropped safely.", fix: "Check uniqueness/constraint ownership, monitoring window, replicas, rare jobs, and plans before removal." },
+]}/>
+
+<WhereToCheck>
+- `pg_stat_user_indexes`, definitions, sizes, and constraint ownership.
+- Representative read plans and write benchmark results.
+- WAL volume, buffer/cache pressure, and vacuum/reindex maintenance.
+- Duplicate/overlapping prefix indexes and actual query shapes.
+</WhereToCheck>
+
+<WorkedExample title="the dashboard index that taxed every ingest">
+1. A dashboard filtered by project and status is slow.
+2. The team creates separate indexes on project, status, created_at, priority, and every displayed field.
+3. One query improves, but ingestion latency and WAL double.
+4. Plan analysis shows one `(project_id, status, created_at DESC)` index serves the dominant predicate/order; most new indexes add no chosen plan.
+5. Keeping the focused composite index and removing proven overlap restores write throughput while retaining the read gain.
+</WorkedExample>
+
+<Quiz question="What evidence is required before calling an added index a successful tuning change?" options={["The CREATE INDEX command succeeded", "Representative reads improve and total write/storage/WAL costs remain acceptable", "The table now has more indexes", "One warm run is faster"]} answer={1} explain="Indexes exchange read work for maintenance and storage. Success is a workload-level result, not a single-query anecdote." />
+
+<Flashcards cards={[
+  { front: "Sargable predicate", back: "A predicate shaped so the database can use an appropriate access method/index condition." },
+  { front: "Write amplification", back: "Additional index/WAL/storage work caused by one logical row change." },
+  { front: "Composite leading columns", back: "Equality constraints on leading B-tree columns usually narrow scan most effectively." },
+]}/>
+
+<Challenge>Inventory every index on one table. Map each to observed query patterns, constraint ownership, size, and write cost; identify one overlap candidate and design a safe measurement/removal experiment.</Challenge>
+
+<AskCommunity prompt="For table `[name]`, index `[definition]` improves `[reads]` but changes writes/WAL/size by `[metrics]`. Existing overlaps are `[definitions]`. Which structure should survive?">Share plans before and after plus monitoring window.</AskCommunity>
+
+<Resources links={[
+  { href: "https://www.postgresql.org/docs/current/indexes-multicolumn.html", title: "PostgreSQL — Multicolumn indexes", kind: "read" },
+  { href: "https://www.postgresql.org/docs/current/indexes-examine.html", title: "PostgreSQL — Examining index usage", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=-qNSXK7s7_w" title="Database Indexing Explained with PostgreSQL — Hussein Nasser" minutes={18} />
+
+<Takeaways points={[
+  "Tune logical work and cardinality before reflexively adding indexes.",
+  "Composite index order must follow real predicate and ordering patterns.",
+  "Every index taxes writes, WAL, storage, cache, and maintenance.",
+  "Usage counters alone cannot prove an index safe to drop.",
+  "A tuning win improves the representative workload, not one warm query.",
+]}/>
+
+<Complete xp={10} />

@@ -1,0 +1,99 @@
+---
+title: "Auditing Data Changes"
+summary: "Design and test append-only database audit evidence that answers who changed what, when, and in which transaction."
+tags: ["postgresql", "auditing", "triggers", "data-integrity"]
+updated: "2026-07-17"
+related: ["relational-databases-engineer-level/programmable-objects/triggers", "relational-databases-engineer-level/data-integrity-at-scale/migrations-and-etl-verification", "relational-databases-engineer-level/data-integrity-at-scale/finding-orphans-and-duplicates"]
+---
+
+<Hook>An `updated_at` column says something changed. An audit trail must answer who, what, when, from where, and under which transaction—without becoming a second ungoverned copy of sensitive data.</Hook>
+
+<Callout type="analogy">An audit table is a general ledger. Entries are appended, attributable, ordered, and reconcilable. Erasing a line to make the balance prettier defeats the reason the ledger exists.</Callout>
+
+## Capture evidence, not noise
+
+Define the threat and investigation model first. An <Term define="Attributable, correlated evidence of a governed data operation and its relevant delta.">audit event</Term> often includes event ID, occurred time, actor, transaction/request correlation, operation, table, row key, and old/new or changed fields. Database users may be pooled service accounts, so application actor identity often needs trusted session context.
+
+<HotspotImage src="/notes/relational-databases-engineer-level/data-integrity-at-scale/auditing-data-changes.jpg" alt="A general ledger illustrating append-only change history" credit="Image: Bgibbs, Wikimedia Foundation — Wikimedia Commons, CC BY-SA 4.0" creditHref="https://commons.wikimedia.org/wiki/File:General_ledger_example.jpg" pins={[
+  { x: 25, y: 34, label: "Attribution", desc: "Actor, request, transaction, and source connect the change to a responsible execution context." },
+  { x: 55, y: 51, label: "Before and after", desc: "Operation plus row key and changed values explain what actually happened." },
+  { x: 80, y: 72, label: "Append-only evidence", desc: "Restricted writes, retention, export, and monitoring protect the history from casual alteration." },
+]}/>
+
+<Callout type="tip">Test audit behavior inside the same transaction as the business change. A rolled-back update should not leave an audit row claiming a change that never committed.</Callout>
+
+<Callout type="mistake">Copying every row as JSON forever. Secrets, personal data, storage cost, and access scope multiply. Capture the minimum investigation evidence and apply explicit retention.</Callout>
+
+<FlowAnimation title="Audit event lifecycle" intervalMs={1250} nodes={[
+  { label: "Context", desc: "Set trusted actor and request correlation before the write." },
+  { label: "Change", desc: "The business statement inserts, updates, or deletes governed data." },
+  { label: "Record", desc: "An audit trigger or service appends operation, identity, key, and delta in the transaction." },
+  { label: "Protect + review", desc: "Restrict mutation, retain appropriately, export if required, and monitor gaps." },
+]}/>
+
+<CodePlayground language="python" title="Build a minimal audit event" code={`event = {
+    "event_id": "evt-1042",
+    "actor": "user-17",
+    "operation": "UPDATE",
+    "row_key": "order-42",
+    "changed": "status:PENDING->PAID",
+    "occurred_at": "2026-07-17T10:15:30Z",
+}
+required = {"event_id", "actor", "operation", "row_key", "changed", "occurred_at"}
+assert required <= event.keys()
+print(event)`}/>
+
+<CodePlayground language="java" title="Build the same event in Java" code={`import java.time.*;
+import java.util.*;
+class Main {
+  public static void main(String[] args) {
+    Map<String, String> event = new LinkedHashMap<>();
+    event.put("event_id", "evt-1042");
+    event.put("actor", "user-17");
+    event.put("operation", "UPDATE");
+    event.put("row_key", "order-42");
+    event.put("changed", "status:PENDING->PAID");
+    event.put("occurred_at", Instant.parse("2026-07-17T10:15:30Z").toString());
+    event.forEach((key, value) -> System.out.println(key + "=" + value));
+  }
+}`}/>
+
+<FirstTime title="Test an audit trail"><StepChecklist steps={[
+  { text: "Define required evidence", detail: "Map investigation questions to fields, sensitivity, and retention." },
+  { text: "Exercise every operation", detail: "Insert, meaningful update, no-op update, delete, bulk statement, and privileged path." },
+  { text: "Assert transaction behavior", detail: "Commit produces one attributable event per contract; rollback produces none." },
+  { text: "Test protection", detail: "The application role can read only as intended and cannot rewrite or delete history." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Every event actor is the same service account.", fix: "Propagate authenticated actor through trusted transaction-local context and record both application and database identities." },
+  { symptom: "No-op updates flood the trail.", fix: "Define meaningful-change semantics and compare OLD with NEW in a narrow WHEN condition or function." },
+  { symptom: "Audit rows exist for rolled-back changes.", fix: "Keep audit writes transactional; external emission needs an outbox or commit-aware design." },
+]}/>
+
+<WhereToCheck>Inspect trigger definitions, audit-table grants, actor context setup, row-event correlation, transaction IDs, timestamps/time zone, retention jobs, export monitoring, and gaps between business changes and audit events.</WhereToCheck>
+
+<WorkedExample title="Auditing an order status change">As application actor `user-17`, update order 42 from PENDING to PAID. Assert one event with actor, request ID, UPDATE, row key, old/new status, and transaction correlation. Roll back a second update and assert no durable event. Attempt audit DELETE as the app role and assert denial.</WorkedExample>
+
+<Quiz question="Why should a rolled-back business update usually leave no audit row?" options={["Audit tables cannot store text", "The claimed durable change never happened, so transactional evidence must roll back with it", "Timestamps are optional", "Triggers only run on commit"]} answer={1} explain="An audit trail should describe committed state transitions unless it explicitly models attempted actions separately." />
+
+<Flashcards cards={[
+  { front: "Audit event", back: "Attributable evidence of a governed operation, row identity, timing, correlation, and relevant delta." },
+  { front: "Application actor", back: "The end-user or system principal behind a pooled database connection." },
+  { front: "Append-only", back: "Normal writers may add governed events but cannot rewrite or erase prior history." },
+]}/>
+
+<Challenge>Create an audit contract for one sensitive table: required fields, actor propagation, no-op policy, bulk behavior, rollback result, access controls, retention, and gap monitor.</Challenge>
+
+<AskCommunity prompt="Audited operation: [table/action]. Expected event: [fields/count]. Actual event and transaction result: [evidence]. Actor propagation: [method]. Which trust gap remains?">Redact sensitive values; share field presence, correlation, roles, and transaction sequence.</AskCommunity>
+
+<Resources links={[
+  { href: "https://www.postgresql.org/docs/current/plpgsql-trigger.html", title: "PostgreSQL — Trigger Functions and Audit Example", kind: "read" },
+  { href: "https://www.postgresql.org/docs/current/ddl-priv.html", title: "PostgreSQL — Privileges", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=qw--VYLpxG4" title="Learn PostgreSQL — Full Course for Beginners" minutes={260} />
+
+<Takeaways points={["Audit evidence must be attributable, correlated, minimal, and protected.", "Test insert, update, delete, bulk, no-op, rollback, and privileged paths.", "Pooled connections require explicit trusted application-actor context.", "Retention and sensitive-data policy are part of audit correctness."]}/>
+
+<Complete xp={10} />

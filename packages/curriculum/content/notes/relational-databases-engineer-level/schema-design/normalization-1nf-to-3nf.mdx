@@ -1,0 +1,101 @@
+---
+title: "Normalization: 1NF to 3NF"
+summary: "Normalize from atomic rows through whole-key and non-transitive dependencies to prevent insert, update, and delete anomalies—then verify decompositions preserve facts and constraints."
+tags: ["relational-databases-engineer-level", "schema-design", "track-e"]
+updated: "2026-07-17"
+related:
+  - "relational-databases-engineer-level/schema-design/keys-and-relationships"
+  - "relational-databases-engineer-level/schema-design/when-to-denormalize"
+  - "relational-databases-engineer-level/schema-design/er-modeling-from-requirements"
+---
+
+<Hook>Repeating the customer's email on every order is convenient until one customer has six current email addresses depending on which row your query accidentally reads.</Hook>
+<Callout type="analogy">A card catalogue stores one fact in its proper drawer and references it by a stable label. Normalization stops facts from being recopied across every card that mentions them.</Callout>
+<Term define="Normalization decomposes relations according to functional dependencies. In the practical 1NF-to-3NF progression: values are atomic with no repeating groups; non-key attributes depend on the whole candidate key; and non-key attributes do not depend transitively on other non-key attributes.">normalization</Term>
+
+## Follow dependencies, not slogans
+
+An order-line table keyed by `(order_id, product_id)` should not store `product_name` (depends only on
+`product_id`) or `customer_email` (depends on `order_id` through customer). Split facts into tables
+where their determinant is a key, then enforce relationships.
+
+<Callout type="tip">Write functional dependencies explicitly: `product_id -> product_name`. They reveal the correct owner of each fact.</Callout>
+<Callout type="mistake">Believing a surrogate primary key makes any table 3NF. Dependencies among business attributes still exist after adding `id`.</Callout>
+
+<HotspotImage src="/notes/relational-databases-engineer-level/schema-design/normalization-1nf-to-3nf.jpg" alt="Rows of labeled wooden card catalogue drawers" credit="Card catalogue drawers — Carolina Prysyazhnyuk, Wikimedia Commons, CC BY-SA 2.0" creditHref="https://commons.wikimedia.org/wiki/File:Card_catalogue_drawers.jpg" pins={[
+  { x: 25, y: 45, label: "1NF", desc: "One atomic value per attribute and no repeating groups." },
+  { x: 52, y: 60, label: "2NF", desc: "Every non-key fact depends on the whole candidate key." },
+  { x: 78, y: 43, label: "3NF", desc: "Non-key facts do not depend transitively on other non-key facts." },
+]}/>
+
+<FlowAnimation title="Decompose a risky table" intervalMs={1500} nodes={[
+  { label: "List candidate keys", desc: "Normalization depends on all candidate keys, not merely one ID." },
+  { label: "Write dependencies", desc: "State which attributes determine which facts." },
+  { label: "Remove repeating groups", desc: "Reach atomic relational values." },
+  { label: "Remove partial dependencies", desc: "Move facts dependent on part of a composite key." },
+  { label: "Remove transitive dependencies", desc: "Move facts owned by another non-key determinant." },
+]}/>
+
+<CodePlayground language="python" title="Run it — expose an update anomaly (Python)" code={`rows = [(1, "a@example.test"), (2, "a@example.test"), (3, "a@example.test")]
+rows[0] = (1, "new@example.test")
+emails = sorted({email for _, email in rows})
+print("emails after one-row update:", emails)
+print("anomaly:", len(emails) > 1)
+
+# emails after one-row update: ['a@example.test', 'new@example.test']
+# anomaly: True`}/>
+
+<CodePlayground language="java" title="Run it — expose an update anomaly (Java)" code={`import java.util.*;
+public class Main {
+  public static void main(String[] args){
+    List<String> emails=new ArrayList<>(List.of("a@example.test","a@example.test","a@example.test"));
+    emails.set(0,"new@example.test");
+    Set<String> unique=new TreeSet<>(emails);
+    System.out.println("emails after one-row update: "+unique);
+    System.out.println("anomaly: "+(unique.size()>1));
+  }
+}
+
+/* emails after one-row update: [a@example.test, new@example.test]
+   anomaly: true */`}/>
+
+<FirstTime title="Your mission: normalize one import table"><StepChecklist steps={[
+  { text: "Identify all candidate keys", detail: "Do not let a synthetic ID erase business dependencies." },
+  { text: "Write functional dependencies", detail: "Use determinant arrows for every non-key fact." },
+  { text: "Decompose through 1NF, 2NF, and 3NF", detail: "Name the anomaly each split prevents." },
+  { text: "Test lossless reconstruction", detail: "Join fixed data and compare facts/counts with the original." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Join after decomposition multiplies rows.", fix: "A relationship key or uniqueness constraint is missing; prove cardinality before trusting reconstruction." },
+  { symptom: "A fact still has two possible owners.", fix: "Revisit candidate keys and functional dependencies with concrete counterexamples." },
+  { symptom: "Too many joins appear in one read path.", fix: "Measure first; normalization correctness and read optimization are separate decisions." },
+]}/>
+
+<WhereToCheck>
+- Candidate keys and written functional dependencies.
+- Insert, update, and delete anomaly examples.
+- Bidirectional fact comparisons after decomposition and reconstruction.
+</WhereToCheck>
+<WorkedExample title="customer email stops disagreeing with itself">Three order rows duplicate one customer email. Updating one creates conflicting truth. Moving email to `customer(customer_id, email)` leaves orders referencing one owner, so one update changes the fact exactly once.</WorkedExample>
+<Quiz question="Does adding a surrogate id automatically put a table in 3NF?" options={["Yes", "No; business dependencies among other attributes remain", "Only in PostgreSQL", "Only for small tables"]} answer={1} explain="Normal forms concern functional dependencies across candidate keys and attributes, not the mere presence of a generated identifier." />
+<Flashcards cards={[
+  { front: "1NF", back: "Atomic attributes and no repeating groups within a relation." },
+  { front: "2NF", back: "In 1NF, with no non-key fact dependent on only part of a candidate key." },
+  { front: "3NF", back: "In 2NF, without non-key facts transitively determined by other non-key facts." },
+  { front: "Update anomaly", back: "One logical fact has multiple copies that can disagree." },
+]}/>
+<Challenge>Normalize an order-import table to 3NF and prove no facts are lost or multiplied by reconstruction joins.</Challenge>
+<AskCommunity prompt="I believe `[attribute]` belongs in `[table]` because `[dependency]`; here are candidate keys and counterexample rows.">Discuss dependencies, not preferred table names.</AskCommunity>
+<Resources links={[
+  { href: "https://www.postgresql.org/docs/current/ddl-constraints.html", title: "PostgreSQL — constraints for normalized schemas", kind: "read" },
+  { href: "https://www.postgresql.org/docs/current/ddl-basics.html", title: "PostgreSQL — relational table basics", kind: "read" },
+]}/>
+<Video href="https://www.youtube.com/watch?v=GFQaEYEc8_8" title="Decomplexify — database normalization from 1NF onward" minutes={29} />
+<Takeaways points={[
+  "Normalization follows candidate keys and functional dependencies.",
+  "1NF removes repeating groups; 2NF removes partial dependencies; 3NF removes transitive non-key dependencies.",
+  "Surrogate IDs do not erase business dependencies.",
+  "Verify decompositions for constraints, lossless reconstruction, and anomaly prevention.",
+]}/>
+<Complete xp={10} />

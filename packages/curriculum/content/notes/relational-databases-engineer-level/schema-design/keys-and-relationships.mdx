@@ -1,0 +1,115 @@
+---
+title: "Keys & relationships"
+summary: "Choose stable candidate and primary keys, enforce alternate identities with UNIQUE, represent relationships with foreign keys, and test updates/deletes as integrity behavior."
+tags: ["relational-databases-engineer-level", "schema-design", "track-e"]
+updated: "2026-07-17"
+related:
+  - "relational-databases-engineer-level/schema-design/er-modeling-from-requirements"
+  - "relational-databases-engineer-level/schema-design/normalization-1nf-to-3nf"
+  - "relational-databases-engineer-level/sql-mastery/set-operators"
+---
+
+<Hook>A UUID does not make a relationship correct. It merely gives the wrong row a very professional-looking identifier.</Hook>
+<Callout type="analogy">A key identifies one lock; a key ring organizes several roles. Database keys identify rows, alternate identities, and references—each with a different job.</Callout>
+<Term define="A candidate key is a minimal set of columns that uniquely identifies a row. One candidate is chosen as the primary key; other business identities can be UNIQUE. A foreign key requires referencing values to match a referenced primary/unique key, subject to declared action rules.">key and relationship</Term>
+
+## Encode the rules in DDL
+
+```sql
+CREATE TABLE ticket (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  project_id bigint NOT NULL REFERENCES project(id) ON DELETE RESTRICT,
+  external_key text NOT NULL,
+  UNIQUE (project_id, external_key)
+);
+```
+
+PostgreSQL primary keys imply uniqueness and `NOT NULL`. A foreign key must reference a primary key,
+unique constraint, or eligible non-partial unique index. Index referencing columns separately when
+workloads need efficient parent updates/deletes or child lookups; PostgreSQL does not create that
+referencing-side index automatically.
+
+<Callout type="tip">Name constraints when failure diagnostics matter. `ticket_project_fk` says more than an auto-generated suffix during a migration incident.</Callout>
+<Callout type="mistake">Using `ON DELETE CASCADE` because cleanup tests become easy. Cascade encodes ownership semantics and can widen blast radius dramatically.</Callout>
+
+<HotspotImage src="/notes/relational-databases-engineer-level/schema-design/keys-and-relationships.jpg" alt="A ring holding several distinct metal keys" credit="Key ring — Basile Morin, Wikimedia Commons, CC BY-SA 4.0" creditHref="https://commons.wikimedia.org/wiki/File:Key_ring.jpg" pins={[
+  { x: 28, y: 52, label: "Primary key", desc: "The chosen row identity." },
+  { x: 54, y: 40, label: "Alternate key", desc: "Another business identity protected by UNIQUE." },
+  { x: 75, y: 61, label: "Foreign key", desc: "A reference whose target and lifecycle action are enforced." },
+]}/>
+
+<FlowAnimation title="Design and test a relationship" intervalMs={1500} nodes={[
+  { label: "List candidate identities", desc: "Find minimal stable unique sets." },
+  { label: "Choose primary key", desc: "Prefer stable, non-null identity." },
+  { label: "Add foreign key", desc: "Match types and referenced uniqueness." },
+  { label: "Choose actions", desc: "RESTRICT, CASCADE, SET NULL, or defaults from ownership rules." },
+  { label: "Test invalid states", desc: "Orphans, duplicate alternates, updates, and deletes." },
+]}/>
+
+<CodePlayground language="python" title="Run it — enforce a composite alternate key (Python)" code={`tickets = [(10, "QA-1"), (10, "QA-2"), (11, "QA-1"), (10, "QA-1")]
+seen = set()
+for key in tickets:
+    result = "ACCEPT" if key not in seen else "REJECT duplicate"
+    print(key, result)
+    seen.add(key)
+
+# (10, 'QA-1') ACCEPT
+# (10, 'QA-2') ACCEPT
+# (11, 'QA-1') ACCEPT
+# (10, 'QA-1') REJECT duplicate`}/>
+
+<CodePlayground language="java" title="Run it — enforce a composite alternate key (Java)" code={`import java.util.*;
+public class Main {
+  record Key(int project,String external){}
+  public static void main(String[] args){
+    List<Key> keys=List.of(new Key(10,"QA-1"),new Key(10,"QA-2"),new Key(11,"QA-1"),new Key(10,"QA-1"));
+    Set<Key> seen=new HashSet<>();
+    for(Key k:keys) System.out.println("("+k.project()+", '"+k.external()+"') "+(seen.add(k)?"ACCEPT":"REJECT duplicate"));
+  }
+}
+
+/* (10, 'QA-1') ACCEPT
+   (10, 'QA-2') ACCEPT
+   (11, 'QA-1') ACCEPT
+   (10, 'QA-1') REJECT duplicate */`}/>
+
+<FirstTime title="Your mission: prove referential integrity"><StepChecklist steps={[
+  { text: "List primary and alternate candidate keys", detail: "Justify stability and minimality." },
+  { text: "Add one named foreign key", detail: "Choose delete/update actions from lifecycle rules." },
+  { text: "Attempt orphan and duplicate inserts", detail: "Assert exact constraint failures." },
+  { text: "Test parent update and delete", detail: "Verify restrict, cascade, or null behavior plus row counts." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Foreign key cannot be created.", fix: "Check matching types and that referenced columns have primary/unique eligibility." },
+  { symptom: "Parent delete is unexpectedly slow.", fix: "Inspect referencing-side indexes and child volume; PostgreSQL does not auto-index foreign-key columns." },
+  { symptom: "Cascade removes too much.", fix: "Revisit ownership semantics and test the entire descendant row-count blast radius." },
+]}/>
+
+<WhereToCheck>
+- `information_schema` or `\d` for actual constraints.
+- Duplicate and orphan probes in a rollback-safe test transaction.
+- Query plans for parent delete/update checks.
+</WhereToCheck>
+<WorkedExample title="the business key the surrogate missed">Tickets use surrogate IDs, but imports create two `QA-1` tickets in the same project. Adding `UNIQUE(project_id, external_key)` captures the real business identity while allowing `QA-1` in another project.</WorkedExample>
+<Quiz question="Does PostgreSQL automatically index the referencing columns of a foreign key?" options={["Always", "No; add an index when access and parent-change workloads need it", "Only for text", "Foreign keys cannot be indexed"]} answer={1} explain="The referenced key is unique/indexed, but PostgreSQL does not automatically create an index on the referencing columns." />
+<Flashcards cards={[
+  { front: "Candidate key", back: "A minimal column set that uniquely identifies a row." },
+  { front: "Primary key", back: "The chosen candidate key; unique and not null." },
+  { front: "Alternate key", back: "Another candidate identity usually enforced with UNIQUE." },
+  { front: "Foreign key action", back: "Declared behavior when referenced rows update or delete." },
+]}/>
+<Challenge>Model project-ticket identity with surrogate and business keys, then test orphan, duplicate, restrict, and cascade cases.</Challenge>
+<AskCommunity prompt="My foreign key `[name]` rejects/allows `[operation]`; here are DDL and expected ownership rules.">Include both table definitions and sanitized constraint error.</AskCommunity>
+<Resources links={[
+  { href: "https://www.postgresql.org/docs/current/ddl-constraints.html", title: "PostgreSQL — primary, unique, and foreign-key constraints", kind: "read" },
+  { href: "https://www.postgresql.org/docs/current/ddl-identity-columns.html", title: "PostgreSQL — identity columns", kind: "read" },
+]}/>
+<Video href="https://www.youtube.com/watch?v=ztHopE5Wnpc" title="freeCodeCamp — database design course" minutes={487} />
+<Takeaways points={[
+  "Candidate keys capture minimal row identities; one becomes primary and alternates remain constrained.",
+  "Foreign keys enforce references only to eligible unique targets.",
+  "Delete/update actions encode ownership and must be tested for blast radius.",
+  "Index referencing columns according to workload; PostgreSQL does not add that index automatically.",
+]}/>
+<Complete xp={10} />

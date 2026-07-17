@@ -1,0 +1,112 @@
+---
+title: "Subqueries & CTEs"
+summary: "Use subqueries for local questions and CTEs for named stages, recursive traversal, or deliberate materialization—then inspect the plan instead of assuming WITH is a performance spell."
+tags: ["relational-databases-engineer-level", "sql-mastery", "track-e"]
+updated: "2026-07-17"
+related:
+  - "relational-databases-engineer-level/sql-mastery/window-functions"
+  - "relational-databases-engineer-level/sql-mastery/set-operators"
+  - "relational-databases-engineer-level/indexes-and-performance/reading-explain-and-execution-plans"
+---
+
+<Hook>A CTE can make a query readable without making it fast. Naming the mess is progress; measuring the plan is engineering.</Hook>
+<Callout type="analogy">Nesting dolls answer an inner question before the outer shell can use it. A CTE puts each doll on the table and gives it a name.</Callout>
+<Term define="A subquery is a query nested inside another SQL expression. A common table expression (CTE) is a named query introduced by WITH for use within one statement; WITH RECURSIVE can refer to its own prior output.">subquery and CTE</Term>
+
+## Choose the shape that exposes intent
+
+```sql
+WITH failed_runs AS (
+  SELECT build_id, count(*) AS failures
+  FROM test_runs
+  WHERE status = 'failed'
+  GROUP BY build_id
+)
+SELECT b.id, f.failures
+FROM builds b JOIN failed_runs f ON f.build_id = b.id
+WHERE f.failures >= 3;
+```
+
+In current PostgreSQL, a side-effect-free non-recursive CTE referenced once can be folded into its
+parent. `MATERIALIZED` forces separate calculation; `NOT MATERIALIZED` permits folding. Verify with
+`EXPLAIN`, because folklore from older versions ages like milk in a server room.
+
+<Callout type="tip">Use `EXISTS` when the question is “does any related row exist?” It can express intent better than counting every match.</Callout>
+<Callout type="mistake">Assuming every CTE is an optimization fence. That is version-sensitive and reference-sensitive; read the actual plan.</Callout>
+
+<HotspotImage src="/notes/relational-databases-engineer-level/sql-mastery/subqueries-and-ctes.jpg" alt="A row of opened and nested Matryoshka dolls" credit="Matryoshka dolls — Marit and Toomas Hinnosaar, Wikimedia Commons, CC BY 2.0" creditHref="https://commons.wikimedia.org/wiki/File:Matryoshka_dolls_(6392117189).jpg" pins={[
+  { x: 22, y: 55, label: "Inner query", desc: "Produces a result the outer query consumes." },
+  { x: 53, y: 48, label: "Named CTE", desc: "Makes a stage readable and reusable inside one statement." },
+  { x: 80, y: 57, label: "Outer query", desc: "Combines and filters the staged evidence." },
+]}/>
+
+<FlowAnimation title="Build a staged investigation" intervalMs={1500} nodes={[
+  { label: "State the question", desc: "Existence, scalar comparison, staged aggregation, or recursion?" },
+  { label: "Choose subquery or CTE", desc: "Keep a local expression local; name multi-step logic." },
+  { label: "Assert cardinality", desc: "A scalar subquery must return at most one row." },
+  { label: "Inspect EXPLAIN", desc: "Confirm folding, materialization, joins, and row estimates." },
+]}/>
+
+<CodePlayground language="python" title="Run it — staged failure aggregation (Python)" code={`runs = [(101, "failed"), (101, "passed"), (102, "failed"), (102, "failed"), (102, "failed")]
+failed = {}
+for build, status in runs:
+    if status == "failed": failed[build] = failed.get(build, 0) + 1
+result = [(build, count) for build, count in failed.items() if count >= 3]
+print(result)
+
+# [(102, 3)]`}/>
+
+<CodePlayground language="java" title="Run it — staged failure aggregation (Java)" code={`import java.util.*;
+public class Main {
+  public static void main(String[] args) {
+    String[][] runs={{"101","failed"},{"101","passed"},{"102","failed"},{"102","failed"},{"102","failed"}};
+    Map<String,Integer> failed=new TreeMap<>();
+    for(String[] r:runs) if(r[1].equals("failed")) failed.merge(r[0],1,Integer::sum);
+    failed.entrySet().stream().filter(e->e.getValue()>=3).forEach(e->System.out.println("[("+e.getKey()+", "+e.getValue()+")]"));
+  }
+}
+
+/* [(102, 3)] */`}/>
+
+<FirstTime title="Your mission: refactor and measure"><StepChecklist steps={[
+  { text: "Write the result first as one query", detail: "Capture expected rows on fixed test data." },
+  { text: "Extract one meaningful stage into a CTE", detail: "Name business meaning, not temp1." },
+  { text: "Compare EXPLAIN plans", detail: "Try default, MATERIALIZED, and NOT MATERIALIZED where legal." },
+  { text: "Assert result equivalence", detail: "A prettier rewrite must not change duplicates or null behavior." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Scalar subquery returns more than one row.", fix: "Fix the data relationship or use an aggregate/EXISTS; LIMIT 1 merely hides ambiguity unless ordering defines truth." },
+  { symptom: "Recursive CTE never finishes.", fix: "Add a termination condition and cycle handling; test a cyclic graph deliberately." },
+  { symptom: "CTE rewrite becomes slower.", fix: "Compare plans and row estimates; repeated references may benefit from materialization while selective predicates may benefit from folding." },
+]}/>
+
+<WhereToCheck>
+- `EXPLAIN (ANALYZE, BUFFERS)` in a safe test environment.
+- Row counts and duplicate behavior at every stage.
+- PostgreSQL `WITH` documentation for folding and recursion rules.
+</WhereToCheck>
+
+<WorkedExample title="a readable query that still scans too much">A CTE aggregates all historical failures, then the outer query selects one week. `EXPLAIN` shows a broad materialized scan. Moving the week predicate into the CTE—or allowing folding—cuts input rows while preserving the result.</WorkedExample>
+
+<Quiz question="Does WITH always force PostgreSQL to materialize a CTE?" options={["Yes", "No; eligible side-effect-free non-recursive CTEs can be folded", "Only on Tuesdays", "Only when named"]} answer={1} explain="Current PostgreSQL can fold eligible CTEs; MATERIALIZED and NOT MATERIALIZED influence that choice." />
+<Flashcards cards={[
+  { front: "Scalar subquery", back: "Must produce at most one row where a single value is required." },
+  { front: "EXISTS", back: "Tests whether any related row exists without asking for a count." },
+  { front: "MATERIALIZED", back: "Forces separate calculation of the CTE." },
+  { front: "Recursive CTE", back: "A non-recursive seed plus recursive term evaluated until no new rows emerge." },
+]}/>
+<Challenge>Write an `EXISTS` test for builds with failures, then a CTE for builds with at least three failures. Prove both against duplicates and empty input.</Challenge>
+<AskCommunity prompt="My PostgreSQL CTE changed runtime from `[before]` to `[after]`; here are sanitized EXPLAIN plans and row counts.">Include server version and whether the CTE is referenced once or repeatedly.</AskCommunity>
+<Resources links={[
+  { href: "https://www.postgresql.org/docs/current/queries-with.html", title: "PostgreSQL — WITH queries and CTE materialization", kind: "read" },
+  { href: "https://www.postgresql.org/docs/current/functions-subquery.html", title: "PostgreSQL — subquery expressions", kind: "read" },
+]}/>
+<Video href="https://www.youtube.com/watch?v=HXV3zeQKqGY" title="freeCodeCamp — SQL tutorial, full database course" minutes={261} />
+<Takeaways points={[
+  "Subqueries answer local nested questions; CTEs name stages and support recursion.",
+  "Current PostgreSQL can fold eligible CTEs into the parent query.",
+  "MATERIALIZED and NOT MATERIALIZED are plan controls, not decorations.",
+  "Test cardinality, duplicates, nulls, and plans after every rewrite.",
+]}/>
+<Complete xp={10} />

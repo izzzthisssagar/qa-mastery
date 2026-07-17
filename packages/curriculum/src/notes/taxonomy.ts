@@ -1579,6 +1579,74 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   },
   // END api-test-automation
   {
+    slug: "relational-databases-engineer-level",
+    title: "Relational Databases, Engineer-Level",
+    summary: "Build production-grade relational database judgment through advanced SQL, schema design, indexing and execution plans, transaction concurrency, programmable database objects, and integrity verification at scale.",
+    chapters: [
+      {
+        slug: "sql-mastery",
+        title: "SQL mastery",
+        topics: [
+          { slug: "subqueries-and-ctes", title: "Subqueries & CTEs" },
+          { slug: "window-functions", title: "Window functions" },
+          { slug: "set-operators", title: "Set operators" },
+          { slug: "date-time-and-timezone-handling", title: "Date, time & timezone handling" },
+        ],
+      },
+      {
+        slug: "schema-design",
+        title: "Schema design",
+        topics: [
+          { slug: "er-modeling-from-requirements", title: "ER modeling from requirements" },
+          { slug: "keys-and-relationships", title: "Keys & relationships" },
+          { slug: "normalization-1nf-to-3nf", title: "Normalization: 1NF to 3NF" },
+          { slug: "when-to-denormalize", title: "When to denormalize" },
+        ],
+      },
+      {
+        slug: "indexes-and-performance",
+        title: "Indexes & performance",
+        topics: [
+          { slug: "how-an-index-works", title: "How an index works" },
+          { slug: "clustered-vs-non-clustered", title: "Clustered vs non-clustered" },
+          { slug: "reading-explain-and-execution-plans", title: "Reading EXPLAIN & execution plans" },
+          { slug: "query-tuning-and-over-indexing-writes", title: "Query tuning & over-indexing writes" },
+        ],
+      },
+      {
+        slug: "transactions-and-concurrency",
+        title: "Transactions & concurrency",
+        topics: [
+          { slug: "acid-properly", title: "ACID, properly" },
+          { slug: "isolation-levels-and-anomalies", title: "Isolation levels & anomalies" },
+          { slug: "locks-and-deadlocks", title: "Locks & deadlocks" },
+          { slug: "testing-concurrent-behavior", title: "Testing concurrent behavior" },
+        ],
+      },
+      {
+        slug: "programmable-objects",
+        title: "Programmable objects",
+        topics: [
+          { slug: "stored-procedures-and-functions", title: "Stored procedures & functions" },
+          { slug: "triggers", title: "Triggers" },
+          { slug: "testing-procedures", title: "Testing procedures" },
+          { slug: "error-handling-in-sql", title: "Error handling in SQL" },
+        ],
+      },
+      {
+        slug: "data-integrity-at-scale",
+        title: "Data integrity at scale",
+        topics: [
+          { slug: "constraints-and-referential-integrity", title: "Constraints & referential integrity" },
+          { slug: "finding-orphans-and-duplicates", title: "Finding orphans & duplicates" },
+          { slug: "migrations-and-etl-verification", title: "Migrations & ETL verification" },
+          { slug: "auditing-data-changes", title: "Auditing data changes" },
+        ],
+      },
+    ],
+  },
+  // END relational-databases-engineer-level
+  {
     slug: "foundations",
     title: "QA Foundations",
     summary: "The vocabulary and mental models every tester needs.",

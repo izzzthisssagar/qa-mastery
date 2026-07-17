@@ -1,0 +1,136 @@
+---
+title: "Locks and deadlocks"
+summary: "Locks coordinate conflicting work; deadlocks form when transactions wait in a cycle. Learn PostgreSQL lock behavior, diagnosis, prevention, and recovery without blaming every wait on a deadlock."
+tags: ["relational-databases-engineer-level", "transactions-and-concurrency", "track-e"]
+updated: "2026-07-17"
+related:
+  - "relational-databases-engineer-level/transactions-and-concurrency/isolation-levels-and-anomalies"
+  - "relational-databases-engineer-level/transactions-and-concurrency/testing-concurrent-behavior"
+---
+
+<Hook>A lock wait is a queue. A deadlock is a circle: everyone holds something the next transaction needs, so nobody can move without intervention.</Hook>
+
+<Callout type="analogy">Two people each clutch one end of a chained gate while asking the other to release first. Waiting longer cannot solve the cycle; one participant must give way.</Callout>
+
+<Term define="A database lock reserves a resource or conflicts with particular operations so concurrent work cannot violate a coordination rule. A deadlock is a cycle in the wait-for graph where every transaction waits for another transaction in that same cycle.">lock and deadlock</Term>
+
+## Distinguish ordinary blocking from a cycle
+
+PostgreSQL uses table-level, row-level, page-level, and advisory locks. Lock modes conflict selectively; they do not all exclude all work. MVCC lets ordinary readers and writers often proceed without blocking each other, while writers targeting the same row conflict. Locks normally remain until transaction end.
+
+A long wait has an owner and a waiter. A deadlock has a cycle. PostgreSQL detects a deadlock and aborts one transaction; the application must handle that failure. Consistent lock ordering is the strongest general prevention technique.
+
+<Callout type="tip">Acquire shared resources in one global order and keep transactions bounded. This shortens waits and removes many cycles before monitoring has to explain them.</Callout>
+
+<Callout type="mistake">Calling every slow blocked query a deadlock. A single wait chain can eventually progress; only a cycle requires a victim to break it.</Callout>
+
+<HotspotImage src="/notes/relational-databases-engineer-level/transactions-and-concurrency/locks-and-deadlocks.jpg" alt="Metal padlock securing overlapping links of a heavy chain" credit="Padlock with chain — Lacz02, Wikimedia Commons, CC BY-SA 4.0" creditHref="https://commons.wikimedia.org/wiki/File:Padlock_with_chain.jpg" pins={[
+  { x: 48, y: 43, label: "Held lock", desc: "One transaction owns a resource until it commits or rolls back." },
+  { x: 30, y: 66, label: "Waiting link", desc: "A conflicting request waits behind the current owner." },
+  { x: 72, y: 67, label: "Cycle risk", desc: "Opposite acquisition order can connect waiters into a deadlock cycle." },
+]}/>
+
+<FlowAnimation title="From conflicting updates to deadlock recovery" intervalMs={1400} nodes={[
+  { label: "A locks account 1", desc: "Transaction A updates the first row." },
+  { label: "B locks account 2", desc: "Transaction B updates the second row." },
+  { label: "A waits for account 2", desc: "A conflicting row lock is already held by B." },
+  { label: "B waits for account 1", desc: "The wait-for graph closes into a cycle." },
+  { label: "PostgreSQL aborts a victim", desc: "One transaction rolls back; the survivor can continue." },
+]}/>
+
+<CodePlayground language="python" title="Run it — detect a wait-for cycle (Python)" code={`waits_for = {"txA": "txB", "txB": "txC", "txC": "txA"}
+
+def cycle_from(start):
+    seen = []
+    current = start
+    while current in waits_for:
+        if current in seen:
+            first = seen.index(current)
+            return seen[first:] + [current]
+        seen.append(current)
+        current = waits_for[current]
+    return []
+
+cycle = cycle_from("txA")
+print(" -> ".join(cycle))
+print("deadlock:", bool(cycle))
+
+# txA -> txB -> txC -> txA
+# deadlock: True`}/>
+
+<CodePlayground language="java" title="Run it — prevent a cycle with ordered acquisition (Java)" code={`import java.util.*;
+public class Main {
+  static List<Integer> lockOrder(int first, int second) {
+    List<Integer> ids = new ArrayList<>(Arrays.asList(first, second));
+    Collections.sort(ids);
+    return ids;
+  }
+  public static void main(String[] args) {
+    System.out.println("txA order=" + lockOrder(2, 1));
+    System.out.println("txB order=" + lockOrder(1, 2));
+    System.out.println("same order prevents opposite-edge cycle");
+  }
+}
+/* txA order=[1, 2]
+   txB order=[1, 2]
+   same order prevents opposite-edge cycle */`}/>
+
+<FirstTime title="Your mission: diagnose one blocker chain">
+<StepChecklist steps={[
+  { text: "Capture active sessions", detail: "Record transaction age, query, state, and wait event." },
+  { text: "Join waiters to blockers", detail: "Use pg_locks with pg_stat_activity or pg_blocking_pids." },
+  { text: "Draw the wait-for graph", detail: "Separate a chain from a cycle before naming the incident." },
+  { text: "Fix acquisition order", detail: "Shorten boundaries and make all paths lock shared resources consistently." },
+]}/>
+You can now explain who waits for whom and why.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Sessions wait but no deadlock error appears.", fix: "Look for a long-running blocker or idle-in-transaction owner; a chain is not necessarily a cycle." },
+  { symptom: "Deadlocks recur during transfers.", fix: "Sort account identifiers and lock/update both rows in that order on every code path." },
+  { symptom: "The victim transaction leaves an error state.", fix: "Roll back the failed transaction and retry the complete idempotent unit when policy permits." },
+]}/>
+
+<WhereToCheck>
+- `pg_stat_activity` for transaction age, state, query, and wait event.
+- `pg_locks` and `pg_blocking_pids(pid)` for owners and waiters.
+- PostgreSQL logs for deadlock detail and involved statements.
+- Application traces for transaction boundaries and lock acquisition order.
+</WhereToCheck>
+
+<WorkedExample title="the transfer deadlock">
+1. Transaction A updates account 1, then asks for account 2.
+2. Transaction B updates account 2, then asks for account 1.
+3. Each holds the row lock required by the other.
+4. PostgreSQL detects the wait cycle and aborts one transaction.
+5. Sorting account IDs before either update prevents the opposite acquisition order.
+</WorkedExample>
+
+<Quiz question="What separates a deadlock from ordinary lock waiting?" options={["The wait lasts more than one second", "The blocked query is an UPDATE", "The wait-for relationships contain a cycle", "More than one table is involved"]} answer={2} explain="A chain can progress when its owner finishes; a cycle cannot progress without aborting or releasing one participant." />
+
+<Flashcards cards={[
+  { front: "Wait-for graph", back: "Directed edges from waiting transactions to transactions holding required locks." },
+  { front: "Deadlock victim", back: "A transaction PostgreSQL aborts so the cycle is broken." },
+  { front: "Consistent ordering", back: "Acquiring shared resources in the same global order on every path." },
+]}/>
+
+<Challenge>Create two transfer paths that acquire the same accounts in opposite orders, reproduce the deadlock, then change both paths to sorted order and verify the cycle disappears.</Challenge>
+
+<AskCommunity prompt="PID `[waiter]` waits on `[resource]` held by `[blocker]`; the transaction timelines are `[steps]`. Is this a chain or cycle, and which boundary/order should change?">Include transaction age and complete acquisition order.</AskCommunity>
+
+<Resources links={[
+  { href: "https://www.postgresql.org/docs/current/explicit-locking.html", title: "PostgreSQL — Explicit locking and deadlocks", kind: "read" },
+  { href: "https://www.postgresql.org/docs/current/monitoring-stats.html", title: "PostgreSQL — Monitoring database activity", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=5ZjhNTM8XU8" title="Transactions: myths, surprises and opportunities — Martin Kleppmann" minutes={41} />
+
+<Takeaways points={[
+  "Lock modes conflict selectively; not every lock blocks every operation.",
+  "MVCC allows many readers and writers to overlap, while conflicting row writers wait.",
+  "A deadlock is a cycle, not merely a long wait.",
+  "PostgreSQL aborts one participant to break a detected deadlock.",
+  "Consistent acquisition order and short transactions prevent many incidents.",
+]}/>
+
+<Complete xp={10} />

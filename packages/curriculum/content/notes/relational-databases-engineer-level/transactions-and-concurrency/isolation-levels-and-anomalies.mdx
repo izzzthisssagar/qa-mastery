@@ -1,0 +1,128 @@
+---
+title: "Isolation levels and anomalies"
+summary: "Isolation levels permit different concurrent histories. Learn dirty reads, nonrepeatable reads, phantoms, and serialization anomalies with PostgreSQL's exact behavior and retry contract."
+tags: ["relational-databases-engineer-level", "transactions-and-concurrency", "track-e"]
+updated: "2026-07-17"
+related:
+  - "relational-databases-engineer-level/transactions-and-concurrency/acid-properly"
+  - "relational-databases-engineer-level/transactions-and-concurrency/locks-and-deadlocks"
+---
+
+<Hook>Two transactions can each be locally sensible and still create a history no one intended. Isolation is the rulebook for which overlapping histories the database may expose.</Hook>
+
+<Callout type="analogy">A transit map can show one snapshot or update between every glance. Read Committed gives PostgreSQL statements fresh snapshots; Repeatable Read keeps a transaction snapshot; Serializable rejects histories that cannot be ordered safely.</Callout>
+
+<Term define="A transaction isolation level specifies which effects of concurrent transactions may become visible and which anomalous histories the database must prevent. PostgreSQL implements Read Committed, Repeatable Read, and Serializable; its Read Uncommitted behaves as Read Committed.">transaction isolation level</Term>
+
+## Map the anomaly before choosing the level
+
+- **Dirty read:** reading another transaction's uncommitted data.
+- **Nonrepeatable read:** rereading a row and seeing a committed change.
+- **Phantom read:** rerunning a predicate and seeing a changed matching set.
+- **Serialization anomaly:** a result impossible under any serial ordering, such as write skew.
+
+PostgreSQL's default **Read Committed** takes a new snapshot per statement. **Repeatable Read** uses a stable transaction snapshot and, unlike the SQL minimum, prevents phantom reads in PostgreSQL, but serialization anomalies remain possible. **Serializable** detects dangerous dependencies and may abort a transaction; the application must retry the entire transaction.
+
+<Callout type="tip">Name the anomaly your invariant cannot tolerate. Choosing Serializable everywhere without a retry loop merely trades silent corruption for visible failures.</Callout>
+
+<Callout type="mistake">Copying an isolation matrix from another database. PostgreSQL maps Read Uncommitted to Read Committed and gives stronger phantom protection at Repeatable Read than the standard minimum.</Callout>
+
+<HotspotImage src="/notes/relational-databases-engineer-level/transactions-and-concurrency/isolation-levels-and-anomalies.jpg" alt="Historic London Underground map with intersecting colored railway lines" credit="Tube map 1908 — Wikimedia Commons, public domain" creditHref="https://commons.wikimedia.org/wiki/File:Tube_map_1908.jpg" pins={[
+  { x: 28, y: 38, label: "Transaction A", desc: "One route reads and writes from its own snapshot." },
+  { x: 58, y: 52, label: "Dependency crossing", desc: "Concurrent routes can create a cycle that has no safe serial order." },
+  { x: 78, y: 68, label: "Retry route", desc: "Serializable may cancel one route so it can restart on a fresh snapshot." },
+]}/>
+
+<FlowAnimation title="How PostgreSQL Serializable resolves a dangerous history" intervalMs={1450} nodes={[
+  { label: "Transactions take snapshots", desc: "Each begins work from a coherent visible state." },
+  { label: "Reads and writes create dependencies", desc: "The server tracks relationships relevant to serialization." },
+  { label: "A dangerous structure appears", desc: "The combined history cannot safely remain as observed." },
+  { label: "One transaction aborts", desc: "PostgreSQL reports a serialization failure instead of committing the anomaly." },
+  { label: "Application retries all logic", desc: "The full transaction reruns against a new state." },
+]}/>
+
+<CodePlayground language="python" title="Run it — compare statement and transaction snapshots (Python)" code={`versions = [{"alice": 100}, {"alice": 70}]
+
+read_committed = [versions[0]["alice"], versions[1]["alice"]]
+repeatable_read_snapshot = versions[0]
+repeatable_read = [repeatable_read_snapshot["alice"], repeatable_read_snapshot["alice"]]
+
+print("Read Committed:", read_committed)
+print("Repeatable Read:", repeatable_read)
+
+# Read Committed: [100, 70]
+# Repeatable Read: [100, 100]`}/>
+
+<CodePlayground language="java" title="Run it — classify a write-skew history (Java)" code={`public class Main {
+  public static void main(String[] args) {
+    boolean aliceOnCall = true, bobOnCall = true;
+    boolean txASeesCoverage = bobOnCall;
+    boolean txBSeesCoverage = aliceOnCall;
+    if (txASeesCoverage) aliceOnCall = false;
+    if (txBSeesCoverage) bobOnCall = false;
+    System.out.println("alice=" + aliceOnCall + ", bob=" + bobOnCall);
+    System.out.println("invariant preserved=" + (aliceOnCall || bobOnCall));
+  }
+}
+/* alice=false, bob=false
+   invariant preserved=false */`}/>
+
+<FirstTime title="Your mission: reproduce one anomaly">
+<StepChecklist steps={[
+  { text: "Open two independent sessions", detail: "One connection cannot model overlapping transactions." },
+  { text: "Coordinate the read boundary", detail: "Use a barrier so both transactions observe the intended starting state." },
+  { text: "Run under two isolation levels", detail: "Record results and SQLSTATE, not only elapsed time." },
+  { text: "Add a full-transaction retry", detail: "Prove Serializable failure becomes a correct final result." },
+]}/>
+You have tested a concurrency contract, not merely a happy-path query.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "A value changes between two reads at Read Committed.", fix: "That level uses per-statement snapshots in PostgreSQL; use a stronger level or lock when the invariant requires stability." },
+  { symptom: "Serializable intermittently returns SQLSTATE 40001.", fix: "Treat it as an expected retry signal and rerun the whole transaction with bounded backoff." },
+  { symptom: "Repeatable Read still allows write skew.", fix: "PostgreSQL Repeatable Read prevents phantoms but not every serialization anomaly; use Serializable or explicit coordination." },
+]}/>
+
+<WhereToCheck>
+- `SHOW transaction_isolation` and transaction-scoped settings.
+- SQLSTATE `40001` and retry telemetry.
+- Exact snapshots implied by statement order.
+- Invariants across all rows touched logically, not only rows updated physically.
+</WhereToCheck>
+
+<WorkedExample title="two doctors leave the same shift">
+1. Alice and Bob are both on call; the rule requires at least one.
+2. Two Repeatable Read transactions each see the other on call.
+3. Each updates only its own row to off call.
+4. Both changes can commit, leaving nobody on call: write skew.
+5. PostgreSQL Serializable detects the unsafe dependency structure and aborts one transaction for retry.
+</WorkedExample>
+
+<Quiz question="Which PostgreSQL-specific statement is true?" options={["Read Uncommitted exposes dirty reads", "Repeatable Read permits phantom reads", "Read Uncommitted behaves as Read Committed, and Repeatable Read prevents phantoms", "Serializable transactions never need retries"]} answer={2} explain="PostgreSQL implements Read Uncommitted as Read Committed and its Repeatable Read is stronger than the standard minimum for phantoms." />
+
+<Flashcards cards={[
+  { front: "Read Committed snapshot", back: "A new snapshot at the start of each command in PostgreSQL." },
+  { front: "Write skew", back: "Transactions read overlapping facts but write different rows, jointly breaking an invariant." },
+  { front: "Serialization failure", back: "A retryable abort used to prevent an unsafe concurrent history." },
+]}/>
+
+<Challenge>Design a two-session test for a seat-capacity invariant. Predict outcomes under Read Committed, Repeatable Read, and Serializable, including required retries.</Challenge>
+
+<AskCommunity prompt="At `[isolation]`, sessions A/B execute `[timeline]` and produce `[outcome/SQLSTATE]`. The invariant is `[rule]`. Which anomaly explains it?">Include the interleaving; final values alone hide the cause.</AskCommunity>
+
+<Resources links={[
+  { href: "https://www.postgresql.org/docs/current/transaction-iso.html", title: "PostgreSQL — Transaction isolation", kind: "read" },
+  { href: "https://www.postgresql.org/docs/current/sql-set-transaction.html", title: "PostgreSQL — SET TRANSACTION", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=5ZjhNTM8XU8" title="Transactions: myths, surprises and opportunities — Martin Kleppmann" minutes={41} />
+
+<Takeaways points={[
+  "Isolation levels define permitted concurrent histories.",
+  "PostgreSQL Read Committed uses a fresh snapshot per statement.",
+  "PostgreSQL Repeatable Read prevents phantoms but can allow serialization anomalies.",
+  "Serializable can abort work to preserve a serializable history.",
+  "Correct Serializable clients retry the entire transaction.",
+]}/>
+
+<Complete xp={10} />

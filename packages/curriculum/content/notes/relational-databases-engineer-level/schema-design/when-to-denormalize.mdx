@@ -1,0 +1,106 @@
+---
+title: "When to denormalize"
+summary: "Denormalize only for a measured read bottleneck with explicit ownership, refresh, staleness, reconciliation, and rollback rules; duplication without operations is just two truths entering a cage match."
+tags: ["relational-databases-engineer-level", "schema-design", "track-e"]
+updated: "2026-07-17"
+related:
+  - "relational-databases-engineer-level/schema-design/normalization-1nf-to-3nf"
+  - "relational-databases-engineer-level/schema-design/keys-and-relationships"
+  - "relational-databases-engineer-level/sql-mastery/window-functions"
+---
+
+<Hook>Denormalization trades join cost for synchronization cost. If nobody wrote down who pays the synchronization bill, production will choose someone during an incident.</Hook>
+<Callout type="analogy">Pre-stacked pallets speed dispatch because common bundles are ready. They also require inventory rules when the source boxes change. Denormalized data is the same operational bargain.</Callout>
+<Term define="Denormalization deliberately stores derived or duplicated data to optimize a measured workload. It requires a canonical source, update/refresh mechanism, acceptable staleness, reconciliation checks, and a rollback path.">denormalization</Term>
+
+## Earn the duplicate
+
+Candidates include stored summaries, materialized views, search documents, and duplicated display
+fields. PostgreSQL materialized views persist query results and can be faster to read, but are not
+always current; `REFRESH MATERIALIZED VIEW` regenerates their data.
+
+<Callout type="tip">Write a staleness budget in time and business impact: “dashboard may lag five minutes,” not “eventually consistent-ish.”</Callout>
+<Callout type="mistake">Denormalizing before measuring. A missing index or bad query then survives beneath a new consistency problem.</Callout>
+
+<HotspotImage src="/notes/relational-databases-engineer-level/schema-design/when-to-denormalize.jpg" alt="Many wooden shipping pallets stacked together" credit="Wood pallets — Nadeem55, Wikimedia Commons, CC BY-SA 4.0" creditHref="https://commons.wikimedia.org/wiki/File:Wood_pallets.jpg" pins={[
+  { x: 25, y: 56, label: "Canonical boxes", desc: "Normalized source facts remain authoritative." },
+  { x: 53, y: 43, label: "Prebuilt bundle", desc: "A read-optimized copy answers a measured access pattern." },
+  { x: 79, y: 61, label: "Reconciliation", desc: "Checks detect missing, stale, or conflicting copies." },
+]}/>
+
+<FlowAnimation title="Make denormalization an engineered trade" intervalMs={1500} nodes={[
+  { label: "Measure bottleneck", desc: "Capture latency, throughput, plan, and load." },
+  { label: "Try simpler fixes", desc: "Query shape, indexes, caching, or partitioning." },
+  { label: "Define canonical owner", desc: "One source remains authoritative." },
+  { label: "Set refresh and staleness", desc: "Document timing, retries, and failure behavior." },
+  { label: "Reconcile and rollback", desc: "Continuously compare and retain an exit path." },
+]}/>
+
+<CodePlayground language="python" title="Run it — detect a stale summary (Python)" code={`orders = [40, 35, 25]
+canonical_total = sum(orders)
+summary_total = 75
+print("canonical:", canonical_total)
+print("summary:", summary_total)
+print("drift:", canonical_total - summary_total)
+print("refresh required:", canonical_total != summary_total)
+
+# canonical: 100
+# summary: 75
+# drift: 25
+# refresh required: True`}/>
+
+<CodePlayground language="java" title="Run it — detect a stale summary (Java)" code={`import java.util.*;
+public class Main {
+  public static void main(String[] args){
+    int canonical=List.of(40,35,25).stream().mapToInt(Integer::intValue).sum();
+    int summary=75;
+    System.out.println("canonical: "+canonical); System.out.println("summary: "+summary);
+    System.out.println("drift: "+(canonical-summary)); System.out.println("refresh required: "+(canonical!=summary));
+  }
+}
+
+/* canonical: 100
+   summary: 75
+   drift: 25
+   refresh required: true */`}/>
+
+<FirstTime title="Your mission: write a denormalization contract"><StepChecklist steps={[
+  { text: "Capture baseline plan and latency", detail: "Use representative volume and concurrency." },
+  { text: "Name canonical and derived stores", detail: "Every duplicated field has one owner." },
+  { text: "Define refresh and failure policy", detail: "Include retries, backfill, ordering, and idempotency." },
+  { text: "Automate reconciliation and rollback", detail: "Compare counts/sums/keys and prove the derived path can be disabled." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Derived data is stale beyond budget.", fix: "Alert on refresh age, inspect failed updates, and fall back to canonical reads where required." },
+  { symptom: "Refresh blocks readers.", fix: "Evaluate concurrent refresh requirements, unique indexes, scheduling, and alternative update architecture." },
+  { symptom: "Two stores disagree with no owner.", fix: "Stop bidirectional updates; declare canonical truth and rebuild the derivative from it." },
+]}/>
+
+<WhereToCheck>
+- Baseline and post-change query plans and latency percentiles.
+- Refresh timestamps, queue lag, retry/dead-letter state, and drift metrics.
+- Canonical-versus-derived key/count/sum reconciliation.
+</WhereToCheck>
+<WorkedExample title="a fast dashboard with an honest lag">A daily sales materialized view cuts dashboard latency from seconds to milliseconds. The product accepts ten-minute staleness. Tests verify refresh age, compare totals with base invoices, and fall back when age exceeds budget.</WorkedExample>
+<Quiz question="What must exist before choosing denormalization?" options={["A preference for fewer joins", "A measured bottleneck plus a consistency and ownership contract", "A large table name", "A materialized view extension"]} answer={1} explain="Denormalization is justified by evidence and operated through explicit canonical, refresh, staleness, reconciliation, and rollback rules." />
+<Flashcards cards={[
+  { front: "Canonical source", back: "The authoritative owner from which derived data can be rebuilt." },
+  { front: "Staleness budget", back: "Maximum acceptable lag stated in time and business impact." },
+  { front: "Reconciliation", back: "Automated comparison that detects drift between canonical and derived data." },
+  { front: "Materialized view", back: "Persisted query results refreshed explicitly; fast to read but potentially stale." },
+]}/>
+<Challenge>Design a materialized dashboard summary with a five-minute budget, drift checks, alerting, and a canonical-read fallback.</Challenge>
+<AskCommunity prompt="I propose duplicating `[fact]` because baseline `[metric]`; here are canonical owner, refresh, staleness, and reconciliation plans.">Ask reviewers to attack failure modes, not just query speed.</AskCommunity>
+<Resources links={[
+  { href: "https://www.postgresql.org/docs/current/rules-materializedviews.html", title: "PostgreSQL — materialized views", kind: "read" },
+  { href: "https://www.postgresql.org/docs/current/sql-refreshmaterializedview.html", title: "PostgreSQL — REFRESH MATERIALIZED VIEW", kind: "read" },
+]}/>
+<Video href="https://www.youtube.com/watch?v=ztHopE5Wnpc" title="freeCodeCamp — database design course" minutes={487} />
+<Takeaways points={[
+  "Denormalize only after measuring a real bottleneck and trying simpler fixes.",
+  "Declare one canonical source and treat duplicates as rebuildable derivatives.",
+  "Specify refresh, staleness, failure, and reconciliation behavior before release.",
+  "Materialized views accelerate reads but require explicit refresh and freshness testing.",
+]}/>
+<Complete xp={10} />

@@ -1,0 +1,112 @@
+---
+title: "Set operators"
+summary: "UNION, INTERSECT, and EXCEPT combine compatible query results; DISTINCT semantics, ALL variants, precedence, and final ordering decide whether your comparison is evidence or accidental data loss."
+tags: ["relational-databases-engineer-level", "sql-mastery", "track-e"]
+updated: "2026-07-17"
+related:
+  - "relational-databases-engineer-level/sql-mastery/subqueries-and-ctes"
+  - "relational-databases-engineer-level/schema-design/keys-and-relationships"
+  - "relational-databases-engineer-level/sql-mastery/window-functions"
+---
+
+<Hook>`UNION` is not “append.” It quietly removes duplicates, which is charming until duplicates are the bug you were hired to find.</Hook>
+<Callout type="analogy">Two fruit baskets can be poured together, compared for shared fruit, or subtracted. Whether identical apples remain repeated is the difference between default operators and `ALL`.</Callout>
+<Term define="SQL set operators combine union-compatible query outputs: UNION returns rows from either input, INTERSECT rows in both, and EXCEPT rows in the left input but not the right. Without ALL, duplicates are eliminated.">set operator</Term>
+
+## Compatibility, duplicates, precedence
+
+```sql
+SELECT id FROM source_a
+EXCEPT
+SELECT id FROM source_b;
+```
+
+Inputs need the same column count and compatible corresponding types. `INTERSECT` binds more tightly
+than `UNION` and `EXCEPT`; the latter associate left-to-right. Parenthesize mixed operators so a
+reviewer need not remember a precedence table during an outage.
+
+<Callout type="tip">Use `EXCEPT` in migration verification in both directions: old-minus-new and new-minus-old.</Callout>
+<Callout type="mistake">Applying `ORDER BY` to an unparenthesized branch and believing it sorts that branch. A trailing order normally applies to the combined result.</Callout>
+
+<HotspotImage src="/notes/relational-databases-engineer-level/sql-mastery/set-operators.jpg" alt="Several baskets containing overlapping varieties of fruit" credit="Fruit baskets — Pixel.la Free Stock Photos, Wikimedia Commons, CC0" creditHref="https://commons.wikimedia.org/wiki/File:Fruit_baskets.jpg" pins={[
+  { x: 25, y: 55, label: "Left set", desc: "Rows produced by the first compatible query." },
+  { x: 53, y: 47, label: "Overlap", desc: "Rows visible to INTERSECT." },
+  { x: 79, y: 58, label: "Right set", desc: "Rows added by UNION or removed by EXCEPT." },
+]}/>
+
+<FlowAnimation title="Compare two data populations" intervalMs={1500} nodes={[
+  { label: "Align columns", desc: "Same count, order, and compatible types." },
+  { label: "Choose relationship", desc: "Either, both, or left-only." },
+  { label: "Choose duplicate policy", desc: "Default distinct or explicit ALL." },
+  { label: "Parenthesize and order", desc: "Make evaluation and final presentation explicit." },
+]}/>
+
+<CodePlayground language="python" title="Run it — union, intersection, difference (Python)" code={`left = [1, 1, 2, 3]
+right = [2, 3, 4]
+print("UNION", sorted(set(left) | set(right)))
+print("INTERSECT", sorted(set(left) & set(right)))
+print("EXCEPT", sorted(set(left) - set(right)))
+print("UNION ALL", left + right)
+
+# UNION [1, 2, 3, 4]
+# INTERSECT [2, 3]
+# EXCEPT [1]
+# UNION ALL [1, 1, 2, 3, 2, 3, 4]`}/>
+
+<CodePlayground language="java" title="Run it — union, intersection, difference (Java)" code={`import java.util.*;
+public class Main {
+  public static void main(String[] args){
+    List<Integer> left=List.of(1,1,2,3), right=List.of(2,3,4);
+    Set<Integer> union=new TreeSet<>(left); union.addAll(right);
+    Set<Integer> both=new TreeSet<>(left); both.retainAll(right);
+    Set<Integer> diff=new TreeSet<>(left); diff.removeAll(right);
+    List<Integer> all=new ArrayList<>(left); all.addAll(right);
+    System.out.println("UNION "+union); System.out.println("INTERSECT "+both); System.out.println("EXCEPT "+diff); System.out.println("UNION ALL "+all);
+  }
+}
+
+/* UNION [1, 2, 3, 4]
+   INTERSECT [2, 3]
+   EXCEPT [1]
+   UNION ALL [1, 1, 2, 3, 2, 3, 4] */`}/>
+
+<FirstTime title="Your mission: reconcile two sources"><StepChecklist steps={[
+  { text: "Select the same key shape from old and new tables", detail: "Cast deliberately where types differ." },
+  { text: "Run EXCEPT in both directions", detail: "One direction cannot detect unexpected additions." },
+  { text: "Compare UNION with UNION ALL counts", detail: "Expose duplicate assumptions." },
+  { text: "Parenthesize mixed operators", detail: "Then add one final ORDER BY for deterministic evidence." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Queries are not union compatible.", fix: "Align column count/order and cast corresponding types intentionally." },
+  { symptom: "Duplicate bug disappears.", fix: "Use ALL or separate GROUP BY/HAVING duplicate checks instead of default distinct semantics." },
+  { symptom: "Mixed operator result is surprising.", fix: "Remember INTERSECT binds tighter; add parentheses that encode the intended logic." },
+]}/>
+
+<WhereToCheck>
+- Column order and types on both branches.
+- Counts before and after distinct elimination.
+- Parentheses, final ordering, and NULL-containing rows.
+</WhereToCheck>
+<WorkedExample title="a migration that only looked equal">`old EXCEPT new` returns nothing, so the tester declares victory. `new EXCEPT old` reveals 17 unexpected rows. Equivalence requires both directions—or a symmetric comparison—not optimism in one direction.</WorkedExample>
+<Quiz question="What does UNION do with duplicate rows by default?" options={["Keeps all", "Eliminates duplicates", "Throws an error", "Keeps only duplicates"]} answer={1} explain="UNION uses distinct semantics unless UNION ALL is specified." />
+<Flashcards cards={[
+  { front: "UNION", back: "Rows from either input, duplicates removed by default." },
+  { front: "INTERSECT", back: "Rows present in both inputs." },
+  { front: "EXCEPT", back: "Rows in the left input but not the right." },
+  { front: "Union compatible", back: "Same column count with compatible corresponding types." },
+]}/>
+<Challenge>Verify two migrated key/value projections with bidirectional EXCEPT, explicit duplicate checks, and deterministic output.</Challenge>
+<AskCommunity prompt="My set comparison lost `[duplicates/rows]`; here are branch schemas, counts, and operators.">Include whether ALL was used and how NULLs should be treated.</AskCommunity>
+<Resources links={[
+  { href: "https://www.postgresql.org/docs/current/queries-union.html", title: "PostgreSQL — combining queries", kind: "read" },
+  { href: "https://www.postgresql.org/docs/current/typeconv-union-case.html", title: "PostgreSQL — UNION type resolution", kind: "read" },
+]}/>
+<Video href="https://www.youtube.com/watch?v=HXV3zeQKqGY" title="freeCodeCamp — SQL tutorial, full database course" minutes={261} />
+<Takeaways points={[
+  "UNION, INTERSECT, and EXCEPT express either, both, and left-only relationships.",
+  "Default set operators remove duplicates; ALL preserves multiplicity.",
+  "Inputs must be union compatible.",
+  "Parenthesize mixed operators and compare migrations in both directions.",
+]}/>
+<Complete xp={10} />

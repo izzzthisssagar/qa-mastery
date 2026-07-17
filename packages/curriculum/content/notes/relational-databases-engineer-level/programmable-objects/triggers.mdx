@@ -1,0 +1,98 @@
+---
+title: "Triggers"
+summary: "Test PostgreSQL triggers as hidden event handlers, including timing, row scope, recursion, and audit side effects."
+tags: ["postgresql", "triggers", "plpgsql", "database-testing"]
+updated: "2026-07-17"
+related: ["relational-databases-engineer-level/programmable-objects/stored-procedures-and-functions", "relational-databases-engineer-level/programmable-objects/testing-procedures", "relational-databases-engineer-level/data-integrity-at-scale/auditing-data-changes"]
+---
+
+<Hook>Triggers make a statement do more than it says. That hidden work is useful—and exactly why a test must observe timing, scope, ordering, and side effects instead of trusting the visible SQL.</Hook>
+
+<Callout type="analogy">A <Term define="Database code fired automatically for a declared event, timing, and scope.">trigger</Term> is a mousetrap: a defined event releases a mechanism. Test what sets it off, what it changes, whether it fires once or per row, and whether resetting it causes another snap.</Callout>
+
+## Map event to effect
+
+A PostgreSQL trigger function takes no ordinary arguments and returns `trigger`. Its context includes `NEW`, `OLD`, `TG_OP`, and `TG_LEVEL`. A `BEFORE` row trigger may replace `NEW` or return null to skip the row; an `AFTER` trigger observes the final effect, and its return value is ignored.
+
+<HotspotImage src="/notes/relational-databases-engineer-level/programmable-objects/triggers.jpg" alt="An unset mousetrap illustrating a database trigger" credit="Photo: Evan-Amos — Wikimedia Commons, public domain" creditHref="https://commons.wikimedia.org/wiki/File:Victor-Mousetrap.jpg" pins={[
+  { x: 28, y: 48, label: "Event", desc: "INSERT, UPDATE, DELETE, or TRUNCATE is the pressure that starts the mechanism." },
+  { x: 51, y: 36, label: "Condition and timing", desc: "BEFORE, AFTER, INSTEAD OF, and WHEN decide whether and when it moves." },
+  { x: 76, y: 57, label: "Effect", desc: "The trigger may rewrite a row, reject it, or emit an audit record—possibly once per affected row." },
+]}/>
+
+<Callout type="tip">Query `pg_trigger` and use `pg_get_triggerdef(oid)` before testing. The active definition—not a migration file you remember—is the executable truth.</Callout>
+
+<Callout type="mistake">Testing a one-row UPDATE when production statements update thousands. A row trigger fires per row; a statement trigger fires once. Your fixture must distinguish the two.</Callout>
+
+<FlowAnimation title="A row-trigger lifecycle" intervalMs={1300} nodes={[
+  { label: "Statement arrives", desc: "An INSERT, UPDATE, or DELETE targets one or more rows." },
+  { label: "BEFORE", desc: "Row code can validate, modify NEW, or suppress the operation." },
+  { label: "Row changes", desc: "Constraints and the physical operation determine the final stored row." },
+  { label: "AFTER", desc: "Downstream work such as audit emission sees the completed change." },
+]}/>
+
+<CodePlayground language="python" title="Count row-level trigger effects" code={`rows = [{"id": 1}, {"id": 2}, {"id": 3}]
+audit = []
+for row in rows:
+    row["status"] = "READY"          # BEFORE-row effect
+    audit.append(("UPDATE", row["id"]))  # AFTER-row effect
+
+assert len(audit) == len(rows)
+print(rows)
+print("audit events:", audit)`}/>
+
+<CodePlayground language="java" title="Simulate trigger timing in Java" code={`import java.util.*;
+class Main {
+  static Map<String, String> beforeInsert(Map<String, String> row) {
+    Map<String, String> copy = new HashMap<>(row);
+    copy.put("status", copy.getOrDefault("status", "PENDING").toUpperCase());
+    return copy;
+  }
+  public static void main(String[] args) {
+    List<String> audit = new ArrayList<>();
+    Map<String, String> stored = beforeInsert(Map.of("id", "42", "status", "pending"));
+    audit.add("INSERT id=" + stored.get("id") + " status=" + stored.get("status"));
+    System.out.println(stored);
+    System.out.println(audit);
+  }
+}`}/>
+
+<FirstTime title="Expose a hidden trigger"><StepChecklist steps={[
+  { text: "Inventory active triggers", detail: "Record event, timing, level, WHEN clause, function, and enabled state." },
+  { text: "Test each operation", detail: "INSERT, UPDATE, and DELETE can expose different NEW/OLD behavior." },
+  { text: "Use a multi-row statement", detail: "Count both business rows and side effects to reveal row-versus-statement errors." },
+  { text: "Assert rollback", detail: "Force a failure and confirm the base change and trigger side effects roll back together." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "One UPDATE creates hundreds of audit rows.", fix: "Check FOR EACH ROW versus FOR EACH STATEMENT and decide which scope the contract requires." },
+  { symptom: "A trigger silently changes submitted values.", fix: "Compare requested values with RETURNING output and stored rows; inspect BEFORE trigger assignments to NEW." },
+  { symptom: "Updates recurse until an error.", fix: "Trace trigger-written tables and columns; add a narrow WHEN condition or redesign the cycle rather than masking depth." },
+]}/>
+
+<WhereToCheck>Inspect `pg_trigger`, `pg_get_triggerdef`, the trigger function source, server logs, and exact base/audit row diffs. Check disabled or replica-only state when environments disagree.</WhereToCheck>
+
+<WorkedExample title="An updated_at trigger under a no-op update">Arrange one row with a known timestamp. Update a business field and assert `updated_at` advances. Run a no-op assignment and decide from the contract whether it should advance. Update three rows in one statement and assert exactly three timestamps—not one, not six.</WorkedExample>
+
+<Quiz question="Which trigger test best reveals row-versus-statement scope?" options={["SELECT one row", "UPDATE several rows with one statement and count side effects", "Read the function name", "Run VACUUM"]} answer={1} explain="One statement affecting multiple rows makes the two trigger levels observably different." />
+
+<Flashcards cards={[
+  { front: "NEW / OLD", back: "Trigger context records for the proposed new row and prior row, depending on operation." },
+  { front: "BEFORE row trigger", back: "Can return a modified NEW row or null to suppress that row operation." },
+  { front: "AFTER trigger", back: "Runs after the change; its return value is ignored." },
+]}/>
+
+<Challenge>Build a trigger matrix with rows for INSERT/UPDATE/DELETE and columns for one row, many rows, rejected row, rollback, and retry. Add expected base and side-effect counts.</Challenge>
+
+<AskCommunity prompt="Trigger definition: [event/timing/level]. Statement: [SQL]. Base-row diff: [evidence]. Side-effect diff: [evidence]. Why did it fire this many times?">Share the rendered trigger definition and PostgreSQL version, not only the function body.</AskCommunity>
+
+<Resources links={[
+  { href: "https://www.postgresql.org/docs/current/plpgsql-trigger.html", title: "PostgreSQL — Trigger Functions", kind: "read" },
+  { href: "https://www.postgresql.org/docs/current/trigger-definition.html", title: "PostgreSQL — Overview of Trigger Behavior", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=qw--VYLpxG4" title="Learn PostgreSQL — Full Course for Beginners" minutes={260} />
+
+<Takeaways points={["A trigger test starts with event, timing, level, condition, and enabled state.", "BEFORE row triggers can alter or suppress a row; AFTER return values are ignored.", "Multi-row statements expose firing-count mistakes.", "Assert base changes and trigger side effects across rollback and retry."]}/>
+
+<Complete xp={10} />

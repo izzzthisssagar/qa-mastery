@@ -1,0 +1,151 @@
+---
+title: "Testing concurrent behavior"
+summary: "Concurrency tests need controlled interleavings, independent transactions, bounded waits, and invariant assertions. Build deterministic two-session tests that reveal races without sleep-driven flakiness."
+tags: ["relational-databases-engineer-level", "transactions-and-concurrency", "track-e"]
+updated: "2026-07-17"
+related:
+  - "relational-databases-engineer-level/transactions-and-concurrency/isolation-levels-and-anomalies"
+  - "relational-databases-engineer-level/transactions-and-concurrency/locks-and-deadlocks"
+---
+
+<Hook>A concurrency bug lives in an interleaving. If a test does not control that interleaving, one green run proves almost nothing and one red run may be impossible to reproduce.</Hook>
+
+<Callout type="analogy">A rowing crew tests coordination by aligning strokes to a coxswain's calls. Barriers play that role for transactions: both sessions reach a precise phase before either proceeds.</Callout>
+
+<Term define="A deterministic concurrency test runs work on independent sessions, coordinates exact phase boundaries with barriers or latches, bounds every wait, and asserts both permitted outcomes and durable invariants across the final database state.">concurrency test</Term>
+
+## Control the schedule, then assert the contract
+
+Use separate connections because one connection serializes commands. Start from known fixtures, coordinate reads and writes at named barriers, and capture values, errors, SQLSTATEs, and commit outcomes. Assert the invariant after every transaction finishes. Repeat enough to detect unsupported assumptions, but never substitute repetition for controlled timing.
+
+<Callout type="tip">Build a tiny schedule DSL—`A.read`, `B.read`, `A.write`, `B.write`, `commit`—or explicit barriers. The failure report should print the exact interleaving.</Callout>
+
+<Callout type="mistake">Using `sleep(1)` as synchronization. Scheduler load changes the timing; barriers express causality while sleeps only express hope.</Callout>
+
+<HotspotImage src="/notes/relational-databases-engineer-level/transactions-and-concurrency/testing-concurrent-behavior.jpg" alt="Rowing crew and coxswain coordinating in a racing shell on the water" credit="Rowing crew with coxswain — Columbus Metropolitan Library via DPLA and Wikimedia Commons, public domain in the United States" creditHref="https://commons.wikimedia.org/wiki/File:Rowing_crew_with_coxswain_-_DPLA_-_fb2618e96316b77bb9ec12f87c861a00.jpg" pins={[
+  { x: 55, y: 48, label: "Independent workers", desc: "Each rower represents a separate database session and transaction." },
+  { x: 30, y: 55, label: "Shared barrier", desc: "A named phase aligns both workers before the next operation." },
+  { x: 80, y: 60, label: "Final invariant", desc: "The whole crew's outcome matters, not the apparent success of one worker." },
+]}/>
+
+<FlowAnimation title="A deterministic two-session race test" intervalMs={1400} nodes={[
+  { label: "Reset fixture", desc: "Create one known durable starting state." },
+  { label: "Open A and B", desc: "Use independent connections and explicit transactions." },
+  { label: "Meet at read barrier", desc: "Both sessions capture the intended snapshot or value." },
+  { label: "Release ordered actions", desc: "Latches control writes, commits, and expected waits." },
+  { label: "Assert outcomes and invariant", desc: "Check results, SQLSTATEs, final rows, and retry behavior." },
+]}/>
+
+<CodePlayground language="python" title="Run it — force a stale-read lost update (Python)" code={`from threading import Barrier, Event, Lock, Thread
+
+balance = {"value": 100}
+read_barrier = Barrier(2)
+write_lock = Lock()
+first_write_done = Event()
+
+def withdraw(amount, wait_for_first):
+    observed = balance["value"]
+    read_barrier.wait()
+    if wait_for_first:
+        first_write_done.wait()
+    with write_lock:
+        balance["value"] = observed - amount
+    if not wait_for_first:
+        first_write_done.set()
+
+threads = [Thread(target=withdraw, args=(10, False)), Thread(target=withdraw, args=(20, True))]
+for thread in threads: thread.start()
+for thread in threads: thread.join()
+print("final balance:", balance["value"])
+print("correct serial result: 70")
+
+# final balance: 80
+# correct serial result: 70`}/>
+
+<CodePlayground language="java" title="Run it — coordinate the same race (Java)" code={`import java.util.concurrent.*;
+public class Main {
+  static int balance = 100;
+  static final CyclicBarrier readBarrier = new CyclicBarrier(2);
+  static final CountDownLatch firstWriteDone = new CountDownLatch(1);
+  static synchronized void publish(int value) { balance = value; }
+  static Runnable withdraw(int amount, boolean waitForFirst) {
+    return () -> {
+      int observed = balance;
+      try { readBarrier.await(); } catch (Exception error) { throw new RuntimeException(error); }
+      if (waitForFirst) {
+        try { firstWriteDone.await(); } catch (InterruptedException error) { throw new RuntimeException(error); }
+      }
+      publish(observed - amount);
+      if (!waitForFirst) firstWriteDone.countDown();
+    };
+  }
+  public static void main(String[] args) throws Exception {
+    Thread a = new Thread(withdraw(10, false));
+    Thread b = new Thread(withdraw(20, true));
+    a.start(); b.start(); a.join(); b.join();
+    System.out.println("final balance: " + balance);
+    System.out.println("correct serial result: 70");
+  }
+}
+/* final balance: 80
+   correct serial result: 70 */`}/>
+
+<FirstTime title="Your mission: make a race reproducible">
+<StepChecklist steps={[
+  { text: "Create one minimal fixture", detail: "Keep the invariant and expected serial result obvious." },
+  { text: "Open independent transactions", detail: "Give each worker its own connection and explicit boundary." },
+  { text: "Place barriers around the vulnerable read", detail: "Force both sessions to observe the state before either writes." },
+  { text: "Bound and report every wait", detail: "Timeouts should print the phase, session, query, and lock state." },
+]}/>
+You now own the schedule that exposes the race.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "The test passes locally but flakes in CI.", fix: "Replace sleeps with barriers/latches and log the exact phase reached by each worker." },
+  { symptom: "No overlap occurs.", fix: "Verify separate connections, explicit transactions, and a barrier before the contested operation." },
+  { symptom: "The test hangs forever.", fix: "Set transaction, lock, statement, and harness timeouts; dump blockers before cleanup." },
+]}/>
+
+<WhereToCheck>
+- Per-worker connection identity, transaction boundary, and isolation level.
+- Barrier/latch phase logs and bounded timeout failures.
+- SQLSTATE, commit/rollback result, and retry count.
+- Final invariant queried from a fresh connection after workers finish.
+</WhereToCheck>
+
+<WorkedExample title="a deterministic lost update">
+1. Balance begins at 100; A withdraws 10 and B withdraws 20.
+2. A and B read 100, then wait at the same barrier.
+3. Each computes from its stale copy; writes are released one after another.
+4. The last write leaves 80 or 90 instead of the serial result 70.
+5. A conditional update, row lock, or suitable serializable transaction changes the allowed outcome; the test verifies that contract.
+</WorkedExample>
+
+<Quiz question="Why is a barrier stronger than a sleep in a concurrency test?" options={["It makes the database faster", "It guarantees all threads use one connection", "It expresses that participants reached a named phase before release", "It eliminates the need for timeouts"]} answer={2} explain="A barrier coordinates causality at a specific phase; a sleep only guesses how far another worker has progressed." />
+
+<Flashcards cards={[
+  { front: "Barrier", back: "A synchronization point that releases participants only after all expected workers arrive." },
+  { front: "Invariant assertion", back: "A check of the durable business rule after all concurrent work completes." },
+  { front: "Allowed outcome", back: "A result or retry/error explicitly permitted by the selected concurrency contract." },
+]}/>
+
+<Challenge>Implement a two-session test for double booking. Force both reads before either reservation, then verify the invariant under the current isolation and after adding the chosen fix.</Challenge>
+
+<AskCommunity prompt="Workers A/B follow `[schedule]` at `[isolation]`; outcomes are `[values/SQLSTATEs]`, while invariant `[rule]` becomes `[state]`. Is the test schedule or product control wrong?">Include connection boundaries, barriers, and timeout diagnostics.</AskCommunity>
+
+<Resources links={[
+  { href: "https://www.postgresql.org/docs/current/transaction-iso.html", title: "PostgreSQL — Transaction isolation", kind: "read" },
+  { href: "https://www.postgresql.org/docs/current/explicit-locking.html", title: "PostgreSQL — Explicit locking", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=5ZjhNTM8XU8" title="Transactions: myths, surprises and opportunities — Martin Kleppmann" minutes={41} />
+
+<Takeaways points={[
+  "Concurrency tests need independent sessions and explicit transaction boundaries.",
+  "Barriers and latches control interleavings more reliably than sleeps.",
+  "Assert SQLSTATEs and commit outcomes as well as returned values.",
+  "Check the durable invariant from a fresh connection after workers finish.",
+  "Bound every wait and report the exact phase when a test times out.",
+]}/>
+
+<Complete xp={10} />
