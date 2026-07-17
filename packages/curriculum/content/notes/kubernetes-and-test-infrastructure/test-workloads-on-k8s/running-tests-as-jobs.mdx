@@ -1,0 +1,340 @@
+---
+title: "Running tests as Jobs"
+summary: "A Kubernetes Job runs a pod until it exits, then stops - unlike a Deployment, which restarts its pod forever. Test suites are naturally a run-to-completion task, which is exactly what Job's completions and backoffLimit model."
+tags: ["kubernetes-and-test-infrastructure", "test-workloads-on-k8s", "track-d"]
+updated: "2026-07-17"
+related:
+  - "kubernetes-and-test-infrastructure/kubernetes-in-plain-words/pods-deployments-services"
+  - "kubernetes-and-test-infrastructure/test-workloads-on-k8s/reading-pod-logs"
+  - "docker-and-containers-for-testers/containers-in-automation/running-your-suite-in-a-container"
+---
+
+<Hook>
+A team deploys their nightly regression suite the same way they deploy their app: as a
+Deployment. It runs once, the tests finish, the container exits - and Kubernetes, faithfully
+doing exactly what a Deployment is built to do, immediately restarts it. And again. And again,
+forever, at 2 AM, burning cluster capacity on a test run that already finished hours ago. The
+suite never asked to run forever. It asked to run ONCE, to completion. That is a completely
+different workload shape, and Kubernetes has a completely different object for it.
+</Hook>
+
+<Callout type="analogy">
+An assembly line running a numbered PRODUCTION RUN, not an assembly line that runs forever. A
+1913 Ford plant didn't leave the line moving after the day's batch of magnetos and flywheels was
+built - the run had a target count, workers pulled parts from a shared bin until that count was
+hit, and then the line stopped. That target-count-then-stop behavior is precisely what a
+Kubernetes Job models: run a fixed number of completions, retry a failed attempt up to a limit,
+and then be DONE - not a line that runs forever regardless of how much has already shipped.
+</Callout>
+
+<Term define="A Job is a Kubernetes object that runs one or more pods until a target number of them exit successfully (its `completions` count), then stops - it never restarts a pod that has already succeeded. If a pod's container exits with a failure, the Job creates a replacement pod and retries, up to `backoffLimit` attempts, after which the whole Job is marked Failed. This is the opposite of a Deployment's restart policy, which is built to keep a pod running forever and treats ANY exit (success or failure) as something to restart from - exactly wrong for a workload, like a test suite, that is SUPPOSED to finish.">Job</Term>
+
+## The shape of the workload decides the object
+
+- **A test suite has a natural end.** It runs, produces a pass/fail result, and exits. That is a
+  run-to-completion workload - the same shape as a database migration, a report generation
+  script, or a batch export. None of these should be "kept alive" the way a web server should.
+- **`completions` is the target, `parallelism` is how many run at once.** A Job with
+  `completions: 5` and `parallelism: 2` runs pods two at a time until five have succeeded in
+  total - useful for sharding a large suite across several pods instead of one pod running
+  everything serially.
+- **`backoffLimit` bounds retries, not attempts forever.** A flaky test-runner pod that crashes
+  on startup (a bad image, a missing secret) will retry up to `backoffLimit` times and then the
+  Job gives up and reports Failed - it does not retry indefinitely the way a Deployment's pod
+  would.
+- **`restartPolicy` inside a Job's pod template must be `Never` or `OnFailure`** - never
+  `Always`. That single field is the actual mechanical reason Jobs and Deployments behave so
+  differently: `Always` is what makes a Deployment's pod immortal, and a Job's spec is not
+  allowed to set it.
+
+<Callout type="tip">
+Set `ttlSecondsAfterFinished` on the Job spec. Without it, completed Job pods stick around
+indefinitely - after a few hundred CI runs you get a cluster cluttered with old, finished
+test-runner pods that `kubectl get pods` has to scroll past every time, none of which are doing
+anything anymore.
+</Callout>
+
+<Callout type="mistake">
+Setting `backoffLimit` too high (or leaving the default of 6) on a test-runner Job whose failure
+is deterministic - a bad test fixture, a missing environment variable - rather than a genuinely
+transient one. A deterministic failure will fail the SAME way on every retry, so a high
+`backoffLimit` doesn't add resilience, it just burns six pod-starts and several minutes of CI
+time before reporting the failure you could have seen immediately after attempt one.
+</Callout>
+
+{/* IMAGE: black-and-white 1913 Ford Highland Park factory photo, workers along a moving assembly line assembling wheel/flywheel components, foreground bins overflowing with loose bolts and small parts, the line stretching back with more workers repeating the same task */}
+<HotspotImage
+  src="/notes/kubernetes-and-test-infrastructure/test-workloads-on-k8s/running-tests-as-jobs.jpg"
+  alt="Workers along a 1913 Ford assembly line assembling wheel and flywheel components, with bins of parts in the foreground and the line stretching into the background"
+  credit="Ford assembly line - 1913 — unknown author, Wikimedia Commons, Public Domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:Ford_assembly_line_-_1913.jpg"
+  pins={[
+    { x: 32, y: 55, label: "One worker at one station — one pod completing one unit of the batch", desc: "This worker doesn't stop when their neighbor's piece is done - they finish THEIR unit, which counts toward the shared target. One Job pod succeeding is exactly this: one completion toward the Job's `completions` count, independent of the others." },
+    { x: 20, y: 80, label: "The bin of loose parts — the shared work queue", desc: "Every worker pulls from the SAME bin of bolts and components until it's empty. A Job with `parallelism` greater than one works the same way - multiple pods pulling from the same finite backlog of test work until the target count is reached, not each pod owning a separate private queue." },
+    { x: 65, y: 45, label: "The line stretching into the background — parallelism, not infinity", desc: "More workers doing the identical task further down the line - this is `parallelism`, running several pods of the same Job at once. But it's still a FIXED number of workers on a FIXED run, not a line that grows or shrinks on its own or runs forever." },
+    { x: 78, y: 30, label: "The overhead pulley and belt machinery — what actually drives completion", desc: "The belt mechanism above the line is what advances the batch - the analog of the Job controller itself, which is what actually tracks completions and decides when the target has been hit and the whole run can stop." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One Job, from creation to Complete - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "kubectl apply -f test-job.yaml", desc: "completions: 3, parallelism: 1, backoffLimit: 2 - the target is three successful test-runner pods." },
+    { label: "Pod 1 starts, runs the suite, exits 1 (a real failure)", desc: "The Job controller notices the non-zero exit and starts a replacement pod - this is retry 1 of the backoffLimit budget." },
+    { label: "Pod 2 (the retry) runs the suite, exits 0", desc: "First completion. The Job now needs two more successful pods before it can call itself done." },
+    { label: "Pods 3 and 4 run and both exit 0", desc: "Completions reach 3/3 - the Job's target is met." },
+    { label: "Job condition flips to Complete", desc: "No more pods are created. The Job stops here, permanently - unlike a Deployment, there is nothing left to keep running." },
+  ]}
+/>
+
+Everything above reduces to one question worth asking about any workload before you decide how to
+run it on Kubernetes: is this thing supposed to keep running, or is it supposed to FINISH?
+
+<CodePlayground
+  language="python"
+  title="Run it - a Job scheduler simulation: completions, retries, and backoffLimit (Python)"
+  code={`class TestJob:
+    """A minimal simulation of a Kubernetes Job running a test suite to completion."""
+    def __init__(self, name, completions, parallelism, backoff_limit):
+        self.name = name
+        self.completions_needed = completions
+        self.parallelism = parallelism
+        self.backoff_limit = backoff_limit
+        self.completed = 0
+        self.attempts = 0
+        self.failures_in_a_row = 0
+
+    def run_one_pod(self, outcomes):
+        """Pop the next simulated pod outcome ('pass' or 'fail') and apply Job semantics."""
+        self.attempts += 1
+        outcome = outcomes.pop(0)
+        if outcome == "pass":
+            self.completed += 1
+            self.failures_in_a_row = 0
+            return f"  pod attempt {self.attempts}: PASSED ({self.completed}/{self.completions_needed} completions)"
+        self.failures_in_a_row += 1
+        if self.failures_in_a_row > self.backoff_limit:
+            return f"  pod attempt {self.attempts}: FAILED - backoffLimit ({self.backoff_limit}) exceeded, Job marked Failed"
+        return f"  pod attempt {self.attempts}: FAILED - retrying (failure {self.failures_in_a_row}/{self.backoff_limit} allowed)"
+
+    def run_to_completion(self, outcomes):
+        print(f"Job '{self.name}': needs {self.completions_needed} completions, "
+              f"parallelism={self.parallelism}, backoffLimit={self.backoff_limit}")
+        while self.completed < self.completions_needed and outcomes:
+            print(self.run_one_pod(outcomes))
+            if self.failures_in_a_row > self.backoff_limit:
+                print(f"  Job '{self.name}': FAILED overall")
+                return False
+        if self.completed >= self.completions_needed:
+            print(f"  Job '{self.name}': COMPLETE - {self.completed}/{self.completions_needed} pods succeeded")
+            return True
+        print(f"  Job '{self.name}': ran out of simulated attempts before completing")
+        return False
+
+
+print("--- A test-suite Job that succeeds after one retry (backoffLimit=2) ---")
+job1 = TestJob("nightly-regression", completions=3, parallelism=1, backoff_limit=2)
+job1.run_to_completion(["fail", "pass", "pass", "pass"])
+
+print()
+print("--- The same kind of Job, but it exhausts its backoffLimit ---")
+job2 = TestJob("flaky-suite", completions=3, parallelism=1, backoff_limit=2)
+job2.run_to_completion(["fail", "fail", "fail", "pass"])
+
+print()
+print("--- Compare: a Deployment would NOT behave this way ---")
+print("  A Deployment's restartPolicy keeps the pod alive forever - there is no")
+print("  'completions' target and no concept of the workload ever being 'Complete'.")
+print("  A Job's pod is expected to EXIT (pass or fail); a Deployment's pod is expected")
+print("  to keep RUNNING - that's the entire reason test suites use Jobs, not Deployments.")`}
+/>
+
+Same Job simulation in Java:
+
+<CodePlayground
+  language="java"
+  title="Run it - a Job scheduler simulation: completions, retries, and backoffLimit (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static class TestJob {
+        String name;
+        int completionsNeeded;
+        int parallelism;
+        int backoffLimit;
+        int completed = 0;
+        int attempts = 0;
+        int failuresInARow = 0;
+
+        TestJob(String name, int completionsNeeded, int parallelism, int backoffLimit) {
+            this.name = name;
+            this.completionsNeeded = completionsNeeded;
+            this.parallelism = parallelism;
+            this.backoffLimit = backoffLimit;
+        }
+
+        String runOnePod(List<String> outcomes) {
+            attempts++;
+            String outcome = outcomes.remove(0);
+            if (outcome.equals("pass")) {
+                completed++;
+                failuresInARow = 0;
+                return "  pod attempt " + attempts + ": PASSED (" + completed + "/" + completionsNeeded + " completions)";
+            }
+            failuresInARow++;
+            if (failuresInARow > backoffLimit) {
+                return "  pod attempt " + attempts + ": FAILED - backoffLimit (" + backoffLimit + ") exceeded, Job marked Failed";
+            }
+            return "  pod attempt " + attempts + ": FAILED - retrying (failure " + failuresInARow + "/" + backoffLimit + " allowed)";
+        }
+
+        boolean runToCompletion(List<String> outcomes) {
+            System.out.println("Job '" + name + "': needs " + completionsNeeded + " completions, "
+                    + "parallelism=" + parallelism + ", backoffLimit=" + backoffLimit);
+            while (completed < completionsNeeded && !outcomes.isEmpty()) {
+                System.out.println(runOnePod(outcomes));
+                if (failuresInARow > backoffLimit) {
+                    System.out.println("  Job '" + name + "': FAILED overall");
+                    return false;
+                }
+            }
+            if (completed >= completionsNeeded) {
+                System.out.println("  Job '" + name + "': COMPLETE - " + completed + "/" + completionsNeeded + " pods succeeded");
+                return true;
+            }
+            System.out.println("  Job '" + name + "': ran out of simulated attempts before completing");
+            return false;
+        }
+    }
+
+    public static void main(String[] args) {
+        System.out.println("--- A test-suite Job that succeeds after one retry (backoffLimit=2) ---");
+        TestJob job1 = new TestJob("nightly-regression", 3, 1, 2);
+        job1.runToCompletion(new ArrayList<>(List.of("fail", "pass", "pass", "pass")));
+
+        System.out.println();
+        System.out.println("--- The same kind of Job, but it exhausts its backoffLimit ---");
+        TestJob job2 = new TestJob("flaky-suite", 3, 1, 2);
+        job2.runToCompletion(new ArrayList<>(List.of("fail", "fail", "fail", "pass")));
+
+        System.out.println();
+        System.out.println("--- Compare: a Deployment would NOT behave this way ---");
+        System.out.println("  A Deployment's restartPolicy keeps the pod alive forever - there is no");
+        System.out.println("  'completions' target and no concept of the workload ever being 'Complete'.");
+        System.out.println("  A Job's pod is expected to EXIT (pass or fail); a Deployment's pod is expected");
+        System.out.println("  to keep RUNNING - that's the entire reason test suites use Jobs, not Deployments.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: run a real test suite as a Job and watch it complete">
+<StepChecklist
+  steps={[
+    { text: "Write a minimal Job manifest wrapping any test command (even `pytest` or `mvn test` inside a small image)", detail: "Set completions: 1, backoffLimit: 2, and restartPolicy: Never on the pod template." },
+    { text: "Apply it and immediately run `kubectl get pods -w`", detail: "Watch the pod go Pending -> Running -> Completed. Note that it does NOT restart after Completed, unlike a Deployment's pod would." },
+    { text: "Break it on purpose: point the command at a test that always fails", detail: "Re-apply, and watch `kubectl get jobs` - count how many pods get created before the Job gives up, and confirm it matches backoffLimit + 1." },
+    { text: "Check `kubectl describe job <name>`", detail: "Find the Complete or Failed condition and its timestamp - this is the ground truth a CI pipeline should poll, not just 'did a pod exist'." },
+  ]}
+/>
+You've now watched the run-to-completion lifecycle directly instead of just reading about it - the
+difference between a Job finishing and a Deployment restarting forever is no longer theoretical.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A test-suite Job never reaches Complete, and `kubectl get pods` keeps showing new pods being created.",
+      fix: "This is almost always a deterministic failure being retried up to backoffLimit, not a transient one. Read the logs of ANY one of the failed pods (they'll all show the same error) before assuming it's flaky - a missing secret or bad image tag fails identically every time, and no amount of retrying fixes that.",
+    },
+    {
+      symptom: "The Job's pod is stuck in Pending and never starts at all.",
+      fix: "This is a scheduling problem, not a test problem - check `kubectl describe pod` for events like insufficient CPU/memory or an image pull failure. The Job controller can't retry its way out of a pod that was never scheduled in the first place.",
+    },
+    {
+      symptom: "Old, completed test-runner pods pile up in `kubectl get pods` and clutter every query.",
+      fix: "Set `ttlSecondsAfterFinished` on the Job spec so Kubernetes garbage-collects the Job (and its pods) some time after it finishes - without it, every historical CI run leaves a permanent, finished pod behind.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **`kubectl get jobs`** — shows COMPLETIONS (e.g. `3/3`) and DURATION at a glance, the fastest way to check whether a test Job actually finished.
+- **`kubectl describe job <name>`** — the Conditions section shows Complete or Failed with a reason and timestamp; the Events section shows every pod the Job created along the way.
+- **The pod template's `restartPolicy`** — confirm it's `Never` or `OnFailure`, never `Always`, whenever a Job behaves like it's restarting forever.
+- **[[kubernetes-and-test-infrastructure/test-workloads-on-k8s/reading-pod-logs]]** — once you know WHICH pod failed, this is how you find out WHY.
+</WhereToCheck>
+
+<WorkedExample title="a nightly Job that looked stuck but was actually working as designed">
+1. A tester notices the `nightly-regression` Job has been showing `0/1` completions for over ten
+   minutes in a dashboard, and assumes it's hung.
+2. `kubectl get pods -l job-name=nightly-regression` shows FOUR pods, three in `Error` state and
+   one currently `Running` - not one stuck pod, but several sequential attempts.
+3. `kubectl describe job nightly-regression` confirms: `backoffLimit: 3`, and three failed
+   attempts already logged in Events, each with the same underlying error visible in its pod's
+   logs - a database connection string pointing at the wrong port.
+4. The CURRENTLY running (fourth) pod is not a hang - it's the Job's last retry attempt before
+   backoffLimit is exhausted and the whole Job is marked Failed.
+5. Finding: "The Job isn't stuck, it's retrying a deterministic failure it cannot recover from.
+   Fix the connection string, not the Job's patience." Confirmed by reading one failed pod's logs
+   rather than assuming from the dashboard's completions count alone.
+</WorkedExample>
+
+<Quiz
+  question="A test-suite Job has backoffLimit: 2 and completions: 1. Its pod fails three times in a row with the identical error, then the Job reports Failed. What is the most useful next step?"
+  options={[
+    "Increase backoffLimit to 10 and re-run, since more retries usually fix Job failures",
+    "Read the logs from any one of the three failed pods - since the error was identical every time, one pod's logs explain all three failures",
+    "Delete the Job and immediately re-apply it with no changes, since Jobs sometimes fail for no reason",
+    "Switch the workload from a Job to a Deployment so it keeps retrying indefinitely instead of giving up"
+  ]}
+  answer={1}
+  explain="This note is explicit that a deterministic failure (the same error on every attempt) is not fixed by retrying more - it needs to be diagnosed, and since every failed pod hit the identical error, reading just one of them is sufficient. Option one wastes CI time on a failure that will recur identically at any backoffLimit. Option three assumes randomness that the scenario explicitly rules out (identical error each time). Option four is actively wrong - Jobs exist specifically because test suites should NOT restart forever; converting to a Deployment abandons the entire run-to-completion model this note describes."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Job, in one line", back: "Runs a pod until a target number of completions succeed, then stops - never restarts a pod that already succeeded, unlike a Deployment." },
+    { front: "completions vs parallelism", back: "completions is the total number of successful pod runs needed; parallelism is how many of them run at once." },
+    { front: "backoffLimit", back: "The maximum number of retry attempts after a pod fails before the whole Job is marked Failed - bounded retries, not infinite ones." },
+    { front: "Why restartPolicy: Always is invalid in a Job's pod template", back: "Always is what makes a Deployment's pod immortal - a Job's pods are supposed to eventually stop, so only Never or OnFailure are allowed." },
+    { front: "The assembly-line analogy", back: "A numbered production run: workers pull from a shared bin until the target count is hit, then the line stops - not a line that runs forever regardless of how much has already shipped." },
+  ]}
+/>
+
+<Challenge>
+Take any test command you can already run locally (even a single `pytest` or `mvn test`
+invocation). Write a Kubernetes Job manifest that runs it in a container, with
+`completions: 1`, `backoffLimit: 2`, and `restartPolicy: Never`. Apply it to any cluster you have
+access to (or a local `minikube`/`kind` cluster), then use `kubectl get jobs` and
+`kubectl describe job` to confirm it reached Complete - or, if you deliberately break the test
+command first, confirm it reached Failed after exactly `backoffLimit + 1` pod attempts.
+</Challenge>
+
+<AskCommunity prompt="My test-suite Job shows `[N]` failed pods in `kubectl describe job` before reporting Failed, all with what looks like the same error. Is there a faster way to confirm they're really identical failures than reading each pod's logs one by one?">
+Useful replies usually point at `kubectl logs -l job-name=<name> --all-containers` (or a small
+loop) to pull every failed pod's logs in one pass, and at comparing just the first and last
+failed pod's logs first - if those two match, the middle ones almost always do too.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://kubernetes.io/docs/concepts/workloads/controllers/job/", title: "Kubernetes docs — Jobs", kind: "read" },
+    { href: "https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/", title: "Kubernetes docs — CronJobs (scheduled Jobs)", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=cWUbkuzc8dM", title: "Pavan Elthepu — Jobs and CronJobs in Kubernetes", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=cWUbkuzc8dM" title="Pavan Elthepu — Jobs and CronJobs in Kubernetes" minutes={17} />
+
+<Takeaways
+  points={[
+    "A Job runs a pod until a target number of completions succeed, then stops - a Deployment restarts its pod forever, which is the wrong shape for a test suite.",
+    "completions is the total successful runs needed; parallelism is how many run at once; backoffLimit bounds retries after a failure.",
+    "A Job's pod template must use restartPolicy: Never or OnFailure - Always is what makes Deployment pods immortal and is not valid here.",
+    "A deterministic failure (bad config, missing secret) fails the same way on every retry - read one failed pod's logs instead of raising backoffLimit and hoping.",
+    "Set ttlSecondsAfterFinished so completed Job pods get garbage-collected instead of piling up after every CI run.",
+  ]}
+/>
+
+<Complete xp={10} />

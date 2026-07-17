@@ -1,0 +1,317 @@
+---
+title: "Reading pod logs"
+summary: "kubectl logs streams whatever a container wrote to stdout/stderr - the same words 'log' and 'logbook' meant for a ship's crew centuries ago: a chronological record you read back to reconstruct what actually happened before it disappears."
+tags: ["kubernetes-and-test-infrastructure", "test-workloads-on-k8s", "track-d"]
+updated: "2026-07-17"
+related:
+  - "kubernetes-and-test-infrastructure/kubernetes-in-plain-words/kubectl-survival-kit"
+  - "docker-and-containers-for-testers/docker-hands-on/run-exec-logs-and-stop"
+  - "kubernetes-and-test-infrastructure/test-workloads-on-k8s/port-forward-to-debug"
+---
+
+<Hook>
+A test-runner pod exits with code 1 overnight. By morning it's already gone - replaced,
+completed, or garbage-collected, depending on what created it. There is no pod left to `exec`
+into, no live process to attach a debugger to, nothing running anymore at all. And yet the
+question "why did it fail" is still completely answerable, because one thing survived the pod's
+death long enough to be read: the log it left behind of everything it printed on its way there.
+</Hook>
+
+<Callout type="analogy">
+A truck driver's daily log book, not a live GPS feed. A dispatcher checking on a driver mid-route
+doesn't need to watch them driving in real time to reconstruct the day - the driver's log already
+has it: departure time, a stop in one town for loading, a stop in another for a meal, the exact
+hour driving resumed. Read chronologically, it reconstructs the whole day after the fact, from a
+record that was being written the entire time, whether or not anyone was watching when it
+happened. Pod logs work exactly the same way - a chronological trail written continuously,
+readable after the fact, that reconstructs what a container was doing before you ever looked.
+</Callout>
+
+<Term define="Pod logs are whatever a container writes to its standard output (stdout) and standard error (stderr) streams, captured by the container runtime and made readable with `kubectl logs <pod>`. They are NOT a general-purpose application log file living on disk somewhere - they are specifically the stdout/stderr of the container's main process, which is why a test runner that prints its results to the console (rather than only to a file) is what makes `kubectl logs` useful for it at all. Logs are tied to the CONTAINER's lifetime: `kubectl logs` reads the current container's captured output, `kubectl logs --previous` reads the output of that same pod's last container BEFORE its most recent restart, and once a pod is deleted and garbage-collected, its logs are gone unless something shipped them elsewhere first.">Pod logs</Term>
+
+## A chronological record, not a live window
+
+- **`kubectl logs <pod>` shows what's already been printed, once.** For a running pod, add `-f`
+  to follow new output as it's written - the same distinction as reading a finished log book
+  versus watching over someone's shoulder as they write the next entry.
+- **`--previous` is for a pod that already restarted.** After a crash, the CURRENT container's
+  logs start fresh from the restart - the crash's own output is only in the PREVIOUS container's
+  logs, and `--previous` is the only way to read it before it's gone for good on the next
+  restart.
+- **`--tail=N` and `--since=<duration>` narrow a long log to what matters.** A test-runner pod
+  that ran for twenty minutes doesn't need to be read start to finish just to find the one
+  failure near the end.
+- **A multi-container pod needs `-c <container>`.** Without it, `kubectl logs` on a pod with more
+  than one container fails outright asking you to specify which container's stream you meant -
+  there's no such thing as "the pod's logs" when there's more than one process writing them.
+
+<Callout type="tip">
+The moment you see `CrashLoopBackOff`, run `kubectl logs --previous` immediately, before doing
+anything else. Kubernetes will keep restarting that container, and each new restart's logs
+overwrite what `kubectl logs` (without `--previous`) shows - the evidence of THIS SPECIFIC crash
+has a shrinking window before the next restart buries it under fresh output.
+</Callout>
+
+<Callout type="mistake">
+Assuming `kubectl logs` can show you what a pod printed BEFORE it was deleted. It can't - logs
+live and die with the container they came from (specifically, with the node's retained log file
+for that container, which the kubelet eventually garbage-collects). If a test-runner pod's logs
+matter for more than a few hours, or need to survive the pod being deleted entirely, they need to
+be shipped to a central store (Loki, ELK, CloudWatch) WHILE the pod is still alive - `kubectl
+logs` alone is not a historical archive.
+</Callout>
+
+{/* IMAGE: a filled-out US trucking hours-of-service log book form, a hand-drawn duty-status trace line stepping between off-duty/sleeper/driving/on-duty rows across a 24-hour grid, with handwritten location remarks like "Corsicana, TX Loading" and "Houston, TX Dinner" along the trace, plus a totals box on the right */}
+<HotspotImage
+  src="/notes/kubernetes-and-test-infrastructure/test-workloads-on-k8s/reading-pod-logs.jpg"
+  alt="A filled-out truck driver's daily log book, showing a hand-drawn duty-status trace across a 24-hour grid with handwritten location and activity remarks along the way"
+  credit="Truck driver log book (example) — ErgoSum88 / U.S. Department of Transportation, Wikimedia Commons, Public Domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:Truck_driver_log_book_(example).JPG"
+  pins={[
+    { x: 22, y: 42, label: "The stepped trace line across the 24-hour grid — the log, read in order", desc: "Each step up or down the four duty-status rows is one event, in the order it happened - exactly what `kubectl logs` prints: one line per event, oldest first, in the order the container actually emitted them." },
+    { x: 48, y: 55, label: "A handwritten remark at a step — a single log line's context", desc: "\"Corsicana, TX - Loading\" is what turns a bare status change into something explainable - the log equivalent of a message like \"retrying locator once\" next to a bare timestamp. Context beats a timestamp alone every time." },
+    { x: 82, y: 30, label: "The totals box — a --tail summary, not the full story", desc: "Hours worked last 7 days, at a glance, without reading every single stepped entry - the same value `kubectl logs --tail=20` provides: a fast summary when you don't need the entire run's output." },
+    { x: 15, y: 15, label: "The header identifying this specific driver, date, and vehicle — which pod, which container", desc: "Before trusting any log entry, confirm whose log you're actually reading. The equivalent mistake in Kubernetes is reading the wrong pod's (or the wrong container's, in a multi-container pod) logs and drawing conclusions from an entirely different run." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One container's output, from print statement to your terminal - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "The test-runner process prints a line to stdout", desc: "Just a normal print/log statement inside the running container - it has no idea Kubernetes exists." },
+    { label: "The container runtime captures that stream to a log file on the node", desc: "This capture happens automatically for every container, whether or not anyone is watching right now." },
+    { label: "You run `kubectl logs test-runner-7f8d`", desc: "kubectl asks the API server, which asks the node's kubelet, which reads that captured file and streams it back to your terminal." },
+    { label: "The pod later exits and is deleted", desc: "The node eventually garbage-collects that log file too - it was never a permanent record on its own." },
+    { label: "Anything read (or shipped elsewhere) before that point is preserved; anything not read is gone", desc: "This is the entire reason `kubectl logs --previous` right after a crash - and shipping logs to a central store for anything long-lived - both matter." },
+  ]}
+/>
+
+Every log-reading habit in this note reduces to the same instinct: read it while the pod that
+wrote it still exists, because the window for reading it is not permanent.
+
+<CodePlayground
+  language="python"
+  title="Run it - a kubectl logs simulation: tail, filter by level, and since-time (Python)"
+  code={`RAW_LOG = [
+    "2026-07-17T10:00:01Z INFO  starting test-runner pod",
+    "2026-07-17T10:00:02Z INFO  connecting to grid hub at http://selenium-hub:4444",
+    "2026-07-17T10:00:03Z INFO  running suite: checkout_smoke",
+    "2026-07-17T10:00:07Z ERROR element #pay-button not found (timeout 5s)",
+    "2026-07-17T10:00:07Z INFO  retrying locator once",
+    "2026-07-17T10:00:12Z ERROR element #pay-button not found (timeout 5s)",
+    "2026-07-17T10:00:12Z INFO  test checkout_smoke: FAILED",
+    "2026-07-17T10:00:13Z INFO  running suite: login_smoke",
+    "2026-07-17T10:00:15Z INFO  test login_smoke: PASSED",
+    "2026-07-17T10:00:15Z INFO  pod exiting with code 1 (1 test failed)",
+]
+
+
+def kubectl_logs(lines, tail=None, since_ts=None, level=None):
+    """A tiny stand-in for \`kubectl logs <pod> [--tail=N] [--since-time=...] | grep LEVEL\`."""
+    result = lines
+    if since_ts is not None:
+        result = [l for l in result if l.split(" ", 1)[0] >= since_ts]
+    if level is not None:
+        result = [l for l in result if f" {level} " in l]
+    if tail is not None:
+        result = result[-tail:]
+    return result
+
+
+print("--- kubectl logs test-runner-7f8d (full output) ---")
+for line in kubectl_logs(RAW_LOG):
+    print(" ", line)
+
+print()
+print("--- kubectl logs test-runner-7f8d --tail=3 (just the ending) ---")
+for line in kubectl_logs(RAW_LOG, tail=3):
+    print(" ", line)
+
+print()
+print("--- kubectl logs test-runner-7f8d | grep ERROR (filter by level) ---")
+errors = kubectl_logs(RAW_LOG, level="ERROR")
+for line in errors:
+    print(" ", line)
+print(f"  -> {len(errors)} ERROR line(s) found: this is the fast path to 'why did the pod exit 1'")
+
+print()
+print("--- kubectl logs test-runner-7f8d --since-time=2026-07-17T10:00:12Z (only what happened after the failure) ---")
+for line in kubectl_logs(RAW_LOG, since_ts="2026-07-17T10:00:12Z"):
+    print(" ", line)`}
+/>
+
+Same log-reading simulation in Java:
+
+<CodePlayground
+  language="java"
+  title="Run it - a kubectl logs simulation: tail, filter by level, and since-time (Java)"
+  code={`import java.util.*;
+import java.util.stream.*;
+
+public class Main {
+    static final List<String> RAW_LOG = List.of(
+            "2026-07-17T10:00:01Z INFO  starting test-runner pod",
+            "2026-07-17T10:00:02Z INFO  connecting to grid hub at http://selenium-hub:4444",
+            "2026-07-17T10:00:03Z INFO  running suite: checkout_smoke",
+            "2026-07-17T10:00:07Z ERROR element #pay-button not found (timeout 5s)",
+            "2026-07-17T10:00:07Z INFO  retrying locator once",
+            "2026-07-17T10:00:12Z ERROR element #pay-button not found (timeout 5s)",
+            "2026-07-17T10:00:12Z INFO  test checkout_smoke: FAILED",
+            "2026-07-17T10:00:13Z INFO  running suite: login_smoke",
+            "2026-07-17T10:00:15Z INFO  test login_smoke: PASSED",
+            "2026-07-17T10:00:15Z INFO  pod exiting with code 1 (1 test failed)"
+    );
+
+    // A tiny stand-in for \`kubectl logs <pod> [--tail=N] [--since-time=...] | grep LEVEL\`.
+    static List<String> kubectlLogs(List<String> lines, Integer tail, String sinceTs, String level) {
+        List<String> result = new ArrayList<>(lines);
+        if (sinceTs != null) {
+            result = result.stream()
+                    .filter(l -> l.split(" ", 2)[0].compareTo(sinceTs) >= 0)
+                    .collect(Collectors.toList());
+        }
+        if (level != null) {
+            String needle = " " + level + " ";
+            result = result.stream().filter(l -> l.contains(needle)).collect(Collectors.toList());
+        }
+        if (tail != null) {
+            int from = Math.max(0, result.size() - tail);
+            result = result.subList(from, result.size());
+        }
+        return result;
+    }
+
+    public static void main(String[] args) {
+        System.out.println("--- kubectl logs test-runner-7f8d (full output) ---");
+        for (String line : kubectlLogs(RAW_LOG, null, null, null)) System.out.println("  " + line);
+
+        System.out.println();
+        System.out.println("--- kubectl logs test-runner-7f8d --tail=3 (just the ending) ---");
+        for (String line : kubectlLogs(RAW_LOG, 3, null, null)) System.out.println("  " + line);
+
+        System.out.println();
+        System.out.println("--- kubectl logs test-runner-7f8d | grep ERROR (filter by level) ---");
+        List<String> errors = kubectlLogs(RAW_LOG, null, null, "ERROR");
+        for (String line : errors) System.out.println("  " + line);
+        System.out.println("  -> " + errors.size() + " ERROR line(s) found: this is the fast path to 'why did the pod exit 1'");
+
+        System.out.println();
+        System.out.println("--- kubectl logs test-runner-7f8d --since-time=2026-07-17T10:00:12Z (only what happened after the failure) ---");
+        for (String line : kubectlLogs(RAW_LOG, null, "2026-07-17T10:00:12Z", null)) System.out.println("  " + line);
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: read a real crash's logs before they're overwritten">
+<StepChecklist
+  steps={[
+    { text: "Run any pod (even a Job from the previous note) whose command deliberately fails and crashes", detail: "Use a command like `exit 1` inside a container with a restart policy that allows retrying." },
+    { text: "The moment you see CrashLoopBackOff or a restart count greater than 0, run `kubectl logs <pod> --previous`", detail: "This is the crashed attempt's own output - confirm it differs from plain `kubectl logs` on the same pod." },
+    { text: "Now run plain `kubectl logs <pod>` again", detail: "Confirm it shows the CURRENT (post-restart) container's output, not the crash - this is the exact overwrite behavior the tip above warns about." },
+    { text: "Try `kubectl logs <pod> --tail=5` and `kubectl logs <pod> --since=1m`", detail: "Confirm both narrow the output the way you'd expect from this note's description." },
+  ]}
+/>
+You've now directly experienced the shrinking window `--previous` exists to catch, instead of
+just reading about it - the difference between "the crash's logs" and "the current logs" is no
+longer abstract.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "`kubectl logs <pod>` returns nothing at all, not even an error.",
+      fix: "Check `kubectl describe pod <pod>` first - a container stuck in `ImagePullBackOff` or `ContainerCreating` has never actually started, so there is no stdout to capture yet. Logs being empty is a symptom of the container not running, not a logging problem.",
+    },
+    {
+      symptom: "`kubectl logs <pod>` fails with an error naming multiple containers.",
+      fix: "Add `-c <container-name>` - a pod with a sidecar (or an init container that already finished) has more than one log stream, and kubectl refuses to guess which one you meant.",
+    },
+    {
+      symptom: "A failure that definitely happened is nowhere in the current logs.",
+      fix: "Check whether the pod restarted since the failure - if so, the failure is only in `kubectl logs --previous`, not the current output. If the pod was deleted and replaced entirely, the logs may already be gone unless something shipped them to a central store first.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **`kubectl logs <pod> --previous`** — the only place a crash's own output survives after the restart that followed it.
+- **`kubectl describe pod <pod>`** — Events section explains WHY a container never started, which empty logs alone cannot.
+- **A central log store (Loki, ELK, CloudWatch), if one exists** — the only place logs survive after the pod itself is deleted and garbage-collected.
+- **[[kubernetes-and-test-infrastructure/kubernetes-in-plain-words/kubectl-survival-kit]]** — the broader set of kubectl commands this one habit sits inside.
+</WhereToCheck>
+
+<WorkedExample title="a failure that seemed to vanish, and where it actually went">
+1. A tester is told a nightly test-runner pod failed around 2 AM, but by the time they check at
+   9 AM, `kubectl logs test-runner-9k2p` shows only normal startup output - no error anywhere.
+2. `kubectl get pod test-runner-9k2p` shows `RESTARTS: 1` - the pod restarted at some point after
+   the failure, which explains why plain `kubectl logs` looks clean: it's showing the NEW
+   container's output, not the one that actually failed.
+3. `kubectl logs test-runner-9k2p --previous` immediately shows the real error: a connection
+   timeout to the Selenium hub, followed by the process exiting non-zero.
+4. The 9 AM "no error" result was never true - it was reading the wrong container's log stream,
+   not evidence that nothing went wrong.
+5. Finding: "The 2 AM failure was a hub connection timeout, visible only via `--previous` after
+   the pod's automatic restart. Recommend shipping logs to the team's central log store so this
+   isn't a race against the next restart in the future." Confirmed by checking restart count
+   before trusting an empty-looking log.
+</WorkedExample>
+
+<Quiz
+  question="A pod shows RESTARTS: 2 in `kubectl get pods`. Plain `kubectl logs <pod>` shows only clean startup output with no errors. What is the most likely explanation, and what should you check next?"
+  options={[
+    "The pod never actually failed - restarts happen for harmless reasons and can be ignored",
+    "The current container's logs only cover the time since the LAST restart; the actual failure is most likely in `kubectl logs <pod> --previous`, which reads the prior container's output",
+    "Logs are unreliable in Kubernetes and the only fix is to exec into the pod while it's running",
+    "The pod's logs are permanently lost the moment a restart happens, so nothing can be recovered"
+  ]}
+  answer={1}
+  explain="This note is explicit that kubectl logs reads the CURRENT container's captured output, and a restart starts that capture fresh - the failure that caused the restart lives in the PREVIOUS container's logs, retrievable with --previous, until the next restart overwrites it. Option one ignores that a non-zero restart count is real evidence something exited abnormally. Option three overstates the problem - previous is a completely reliable, standard way to read exactly this situation. Option four is wrong specifically because of --previous, which is designed for exactly this window before it actually is lost on the restart after that."
+/>
+
+<Flashcards
+  cards={[
+    { front: "kubectl logs, in one line", back: "Streams a container's captured stdout/stderr - a chronological record of what it already printed, not a live application log file on disk." },
+    { front: "--previous, precisely", back: "Reads the log of a pod's PRIOR container, before its most recent restart - the only place a crash's own output survives after that restart." },
+    { front: "Why logs can vanish entirely", back: "They live and die with the container/pod - once deleted and garbage-collected, kubectl logs has nothing left to read unless the logs were shipped to a central store first." },
+    { front: "Multi-container pods and -c", back: "kubectl logs refuses to guess which container's stream you meant when a pod has more than one - always name it with -c." },
+    { front: "The truck driver's log book analogy", back: "A chronological trail written continuously, readable after the fact - reconstructing the whole story from a record, not from watching it happen live." },
+  ]}
+/>
+
+<Challenge>
+Deliberately crash a container (a command like `exit 1` inside a pod whose restart policy allows
+retrying) and, within the same terminal session, capture BOTH `kubectl logs <pod>` and
+`kubectl logs <pod> --previous` output before the pod restarts again a second time. Write down
+what's different between the two, and specifically what information would have been permanently
+lost if you had only ever run the version without `--previous`.
+</Challenge>
+
+<AskCommunity prompt="A pod I'm investigating has already been deleted, and I never captured its logs while it existed. Is there any way to recover them after the fact, or is that data genuinely gone?">
+Useful replies usually ask whether the cluster ships logs anywhere centrally (a DaemonSet running
+Fluent Bit/Fluentd to Loki, ELK, or a cloud provider's logging service) BEFORE concluding the data
+is unrecoverable - if nothing was shipping logs off the node, the answer is usually genuinely yes,
+it's gone, which is itself the strongest argument for setting up central logging going forward.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://kubernetes.io/docs/concepts/cluster-administration/logging/", title: "Kubernetes docs — Logging Architecture", kind: "read" },
+    { href: "https://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands#logs", title: "kubectl reference — logs", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=3j8cwde3TVk", title: "I Read Help Files and Write Trainings — 3 ways to view logs in kubernetes", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=3j8cwde3TVk" title="I Read Help Files and Write Trainings — 3 ways to view logs in kubernetes" minutes={12} />
+
+<Takeaways
+  points={[
+    "kubectl logs streams a container's captured stdout/stderr - a chronological record, readable after the fact, not a live feed or a general application log file.",
+    "kubectl logs --previous reads the prior container's output after a restart - the only place a crash's own logs survive, and only until the NEXT restart overwrites it.",
+    "--tail and --since narrow a long log to what matters; -c is required on any pod with more than one container.",
+    "Logs live and die with the container that wrote them - once a pod is deleted and garbage-collected, unshipped logs are genuinely gone.",
+    "Check restart count before trusting a clean-looking log - a restarted pod's current logs cover only the time since that restart, not the failure that caused it.",
+  ]}
+/>
+
+<Complete xp={10} />

@@ -2179,10 +2179,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "test-workloads-on-k8s",
         title: "Test workloads on K8s",
         topics: [
-          { slug: "running-tests-as-jobs", title: "Running tests as Jobs", planned: true },
-          { slug: "selenium-grid-on-k8s", title: "Selenium Grid on K8s (dynamic grid)", planned: true },
-          { slug: "reading-pod-logs", title: "Reading pod logs", planned: true },
-          { slug: "port-forward-to-debug", title: "Port-forward to debug", planned: true },
+          { slug: "running-tests-as-jobs", title: "Running tests as Jobs" },
+          { slug: "selenium-grid-on-k8s", title: "Selenium Grid on K8s (dynamic grid)" },
+          { slug: "reading-pod-logs", title: "Reading pod logs" },
+          { slug: "port-forward-to-debug", title: "Port-forward to debug" },
         ],
       },
       {
