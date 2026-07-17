@@ -1,0 +1,354 @@
+---
+title: "API & integration bug families"
+summary: "Integration bugs live between systems, not inside them: renamed fields, types that quietly change, errors smuggled inside 200s, timeouts nobody handles. Each side's tests pass - the seam is what breaks. Recognizing these families turns 'it randomly fails' into a routed, evidenced report."
+tags: ["system-design-for-testers", "where-bugs-live-by-layer", "track-c"]
+updated: "2026-07-17"
+related:
+  - "system-design-for-testers/architecture-styles/apis-as-the-glue"
+  - "system-design-for-testers/architecture-styles/third-party-services-and-webhooks"
+  - "system-design-for-testers/where-bugs-live-by-layer/ui-layer-bug-families"
+---
+
+<Hook>
+In 1904, Baltimore caught fire. Fire crews raced in from Washington, Philadelphia, even New York -
+and then stood there, helpless, holding hoses that would not screw onto Baltimore's hydrants. Every
+hose worked. Every hydrant worked. The city still burned for thirty hours, because the THREADS
+didn't match - the connection failed while both sides were individually fine. That is an
+integration bug, in cast iron. Your systems have hundreds of these threaded couplings, and the bugs
+that live in them are a family with recognizable faces.
+</Hook>
+
+<Callout type="analogy">
+A fire hydrant coupled to a pumper truck by one fat hose. The hydrant team and the truck
+manufacturer never met - the connection works only because both machined their fittings to the same
+agreed thread. Water flowing is the happy path everyone tests. The bug families live in everything
+else: threads that drifted a millimeter (a renamed field), a fitting that LOOKS attached but leaks
+under pressure (an unhandled error), a hydrant that opens but delivers a trickle (a slow, timing-out
+dependency), and the capped outlet nobody has opened in years (the API path first exercised during
+a real emergency). The seam - not either machine - is where the danger concentrates.
+</Callout>
+
+<Term define="API and integration bugs are defects that emerge where two separately built components exchange data - frontend to backend, service to service, your system to a third party. The recurring families: CONTRACT DRIFT (a field renamed, moved, or removed while a consumer still expects the old shape); TYPE DRIFT (the value survives but its type changes - number to string, single item to array); ERROR-SHAPE bugs (failures reported as HTTP 200 with an error body, or error responses whose format no consumer parses); NULLABILITY surprises (a field that was 'always there' arrives null or absent); TIMING failures (timeouts, slow dependencies, retries, out-of-order responses); and VERSION SKEW (one side deployed, the other not yet - permanently temporary in any live system). Their shared signature: each component's own tests pass, because each is correct against its OWN understanding.">API & integration bug families</Term>
+
+## The families, and the face each one wears
+
+- **Contract drift - the renamed/missing field.** Producer ships `state`; consumer still reads
+  `status`. Depending on the consumer's language this crashes, renders `undefined`, or silently
+  skips logic. Wears the face of "the feature stopped working after THEIR deploy, but their tests
+  pass."
+- **Type drift - same value, different type.** `7035` becomes `"7035"`; one result becomes a
+  one-element array; a boolean becomes `"true"`. The nastiest versions don't crash - JavaScript
+  happily concatenates `"7035" + 99` into `"703599"` and displays it. Wears the face of "the
+  numbers are weirdly wrong sometimes."
+- **Errors smuggled inside success.** HTTP 200 with `{"error": "upstream timeout"}` in the body,
+  or a null where data should be. Consumers checking only the status code proceed confidently into
+  garbage. Wears the face of "no errors anywhere in monitoring, but users see broken screens."
+- **Nullability surprises.** The optional field that was ALWAYS present in test data finally
+  arrives absent in production - because a real user skipped a profile field or a new signup path
+  doesn't set it. Wears the face of "crashes for some users only, unreproducible with QA accounts."
+- **Timing failures.** The dependency answers in 12 seconds instead of 200ms; the caller times out
+  at 10; retries fire; responses arrive out of order. Nothing is 'down' - everything is slow, which
+  most integration code handles worse than being down. Wears the face of "only fails under load /
+  at peak hours."
+- **Version skew.** Service A deployed at 14:00, service B at 14:20 - for twenty minutes the live
+  system ran a combination nobody ever tested. With mobile apps the skew lasts MONTHS: last year's
+  app version still calls today's API. Wears the face of "broke briefly during the deploy, then
+  fixed itself" - or "only breaks for users on old app versions."
+
+<Callout type="tip">
+For any suspected integration bug, capture the exact request and the exact raw response body - not
+the UI, not a description, the actual bytes (devtools Network tab, copy-as-cURL, or logs). Every
+family above is DIAGNOSED from that pair in seconds: the renamed field is visible, the string-typed
+number is visible, the error-in-a-200 is visible. A ticket with the raw pair attached routes itself;
+a ticket that says "the integration is broken" starts a week of archaeology.
+</Callout>
+
+<Callout type="mistake">
+Testing integrations only through the UI, only on the happy path, only with everything up and fast.
+The seam's failure modes - slow responses, malformed bodies, absent optional fields, the version
+mix during deploys - are exactly the states a healthy demo environment never shows you. If your
+integration test plan is "click through the flow while both services are healthy," you are testing
+the hose while it's rolled up: the coupling's real test is pressure, and pressure means error paths,
+delays, and absent data, induced on purpose.
+</Callout>
+
+{/* IMAGE: NYC fire hydrant on a sidewalk connected via a fat yellow hose to a red FDNY pumper truck; a second hose crosses the street toward another truck, and the hydrant's second outlet is capped */}
+<HotspotImage
+  src="/notes/system-design-for-testers/where-bugs-live-by-layer/api-and-integration-bug-families.jpg"
+  alt="Fire hydrant connected by a large hose to a fire truck, with another hose crossing the street behind it"
+  credit="Hydrant to truck, Brooklyn — DRosenbach, Wikimedia Commons, CC BY-SA 3.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Hydrant_to_truck.jpg"
+  pins={[
+    { x: 40, y: 77, label: "The threaded coupling — the contract itself", desc: "This connection works only because hydrant and hose were machined to the same agreed thread. In 1904 Baltimore burned for 30 hours while out-of-town crews held hoses that wouldn't fit the hydrants - both sides 'worked', the CONTRACT didn't. Every integration bug is a version of this coupling failing." },
+    { x: 65, y: 52, label: "The hose in flight — data crossing the seam", desc: "Between the two machines, under pressure, is where everything interesting happens: leaks (dropped fields), kinks (throttling), bursts (malformed payloads). Testing either machine alone never exercises this span - only traffic through the connection does." },
+    { x: 22, y: 20, label: "The pumper truck — a consumer with assumptions", desc: "The truck assumes water at a certain pressure, on demand, indefinitely. Consumers of an API assume shape, type, and latency the same way - and the assumptions nobody wrote down are the ones that fail loudest." },
+    { x: 62, y: 8, label: "The second hose — integrations multiply", desc: "Another line already crosses the street to another truck. Real systems run dozens of couplings at once - payment, auth, search, email, analytics - and each one carries this entire catalog of failure families independently." },
+    { x: 33, y: 60, label: "The capped outlet — the path nobody exercises", desc: "This hydrant has a second outlet that may not have been opened in years. APIs have these too: error paths, rare parameters, legacy endpoints - first exercised for real during an incident, which is the worst possible moment to discover the threads are rusted." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Both teams' tests pass, production burns - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Team A 'cleans up' their API: renames status to state, ships with green tests", desc: "Their tests assert the NEW contract - and pass, correctly. Nothing in their pipeline knows the old name mattered to anyone." },
+    { label: "Team B's consumer still reads status - their tests also pass", desc: "Their tests run against a MOCK of the old contract, which they also wrote. Both teams are correct against their own assumptions. The seam now holds two different truths." },
+    { label: "Production: order pages crash for every user; each team's dashboard is green", desc: "The failure exists only in the LIVE exchange between them - the one place neither team's test suite looks. Monitoring says healthy, users say broken." },
+    { label: "The tester's artifact: one raw request/response pair", desc: "The body plainly shows state where the consumer expects status. Diagnosis in sixty seconds, routed to the right team with proof - and a standing recommendation: a contract test on the REAL exchange, so drift fails a pipeline instead of production." },
+  ]}
+/>
+
+Three of the families in executable form - a consumer built for the happy path meeting each drift,
+and a defensive check that names the family before touching the data:
+
+<CodePlayground
+  language="python"
+  title="Run it - renamed field, type drift, and an error inside a 200 (Python)"
+  code={`# The consumer was built against this contract:
+#   { "status": <str>, "items_count": <int>, "total_cents": <int> }
+
+responses = {
+    "healthy":              {"status": "shipped", "items_count": 3, "total_cents": 7035},
+    "renamed field":        {"state": "shipped", "items_count": 3, "total_cents": 7035},
+    "type drift":           {"status": "shipped", "items_count": 3, "total_cents": "7035"},
+    "error inside a 200":   {"status": None, "error": "upstream timeout", "items_count": 0,
+                             "total_cents": 0},
+}
+
+
+def naive_consumer(r):
+    """Written for the happy path - meets reality."""
+    label = r["status"].upper()                    # crashes or lies per family
+    total = r["total_cents"] + 99                  # +99 shipping, integer math assumed
+    return f"{label}: {r['items_count']} items, {total} cents with shipping"
+
+
+def defensive_check(r):
+    """Name the bug family BEFORE using the data."""
+    problems = []
+    if "status" not in r:
+        problems.append("contract drift: expected field 'status' is missing (renamed?)")
+    elif r["status"] is None and "error" in r:
+        problems.append(f"error smuggled in a success response: {r['error']!r}")
+    if not isinstance(r.get("total_cents"), int):
+        problems.append(f"type drift: total_cents is {type(r.get('total_cents')).__name__}, expected int")
+    return problems
+
+
+for family, resp in responses.items():
+    print(f"--- {family} ---")
+    problems = defensive_check(resp)
+    for p in problems:
+        print(f"  CAUGHT -> {p}")
+    if not problems:
+        print(f"  ok     -> {naive_consumer(resp)}")
+    else:
+        try:
+            print(f"  naive consumer would say: {naive_consumer(resp)}")
+        except Exception as e:
+            print(f"  naive consumer would CRASH: {type(e).__name__}: {e}")
+    print()
+
+print("Three families, one lesson: every integration bug is a broken promise about")
+print("shape, type, or meaning. Here the naive consumer crashes on all three; in")
+print("JavaScript the type drift would not even crash - '7035' + 99 concatenates to")
+print("'703599', silently displaying garbage. Check the promise, then use the data.")`}
+/>
+
+The same seam in Java - the families produce `NullPointerException` and `ClassCastException`
+instead of `KeyError` and `TypeError`, but the diagnosis lines are identical:
+
+<CodePlayground
+  language="java"
+  title="Run it - renamed field, type drift, and an error inside a 200 (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    // The consumer was built against this contract:
+    //   { "status": <String>, "items_count": <int>, "total_cents": <int> }
+
+    static String naiveConsumer(Map<String, Object> r) {
+        // Written for the happy path - meets reality
+        String label = ((String) r.get("status")).toUpperCase(); // crashes per family
+        int total = (int) r.get("total_cents") + 99;             // +99 shipping
+        return label + ": " + r.get("items_count") + " items, " + total + " cents with shipping";
+    }
+
+    static List<String> defensiveCheck(Map<String, Object> r) {
+        // Name the bug family BEFORE using the data
+        List<String> problems = new ArrayList<>();
+        if (!r.containsKey("status")) {
+            problems.add("contract drift: expected field 'status' is missing (renamed?)");
+        } else if (r.get("status") == null && r.containsKey("error")) {
+            problems.add("error smuggled in a success response: '" + r.get("error") + "'");
+        }
+        Object total = r.get("total_cents");
+        if (!(total instanceof Integer)) {
+            problems.add("type drift: total_cents is "
+                    + (total == null ? "null" : total.getClass().getSimpleName()) + ", expected Integer");
+        }
+        return problems;
+    }
+
+    public static void main(String[] args) {
+        Map<String, Map<String, Object>> responses = new LinkedHashMap<>();
+        responses.put("healthy", new HashMap<>(Map.of(
+                "status", "shipped", "items_count", 3, "total_cents", 7035)));
+        Map<String, Object> renamed = new HashMap<>(Map.of(
+                "state", "shipped", "items_count", 3, "total_cents", 7035));
+        responses.put("renamed field", renamed);
+        responses.put("type drift", new HashMap<>(Map.of(
+                "status", "shipped", "items_count", 3, "total_cents", "7035")));
+        Map<String, Object> errorIn200 = new HashMap<>();
+        errorIn200.put("status", null);
+        errorIn200.put("error", "upstream timeout");
+        errorIn200.put("items_count", 0);
+        errorIn200.put("total_cents", 0);
+        responses.put("error inside a 200", errorIn200);
+
+        for (var entry : responses.entrySet()) {
+            System.out.println("--- " + entry.getKey() + " ---");
+            List<String> problems = defensiveCheck(entry.getValue());
+            for (String p : problems) System.out.println("  CAUGHT -> " + p);
+            if (problems.isEmpty()) {
+                System.out.println("  ok     -> " + naiveConsumer(entry.getValue()));
+            } else {
+                try {
+                    System.out.println("  naive consumer would say: " + naiveConsumer(entry.getValue()));
+                } catch (Exception e) {
+                    System.out.println("  naive consumer would CRASH: "
+                            + e.getClass().getSimpleName() + ": " + e.getMessage());
+                }
+            }
+            System.out.println();
+        }
+
+        System.out.println("Three families, one lesson: every integration bug is a broken promise about");
+        System.out.println("shape, type, or meaning. Here the naive consumer crashes on all three; in");
+        System.out.println("JavaScript the type drift would not even crash - '7035' + 99 concatenates to");
+        System.out.println("'703599', silently displaying garbage. Check the promise, then use the data.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: pressure-test one integration's unhappy paths">
+<StepChecklist
+  steps={[
+    { text: "Pick one integration in your app and capture its healthy exchange", detail: "Devtools Network tab or an API client: save the exact request and the exact response body of the working case. This is your baseline contract." },
+    { text: "Probe the error shape on purpose", detail: "Request a nonexistent ID, omit a required parameter, send a wrong type. Record what actually comes back: a clean 404 with a parseable body? A 200 with an error inside? A raw HTML error page where JSON should be? What comes back IS the error contract - most teams have never looked." },
+    { text: "Hunt the nullability surprises", detail: "Find the response's optional-looking fields and ask: what does the consumer do when this is null or absent? Then create the situation with a REAL flow - a fresh account, an entity with optional fields skipped." },
+    { text: "Ask a developer the version-skew question", detail: "'During a deploy, is there a window where the old frontend calls the new API (or vice versa)? Has that combination ever been tested?' For mobile: 'What's the oldest app version still calling us?' The answers usually locate untested live combinations." },
+  ]}
+/>
+You've now tested the coupling under pressure instead of admiring the rolled-up hose - and you have
+a baseline artifact to diff against the day this integration 'mysteriously' breaks.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A feature broke right after another team's (or vendor's) deploy - and their tests are green.",
+      fix: "Suspect contract drift. Diff the current raw response against any earlier capture (or the docs): renamed/moved/removed fields will be visible immediately. Quote both shapes in the report - 'response now has state, consumer reads status' is unarguable and lands on the right desk. Recommend a contract test on the real exchange so the next drift fails a pipeline instead of production.",
+    },
+    {
+      symptom: "Numbers are wrong in weird ways - totals like 703599, quantities like '31' displaying oddly, sums that concatenate.",
+      fix: "Type drift, the crash-free family. Check the raw JSON for quotes around numbers ('7035' vs 7035) and for single items wrapped/unwrapped in arrays. JavaScript consumers won't crash - they'll compute garbage. The one-line repro: the field's type in the raw body vs the type the consumer's math assumes.",
+    },
+    {
+      symptom: "Monitoring shows zero errors, all requests 200 - while users see broken or empty screens.",
+      fix: "Look INSIDE the 200s: errors smuggled in success bodies ({'error': ...}, data: null, an empty array where content belongs) are invisible to status-code monitoring by definition. Capture one affected user's actual response body; if the failure is in-body, also file the observability gap - 'our monitoring cannot see this entire failure class' is a separate, valuable finding.",
+    },
+    {
+      symptom: "The integration fails only under load, at peak hours, or 'randomly' resolves on retry.",
+      fix: "Timing family: the dependency is slow, not down - hitting the caller's timeout, triggering retries (watch for duplicate side effects), or responding out of order. Get the dependency's response-time distribution alongside the caller's timeout setting; when p95 latency crosses the timeout, you have the whole diagnosis. Test it deliberately by adding artificial delay in staging - slowness is the failure mode healthy environments never show.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The raw request/response pair for the failing exchange** — devtools Network tab, copy-as-cURL, or gateway logs; every family in this note is visible in that pair.
+- **A saved baseline of the healthy exchange** — captured BEFORE things break; drift diagnosis is a diff, and you can only diff against something.
+- **Both sides' deploy timelines** — integration breakage correlates with SOMEONE's deploy; 'what shipped, on either side, when this started' beats reading code.
+- **API documentation / schema vs live traffic** — where the documented contract and the actual bytes disagree, the disagreement itself is the finding (and the docs are usually the stale side).
+- **[[system-design-for-testers/architecture-styles/third-party-services-and-webhooks]]** — the same families across integrations you don't control at all, where the diagnosis toolkit is the only leverage you have.
+</WhereToCheck>
+
+<WorkedExample title="the empty order-history that monitoring swore was healthy">
+1. Support tickets: some users' order-history pages show "You haven't ordered yet" - for accounts
+   with years of orders. Monitoring is spotless: the history endpoint returns 200 at normal
+   latency for every request. The frontend team sees no JS errors. Ticket bounces twice.
+2. A tester gets one affected user's session captured (a support screen-share): the history
+   request returns 200 - with body `{"orders": null, "warning": "history service degraded"}`.
+   The healthy case returns `{"orders": [...]}`. The frontend renders `null` orders as the empty
+   state - the 'no orders yet' screen - because nobody distinguished 'none' from 'unknown'.
+3. So three defects, one seam: the history service reports failure inside a 200 (error-shape
+   family); the frontend treats null as empty instead of as an error (nullability family); and
+   monitoring, watching only status codes, is structurally blind to the whole event.
+4. Root cause of the degradation itself: a downstream dependency had slowed past its timeout for a
+   subset of shards - the timing family, wearing the others as a costume.
+5. The report: one raw body from an affected user, one from a healthy one, side by side; three
+   routed findings (return 5xx or a parseable error envelope on failure; render 'unknown' distinct
+   from 'empty'; monitor in-body error markers). The fix conversation took one meeting - because
+   the tester brought the bytes, and the bytes named all three families.
+</WorkedExample>
+
+<Quiz
+  question="After a partner API's 'minor maintenance release', your app's shipping estimates display as 'NaN days'. Their status page is green, their support insists nothing changed, and your backend logs show every call to them returning 200. What's the highest-value next step?"
+  options={[
+    "Escalate to the partner's account manager, since their support isn't cooperating",
+    "Restart your backend services to clear any cached bad state",
+    "Capture the raw response body from their API right now and diff it against the documented contract or any earlier capture - looking specifically for renamed fields or numbers that became strings",
+    "Add a try/catch around the estimate display so NaN never renders"
+  ]}
+  answer={2}
+  explain="'NaN days' means arithmetic met a non-number - the classic downstream footprint of type drift (a number now arriving as a string, or a moved/renamed field yielding undefined). The 200s and the green status page are fully consistent with that: the partner's service IS up; its response SHAPE changed. One raw body, compared against the documented contract or a pre-maintenance capture, converts 'nothing changed' into 'estimated_days is now the string seven' - evidence that unsticks the vendor conversation instantly. Escalating first brings feelings to a bytes fight; restarting shuffles state the bug doesn't live in; try/catch hides the symptom and keeps showing users no estimate at all."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The shared signature of all integration bugs", back: "Each side's own tests pass - each component is correct against its OWN understanding of the contract - and the failure exists only in the live exchange between them. The seam breaks, not the machines." },
+    { front: "The six API/integration bug families", back: "Contract drift (renamed/missing fields); type drift (number-to-string, item-to-array); errors smuggled in 200s; nullability surprises (the optional field finally absent); timing failures (slow beats down); version skew (combinations nobody tested)." },
+    { front: "The universal diagnostic artifact", back: "The exact raw request/response pair for the failing exchange. Every family is visible in it: the renamed field, the quoted number, the error inside the success body. Capture it before theorizing." },
+    { front: "Why 'slow' is worse than 'down' for integrations", back: "Down fails fast and obviously; slow hits timeouts, triggers retries (hello duplicate side effects), reorders responses, and only appears under load - and most integration code handles slow far worse than down. Test it by injecting delay on purpose." },
+    { front: "Errors inside 200s - why monitoring misses them", back: "Status-code monitoring is blind to failure reported in the body ({'error':...}, data: null). Users see broken screens while dashboards stay green - so the observability gap is a second, separate finding worth filing." },
+    { front: "Version skew, and its mobile multiplier", back: "During every deploy there's a window where old code calls new code (or vice versa) - a combination nobody tested. Web skew lasts minutes; mobile skew lasts MONTHS, because last year's installed app still calls today's API." },
+    { front: "The 1904 Baltimore fire, as a testing lesson", back: "Out-of-town hoses didn't fit Baltimore's hydrants: every component worked, the CONTRACT failed, the city burned 30 hours. Interoperability is a property of the seam - and only testing the actual connection proves it." },
+  ]}
+/>
+
+<Challenge>
+Build a seam map for your app: list every integration you know of (frontend-to-backend counts;
+then payments, auth, email, search, analytics, any partner APIs). For each, answer three questions:
+(1) Do we have a captured baseline of its healthy exchange? (2) Has anyone ever seen its error
+response - do we know its failure SHAPE? (3) Who finds out first when it breaks - our monitoring,
+or our users? Any seam scoring no/no/users is your next test target, and the map itself is a
+document your team probably doesn't have.
+</Challenge>
+
+<AskCommunity prompt="Our integration with `[service]` fails as `[symptom]` while both sides' tests pass and monitoring shows 200s. I've captured the raw response: it shows `[what you found - renamed field/string number/error in body]`. Beyond fixing this instance, what's the lightest-weight contract-testing setup teams actually stick with (Pact, schema validation in CI, recorded-response diffing) for catching drift before production?">
+Leading with the captured body - not the symptom story - marks the diagnosis as done and focuses
+answers on prevention, which is where the community's scar tissue is genuinely useful.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://martinfowler.com/bliki/IntegrationTest.html", title: "Martin Fowler — IntegrationTest (what the term really covers)", kind: "read" },
+    { href: "https://docs.pact.io/", title: "Pact — Contract testing introduction (drift caught in CI)", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=QYCaaNz8emY", title: "Guru99 — What is Integration Testing? Software Testing Tutorial", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=QYCaaNz8emY" title="Guru99 — What is Integration Testing? Software Testing Tutorial" minutes={3} />
+
+<Takeaways
+  points={[
+    "Integration bugs live in the seam between components: both sides' tests pass because both are right against their own assumptions - only the live exchange reveals the disagreement.",
+    "Learn the six families - contract drift, type drift, errors-in-200s, nullability surprises, timing failures, version skew - and most 'mystery' cross-system bugs become recognizable on sight.",
+    "The raw request/response pair is the universal diagnostic: capture it first, and keep baseline captures of healthy exchanges so drift becomes a diff instead of an argument.",
+    "Slow is a worse failure mode than down, and healthy test environments never show it - inject delay and malformed bodies on purpose, or the error paths ship untested.",
+    "Status-code monitoring cannot see failures reported inside success bodies - when you find one, file the observability gap as its own bug.",
+    "Version skew is guaranteed by every deploy and lasts months on mobile - 'old client against new API' is a live production combination that belongs in the test plan.",
+  ]}
+/>
+
+<Complete xp={10} />

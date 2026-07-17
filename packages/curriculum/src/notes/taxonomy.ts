@@ -1944,10 +1944,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "where-bugs-live-by-layer",
         title: "Where bugs live, layer by layer",
         topics: [
-          { slug: "ui-layer-bug-families", title: "UI-layer bug families", planned: true },
-          { slug: "api-and-integration-bug-families", title: "API & integration bug families", planned: true },
-          { slug: "data-layer-bug-families", title: "Data-layer bug families", planned: true },
-          { slug: "infra-and-config-bug-families", title: "Infra & config bug families", planned: true },
+          { slug: "ui-layer-bug-families", title: "UI-layer bug families" },
+          { slug: "api-and-integration-bug-families", title: "API & integration bug families" },
+          { slug: "data-layer-bug-families", title: "Data-layer bug families" },
+          { slug: "infra-and-config-bug-families", title: "Infra & config bug families" },
         ],
       },
       {

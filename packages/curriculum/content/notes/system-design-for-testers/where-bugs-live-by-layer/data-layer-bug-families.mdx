@@ -1,0 +1,348 @@
+---
+title: "Data-layer bug families"
+summary: "Data-layer bugs are the quiet ones: duplicates from a missing unique constraint, orphans from a missing foreign key, updates lost to a race - all invisible in the UI on the day they happen, all permanent until someone cleans them up. Testing them means verifying the data, not the screen."
+tags: ["system-design-for-testers", "where-bugs-live-by-layer", "track-c"]
+updated: "2026-07-17"
+related:
+  - "system-design-for-testers/the-big-picture/frontend-backend-and-the-database"
+  - "system-design-for-testers/where-bugs-live-by-layer/api-and-integration-bug-families"
+  - "system-design-for-testers/scaling-building-blocks/message-queues-and-async-work"
+---
+
+<Hook>
+Every bug family so far had a symptom: a broken layout, a crashed request, a weird total. This
+family's signature is SILENCE. The double-signup succeeds. The delete completes. The concurrent
+edits both return 200. Everyone goes home happy - and three weeks later finance can't reconcile
+revenue, a customer's order history is empty, and a deposit has vanished from a balance. Data-layer
+bugs are the only family where the incident and its discovery can be separated by MONTHS, because
+bad data doesn't crash - it waits.
+</Hook>
+
+<Callout type="analogy">
+An archive room holding 1.8 million records in labeled boxes on rolling shelves. The room's real
+guarantees aren't the shelves - they're the RULES: one label per box, every box logged in the
+index, no box leaves without a card. Break a rule quietly - shelve one folder in the wrong box -
+and nothing happens. No alarm, no error. The archive looks identical. The damage surfaces YEARS
+later, when someone requests that folder and it isn't where the index says - and by then, nobody
+remembers who misfiled it or when. A database is this room; constraints are its filing rules; and
+data bugs are misfiled folders, harmless-looking until the day of retrieval.
+</Callout>
+
+<Term define="The data layer is where the system's facts live - the database with its tables, plus the rules that keep those facts coherent: UNIQUE constraints (no two rows may share this value, e.g. email), FOREIGN KEYS (a row may only reference rows that exist - an order must point at a real user), NOT NULL and CHECK constraints (required and valid values), and TRANSACTIONS (a group of changes succeeds or fails as one). Data-layer bug families are what happens when those rules are missing or bypassed: DUPLICATES (double-submits creating two rows), ORPHANS (children whose parent row was deleted), LOST UPDATES (two concurrent read-modify-write cycles, the second silently overwriting the first), PARTIAL WRITES (half of a multi-step change committed), and DRIFT (encoding, timezone, and precision corruption accumulating over time). Their shared property: the UI shows success at the moment the damage is done.">Data layer (and its bug families)</Term>
+
+## The families, and why the screen never shows them
+
+- **Duplicates - the double-submit's permanent souvenir.** A double-clicked signup, a retried
+  payment, an import run twice. Without a unique constraint, the database happily stores both
+  rows. The UI shows success (twice!). The damage appears later, split across the two identities:
+  half of maya's orders under one account id, half under the other.
+- **Orphans - children whose parent vanished.** Delete a user without handling their orders and,
+  with no foreign key enforced, the orders remain - pointing at nobody. Every report that JOINs
+  orders to users silently drops them; totals stop reconciling with payments; and the discrepancy
+  is discovered by an accountant, not a stack trace.
+- **Lost updates - the concurrency classic.** Two sessions read balance 100; one writes 100+50,
+  the other writes 100-30. Whoever writes last wins; the other change evaporates without any
+  error. Needs no load to exist - just two overlapping read-modify-write cycles: two support
+  agents editing one ticket, a user with two tabs open.
+- **Partial writes - the interrupted multi-step change.** Creating an order means writing the
+  order, its line items, and a stock decrement. If step two fails without a transaction wrapping
+  all three, the database now holds an order with no items - a state the application never
+  intended and its code never expects to read.
+- **Drift - slow corruption with no event at all.** Names garbled by encoding mismatches, times
+  shifted by timezone-naive storage, money off by a cent from float rounding. No single action
+  broke anything; the data just decays until a report or a migration trips over it.
+- **Why testers matter uniquely here: the screen lies by omission.** On the day of the bug, every
+  UI check passes. The only way to catch this family at creation time is to look UNDERNEATH - do
+  the risky action, then verify the rows themselves (or get a dev to). That habit is rare, which
+  is exactly why it's valuable.
+
+<Callout type="tip">
+The data layer has a house rule the other layers don't: bugs here COMPOUND. One duplicate account
+today becomes two order histories, two loyalty balances, and a failed migration two years from now.
+When you find any data bug, always ask the follow-up: 'How many rows are ALREADY affected?' A
+missing constraint has usually been missing since launch - the fix is two-part (add the rule, clean
+the backlog), and reporting the backlog size is what gets the ticket prioritized correctly.
+</Callout>
+
+<Callout type="mistake">
+Verifying data-affecting actions only through the UI. 'I deleted the account and it disappeared
+from the screen' proves the LIST no longer shows it - not that the account's orders, sessions, and
+files were handled. The UI is a view over the data, and views are curated: they hide orphans,
+deduplicate on the fly, and format drift away. For any action that creates, modifies, or deletes
+data, the test isn't complete until someone has looked at what the DATABASE now contains - the
+screen showing 'success' is where this family's bugs BEGIN, not where they end.
+</Callout>
+
+{/* IMAGE: long narrow aisle between tall archive shelves densely packed with labeled gray records boxes; sticky notes on some shelves, papers protruding from boxes on the right, dark far end of the aisle */}
+<HotspotImage
+  src="/notes/system-design-for-testers/where-bugs-live-by-layer/data-layer-bug-families.jpg"
+  alt="Narrow aisle between tall archive shelves packed with labeled record storage boxes"
+  credit="National Fish and Aquatic Conservation Archives — USFWS Mountain-Prairie, Wikimedia Commons, Public domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:National_Fish_and_Aquatic_Conservation_Archives_(51339083153).jpg"
+  pins={[
+    { x: 15, y: 45, label: "Labeled boxes — rows with keys", desc: "Each label is the box's identity, and the whole archive works only if labels are unique and accurate - a primary key in cardboard. Two boxes with one label, or one box mislabeled, is a duplicate-row bug: nothing complains at filing time, everything fails at retrieval time." },
+    { x: 50, y: 78, label: "The rails in the floor — the structure that makes retrieval possible", desc: "Rolling shelves only work because everything sits in a known, ordered place - the archive's 'index'. Databases are the same: it's not the storage that makes data usable, it's the organization rules. Data bugs are precisely the states those rules would have forbidden." },
+    { x: 80, y: 38, label: "Sticky notes on shelves — fixes outside the system", desc: "Someone patched reality with a note the index knows nothing about. Every production database accumulates these: manual UPDATEs, hotfix scripts, 'temporary' corrections - each one a write that bypassed the application's rules, and a favorite origin story for drift and orphans." },
+    { x: 88, y: 62, label: "Papers sticking out of a box — data that didn't fit the schema", desc: "A folder too thick for its box, wedged in anyway. Values truncated to fit a column, emojis mangled by the wrong encoding, a second address crammed into address_line_1 - stored 'successfully', corrupted quietly." },
+    { x: 50, y: 30, label: "The dark far end — rows nobody has read in years", desc: "Silent corruption's home. A data bug's incident and its DISCOVERY can be years apart, because bad rows don't crash - they wait for the report, migration, or audit that finally reads them. That gap is what makes this family uniquely expensive." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One double-click, three weeks of consequences - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Day 1: maya double-clicks Sign Up; two user rows are created for her email", desc: "No unique constraint on email. Both requests return success. The UI looks perfect. The bug is now IN the data, and nothing will mention it again for weeks." },
+    { label: "Day 9: maya orders headphones - the order lands under her SECOND row", desc: "Login happens to match the first row; the order was created in a session tied to the second. Both operations correct in isolation - the duplicate made them incoherent together." },
+    { label: "Day 12: 'Where's my order?' - support sees an empty history and escalates as a UI bug", desc: "The frontend team finds nothing: the UI faithfully renders the (empty) orders of user #1. The screen is honest about dishonest data - which is why the ticket bounces." },
+    { label: "Day 21: a tester asks the data question: 'How many rows share this email?'", desc: "Two. Diagnosis in one query. The full finding: missing unique constraint, 480 other duplicate emails accumulated since launch, and a two-part fix - add the constraint, merge the backlog. From ghost to root cause via ONE look under the UI." },
+  ]}
+/>
+
+Three families in one runnable script - duplicates, orphans, and the lost update, each followed by
+what the missing rule would have done:
+
+<CodePlayground
+  language="python"
+  title="Run it - duplicates, orphans, and a vanishing deposit (Python)"
+  code={`users = []    # pretend table, NO unique constraint on email
+orders = []   # pretend table, NO foreign-key enforcement
+
+print("--- family 1: duplicates (missing unique constraint) ---")
+users.append({"id": 1, "email": "maya@example.com"})
+users.append({"id": 2, "email": "maya@example.com"})   # double-click on signup
+orders.append({"id": 101, "user_id": 2, "total": 45})
+found = next(u for u in users if u["email"] == "maya@example.com")
+her_orders = [o for o in orders if o["user_id"] == found["id"]]
+print(f"maya signs up twice -> {sum(u['email'] == 'maya@example.com' for u in users)} rows")
+print(f"login finds user id {found['id']}; her order lives under id 2")
+print(f"maya's order history shows: {her_orders}  <- order 'lost', support ticket filed")
+
+print()
+print("--- family 2: orphans (missing foreign-key constraint) ---")
+users.remove(users[1])                                  # account deleted...
+orphans = [o for o in orders if not any(u["id"] == o["user_id"] for u in users)]
+print(f"user 2 deleted, their order remains -> orphaned rows: {orphans}")
+print("Monthly revenue report joins orders to users, orphan silently drops out,")
+print("finance asks why order 101's 45 dollars is in payments but not in the report.")
+
+print()
+print("--- family 3: the lost update (read-modify-write race) ---")
+balance = {"acct": 100}
+session_a = balance["acct"]        # A reads 100
+session_b = balance["acct"]        # B reads 100 (before A writes!)
+balance["acct"] = session_a + 50   # A: +50 deposit -> writes 150
+balance["acct"] = session_b - 30   # B: -30 purchase -> writes 70, clobbering A
+print(f"deposit +50 and purchase -30 from a 100 balance should leave 120")
+print(f"actual stored balance: {balance['acct']}  <- the +50 deposit simply vanished")
+
+print()
+print("--- the same three, with the database doing its job ---")
+constrained_users = {}                                  # unique email enforced by dict key
+constrained_users["maya@example.com"] = {"id": 1}
+try:
+    if "maya@example.com" in constrained_users:
+        raise ValueError("UNIQUE constraint violation: email already exists")
+except ValueError as e:
+    print(f"duplicate signup -> rejected: {e}")
+print("FK constraint -> deleting a user with orders is refused (or cascades, by design)")
+balance = {"acct": 100}
+balance["acct"] += 50              # atomic UPDATE acct SET bal = bal + 50
+balance["acct"] -= 30              # atomic UPDATE acct SET bal = bal - 30
+print(f"atomic increments instead of read-modify-write -> balance: {balance['acct']}")
+print()
+print("Every family here is invisible in the UI on the day it happens - and testable")
+print("the same way: do the risky action (double-submit, delete-with-children,")
+print("concurrent edits), then verify the DATA, not just the screen.")`}
+/>
+
+The same three families in Java - streams instead of comprehensions, `merge` as the atomic
+increment, identical vanishing deposit:
+
+<CodePlayground
+  language="java"
+  title="Run it - duplicates, orphans, and a vanishing deposit (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    public static void main(String[] args) {
+        List<Map<String, Object>> users = new ArrayList<>();  // NO unique constraint on email
+        List<Map<String, Object>> orders = new ArrayList<>(); // NO foreign-key enforcement
+
+        System.out.println("--- family 1: duplicates (missing unique constraint) ---");
+        users.add(new HashMap<>(Map.of("id", 1, "email", "maya@example.com")));
+        users.add(new HashMap<>(Map.of("id", 2, "email", "maya@example.com"))); // double-click
+        orders.add(new HashMap<>(Map.of("id", 101, "user_id", 2, "total", 45)));
+        Map<String, Object> found = users.stream()
+                .filter(u -> u.get("email").equals("maya@example.com")).findFirst().get();
+        List<Map<String, Object>> herOrders = orders.stream()
+                .filter(o -> o.get("user_id").equals(found.get("id"))).toList();
+        long dupes = users.stream().filter(u -> u.get("email").equals("maya@example.com")).count();
+        System.out.println("maya signs up twice -> " + dupes + " rows");
+        System.out.println("login finds user id " + found.get("id") + "; her order lives under id 2");
+        System.out.println("maya's order history shows: " + herOrders + "  <- order 'lost', support ticket filed");
+
+        System.out.println();
+        System.out.println("--- family 2: orphans (missing foreign-key constraint) ---");
+        users.remove(1); // account deleted...
+        List<Map<String, Object>> orphans = orders.stream()
+                .filter(o -> users.stream().noneMatch(u -> u.get("id").equals(o.get("user_id"))))
+                .toList();
+        System.out.println("user 2 deleted, their order remains -> orphaned rows: " + orphans);
+        System.out.println("Monthly revenue report joins orders to users, orphan silently drops out,");
+        System.out.println("finance asks why order 101's 45 dollars is in payments but not in the report.");
+
+        System.out.println();
+        System.out.println("--- family 3: the lost update (read-modify-write race) ---");
+        Map<String, Integer> balance = new HashMap<>(Map.of("acct", 100));
+        int sessionA = balance.get("acct");      // A reads 100
+        int sessionB = balance.get("acct");      // B reads 100 (before A writes!)
+        balance.put("acct", sessionA + 50);      // A: +50 deposit -> writes 150
+        balance.put("acct", sessionB - 30);      // B: -30 purchase -> writes 70, clobbering A
+        System.out.println("deposit +50 and purchase -30 from a 100 balance should leave 120");
+        System.out.println("actual stored balance: " + balance.get("acct") + "  <- the +50 deposit simply vanished");
+
+        System.out.println();
+        System.out.println("--- the same three, with the database doing its job ---");
+        Map<String, Map<String, Object>> constrainedUsers = new HashMap<>(); // unique email via key
+        constrainedUsers.put("maya@example.com", Map.of("id", 1));
+        if (constrainedUsers.containsKey("maya@example.com")) {
+            System.out.println("duplicate signup -> rejected: UNIQUE constraint violation: email already exists");
+        }
+        System.out.println("FK constraint -> deleting a user with orders is refused (or cascades, by design)");
+        balance.put("acct", 100);
+        balance.merge("acct", 50, Integer::sum);  // atomic UPDATE acct SET bal = bal + 50
+        balance.merge("acct", -30, Integer::sum); // atomic UPDATE acct SET bal = bal - 30
+        System.out.println("atomic increments instead of read-modify-write -> balance: " + balance.get("acct"));
+
+        System.out.println();
+        System.out.println("Every family here is invisible in the UI on the day it happens - and testable");
+        System.out.println("the same way: do the risky action (double-submit, delete-with-children,");
+        System.out.println("concurrent edits), then verify the DATA, not just the screen.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: attack the data rules on purpose">
+<StepChecklist
+  steps={[
+    { text: "Try to create a duplicate of something that should be unique", detail: "Sign up twice with one email (try double-clicking submit), add the same item to a wishlist twice, apply one coupon twice. Rejection with a clear message = the rule exists. Two successes = a finding, even before you see the rows." },
+    { text: "Delete something that has children", detail: "Delete an account that has orders, a category that has products, a project that has tasks. Then look for the children: still visible anywhere? Half-present (in search but not lists)? Ask a dev what the DB now contains - refused, cascaded, or orphaned?" },
+    { text: "Race yourself with two tabs", detail: "Open the same editable thing (profile, ticket, document) in two tabs. Edit different fields in each, save both. Check the final state: both changes kept, or did the second save silently erase the first? The second outcome is a lost-update bug you just proved with zero tools." },
+    { text: "Ask a developer the two data questions", detail: "'Which uniqueness and foreign-key rules are actually enforced in the DATABASE (vs only in app code)?' and 'Are multi-step writes wrapped in transactions?' App-code-only enforcement fails exactly under the double-submit and race conditions you just tested." },
+  ]}
+/>
+Four attacks, zero SQL required - and you've probed all three major families. Anything that
+succeeded where it should have been refused is a bug today and a data-cleanup project next year.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A user's data is 'missing' - orders, history, files - but payments/emails prove the activity happened.",
+      fix: "Suspect duplicates first: the activity may live under a second identity row (same email, different id). Ask for a count of rows sharing the user's email/phone. If found, the report is: missing unique constraint + N-row backlog + the merge question. The UI showing an empty history was TRUE - for the row it was looking at.",
+    },
+    {
+      symptom: "Reports and dashboards disagree with raw payment/inventory records, by small amounts that grow over time.",
+      fix: "Classic orphan signature: JOINs silently drop child rows whose parent was deleted. Ask for an orphan check (children whose parent id matches no parent). Growing discrepancy = ongoing orphan creation = some delete path lacks FK handling. Report both the leak and the accumulated backlog size.",
+    },
+    {
+      symptom: "A change a user definitely made is 'gone' - a setting reverted, a deposit vanished, an edit lost - with no error anywhere.",
+      fix: "Lost update: something else wrote the same row between their read and their write (another tab, another agent, a background job). Repro with the two-tab race. The fix conversation is about atomic updates or optimistic locking ('this record changed while you were editing') - and your repro is what proves it's real and not user confusion.",
+    },
+    {
+      symptom: "Rows exist that the app itself seems unable to have created - an order with no items, a booking with no dates.",
+      fix: "Partial write: a multi-step change without a wrapping transaction, interrupted between steps. These states crash code that assumes they're impossible ('order.items is never empty'). Ask when the rows were created and cross-reference deploy/incident timelines - partial writes cluster around failures and restarts. Recommend transactions plus a periodic integrity query for impossible states.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The actual rows behind the affected feature** — via a dev, a read-only DB client, or an admin tool; the UI is a curated view, and this family hides in exactly what the curation hides.
+- **Counts that should be equal** — users vs distinct emails, orders vs order-items' parents, payments vs reported revenue; two numbers that should match and don't are how silent families get loud.
+- **The schema's actual constraints** — which UNIQUE/FK/NOT NULL rules exist in the database (not just in app code); every missing expected rule names a bug family that is currently possible.
+- **Timestamps around the damage** — created_at/updated_at of bad rows, cross-referenced with deploys, incidents, and imports; data bugs have birthdays even when they have no error messages.
+- **[[system-design-for-testers/the-big-picture/frontend-backend-and-the-database]]** — the map of which layer owns which truth; this note is why 'the screen says success' was never the end of that story.
+</WhereToCheck>
+
+<WorkedExample title="the revenue report that drifted 45 dollars, then 4,500">
+1. Finance flags it: the monthly revenue report is 45 dollars short of the payment provider's
+   total. One month later the gap is 900; the next, 4,500. No errors, no failed payments, no
+   customer complaints. The report code hasn't changed all year.
+2. A tester picks it up with the family catalog in mind: growing reconciliation gap = rows
+   leaking out of a JOIN = orphan family, until proven otherwise. Question one: 'Do we have
+   orders whose user no longer exists?'
+3. A dev runs the check: 103 orphaned orders, all created before their user rows were deleted.
+   Cross-referencing timestamps: every orphan's user was deleted via the new GDPR
+   account-erasure tool that shipped earlier in the year - which deletes the user row directly,
+   bypassing the app's usual cleanup, and the schema has no FK to object.
+4. The compounding part: each erased account keeps generating a gap every time its old orders
+   should have appeared in a report. The bug's rate is small; its ACCUMULATION is what finance
+   noticed. Classic data-layer economics - incident and discovery separated by months.
+5. The report: family named (orphans), origin named (erasure tool bypasses cleanup; no FK
+   enforcement), backlog sized (103 and growing), and a three-part fix: decide the policy
+   (anonymize orders instead of orphaning them), enforce it in the schema, clean the backlog. Plus
+   one new standing test: after ANY delete feature ships, verify the children, not just the
+   parent's disappearance.
+</WorkedExample>
+
+<Quiz
+  question="A user reports their support ticket 'unassigned itself' - they set an assignee, saved successfully, and an hour later the field was empty again. Logs show no errors, and another agent confirms they were also editing that ticket around the same time. What family is this, and what's the convincing repro?"
+  options={[
+    "UI-layer state bug - the assignee dropdown must be rendering the wrong value; repro by refreshing the page",
+    "Lost update - both agents read the ticket, edited different fields, and the second save wrote its stale copy over the first; repro by editing one record in two tabs and saving both",
+    "Orphan - the assignee user was deleted, so the reference broke; repro by deleting a user with assigned tickets",
+    "Duplicate - there are two copies of the ticket and they're viewing different ones; repro by searching for the ticket ID twice"
+  ]}
+  answer={1}
+  explain="Two editors on one record, both saves 'successful', one change silently gone, zero errors - that is the lost update's exact fingerprint: each session read the full ticket, modified one field, and wrote back its ENTIRE stale copy, so the later save reverted the earlier one's field. The two-tab repro proves it in minutes without tools and survives any 'cannot reproduce' pushback. A rendering bug would survive refresh checks and wouldn't correlate with the second editor; an orphaned assignee would show a broken reference rather than a clean revert; duplicates would show two ticket rows, which a single ID lookup rules out. The dev-side fix conversation is optimistic locking or field-level updates - and your repro is the evidence that starts it."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The data-layer family's shared signature", back: "Silence: the UI shows success at the exact moment the damage is done, and discovery comes later - via a report, a migration, or a confused customer. Incident and discovery can be separated by months." },
+    { front: "The five data-layer bug families", back: "Duplicates (missing UNIQUE), orphans (missing FK handling on delete), lost updates (concurrent read-modify-write), partial writes (multi-step changes without a transaction), and drift (encoding/timezone/precision decay)." },
+    { front: "Why 'it disappeared from the screen' proves so little", back: "The UI is a curated view over the data: it hides orphans, dedupes on the fly, formats drift away. Data-affecting actions are verified by looking at the rows (or having a dev look), not at the view." },
+    { front: "The two-tab race - what it proves and how", back: "Open one record in two tabs, edit different fields, save both. If the second save erases the first's change, you've proven a lost-update bug with zero tooling - full-copy writes without locking." },
+    { front: "The compounding question for any data bug", back: "'How many rows are ALREADY affected?' A missing constraint has been missing since launch, so the fix is two-part: add the rule AND clean the accumulated backlog - and backlog size is what sets the priority." },
+    { front: "Where app-code-only validation fails", back: "Exactly under double-submits and races: two requests can both pass the app's 'does it exist?' check before either writes. Uniqueness and referential rules only truly hold when the DATABASE enforces them." },
+    { front: "Impossible rows (order with no items) point to which family?", back: "Partial writes: a multi-step change interrupted without a wrapping transaction. They cluster around failures, restarts, and deploys - check the bad rows' timestamps against incident timelines." },
+  ]}
+/>
+
+<Challenge>
+Design a five-minute 'data smoke test' for the app you test - five checks you could run (or ask a
+dev to run) after any risky release: (1) a duplicate count on the most important unique field,
+(2) an orphan count on the most important parent-child pair, (3) one impossible-state query (the
+'order with no items' of your domain), (4) the two-tab race on the most-edited record type, and
+(5) one reconciliation pair (two totals that must match). Write down the expected result of each.
+You've just built the early-warning system this bug family otherwise never gets.
+</Challenge>
+
+<AskCommunity prompt="We found `[duplicates/orphans/lost updates]` in `[table/feature]` - the risky action succeeds in the UI and the bad rows only surface later. Before we just fix the instance: what data-integrity checks do your teams run routinely (constraint audits, orphan/duplicate counts, reconciliation queries), and do you run them in CI, on a schedule, or after releases?">
+Naming the family you found tells responders you've done the diagnosis; asking about ROUTINE checks
+turns one bug into a permanent safety net - which is the conversation worth having.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.postgresql.org/docs/current/ddl-constraints.html", title: "PostgreSQL Docs — Constraints (UNIQUE, FK, CHECK - the rules that prevent these families)", kind: "read" },
+    { href: "https://martinfowler.com/articles/patterns-of-distributed-systems/version-vector.html", title: "Martin Fowler — Lost updates and versioning (why concurrent writes need protection)", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=GAe5oB742dw", title: "ByteByteGo — ACID Properties in Databases With Examples", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=GAe5oB742dw" title="ByteByteGo — ACID Properties in Databases With Examples" minutes={5} />
+
+<Takeaways
+  points={[
+    "Data-layer bugs succeed silently and surface later: the UI shows success at damage time, and discovery arrives via reports, migrations, and confused customers - sometimes months on.",
+    "Know the five families - duplicates, orphans, lost updates, partial writes, drift - and their triggers: double-submits, deletes-with-children, concurrent edits, interrupted multi-step writes, and time.",
+    "Verify data-affecting actions beneath the UI: the screen is a curated view that actively hides exactly what this family produces.",
+    "Cheap, tool-free probes exist for every family: double-click the submit, delete a parent, race yourself with two tabs - rejection is a pass, silent success is a finding.",
+    "Data bugs compound: always size the existing backlog ('how many rows already?'), because the fix is add-the-rule AND clean-the-history, and backlog size drives priority.",
+    "Rules enforced only in app code fail under concurrency - uniqueness and referential integrity are real only when the database enforces them.",
+  ]}
+/>
+
+<Complete xp={10} />

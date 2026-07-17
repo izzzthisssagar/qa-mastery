@@ -1,0 +1,357 @@
+---
+title: "Infra & config bug families"
+summary: "Infra and config bugs live in everything AROUND the code: a missing environment variable, a staging URL pointing at prod, a certificate that expires on Sunday, a disk that quietly fills. The code is innocent, the behavior is broken - and 'works in staging' proves nothing when the configs differ."
+tags: ["system-design-for-testers", "where-bugs-live-by-layer", "track-c"]
+updated: "2026-07-17"
+related:
+  - "system-design-for-testers/where-bugs-live-by-layer/data-layer-bug-families"
+  - "system-design-for-testers/scaling-building-blocks/load-balancers"
+  - "system-design-for-testers/scaling-building-blocks/cdns-and-static-assets"
+---
+
+<Hook>
+The release passed every test in staging. Same code ships to production - and emails stop
+arriving, searches time out, and one endpoint returns certificate errors. Nothing in the diff
+explains any of it, because the answer isn't IN the diff: production is missing one environment
+variable staging has, enforces a timeout fifteen times stricter, and carries a TLS certificate
+that expired over the weekend. Identical code, different worlds. The last bug family lives not in
+what developers write, but in everything the software stands on.
+</Hook>
+
+<Callout type="analogy">
+An aircraft circuit-breaker panel: hundreds of small labeled breakers - COPILOT PFD, FUEL SYSTEM,
+BATTERY BUS - each one deciding whether some subsystem gets power. The engines can be perfect, the
+avionics flawless; pull one breaker among hundreds and a working instrument goes dark. Nothing is
+'broken' in the sense of damaged - one switch is in the wrong position. Infrastructure and
+configuration are your system's breaker panel: rows of settings, each small, each labeled
+cryptically, each capable of turning a perfectly coded feature into a dead screen. And like the
+panel, the whole thing is invisible to passengers - until one switch is wrong.
+</Callout>
+
+<Term define="Infrastructure and configuration are everything a system needs that is not its application code: environment variables and config files (URLs, credentials, feature flags, timeouts, limits), the runtime environment (server capacity, disk space, memory), networking (DNS, TLS certificates, firewall rules, ports), and third-party service endpoints. The bug families: MISSING/WRONG CONFIG (a variable absent or set to the wrong value, often masked by a silent default); ENVIRONMENT DRIFT (staging and production configured differently, so testing one says little about the other); CROSS-ENVIRONMENT LEAKS (staging pointing at production databases or live payment modes); EXPIRY (certificates, tokens, and domains that lapse on a schedule); and RESOURCE EXHAUSTION (disks filling, memory leaking, quotas hitting limits over time). Signature: identical code behaves differently in different environments, and 'nothing changed' in the codebase when things broke.">Infrastructure & configuration (and their bug families)</Term>
+
+## The families, and their tells
+
+- **Missing or wrong config, masked by silent defaults.** `SMTP_HOST` unset, so the code falls
+  back to `localhost` and 'sends' emails into the void - successfully, as far as logs show. Tell:
+  a feature that cannot possibly be broken by the code IS broken, in exactly one environment,
+  with no errors.
+- **Environment drift - staging is not production.** Different timeouts, different flag states,
+  different service versions, different data volumes. Every drifted key shrinks what staging
+  tests actually prove. Tell: 'works in staging, fails in prod' with an empty code diff.
+- **Cross-environment leaks - the scary family.** A staging config holding the PRODUCTION
+  database URL; a test suite running against live payments; a dev tool emailing real customers.
+  One wrong line quietly turns testing into production writes. Tell: test data appearing where it
+  shouldn't - or real data appearing in a test environment.
+- **Expiry - failures on a calendar, not a deploy.** TLS certificates, API tokens, domain
+  registrations, license keys: all lapse at a preset moment, typically a weekend. Tell: sudden
+  breakage with NO deploy anywhere near it; the incident time matches an expiry timestamp to the
+  minute.
+- **Resource exhaustion - the slow-motion outage.** Log files filling a disk over months, a
+  memory leak crossing its threshold, a rate limit or quota finally reached at peak. Tell:
+  gradual degradation, failures correlated with time-of-day or data growth, and 'restarting fixed
+  it' (until it doesn't).
+- **Why this family reshapes a tester's questions.** 'Nothing changed' is never true - config
+  changes, certificates age, disks fill. The question is always 'what changed in the ENVIRONMENT,
+  and when?' - and asking it moves you from where the bug isn't (the diff) to where it is.
+
+<Callout type="tip">
+The highest-leverage artifact for this whole family is the environment diff: the list of every
+config key whose value differs between staging and production (with secrets masked). Ask a
+developer or ops engineer for it before any major release. Missing keys, order-of-magnitude
+drifts, and prod-URLs-in-staging leap off that one screen - it is the config equivalent of the raw
+API response, and almost nobody thinks to ask for it.
+</Callout>
+
+<Callout type="mistake">
+Accepting 'must be an environment issue' as a closing diagnosis instead of an opening one.
+'Environment issue' is a family name, not a root cause - the ticket isn't done until someone names
+WHICH setting, WHERE, differs from WHAT expectation. Letting it close as a shrug guarantees a
+repeat, because unlike code bugs, nobody 'fixes' an unnamed config problem - the wrong value is
+still sitting there, waiting for the next release to trip over it.
+</Callout>
+
+{/* IMAGE: close-up of an aircraft circuit-breaker panel with rows of small round black breakers ringed in green, blue, yellow, and red, labeled COPILOT PFD, LIGHTS CDUI, FUEL SYSTEM, COPILOT PEDESTAL, BATTERY BUS, AVNCS, each stamped with amp ratings like 5 and 7 1/2 */}
+<HotspotImage
+  src="/notes/system-design-for-testers/where-bugs-live-by-layer/infra-and-config-bug-families.jpg"
+  alt="Aircraft circuit breaker panel with rows of labeled breakers ringed in different colors, each stamped with an amp rating"
+  credit="Coloured Circuit Breaker Panel — Shawn (Airdrie, Canada), Wikimedia Commons, CC BY-SA 2.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Coloured_Circuit_Breaker_Panel_(1245142933).jpg"
+  pins={[
+    { x: 15, y: 30, label: "COPILOT PFD — every subsystem has a switch", desc: "The copilot's primary flight display - a critical instrument - depends on this one unremarkable breaker. Your login flow has an equivalent: an auth-service URL, a session-store host, a token secret. Feature works = code correct AND its switches set right. The second half is this family." },
+    { x: 52, y: 47, label: "The amp ratings (5, 7 1/2) — limits chosen in advance", desc: "Each breaker trips at its stamped threshold. Timeouts, rate limits, max upload sizes, connection-pool caps - your config is full of numbers exactly like these, and when staging says 30000 where prod says 2000, the same feature passes one world and trips in the other." },
+    { x: 40, y: 12, label: "The FUEL SYSTEM row — grouping by what it powers", desc: "Breakers are organized by subsystem, so a fault can be traced to its switch. Well-run configs group the same way (DATABASE_*, SMTP_*, PAYMENT_*) - and the diagnostic question is identical: which group does the broken behavior belong to, and what are ITS values right now?" },
+    { x: 75, y: 40, label: "Color-coded rings — conventions carrying meaning", desc: "Green, blue, yellow, red - a scheme someone defined so states are readable at a glance. Environments work the same way: sandbox vs live, staging vs prod naming conventions. Cross-environment leak bugs are precisely a wire in the wrong color's circuit - staging config holding a prod URL." },
+    { x: 85, y: 12, label: "Hundreds of switches — one wrong among many", desc: "The panel's real hazard isn't any single breaker - it's that there are hundreds, and one in the wrong position looks exactly like all its neighbors. Config files are this panel without the tidy labels: the whole family's difficulty is FINDING the one wrong switch, which is why the environment diff is the tool that matters." },
+  ]}
+/>
+
+<FlowAnimation
+  title="'Nothing changed' - a release-day mystery in four acts - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Friday 16:00: release passes all staging tests, ships to production", desc: "The code is genuinely fine. Staging genuinely passed. Everyone genuinely goes home." },
+    { label: "Friday 16:20: production emails stop; search times out for heavy queries", desc: "Production is missing SMTP_HOST (silent localhost fallback - emails vanish without errors) and enforces a 2s search timeout where staging allowed 30s. Two config bugs wearing a code-bug costume." },
+    { label: "Sunday 03:00: the API goes down entirely - certificate errors everywhere", desc: "No deploy in 36 hours. The TLS certificate expired on its calendar, not on anyone's release schedule. Third family, same weekend." },
+    { label: "Monday: the tester asks for two artifacts - the config diff and the cert expiry dates", desc: "The diff names SMTP_HOST (missing) and SEARCH_TIMEOUT_MS (15x drift) in one screen; the cert list shows Sunday 03:00 exactly. Three mysteries, zero code changes, two documents. That's this family's entire diagnostic playbook." },
+  ]}
+/>
+
+The family in executable form - one function whose behavior is decided entirely by config, and the
+diff that finds every planted bug:
+
+<CodePlayground
+  language="python"
+  title="Run it - a silent fallback, a prod leak, and 15x drift, caught by one diff (Python)"
+  code={`CONFIGS = {
+    "staging": {
+        "DATABASE_URL": "db.prod.internal:5432/shop",   # <- oops (bug 2)
+        "SMTP_HOST": "smtp.staging.internal",
+        "PAYMENT_MODE": "sandbox",
+        "SEARCH_TIMEOUT_MS": 30000,
+    },
+    "production": {
+        "DATABASE_URL": "db.prod.internal:5432/shop",
+        # SMTP_HOST is missing entirely                  # <- oops (bug 1)
+        "PAYMENT_MODE": "live",
+        "SEARCH_TIMEOUT_MS": 2000,                       # <- 15x stricter (bug 3)
+    },
+}
+
+
+def send_email(env):
+    """Same code everywhere - behavior decided entirely by config."""
+    host = CONFIGS[env].get("SMTP_HOST", "localhost")    # silent fallback default
+    if host == "localhost":
+        return "email handed to localhost - vanishes without an error"
+    return f"email sent via {host}"
+
+
+print("--- bug 1: missing config + silent fallback ---")
+print(f"staging:    {send_email('staging')}")
+print(f"production: {send_email('production')}")
+print("Same code, both 'succeed'. Production emails silently go nowhere -")
+print("the bug report will say 'emails are broken', and the CODE is innocent.")
+
+print()
+print("--- bug 2 + 3: find config drift by diffing, like a tester would ---")
+keys = sorted(set(CONFIGS["staging"]) | set(CONFIGS["production"]))
+for key in keys:
+    s, p = CONFIGS["staging"].get(key), CONFIGS["production"].get(key)
+    if s == p and key == "DATABASE_URL" and "prod" in str(s):
+        print(f"  DANGER  {key}: staging points at PRODUCTION ({s})")
+        print("          -> staging tests are reading/writing real customer data")
+    elif p is None:
+        print(f"  MISSING {key}: set in staging, absent in production")
+    elif s != p and isinstance(s, int) and max(s, p) / min(s, p) >= 10:
+        print(f"  DRIFT   {key}: staging={s}, production={p} ({max(s,p)//min(s,p)}x apart)")
+        print("          -> a search that passes in staging can time out for real users")
+    elif s != p:
+        print(f"  differs {key}: staging={s}, production={p} (expected - by design)")
+    else:
+        print(f"  same    {key}: {s}")
+
+print()
+print("None of these bugs is in the code. All of them decide what users experience.")
+print("A tester who asks 'can I see the config diff between staging and prod?'")
+print("finds this whole family in one screen - before release day does.")`}
+/>
+
+The same configs and the same diff in Java - pattern-matching on `Integer` pairs for the drift
+check, identical findings:
+
+<CodePlayground
+  language="java"
+  title="Run it - a silent fallback, a prod leak, and 15x drift, caught by one diff (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static Map<String, Map<String, Object>> CONFIGS = new LinkedHashMap<>();
+    static {
+        Map<String, Object> staging = new LinkedHashMap<>();
+        staging.put("DATABASE_URL", "db.prod.internal:5432/shop"); // <- oops (bug 2)
+        staging.put("SMTP_HOST", "smtp.staging.internal");
+        staging.put("PAYMENT_MODE", "sandbox");
+        staging.put("SEARCH_TIMEOUT_MS", 30000);
+        CONFIGS.put("staging", staging);
+
+        Map<String, Object> production = new LinkedHashMap<>();
+        production.put("DATABASE_URL", "db.prod.internal:5432/shop");
+        // SMTP_HOST is missing entirely                            // <- oops (bug 1)
+        production.put("PAYMENT_MODE", "live");
+        production.put("SEARCH_TIMEOUT_MS", 2000);                  // <- 15x stricter (bug 3)
+        CONFIGS.put("production", production);
+    }
+
+    static String sendEmail(String env) {
+        // Same code everywhere - behavior decided entirely by config
+        Object host = CONFIGS.get(env).getOrDefault("SMTP_HOST", "localhost"); // silent fallback
+        if (host.equals("localhost")) {
+            return "email handed to localhost - vanishes without an error";
+        }
+        return "email sent via " + host;
+    }
+
+    public static void main(String[] args) {
+        System.out.println("--- bug 1: missing config + silent fallback ---");
+        System.out.println("staging:    " + sendEmail("staging"));
+        System.out.println("production: " + sendEmail("production"));
+        System.out.println("Same code, both 'succeed'. Production emails silently go nowhere -");
+        System.out.println("the bug report will say 'emails are broken', and the CODE is innocent.");
+
+        System.out.println();
+        System.out.println("--- bug 2 + 3: find config drift by diffing, like a tester would ---");
+        Set<String> keys = new TreeSet<>();
+        keys.addAll(CONFIGS.get("staging").keySet());
+        keys.addAll(CONFIGS.get("production").keySet());
+        for (String key : keys) {
+            Object s = CONFIGS.get("staging").get(key);
+            Object p = CONFIGS.get("production").get(key);
+            if (Objects.equals(s, p) && key.equals("DATABASE_URL") && String.valueOf(s).contains("prod")) {
+                System.out.println("  DANGER  " + key + ": staging points at PRODUCTION (" + s + ")");
+                System.out.println("          -> staging tests are reading/writing real customer data");
+            } else if (p == null) {
+                System.out.println("  MISSING " + key + ": set in staging, absent in production");
+            } else if (!Objects.equals(s, p) && s instanceof Integer a && p instanceof Integer b
+                    && Math.max(a, b) / Math.min(a, b) >= 10) {
+                System.out.println("  DRIFT   " + key + ": staging=" + s + ", production=" + p
+                        + " (" + (Math.max(a, b) / Math.min(a, b)) + "x apart)");
+                System.out.println("          -> a search that passes in staging can time out for real users");
+            } else if (!Objects.equals(s, p)) {
+                System.out.println("  differs " + key + ": staging=" + s + ", production=" + p + " (expected - by design)");
+            } else {
+                System.out.println("  same    " + key + ": " + s);
+            }
+        }
+
+        System.out.println();
+        System.out.println("None of these bugs is in the code. All of them decide what users experience.");
+        System.out.println("A tester who asks 'can I see the config diff between staging and prod?'");
+        System.out.println("finds this whole family in one screen - before release day does.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: map the environment you actually test in">
+<StepChecklist
+  steps={[
+    { text: "Ask for (or sketch) the environment list", detail: "Which environments exist - dev, test, staging, prod? Which one do YOU test in daily, and which one do users live in? Just writing this down surfaces assumptions." },
+    { text: "Request the staging-vs-production config diff, secrets masked", detail: "The single highest-leverage artifact in this note. Scan it for three things: keys missing on one side, numeric values an order of magnitude apart, and anything in staging containing 'prod'." },
+    { text: "Ask the expiry question", detail: "'What expires around here - TLS certificates, API tokens, domains - and does anything alert us BEFORE it does?' If the answer involves someone checking manually, note the next expiry date yourself. You may just have prevented a weekend incident." },
+    { text: "Ask the capacity question", detail: "'What fills up or runs out - disk, memory, rate limits, quotas - and how would we know before users do?' Resource exhaustion is the slowest bug in this note; one dashboard answer tells you whether anyone is watching it." },
+  ]}
+/>
+You now know how faithfully your test environment resembles the world users live in - which is
+the exact factor that decides how much your test results are worth.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A feature works in staging, fails in production - and the code is identical.",
+      fix: "Stop reading the diff; request the environment diff. Check in order: keys missing in prod (silent-default fallbacks), numeric drift (timeouts, limits), version differences of attached services. Name the exact key in your report - 'prod lacks SMTP_HOST; code falls back to localhost' closes tickets; 'environment issue' reopens them.",
+    },
+    {
+      symptom: "Something broke with NO deploy anywhere near it - especially on a weekend or the 1st of a month.",
+      fix: "Check the calendar family first: certificate expiry dates, token lifetimes, domain renewals, monthly quota resets. Match the incident's exact start time against expiry timestamps - an expiry match to the minute is the whole diagnosis. Then file the second finding: whatever expired had no pre-expiry alert.",
+    },
+    {
+      symptom: "Gradual slowdown or failures that worsen over days, and a restart 'fixes' it.",
+      fix: "Resource exhaustion: memory leak, disk filling, connection pool starvation. The restart resets the resource, not the cause. Ask for the resource's graph over time (memory/disk vs days) - a steady climb toward a ceiling is the signature, and its slope even predicts the next incident's date. Report the slope, not just the symptom.",
+    },
+    {
+      symptom: "Test data appears in production, or real customer data shows up in a test environment.",
+      fix: "Cross-environment leak - treat as an incident, not a bug: something in a test/staging config points at production (or vice versa). Stop the leaking activity first, then locate the wrong URL/credential, then ask the audit questions: what test writes reached prod, and does any policy prevent staging configs from ever holding prod endpoints? This family is where testing itself can damage production - the one bug type a tester can personally trigger.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The environment/config diff (secrets masked)** — missing keys, magnitude drift, and prod-strings-in-staging, all on one screen; ask for it by name.
+- **Expiry dates of certificates, tokens, and domains** — browser padlock details show cert expiry to anyone; incidents that match an expiry timestamp need no further root-causing.
+- **Resource dashboards over TIME** — disk, memory, connection counts, quota usage as graphs; steady climbs toward ceilings are this family's only early warning.
+- **Deploy and change logs for the ENVIRONMENT, not just the app** — config edits, infra changes, and flag flips are changes too; 'nothing changed' usually means 'nothing changed in the repo I looked at'.
+- **[[system-design-for-testers/scaling-building-blocks/load-balancers]]** — the pool and health-check mechanics from that note are themselves infrastructure; one server with drifted config inside a pool produces this note's bugs intermittently, which is the cruelest disguise.
+</WhereToCheck>
+
+<WorkedExample title="the search that only failed for real users - and the config line behind it">
+1. Post-release, support tickets: product search 'sometimes fails' in production, mostly for
+   broad queries. QA cannot reproduce in staging - identical build, identical test queries,
+   everything passes.
+2. A tester notices the failures aren't random: broad, slow queries fail; narrow, fast ones
+   don't. That smells like a threshold, and thresholds live in config. They ask for the
+   environment diff instead of another repro attempt.
+3. The diff: `SEARCH_TIMEOUT_MS` is 30000 in staging, 2000 in production. Someone tuned prod for
+   snappiness months ago; staging kept the generous default. Every staging pass was measured
+   against a limit fifteen times looser than the one users face.
+4. Confirmation without any tooling: run the same heavy query in both environments and time it -
+   4.1 seconds. Passes staging's 30s budget, blows prod's 2s. Reproduced on the first try, in
+   the only environment where the bug ever existed.
+5. The report: exact key, both values, the timing evidence - plus the finding behind the finding:
+   staging's timeout doesn't match production's, so staging cannot catch any performance
+   regression users would actually feel. Fix one: align the values. Fix two (the durable one): a
+   CI check that fails when key config values drift between environments. One config line
+   explained weeks of 'sometimes fails' - and the tester found it by asking for a document, not
+   by clicking harder.
+</WorkedExample>
+
+<Quiz
+  question="Your API went down at exactly 03:00 Sunday morning. The last deploy was Thursday. Logs show TLS handshake failures starting at 03:00:00 precisely. What's the most likely cause, and the fastest check?"
+  options={[
+    "A slow memory leak from Thursday's deploy finally crashed the servers - check the deploy's diff for leaks",
+    "A scheduled attack - check firewall logs for intrusion attempts around 03:00",
+    "A TLS certificate expired at 03:00 - check the certificate's expiry timestamp, which takes one command (or one click on the padlock) and matches the incident to the second if right",
+    "Weekend traffic patterns overloaded the API - check request volumes for Saturday night"
+  ]}
+  answer={2}
+  explain="Failures that begin at an EXACT clock moment, days from any deploy, with TLS handshake errors as the symptom, are the calendar family's signature: certificates expire at a precise stored timestamp, and 03:00-on-a-Sunday is exactly the kind of moment they're issued to lapse on. The check costs seconds and is definitive - the cert's expiry either matches the incident start or it doesn't. A memory leak produces gradual degradation, not a to-the-second cliff; an attack doesn't manifest as your own handshake failures; and a traffic spike would correlate with load curves, not one precise timestamp. The follow-up finding matters as much as the fix: nothing alerted anyone BEFORE expiry, and that gap is what turns a renewal task into a Sunday outage."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The infra/config family's signature", back: "Identical code behaving differently across environments, or breaking with 'no changes' - because the bug lives in what surrounds the code: variables, certificates, resources, endpoints." },
+    { front: "The five infra/config bug families", back: "Missing/wrong config (masked by silent defaults); environment drift (staging is not prod); cross-environment leaks (staging pointing at prod); expiry (certs/tokens/domains on a calendar); resource exhaustion (disks, memory, quotas over time)." },
+    { front: "The environment diff - what and why", back: "Every config key whose value differs between staging and prod (secrets masked). Missing keys, 10x numeric drift, and prod-URLs-in-staging all show on one screen. The single highest-leverage artifact for this family - ask for it by name." },
+    { front: "Silent defaults - why they're worse than crashes", back: "A missing variable that crashes gets fixed in minutes; one that falls back quietly ('localhost') produces a WORKING-looking system whose emails/jobs/calls vanish without errors - broken for weeks before anyone connects the dots." },
+    { front: "The 'no deploy, exact timestamp' tell", back: "Breakage starting at a precise clock moment days from any release = the expiry family. Check certificate/token expiry timestamps first; a to-the-minute match is the complete diagnosis. Second finding: no pre-expiry alerting existed." },
+    { front: "What 'restarting fixed it' really means", back: "A resource was exhausted and the restart reset the RESOURCE, not the cause. Ask for the resource's graph over time; a steady climb predicts the next incident's date - report the slope." },
+    { front: "Why cross-environment leaks outrank normal bugs", back: "A staging config pointing at production means TESTING writes to real customer data - the one family where QA activity itself can cause damage. Treat as an incident: stop, locate the wrong endpoint, audit what reached prod." },
+  ]}
+/>
+
+<Challenge>
+Build the 'what changed?' checklist for your app - the five questions to ask when something breaks
+and the code diff is empty: (1) What does the staging-vs-prod config diff show? (2) What expired
+or will expire this month? (3) What resource graphs are climbing? (4) What environment/infra
+changes (not code) shipped this week? (5) Which config values has this bug's feature got, in the
+environment where it's failing? Keep it where you file bugs. The next 'works in staging' mystery
+gets this list instead of a shrug - time yourself; it usually beats code-reading by hours.
+</Challenge>
+
+<AskCommunity prompt="We keep hitting `[works-in-staging-only bugs / expiry outages / config drift]` in `[your stack]`. I've started asking for the staging-vs-prod config diff, which catches a lot. What do your teams use to make this systematic - config validation at startup, drift checks in CI, cert-expiry alerting - and what actually stuck long-term?">
+Frameworks come and go; ops habits stick or don't. Asking 'what actually stuck' filters the
+answers to practices teams still run a year later - which is the only kind worth adopting.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://12factor.net/config", title: "The Twelve-Factor App — Config (why config lives in the environment)", kind: "read" },
+    { href: "https://sre.google/sre-book/release-engineering/", title: "Google SRE Book — Release Engineering (environments, config, and consistency)", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=J7X1iE3LEzs", title: "Super SQA — Understanding Deployment Environments: Dev, Test, Staging & Production", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=J7X1iE3LEzs" title="Super SQA — Understanding Deployment Environments: Dev, Test, Staging & Production Explained" minutes={14} />
+
+<Takeaways
+  points={[
+    "Infra and config bugs live in everything around the code - variables, certificates, resources, endpoints - so identical code can behave differently in every environment.",
+    "Silent defaults are the family's cruelest trick: a missing variable that quietly falls back produces a working-looking system whose work vanishes without a single error.",
+    "The environment diff (staging vs prod, secrets masked) is the one-screen diagnostic: missing keys, order-of-magnitude drift, and prod-endpoints-in-staging all show at once.",
+    "Failures at an exact timestamp with no deploy nearby are calendar bugs - check cert/token expiry first, then file the missing-alert finding alongside the fix.",
+    "'Restart fixed it' means a resource reset, not a cause fixed - get the graph over time and report the slope; it predicts the next incident.",
+    "Every drifted config key shrinks what staging can prove - and a staging config pointing at production turns testing itself into a production incident; treat leaks accordingly.",
+  ]}
+/>
+
+<Complete xp={10} />

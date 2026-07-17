@@ -1,0 +1,330 @@
+---
+title: "UI-layer bug families"
+summary: "UI-layer bugs are the ones where the data is right but the screen lies: broken layouts, raw null leaking into copy, float-mangled money, truncated labels, wrong states after clicks. Knowing this family means knowing when NOT to blame the backend - and where to look instead."
+tags: ["system-design-for-testers", "where-bugs-live-by-layer", "track-c"]
+updated: "2026-07-17"
+related:
+  - "system-design-for-testers/the-big-picture/frontend-backend-and-the-database"
+  - "system-design-for-testers/the-big-picture/client-side-vs-server-side-rendering"
+  - "system-design-for-testers/scaling-building-blocks/cdns-and-static-assets"
+---
+
+<Hook>
+The database says 70.35. The API returns 70.35. And the checkout page - with total confidence -
+shows the customer "$70.35000000000001". Nothing crashed, nothing is down, and if you file this as
+"backend calculates wrong total," the backend team will correctly bounce it back within the hour.
+An entire family of bugs lives in the last inch between correct data and the user's eyeballs, and a
+tester who can recognize that family on sight files reports that land on the right desk the first
+time - which is half the speed of getting anything fixed.
+</Hook>
+
+<Callout type="analogy">
+A supermarket whose rooftop sign has lost two letters and now reads "Sa· sbury's". Inside, the
+store is completely fine: shelves stocked, tills working, prices correct. The BUSINESS is healthy -
+the PRESENTATION is broken. And yet every person driving past makes a judgment about the whole
+company from that sign, because the sign is all they can see. The UI layer is your app's signage:
+when it breaks, the systems behind it are usually untouched - but users can't tell the difference
+between a broken sign and a broken store, and they judge accordingly.
+</Callout>
+
+<Term define="The UI (user interface) layer is everything responsible for PRESENTING the system to a human and capturing their input: layout and styling (CSS), rendered markup (HTML), client-side behavior and state (JavaScript), text and copy, images and icons. UI-layer bug families are the recurring defect types born in this layer: rendering/layout breakage, raw data leaking into copy (null/undefined/NaN on screen), display formatting errors (money, dates, truncation), client-side state bugs (stale or wrong UI state after actions), input-handling bugs (validation messages, focus, keyboard behavior), and responsive/cross-browser differences. Their defining property: the data underneath is correct - the presentation of it is wrong.">UI layer (and its bug families)</Term>
+
+## The families, and how to recognize each one
+
+- **Rendering & layout breakage.** Overlapping elements, buttons pushed off-screen, text spilling
+  out of its box, styles missing entirely. Often environment-shaped: one browser, one screen size,
+  one zoom level. If a screenshot makes the bug obvious with no explanation, it's probably this
+  family.
+- **Raw data leaking into copy.** "Hello, undefined!", "Save None!", "NaN items in cart",
+  "Invalid Date". The backend sent a legitimate empty/absent value; the view code pasted it into a
+  sentence without checking. Instantly recognizable - the programming language's vocabulary showing
+  up in user-facing text.
+- **Display formatting.** "$70.35000000000001" (float money math), "1/2/2026" meaning different
+  days in different countries, "Wireless Noise-Cancellin" (mid-word truncation), 12-hour times
+  shown to 24-hour countries. The value is right; its RENDERING for humans is wrong.
+- **Client-side state.** The button still says "Save" after saving; the cart badge shows 3 after
+  removing an item; a modal reopens with the previous user's data. The server did its job - the
+  UI's memory of what happened is stale or wrong.
+- **Input handling.** Validation that rejects valid input (or accepts garbage), error messages
+  that vanish before they can be read, focus jumping to the wrong field, forms that lose
+  everything on one mistake. The seam where human behavior meets view code.
+- **Responsive & cross-environment.** Perfect on the developer's laptop, broken on a phone, a
+  narrow window, an old browser, or 125% zoom. Not one bug but a MULTIPLIER on every other family:
+  each UI bug may exist in some environments and not others.
+
+<Callout type="tip">
+The one-question triage for any suspicious screen: open devtools, find the API response that fed
+it, and compare. Data wrong in the response too? Not a UI bug - go downstream. Data correct in the
+response but wrong on screen? UI-layer bug, and your report can say so with evidence: "API returns
+70.35, screen shows $70.35000000000001 - view-layer formatting." That single sentence saves a
+cross-team ticket bounce.
+</Callout>
+
+<Callout type="mistake">
+Dismissing UI-layer bugs as "cosmetic" and auto-filing them low priority. Some are cosmetic. But
+"the Place Order button renders off-screen on mobile" is a 100% revenue blocker for phone users,
+"Save None!" in a payment flow torches trust exactly where trust converts to money, and a wrong
+cart badge makes users re-add items and get double orders. Severity comes from user impact, not
+from which layer hosts the defect - the sign being 'just cosmetic' doesn't help the store that
+looks closed.
+</Callout>
+
+{/* IMAGE: Sainsbury's supermarket exterior where the rooftop sign is missing letters and reads "Sa sbury's", with InPost parcel lockers along the wall below whose ad copy reads "Coll ect it." */}
+<HotspotImage
+  src="/notes/system-design-for-testers/where-bugs-live-by-layer/ui-layer-bug-families.jpg"
+  alt="Supermarket building whose sign is missing letters, reading Sa sbury's, with parcel lockers along the wall below"
+  credit="Sainsbury's with missing sign letters, Salford — Marnanel, Wikimedia Commons, CC BY 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Sa%C2%B7_sbury%27s.jpg"
+  pins={[
+    { x: 33, y: 22, label: "The missing letters — a rendering failure in production", desc: "Two letters didn't 'load', and the brand name is garbled for every passer-by. The store behind the sign is untouched - exactly like a missing icon font, a failed CSS file, or an image 404: pure presentation-layer failure with outsized trust damage." },
+    { x: 63, y: 15, label: "The sign as a whole — the only layer users judge", desc: "Nobody driving past evaluates the stockroom or the payment system; they see the sign. Users experience YOUR system the same way - a perfect backend behind a broken UI is, to them, simply a broken product." },
+    { x: 38, y: 66, label: "'Coll ect it.' — a copy bug that shipped", desc: "Look closely: the locker ad has its own spacing glitch. Copy and formatting bugs - truncation, spacing, raw null in a sentence, wrong decimal separator - are tiny, hilarious, and live forever in production because everyone assumes someone else proofread." },
+    { x: 75, y: 75, label: "Third-party lockers on your wall — embedded UI you don't control", desc: "InPost's kiosk lives on Sainsbury's storefront: chat widgets, payment iframes, cookie banners, map embeds. When THEIR UI breaks on YOUR page, users blame you - so your test scope includes surfaces your team never built." },
+    { x: 8, y: 40, label: "The second sign, seen from behind — same UI, different viewpoint", desc: "From this angle the other sign is backwards and unreadable - nothing is 'broken', but the viewing context changed. Every UI bug family multiplies across viewports, browsers, zoom levels, and locales: correct in one context, wrong in another." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Same correct data, four different UI-layer failures - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "The API returns: { name: 'Wireless Noise-Cancelling Headphones', total_cents: 7035, discount: null }", desc: "Downstream of this point, everything is correct. Every failure that follows is manufactured by view code alone." },
+    { label: "Screen 1: 'Total: $70.35000000000001'", desc: "View code converted cents to a float and multiplied. The VALUE was right; float formatting mangled its presentation. Family: display formatting." },
+    { label: "Screen 2: 'Save null!' under the price", desc: "The discount is legitimately absent; the template pasted it into copy without a check. Family: raw data leaking into copy - the app's programming language showing up in a sentence." },
+    { label: "Screen 3: the Buy button is off-screen on a 375px-wide phone", desc: "Same data, same HTML - a layout that never met a narrow viewport. Family: responsive breakage, the multiplier that makes every other family environment-dependent." },
+  ]}
+/>
+
+The whole idea in executable form - one correct backend response, rendered by buggy view code and
+then by careful view code:
+
+<CodePlayground
+  language="python"
+  title="Run it - correct data, lying screen: three UI-layer bugs in one render (Python)"
+  code={`# The backend's answer - correct, tested, and NOT the problem
+order = {
+    "product": "Wireless Noise-Cancelling Headphones (Travel Edition)",
+    "unit_price_cents": 1005,   # money stored as integer cents: exact
+    "quantity": 7,
+    "discount_cents": None,     # no discount on this order
+}
+
+
+def buggy_render(o):
+    """The UI layer: three classic view-code bugs, zero backend involvement."""
+    total = o["unit_price_cents"] / 100 * o["quantity"]  # float money math
+    name = o["product"][:24]                             # hard truncation, mid-word
+    discount_line = f"  Save {o['discount_cents']}!"     # no null-check
+    return [f"  {name}", f"  Total: \${total}", discount_line]
+
+
+def fixed_render(o):
+    """Same data, view code that respects it."""
+    total_cents = o["unit_price_cents"] * o["quantity"]  # integer math: exact
+    total = f"\${total_cents // 100}.{total_cents % 100:02d}"
+    name = o["product"]
+    if len(name) > 40:
+        name = name[:40].rsplit(" ", 1)[0] + "..."       # truncate at a word, show it
+    lines = [f"  {name}", f"  Total: {total}"]
+    if o["discount_cents"]:                              # render nothing when absent
+        lines.append(f"  Save \${o['discount_cents'] / 100:.2f}!")
+    return lines
+
+
+print("What the backend sent (correct in BOTH cases):")
+print(f"  {order['unit_price_cents']} cents x {order['quantity']}, discount: {order['discount_cents']}")
+print()
+print("BUGGY UI renders it as:")
+for line in buggy_render(order):
+    print(line)
+print()
+print("FIXED UI renders the same data as:")
+for line in fixed_render(order):
+    print(line)
+print()
+print("Same API response, same database row - one screen lies, one doesn't.")
+print("This whole bug family lives in view code: float-formatted money, raw")
+print("None/null leaking into user-facing copy, mid-word truncation. The backend")
+print("team's tests all pass, because nothing here is the backend's fault.")`}
+/>
+
+The same two renderers in Java - note the identical float artifact (`$70.35000000000001`) and
+Java's `null` where Python leaked `None`, proving the family is language-independent:
+
+<CodePlayground
+  language="java"
+  title="Run it - correct data, lying screen: three UI-layer bugs in one render (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    // The backend's answer - correct, tested, and NOT the problem
+    static String product = "Wireless Noise-Cancelling Headphones (Travel Edition)";
+    static int unitPriceCents = 1005; // money stored as integer cents: exact
+    static int quantity = 7;
+    static Integer discountCents = null; // no discount on this order
+
+    static List<String> buggyRender() {
+        // The UI layer: three classic view-code bugs, zero backend involvement
+        double total = unitPriceCents / 100.0 * quantity;   // float money math
+        String name = product.substring(0, 24);             // hard truncation, mid-word
+        String discountLine = "  Save " + discountCents + "!"; // no null-check
+        return List.of("  " + name, "  Total: \$" + total, discountLine);
+    }
+
+    static List<String> fixedRender() {
+        // Same data, view code that respects it
+        int totalCents = unitPriceCents * quantity;         // integer math: exact
+        String total = String.format("\$%d.%02d", totalCents / 100, totalCents % 100);
+        String name = product;
+        if (name.length() > 40) {
+            String cut = name.substring(0, 40);
+            name = cut.substring(0, cut.lastIndexOf(' ')) + "..."; // truncate at a word
+        }
+        List<String> lines = new ArrayList<>(List.of("  " + name, "  Total: " + total));
+        if (discountCents != null && discountCents > 0) {   // render nothing when absent
+            lines.add(String.format("  Save \$%.2f!", discountCents / 100.0));
+        }
+        return lines;
+    }
+
+    public static void main(String[] args) {
+        System.out.println("What the backend sent (correct in BOTH cases):");
+        System.out.println("  " + unitPriceCents + " cents x " + quantity + ", discount: " + discountCents);
+        System.out.println();
+        System.out.println("BUGGY UI renders it as:");
+        for (String line : buggyRender()) System.out.println(line);
+        System.out.println();
+        System.out.println("FIXED UI renders the same data as:");
+        for (String line : fixedRender()) System.out.println(line);
+        System.out.println();
+        System.out.println("Same API response, same database row - one screen lies, one doesn't.");
+        System.out.println("This whole bug family lives in view code: float-formatted money, raw");
+        System.out.println("None/null leaking into user-facing copy, mid-word truncation. The backend");
+        System.out.println("team's tests all pass, because nothing here is the backend's fault.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: catch one screen lying about correct data">
+<StepChecklist
+  steps={[
+    { text: "Open a data-heavy screen in your app with devtools Network tab recording", detail: "An order summary, a profile page, a dashboard - anywhere the UI displays values it got from an API." },
+    { text: "Pick three displayed values and find each one in the raw API response", detail: "Match the number/text on screen to the exact JSON field that fed it. This mapping - screen element to response field - is the core skill of UI-layer triage." },
+    { text: "Hunt for presentation drift", detail: "Rounding differences, truncated text (hover for the full value), dates rendered ambiguously (does 03/04 mean March 4 or April 3?), empty fields showing '-' vs 'null' vs blank inconsistently." },
+    { text: "Now break the viewing context on purpose", detail: "Narrow the window to phone width, zoom to 150%, and if you can, switch the OS language or timezone. Recheck your three values - anything that broke just demonstrated the environment multiplier." },
+  ]}
+/>
+You've practiced the two moves that define this bug family: comparing the wire to the glass, and
+varying the viewing context. Everything else is repetition.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A value on screen looks wrong - price, count, date, name.",
+      fix: "Before filing anything, pull the API response that fed the screen (devtools Network tab). If the response value is correct, you have a UI-layer formatting/rendering bug: file it against the frontend with both values quoted ('API: 70.35, screen: \$70.35000000000001'). If the response is wrong too, the bug is downstream - see the API and data-layer families.",
+    },
+    {
+      symptom: "Words like undefined, null, NaN, None, or 'Invalid Date' appear in user-facing text.",
+      fix: "An absent-but-legitimate value met a template with no empty-state handling. Repro reliably by finding WHICH field is absent (new account with no history, item with no discount, profile with no avatar) - then sweep: the same missing null-check usually exists on every screen that renders this entity, so one repro typically yields a family of fixes.",
+    },
+    {
+      symptom: "The screen shows stale state after an action - button still says Save, badge count wrong, deleted item still visible.",
+      fix: "Check the Network tab first: did the action's request succeed? If yes, the server did its job and the UI state is the bug (client-side state family). Note whether a manual refresh fixes it - 'correct after F5' is strong evidence the data is fine and only the in-page state is stale, which routes the ticket precisely.",
+    },
+    {
+      symptom: "Users report a broken page you cannot reproduce on your machine.",
+      fix: "Assume an environment multiplier before assuming user error: get their browser, OS, device width, zoom level, and language. Then reproduce THEIR context - devtools device emulation, browser zoom, OS locale. UI bugs are the most environment-dependent family there is; 'works on my machine' has the least meaning here of anywhere in the stack.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Devtools Network tab: the response that fed the screen** — the single comparison (wire vs glass) that splits 'UI bug' from 'everything else' with evidence.
+- **Devtools Console** — JavaScript errors and failed asset loads (404 on CSS/JS/fonts) that explain rendering breakage; a red console line often IS the bug's fingerprint.
+- **Device emulation + zoom + locale settings** — the environment multipliers; every UI check deserves at least one narrow-viewport and one zoomed pass.
+- **The empty states** — new accounts, zero-item lists, absent optional fields; that's where null/undefined leaks live, and where the fewest people ever test.
+- **[[system-design-for-testers/the-big-picture/client-side-vs-server-side-rendering]]** — WHERE the UI gets assembled decides which failures are even possible on a given page; knowing the rendering mode focuses this whole family.
+</WhereToCheck>
+
+<WorkedExample title="the 'wrong total' that three teams bounced for a week">
+1. A ticket titled "Checkout calculates wrong total" bounces between backend and payments for days:
+   backend proves their math (unit tests, DB values, API contract all show 70.35), payments proves
+   they charge exactly what they're told. Meanwhile users keep screenshotting "$70.35000000000001".
+2. A tester finally does the ninety-second triage nobody did: reproduces the cart, opens the
+   Network tab, reads the raw response feeding the checkout page: `"total_cents": 7035`. Correct.
+   Then reads the screen: wrong. The bug lives between those two facts - in view code.
+3. Digging one level deeper (grep the frontend for the rendering): the display code does
+   `total_cents / 100 * quantity` in floating point and string-concatenates the result - so
+   SOME cent values format cleanly and others sprout fifteen decimals, which is why the bug seemed
+   'random' and survived spot-checks.
+4. The re-filed ticket: "UI formatting bug, not a calculation bug. API returns total_cents: 7035
+   (correct). Frontend renders via float math, producing $70.35000000000001 for price/quantity
+   combinations where the float is inexact (repro: 1005 cents x 7). Fix in the formatter: integer
+   cents in, formatted string out." Fixed the same afternoon - after a week of bouncing.
+5. The lesson: the tester's value wasn't finding the wrongness - users did that - it was LOCATING
+   it. One Network-tab comparison routed the ticket to the right layer with proof, and turned an
+   unfalsifiable argument between teams into a one-line fix.
+</WorkedExample>
+
+<Quiz
+  question="A user's dashboard greets them with 'Welcome back, undefined!' Their name displays correctly everywhere else in the app. What does this most likely tell you?"
+  options={[
+    "The database has lost this user's name and it should be restored from backup",
+    "The API is returning corrupted user data and the backend team should investigate",
+    "This screen's view code reads a field that's absent or differently named in the response it uses, and pastes the missing value into the greeting without an empty-state check - a UI-layer copy leak",
+    "The user's browser is outdated and cannot render the greeting correctly"
+  ]}
+  answer={2}
+  explain="'undefined' is JavaScript vocabulary leaking into a sentence - the signature of view code using a value that isn't there without checking. Since the name renders fine elsewhere, the database and the user-data API are evidently healthy; most likely THIS screen reads a different response (or a differently named field - user.name vs user.displayName) and nothing guards the gap. The fastest confirmation is the Network tab: find the response this dashboard actually uses and look for the missing/renamed field. Restoring backups or blaming the browser both misroute a defect whose fingerprint points precisely at the template."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The defining property of a UI-layer bug", back: "The data underneath is CORRECT - the presentation of it is wrong. Confirmed by comparing the raw API response (right) against the rendered screen (wrong)." },
+    { front: "The six UI-layer bug families", back: "Rendering/layout breakage; raw data leaking into copy (undefined/null/NaN on screen); display formatting (money, dates, truncation); client-side state (stale UI after actions); input handling (validation, focus, errors); responsive/cross-environment differences." },
+    { front: "The 90-second UI triage", back: "Devtools Network tab: find the response that fed the screen. Response wrong too? Not a UI bug - go downstream. Response right, screen wrong? UI-layer bug - file against frontend, quoting both values as evidence." },
+    { front: "Where null/undefined leaks hide", back: "Empty states: new accounts, zero-item lists, absent optional fields (no discount, no avatar, no middle name). One found leak usually means the same missing check exists on every screen rendering that entity." },
+    { front: "Why 'works on my machine' means least for UI bugs", back: "This family is multiplied by environment: browser, viewport width, zoom, OS locale, timezone. Reproduce in the REPORTER'S context (emulation, zoom, locale) before concluding anything." },
+    { front: "'Correct after F5' is evidence of what?", back: "Client-side state staleness: the server processed the action (that's why refresh shows truth), but the in-page UI state wasn't updated. Routes the bug to frontend state handling, not to the backend." },
+    { front: "Why UI bugs aren't automatically low-severity", back: "Severity follows user impact, not layer: an off-screen Buy button blocks 100% of mobile revenue, and 'Save null!' in a payment flow destroys trust exactly where trust converts to money." },
+  ]}
+/>
+
+<Challenge>
+Do an empty-state safari in the app you test: find or create five 'absent value' situations - a
+brand-new account, an empty list, an item with no optional fields filled, a profile with no photo,
+a search with zero results. Screenshot how each is rendered. Score each screen: does it show a
+designed empty state, a silent blank, or leaked programming vocabulary (null/undefined/None/NaN)?
+Anything in the third category is a filable bug WITH a known family, and anything in the second is
+worth a UX question. Most testers find at least one leak within the five.
+</Challenge>
+
+<AskCommunity prompt="Our app shows `[leaked value / broken layout / stale state]` on `[screen]` while the API response contains the correct data (verified in devtools). Before I file this against the frontend: is there a standard way your teams regression-test this family - visual snapshots, empty-state checklists, locale/viewport matrices - so it stops recurring one screen at a time?">
+Mentioning that you've ALREADY split wire-from-glass (response right, screen wrong) marks the
+report as pre-triaged - and asking about prevention practices usually surfaces checklists and
+tooling you can adopt wholesale instead of inventing.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.chrome.com/docs/devtools/network", title: "Chrome DevTools — Inspect network activity (the wire-vs-glass tool)", kind: "read" },
+    { href: "https://www.nngroup.com/articles/error-message-guidelines/", title: "Nielsen Norman Group — Error-Message Guidelines (what good input handling looks like)", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=4G7dJQ-FCSY", title: "Artem Bondar — Stop Missing UI Bugs! Visual Testing in Playwright Explained", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=4G7dJQ-FCSY" title="Artem Bondar — Stop Missing UI Bugs! Visual Testing in Playwright Explained" minutes={8} />
+
+<Takeaways
+  points={[
+    "UI-layer bugs share one fingerprint: correct data, lying screen - and one triage move proves it: compare the raw API response against what's rendered.",
+    "Learn the six families - layout breakage, copy leaks (undefined/null/NaN), display formatting, client-side state, input handling, environment differences - and you can name most UI bugs on sight.",
+    "Empty states are the family's favorite habitat: absent optional values meet templates with no checks, on the screens fewest people test.",
+    "Environment is a multiplier, not a footnote: every UI check deserves a narrow-viewport, zoomed, and ideally locale-shifted pass before 'cannot reproduce'.",
+    "Severity follows user impact, not layer - presentation bugs block revenue and burn trust exactly as effectively as server crashes, sometimes more visibly.",
+    "A pre-triaged UI bug report ('API says X, screen says Y') lands on the right desk first time - routing precision is half the fix speed.",
+  ]}
+/>
+
+<Complete xp={10} />
