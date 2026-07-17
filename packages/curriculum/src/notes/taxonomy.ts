@@ -1934,8 +1934,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "scaling-building-blocks",
         title: "Scaling building blocks",
         topics: [
-          { slug: "load-balancers", title: "Load balancers", planned: true },
-          { slug: "caching-redis-and-its-bugs", title: "Caching (Redis) & its bugs", planned: true },
+          { slug: "load-balancers", title: "Load balancers" },
+          { slug: "caching-redis-and-its-bugs", title: "Caching (Redis) & its bugs" },
           { slug: "message-queues-and-async-work", title: "Message queues & async work", planned: true },
           { slug: "cdns-and-static-assets", title: "CDNs & static assets", planned: true },
         ],
@@ -2156,6 +2156,43 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
           { slug: "dropdowns-and-alerts", title: "Dropdowns & alerts", planned: true },
           { slug: "frames-and-windows", title: "Frames & windows", planned: true },
           { slug: "actions-api", title: "Actions API", planned: true },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "kubernetes-and-test-infrastructure",
+    title: "Kubernetes & test infrastructure",
+    summary: "Intro-level on purpose — enough to work with real deployments and stand out in interviews, not to become a cluster admin. Pods and kubectl, running test workloads on a cluster, and what QA verifies around a release.",
+    chapters: [
+      {
+        slug: "kubernetes-in-plain-words",
+        title: "Kubernetes in plain words",
+        topics: [
+          { slug: "what-k8s-solves", title: "What K8s solves", planned: true },
+          { slug: "pods-deployments-services", title: "Pods, deployments, services", planned: true },
+          { slug: "kubectl-survival-kit", title: "kubectl survival kit", planned: true },
+          { slug: "namespaces-and-contexts", title: "Namespaces & contexts", planned: true },
+        ],
+      },
+      {
+        slug: "test-workloads-on-k8s",
+        title: "Test workloads on K8s",
+        topics: [
+          { slug: "running-tests-as-jobs", title: "Running tests as Jobs", planned: true },
+          { slug: "selenium-grid-on-k8s", title: "Selenium Grid on K8s (dynamic grid)", planned: true },
+          { slug: "reading-pod-logs", title: "Reading pod logs", planned: true },
+          { slug: "port-forward-to-debug", title: "Port-forward to debug", planned: true },
+        ],
+      },
+      {
+        slug: "releases-and-environments",
+        title: "Releases & environments",
+        topics: [
+          { slug: "how-teams-deploy", title: "How teams deploy", planned: true },
+          { slug: "staging-vs-production", title: "Staging vs production", planned: true },
+          { slug: "config-and-secrets", title: "Config & secrets", planned: true },
+          { slug: "what-qa-verifies-after-a-deploy", title: "What QA verifies after a deploy", planned: true },
         ],
       },
     ],
