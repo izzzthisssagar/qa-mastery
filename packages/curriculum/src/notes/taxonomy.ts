@@ -1309,8 +1309,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         topics: [
           { slug: "config-files", title: "Config files" },
           { slug: "environments", title: "Environments" },
-          { slug: "test-data", title: "Test data", planned: true },
-          { slug: "secrets", title: "Secrets", planned: true },
+          { slug: "test-data", title: "Test data" },
+          { slug: "secrets", title: "Secrets" },
         ],
       },
       {

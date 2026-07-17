@@ -1,0 +1,345 @@
+---
+title: "Test data"
+summary: "Feeding an automation framework realistic data without hardcoding literals: builder/factory objects with sensible defaults, external JSON/CSV fixtures, and Faker-style generation - because a magic string copied into thirty tests rots the day the app, the database, or a parallel run touches it."
+tags: ["framework-design", "config-and-data", "track-d"]
+updated: "2026-07-17"
+related:
+  - "framework-design/config-and-data/config-files"
+  - "framework-design/config-and-data/environments"
+  - "framework-design/config-and-data/secrets"
+---
+
+<Hook>
+Thirty signup tests all register `test48@gmail.com`. One Wednesday the backend adds a uniqueness
+check on email - or someone wipes the staging database - and thirty tests go red for a reason that
+has nothing to do with any feature under test. Data hardcoded into test bodies is data with an
+expiry date, and nobody knows the date. The fix is not a better magic string; it's a framework that
+manufactures its own data.
+</Hook>
+
+<Callout type="analogy">
+The Svalbard Global Seed Vault doesn't work by farmers stuffing loose seeds into their coat pockets
+and hoping. Every deposit arrives as a sealed, labeled box, catalogued to a numbered shelf in a
+numbered aisle, so any sample can be requested by name years later - and gene banks don't send
+their only seeds, they grow fresh copies to deposit while keeping originals at home. Catalogued
+boxes you fetch by label, fresh copies grown on demand, nothing precious wedged into someone's
+pocket: that is exactly how a test framework should treat its data.
+</Callout>
+
+<Term define="A test data strategy is the deliberate answer to 'where do tests get their input data?' - instead of the default answer, which is string literals typed into every test body. The standard toolkit has three layers: builder/factory objects that construct domain entities (a User, an Order) with sensible defaults so each test overrides only the field it actually cares about; external fixture files (JSON, CSV) holding structured datasets that live beside the suite, versioned and shared; and data generation (Faker-style libraries) producing realistic, unique values - names, emails, addresses - fresh on every run. All three keep the literal values out of test bodies, so when the data rules change, the change lands in one place instead of in every test.">Test data strategy</Term>
+
+## From magic strings to manufactured data
+
+Without a strategy, every test hardcodes its own literals - and they all quietly share one user:
+
+```java
+// This exact literal is copy-pasted through thirty test classes
+driver.findElement(By.id("name")).sendKeys("Test User");
+driver.findElement(By.id("email")).sendKeys("test48@gmail.com");
+driver.findElement(By.id("plan")).sendKeys("free");
+```
+
+With the pattern, a builder owns the defaults, a generator guarantees uniqueness, and each test
+states only what the test is about:
+
+```java
+public class UserBuilder {
+    private String name = "Asha Rai";        // sensible defaults for the boring fields
+    private String email = uniqueEmail();    // fresh and unique on every build
+    private String plan = "free";
+
+    public static UserBuilder aUser() {
+        return new UserBuilder();
+    }
+
+    public UserBuilder withPlan(String plan) {
+        this.plan = plan;
+        return this;
+    }
+
+    public User build() {
+        return new User(name, email, plan);
+    }
+
+    private static String uniqueEmail() {
+        return "user-" + System.nanoTime() + "@example.test";
+    }
+}
+
+// The test now declares only the one fact it depends on
+User premiumUser = UserBuilder.aUser().withPlan("premium").build();
+signupPage.register(premiumUser);
+```
+
+- **Builders/factories for domain entities** - defaults cover every field the test doesn't care
+  about, so a premium-checkout test says `withPlan("premium")` and nothing else. When a new
+  required field ships, you add one default in one class.
+- **External fixtures (JSON/CSV) for structured datasets** - a table of twelve shipping-rate rows
+  belongs in `fixtures/shipping-rates.json` next to the suite, versioned with it, loaded by a
+  reader - not transcribed into a 60-line assertion block.
+- **Generation (Faker-style libraries such as Datafaker) for realistic variety** - real-looking
+  names, addresses, and phone numbers, plus unique keys per run, so tests stop colliding with each
+  other and with their own previous runs.
+- **Magic strings rot on someone else's schedule** - a uniqueness constraint, a deleted staging
+  row, a new validation rule, or two tests running in parallel will eventually break every literal
+  you've scattered - all at once, thirty files at a time.
+
+<Callout type="tip">
+Generated data must be reproducible after a failure, or "fails sometimes with some data" becomes
+your least favorite bug report. Log every generated value into the test report (or fix the
+generator's random seed per run and log the seed). A failing test should let you copy the exact
+name and email it used straight out of the report and replay them.
+</Callout>
+
+<Callout type="mistake">
+The team "golden user" - one hardcoded account (`test48@gmail.com`) that every test registers,
+logs in with, and mutates. It accumulates orders, address changes, and half-finished carts until
+tests pass or fail depending on what ran before them, and the moment the suite goes parallel, two
+tests fight over the same row and both lose. Shared mutable data turns independent tests into one
+long fragile test.
+</Callout>
+
+{/* IMAGE: a real photograph inside the Svalbard Global Seed Vault: a worker in a blue knit hat and dark snowsuit with reflective stripes reaches up to slide a grey plastic storage box onto blue-and-orange industrial shelving, surrounded by hundreds of identical labeled boxes, with yellow shelf-number placards 1 and 2 and a G aisle placard visible */}
+<HotspotImage
+  src="/notes/framework-design/config-and-data/test-data.jpg"
+  alt="A worker in a blue knit hat and dark snowsuit reaches up to place a grey plastic storage box onto blue-and-orange shelving inside the Svalbard Global Seed Vault, surrounded by hundreds of identical labeled boxes with yellow shelf-number placards 1 and 2 and a G aisle marker"
+  credit="Storage containers in Svalbard Global Seed Vault — Wikimedia Commons, public domain (Dag Endresen)"
+  creditHref="https://commons.wikimedia.org/wiki/File:Storage_containers_in_Svalbard_Global_Seed_Vault_01.jpg"
+  pins={[
+    { x: 55, y: 10, label: "Labeled, sealed boxes — external fixture files", desc: "Each deposit is a named, documented container that outlives any single visit - like a JSON or CSV fixture that lives beside the suite, versioned, and loaded by name instead of retyped into tests." },
+    { x: 66, y: 29, label: "The yellow shelf codes — data addressed by name", desc: "The vault finds any sample by aisle and shelf number, not by someone remembering where it sits. Tests should ask a builder or fixture for 'a premium user' - never memorize the literal values inside." },
+    { x: 38, y: 46, label: "The depositor placing a fresh box — the builder at work", desc: "Gene banks grow FRESH copies to deposit; nobody ships their only seeds. A builder manufactures a complete, valid, brand-new entity per call, so no two tests ever share one precious row." },
+    { x: 12, y: 62, label: "Rows of near-identical boxes — generated variety at scale", desc: "Over a million samples, each unique, none hand-written one seed at a time. Faker-style generation gives every test run realistic, unique values without anyone typing them." },
+  ]}
+/>
+
+<FlowAnimation
+  title="The life and death of a magic string"
+  intervalMs={1800}
+  nodes={[
+    { label: "A test hardcodes test48@gmail.com - and passes", desc: "The literal works today, so it looks harmless. It gets committed." },
+    { label: "Twenty-nine more tests copy the literal", desc: "Copy-paste is faster than thinking about data - now thirty files share one user." },
+    { label: "The world changes under the string", desc: "A uniqueness rule ships, the staging row is deleted, or the suite goes parallel - pick any one." },
+    { label: "Thirty tests fail at once, for a data reason", desc: "Nothing about the features broke; the shared literal expired. Triage wastes a morning proving that." },
+    { label: "With builders and generators: one edit, fresh data per test", desc: "Defaults change in one class, every test gets its own unique user, and the suite stops sharing fate." },
+  ]}
+/>
+
+Underneath builders, fixtures, and Fakers sits one bookkeeping question: how many places own the
+data, and how many tests share one value. Here's that math as a small, generic simulation.
+
+<CodePlayground
+  language="python"
+  title="Run it - 30 tests share one hardcoded user vs each building a fresh one (Python)"
+  code={`# Thirty signup tests need a user. Two ways to supply that data.
+
+DEFAULTS = {"name": "Asha Rai", "country": "NP", "plan": "free"}
+counter = 0
+
+def build_user(**overrides):
+    global counter
+    counter += 1
+    user = dict(DEFAULTS)
+    user["email"] = f"user{counter}@example.test"  # fresh + unique every call
+    user.update(overrides)
+    return user
+
+# Without builders: every test hardcodes its own full user literal
+scattered = {f"test_{i}": {"name": "Test User", "email": "test48@gmail.com",
+                           "country": "NP", "plan": "free"} for i in range(1, 31)}
+
+# With builders: tests state only the field the test is about
+built = {name: build_user() for name in scattered}
+built["test_7"] = build_user(plan="premium")  # the one test that cares
+
+emails_scattered = {t["email"] for t in scattered.values()}
+emails_built = {t["email"] for t in built.values()}
+
+print("Distinct emails across 30 tests:")
+print(f"  hardcoded literals: {len(emails_scattered)} (all 30 fight over the same user)")
+print(f"  builder + generator: {len(emails_built)} (every test owns a fresh user)")
+print()
+
+# Then signup grows a required 'phone' field...
+needs_edit = [name for name, data in scattered.items() if "phone" not in data]
+print("New required field 'phone' arrives:")
+print(f"  hardcoded literals: {len(needs_edit)} test files to edit")
+print("  builder + generator: 1 edit - add one default to the builder")`}
+/>
+
+Same data bookkeeping in Java.
+
+<CodePlayground
+  language="java"
+  title="Run it - 30 tests share one hardcoded user vs each building a fresh one (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static int counter = 0;
+
+    static Map<String, String> buildUser(Map<String, String> overrides) {
+        counter++;
+        Map<String, String> user = new LinkedHashMap<>();
+        user.put("name", "Asha Rai");
+        user.put("country", "NP");
+        user.put("plan", "free");
+        user.put("email", "user" + counter + "@example.test"); // fresh + unique every call
+        user.putAll(overrides);
+        return user;
+    }
+
+    public static void main(String[] args) {
+        // Without builders: every test hardcodes its own full user literal
+        Map<String, Map<String, String>> scattered = new LinkedHashMap<>();
+        for (int i = 1; i <= 30; i++) {
+            Map<String, String> literal = new LinkedHashMap<>();
+            literal.put("name", "Test User");
+            literal.put("email", "test48@gmail.com");
+            literal.put("country", "NP");
+            literal.put("plan", "free");
+            scattered.put("test_" + i, literal);
+        }
+
+        // With builders: tests state only the field the test is about
+        Map<String, Map<String, String>> built = new LinkedHashMap<>();
+        for (String test : scattered.keySet()) built.put(test, buildUser(Map.of()));
+        built.put("test_7", buildUser(Map.of("plan", "premium"))); // the one test that cares
+
+        Set<String> emailsScattered = new HashSet<>();
+        scattered.values().forEach(u -> emailsScattered.add(u.get("email")));
+        Set<String> emailsBuilt = new HashSet<>();
+        built.values().forEach(u -> emailsBuilt.add(u.get("email")));
+
+        System.out.println("Distinct emails across 30 tests:");
+        System.out.println("  hardcoded literals: " + emailsScattered.size() + " (all 30 fight over the same user)");
+        System.out.println("  builder + generator: " + emailsBuilt.size() + " (every test owns a fresh user)");
+        System.out.println();
+
+        int needsEdit = 0;
+        for (Map<String, String> data : scattered.values()) {
+            if (!data.containsKey("phone")) needsEdit++;
+        }
+        System.out.println("New required field 'phone' arrives:");
+        System.out.println("  hardcoded literals: " + needsEdit + " test files to edit");
+        System.out.println("  builder + generator: 1 edit - add one default to the builder");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: evict the magic strings from one real test">
+<StepChecklist
+  steps={[
+    { text: "Pick one test and list every string literal in its body", detail: "Emails, names, addresses, prices - anything typed inline. That list is your rot inventory." },
+    { text: "Extract a UserBuilder with defaults for the boring fields and withX() overrides", detail: "The test should end up declaring only the one field it actually asserts on." },
+    { text: "Make the unique fields generated, not typed", detail: "A nanoTime-suffixed email is enough to start; upgrade to Datafaker for realistic names and addresses." },
+    { text: "Run the test twice in a row without any cleanup between runs", detail: "If both runs pass, your data is genuinely fresh per run - the hardcoded version would have collided with itself." },
+  ]}
+/>
+You've now seen the difference between data a test happens to use and data a test actually
+depends on - builders make that line visible.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "Tests pass alone but fail when the suite runs in parallel.",
+      fix: "They share hardcoded data - usually one login or one entity everyone mutates. Route creation through builders with generated unique keys so each test owns its rows, and the collisions disappear without touching any assertions.",
+    },
+    {
+      symptom: "A generated-data test failed last night and nobody can reproduce it.",
+      fix: "The generated values were thrown away with the run. Log every generated value (or the generator seed) into the report, then replay the failure with exactly that data - the tip above exists for precisely this morning.",
+    },
+    {
+      symptom: "Fixture-driven tests fail after a release with parsing or validation errors.",
+      fix: "The fixture file drifted from the real schema - the app grew a field the JSON never heard of. Regenerate fixtures from the current schema and add a startup check that fails fast when a fixture is missing required fields.",
+    },
+    {
+      symptom: "The builder has forty withX() methods and tests call most of them every time.",
+      fix: "Defaults have stopped doing their job - if every test must set every field, the builder is a constructor with extra steps. Move realistic values into defaults and reserve withX() for the one or two fields a given test is actually about.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Test bodies, for inline literals** — grep the suite for `@gmail`, `@test`, and quoted names;
+  every hit inside a test (rather than a builder, fixture, or generator) is scheduled rot.
+- **The builders/factories package** — one builder per core domain entity, defaults covering the
+  boring fields, is the quickest health check on the strategy.
+- **The fixtures folder's git history** — fixture files that haven't changed since the schema last
+  did are drift waiting to fail.
+- **A failing run's report** — if you can't read the exact generated values a failed test used,
+  reproducibility is broken and the tip above is your next task.
+</WhereToCheck>
+
+<WorkedExample title="the golden user that died when the suite went parallel">
+1. A team's 30 signup and checkout tests all use `test48@gmail.com` - registered once by whoever's
+   test runs first, then reused, logged into, and mutated by everyone else.
+2. To cut a 40-minute run, the team enables parallel execution. Chaos: tests fail in different
+   combinations every run - one test registers the user while another is mid-checkout with it, a
+   third asserts on an order count that a fourth just changed.
+3. The diagnosis is the data, not the tests: thirty tests share one mutable row, so any two
+   running at once can corrupt each other. Order-dependence had been hiding it for months.
+4. The rebuild: a `UserBuilder` with realistic defaults (names from Datafaker), a generated unique
+   email per build, and each test creating its own user. Fixture JSON keeps the twelve shipping
+   rate rows one table-driven test needs. Generated values are logged into the report per test.
+5. Parallel runs go green and stay green. Two sprints later signup adds a required phone field -
+   the fix is one default line in the builder, and no test file is touched. The thirty-file edit
+   that change would have cost is the old world's price, and they no longer pay it.
+</WorkedExample>
+
+<Quiz
+  question="Thirty tests hardcode the same user email. The backend ships a uniqueness constraint on email at signup. What breaks, and why would builders plus generated emails have prevented it?"
+  options={[
+    "Nothing breaks - the constraint only affects production users, not test data",
+    "Only the first test fails; the other twenty-nine keep passing because the user already exists",
+    "Every test that registers that email after the first now fails for a pure data reason; builders with a generated unique email give each test a fresh user, so no test ever re-registers an existing one and the constraint never fires against the suite",
+    "The tests slow down slightly but keep passing, because Selenium retries duplicate submissions automatically"
+  ]}
+  answer={2}
+  explain="A uniqueness constraint means the second and every later registration of the shared literal is rejected - a wall of failures that says nothing about the features under test, which is exactly how magic strings rot. Option one is wishful thinking: staging enforces the same schema. Option two has it backwards - the FIRST registration succeeds and the copies fail. Option four invents a retry mechanism Selenium does not have, and retrying a duplicate would still be rejected. Generated-unique data removes the collision entirely, which is why it's the strategy and not a workaround."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The three layers of a test data strategy", back: "Builder/factory objects for domain entities (defaults + per-test overrides), external JSON/CSV fixtures for structured datasets, and Faker-style generation for realistic, unique values per run." },
+    { front: "Why do hardcoded magic strings in test bodies rot?", back: "The world changes on someone else's schedule - uniqueness constraints, deleted rows, new validation, parallel runs - and every scattered copy breaks at once, thirty files at a time, for reasons unrelated to the features under test." },
+    { front: "What should a test's body declare about its data?", back: "Only the field the test is about - aUser().withPlan('premium'). Defaults cover the boring fields; generation covers the unique ones. The test reads as intent, not as a data-entry form." },
+    { front: "When do fixtures beat builders?", back: "For structured datasets - a twelve-row shipping rate table, a catalog of products - that are data, not entities the test constructs. They live in versioned files beside the suite and load by name." },
+    { front: "The seed-vault analogy for test data", back: "Labeled catalogued boxes = fixtures loaded by name; depositing freshly-grown copies (never your only seeds) = builders manufacturing a new entity per test; a million unique samples = generated data at scale. Nothing precious rides in anyone's pocket - or in any test body." },
+  ]}
+/>
+
+<Challenge>
+Audit one real suite for data rot: grep the test sources for email-shaped literals and count how
+many distinct tests contain one. Take the literal with the most copies, list every file you'd edit
+if it had to change tomorrow, then refactor just that one value behind a builder with a generated
+unique replacement. Rerun the affected tests twice in a row with no cleanup - the second run
+passing is your proof the rot is gone.
+</Challenge>
+
+<AskCommunity prompt="My suite's tests share hardcoded data - mostly `[one golden user / inline literals per test]` - and we just hit `[parallel collisions / a uniqueness constraint / a wiped staging DB]`. Here's one representative test: `[paste it]`. Would you start with builders, fixtures, or generation here, and why?">
+Pasting one real test gets sharper advice than describing the suite - people can point at the
+exact literals that should become builder defaults, the ones that must be generated-unique, and
+the ones that are genuinely fine to leave inline.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.datafaker.net/", title: "Datafaker — realistic fake data generation for the JVM (Java Faker's successor)", kind: "read" },
+    { href: "https://martinfowler.com/bliki/ObjectMother.html", title: "Martin Fowler — ObjectMother (factories for test data)", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=CIv5xCBLzyA" title="Stop Hardcoding! Automate Real Data with Faker API & Selenium Java — Testleaf" minutes={9} />
+
+<Takeaways
+  points={[
+    "Test data is a design decision: builders/factories for entities, JSON/CSV fixtures for structured datasets, Faker-style generation for realistic unique values - literals typed into test bodies are the absence of a decision.",
+    "Builders carry sensible defaults so each test declares only the field it's about - and a new required field costs one default line, not a thirty-file edit.",
+    "Unique generated values (emails, usernames) let tests run in parallel and rerun without cleanup, because no two tests ever share a row.",
+    "Shared mutable data - the team golden user - makes tests order-dependent and parallel-hostile; every test should manufacture what it mutates.",
+    "Log generated values (or the seed) into the report, so any failure can be replayed with exactly the data that provoked it.",
+  ]}
+/>
+
+<Complete xp={10} />
