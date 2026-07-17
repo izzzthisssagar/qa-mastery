@@ -1,0 +1,158 @@
+---
+title: "Stability practices"
+summary: "Stable automation controls state, time, data, dependencies, selectors, resources, order, and observability so a failure reflects the product contract rather than accidental test conditions."
+tags: ["ci", "test-stability", "isolation", "determinism", "track-d"]
+updated: "2026-07-17"
+related:
+  - "automation-in-cicd/flake-management/detecting-flakes"
+  - "playwright/writing-reliable-tests/auto-waiting-and-retrying-assertions"
+  - "automation-in-cicd/running-tests-in-ci/artifacts"
+---
+
+<Hook>
+A team keeps adding waits to a flaky suite: two seconds after login, five after checkout, ten before
+asserting email. The suite becomes slower and still fails when CI is busy. They did not synchronize
+with product state; they synchronized with hope.
+</Hook>
+
+<Callout type="analogy">
+A gyroscope preserves orientation while the frame around it moves. Stable tests need similar anchors:
+observable business states, isolated contexts, controlled clocks/data, explicit dependency contracts,
+and evidence. Fixed sleeps anchor only to elapsed wall time, which is the part most likely to vary.
+</Callout>
+
+<Term define="Test stability is the property that materially equivalent conditions produce the same meaningful outcome. It is engineered through isolation, deterministic data and clocks, state-based synchronization, resilient user-facing or contract selectors, controlled dependencies, bounded resources, order independence, idempotent setup/cleanup, and enough telemetry to explain divergence.">Stable automated test</Term>
+
+## Remove uncontrolled variables systematically
+
+```ts
+await page.getByRole("button", { name: "Place order" }).click();
+await expect(page.getByTestId("order-status")).toHaveText("Confirmed");
+```
+
+The assertion repeatedly observes the state that matters. `waitForTimeout(5000)` merely assumes the
+state will exist by an arbitrary deadline and wastes all five seconds when it appears immediately.
+
+<Callout type="tip">
+Make each test able to run alone, in any order, and in parallel. Generate unique data, create state
+through supported APIs/fixtures, and start from a fresh browser/session/database namespace.
+</Callout>
+
+<Callout type="mistake">
+Mocking every dependency to obtain determinism. Mocks reduce variability but can drift from reality.
+Keep contract checks and a smaller number of controlled real integration paths.
+</Callout>
+
+<HotspotImage src="/notes/automation-in-cicd/flake-management/stability-practices.jpg" alt="Foucault's brass gyroscope displayed beside an optical instrument" credit="Foucault's gyroscope — Stéphane Magnenat, public domain" creditHref="https://commons.wikimedia.org/wiki/File:Foucault%27s_gyroscope.jpg" pins={[
+  { x: 42, y: 64, label: "Stable reference", desc: "Assertions anchor to observable contract state rather than arbitrary elapsed time." },
+  { x: 40, y: 49, label: "Isolation rings", desc: "Fresh context, unique data, and cleanup prevent surrounding tests from changing the result." },
+  { x: 73, y: 54, label: "Observation", desc: "Logs, traces, metrics, and clocks let investigators see the first divergence." },
+  { x: 45, y: 84, label: "Controlled base", desc: "Pinned runtime, dependencies, resources, locale, timezone, and seed create comparable conditions." },
+]} />
+
+<FlowAnimation title="Engineering a stable test" intervalMs={1500} nodes={[
+  { label: "Name the contract", desc: "State the user/business behavior and authoritative observable outcome." },
+  { label: "Build isolated state", desc: "Fresh context, unique data, idempotent setup, and scoped cleanup." },
+  { label: "Control boundaries", desc: "Clock, random seed, dependencies, runtime image, locale, timezone, and resources." },
+  { label: "Synchronize by condition", desc: "Wait for meaningful UI/API/event/database state, not fixed sleeps." },
+  { label: "Exercise hostile order", desc: "Run alone, randomized, parallel, repeated, and under representative load." },
+  { label: "Retain evidence", desc: "Trace the first divergence and trend stability continuously." },
+]} />
+
+<CodePlayground language="python" title="Run it — poll a condition instead of sleeping blindly (Python)" code={```states = ["processing", "processing", "confirmed"]
+for attempt, state in enumerate(states, start=1):
+    print(f"poll {attempt}: {state}")
+    if state == "confirmed":
+        print("assertion passed on observed state")
+        break
+else:
+    raise AssertionError("order never confirmed")```} />
+
+<CodePlayground language="java" title="Run it — poll a condition instead of sleeping blindly (Java)" code={```import java.util.*;
+
+public class Main {
+    public static void main(String[] args) {
+        var states = List.of("processing", "processing", "confirmed");
+        boolean confirmed = false;
+        for (int i = 0; i < states.size(); i++) {
+            System.out.println("poll " + (i + 1) + ": " + states.get(i));
+            if (states.get(i).equals("confirmed")) { confirmed = true; break; }
+        }
+        if (!confirmed) throw new AssertionError("order never confirmed");
+        System.out.println("assertion passed on observed state");
+    }
+}```} />
+
+<FirstTime title="Your mission: harden one unstable test">
+<StepChecklist steps={[
+  { text: "Delete fixed sleeps", detail: "Replace each with the authoritative state or event it was guessing about." },
+  { text: "Isolate identity and data", detail: "Fresh context, unique records, deterministic clock/seed, and scoped cleanup." },
+  { text: "Stabilize boundaries", detail: "Pin/runtime-record dependencies, locale, timezone, and runner resources." },
+  { text: "Stress and observe", detail: "Run alone, random order, parallel, repeated, and retain first-failure evidence." },
+]} />
+The test now fails on contract divergence, not on incidental timing.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "A longer timeout reduces but does not remove failures.", fix: "Identify the missing readiness condition or overloaded dependency; wait on state and measure duration rather than extending blindly." },
+  { symptom: "Tests pass alone but fail together.", fix: "Find shared users/data/files/ports/clock/global state, order dependence, and cleanup collisions; namespace or isolate them." },
+  { symptom: "A selector breaks on harmless layout changes.", fix: "Use role/name, label, or an explicit test contract instead of deep CSS/XPath structure." },
+  { symptom: "A mock-based test is stable but production integration fails.", fix: "Validate mocks against provider contracts and retain representative controlled integration tests." },
+]} />
+
+<WhereToCheck>
+- **Readiness condition** — authoritative UI/API/event/database state.
+- **Fixture lifecycle** — setup, unique data, isolation, and cleanup.
+- **Order/parallel runs** — shared state and resource collision.
+- **Runtime manifest** — browser, image, dependency, locale, timezone, clock, and seed.
+- **First-divergence evidence** — trace, logs, network, console, metrics, and screenshots.
+</WhereToCheck>
+
+<WorkedExample title="replacing a sleep with the actual order contract">
+1. After Place order, the test sleeps five seconds and checks for “Confirmed.”
+2. Under load, confirmation takes six seconds; locally it takes 300 ms.
+3. The team asserts the status element with bounded auto-retry and captures API/event timing.
+4. The test finishes quickly when healthy and fails only when confirmation exceeds the real SLA.
+5. Unique order IDs and fresh contexts make parallel execution independent.
+</WorkedExample>
+
+<Quiz question="Which change most directly improves timing stability?" options={[
+  "Double every fixed sleep",
+  "Retry the entire suite five times",
+  "Wait with a bounded assertion on the authoritative state the user contract requires",
+  "Run all tests sequentially forever"
+]} answer={2} explain="State-based synchronization adapts to normal speed variation and fails at a meaningful boundary. Sleeps only guess, and broad retries hide causes." />
+
+<Flashcards cards={[
+  { front: "State-based wait", back: "Bounded polling of a meaningful observable condition rather than fixed elapsed time." },
+  { front: "Isolation", back: "Each test owns fresh context and state so other tests cannot change its outcome." },
+  { front: "Deterministic input", back: "Recorded or controlled data, seed, clock, locale, timezone, and dependency behavior." },
+  { front: "Resilient selector", back: "User-facing role/name or explicit contract that survives incidental DOM layout changes." },
+  { front: "Order independence", back: "A test succeeds alone and in arbitrary suite order because it owns prerequisites." },
+]} />
+
+<Challenge>
+Choose one test containing sleeps or shared fixtures. Replace guesses with state conditions, unique
+data, and fresh context; run it 100 times alone, random-order, and parallel while retaining evidence.
+</Challenge>
+
+<AskCommunity prompt="Test [ID] is unstable under [condition]. Its state wait, fixture/data isolation, clock/seed, runtime/dependencies, order/parallel result, and first-divergence evidence are [values].">
+These dimensions lead to an engineering fix rather than a timeout increase.
+</AskCommunity>
+
+<Resources links={[
+  { href: "https://playwright.dev/docs/test-assertions", title: "Playwright Docs — auto-retrying assertions", kind: "read" },
+  { href: "https://playwright.dev/docs/browser-contexts", title: "Playwright Docs — test isolation", kind: "read" },
+]} />
+
+<Video href="https://www.youtube.com/watch?v=8g7FvoRToGo" title="Avoid Flaky End-to-End Tests with Playwright toPass — Checkly" minutes={8} />
+
+<Takeaways points={[
+  "Synchronize on authoritative state, not arbitrary time.",
+  "Make tests isolated, order-independent, parallel-safe, and deterministic in inputs.",
+  "Control and record clocks, seeds, dependencies, runtime, locale, timezone, and resources.",
+  "Prefer resilient user-facing or explicit-contract selectors.",
+  "Use repeated hostile execution and first-divergence evidence to maintain stability continuously.",
+]} />
+
+<Complete xp={10} />

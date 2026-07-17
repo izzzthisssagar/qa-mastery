@@ -1,0 +1,152 @@
+---
+title: "Retries"
+summary: "Retries are a bounded diagnostic and resilience mechanism, not a flake fix; preserve every attempt, classify fail-then-pass separately, avoid retrying destructive work blindly, and cap the confidence cost."
+tags: ["ci", "retries", "flaky-tests", "reliability", "track-d"]
+updated: "2026-07-17"
+related:
+  - "automation-in-cicd/flake-management/detecting-flakes"
+  - "automation-in-cicd/flake-management/quarantine"
+  - "automation-in-cicd/scheduling-and-reporting/publishing-reports"
+---
+
+<Hook>
+A suite with one retry reports 99% green. Its first-attempt success is 73%. The dashboard celebrates
+reliability while developers wait for reruns and learn that red means “click again.” Retries did not
+restore trust; they made instability cheaper to ignore.
+</Hook>
+
+<Callout type="analogy">
+A RESET button can recover a machine from a transient state, but pressing it erases clues and may
+repeat half-completed work. A test retry is the same: useful when bounded and instrumented, dangerous
+when it repeats side effects or overwrites the first failure.
+</Callout>
+
+<Term define="A test retry is another attempt of the same logical test after an unexpected result. It should have a small explicit budget, isolated state, preserved attempt evidence, and separate outcome classification: passed first attempt, flaky (failed then passed), or failed all attempts. Retrying changes observed pipeline behavior; it does not remove the underlying nondeterminism.">Test retry</Term>
+
+## Treat the first failure as data
+
+```ts
+export default defineConfig({
+  retries: process.env.CI ? 1 : 0,
+  use: { trace: "on-first-retry" },
+});
+```
+
+One retry may capture richer evidence and distinguish persistent from intermittent failure. Report
+both attempts, fail CI on flaky results when policy requires, and never call fail-pass simply “passed.”
+
+<Callout type="tip">
+Retry at the narrowest safe layer. A retrying assertion that polls a read-only condition is different
+from replaying an entire checkout that may create a second order.
+</Callout>
+
+<Callout type="mistake">
+Increasing retries until the pipeline looks green. If each independent attempt fails with probability
+20%, three total attempts hide the failure 99.2% of the time while tripling worst-case cost.
+</Callout>
+
+<HotspotImage src="/notes/automation-in-cicd/flake-management/retries.jpg" alt="A dusty black industrial push button labeled RESET" credit="RESET — Lukas Large, CC BY-SA 2.0" creditHref="https://commons.wikimedia.org/wiki/File:RESET_(5628279223).jpg" pins={[
+  { x: 54, y: 52, label: "Explicit action", desc: "A retry should be intentional, bounded, and visible—not an invisible loop." },
+  { x: 48, y: 30, label: "Old state", desc: "Dust and residue represent state that must be isolated or cleaned before another attempt." },
+  { x: 77, y: 58, label: "Side effects", desc: "Resetting can replay destructive work; use idempotency and unique data." },
+  { x: 25, y: 70, label: "First evidence", desc: "Preserve the original failure before recovery changes the environment." },
+]} />
+
+<FlowAnimation title="A safe bounded retry" intervalMs={1500} nodes={[
+  { label: "Attempt one fails", desc: "Capture error, trace, logs, seed, state, and environment before cleanup." },
+  { label: "Policy evaluates", desc: "Is this error retryable, budget available, and operation safe to repeat?" },
+  { label: "State is isolated", desc: "New context/data or verified idempotency prevents duplicate side effects." },
+  { label: "Retry executes", desc: "Record a new attempt ID under the same logical test." },
+  { label: "Outcome is classified", desc: "Pass-first, flaky fail-pass, or persistent failure—not one collapsed boolean." },
+  { label: "Debt is routed", desc: "Flaky outcome creates owned evidence even when the pipeline continues." },
+]} />
+
+<CodePlayground language="python" title="Run it — show how retries hide a failure probability (Python)" code={```p_fail = 0.20
+for total_attempts in (1, 2, 3):
+    visible_failure = p_fail ** total_attempts
+    print(f"attempts={total_attempts} visible_failure={visible_failure:.1%} hidden_by_recovery={1-visible_failure:.1%}")```} />
+
+<CodePlayground language="java" title="Run it — show how retries hide a failure probability (Java)" code={```public class Main {
+    public static void main(String[] args) {
+        double pFail = 0.20;
+        for (int attempts = 1; attempts <= 3; attempts++) {
+            double visible = Math.pow(pFail, attempts);
+            System.out.printf("attempts=%d visible_failure=%.1f%% hidden_by_recovery=%.1f%%%n",
+                attempts, 100 * visible, 100 * (1 - visible));
+        }
+    }
+}```} />
+
+<FirstTime title="Your mission: audit one retry policy">
+<StepChecklist steps={[
+  { text: "Find every retry layer", detail: "Assertion, test, job, workflow, client, proxy, and manual rerun can multiply." },
+  { text: "Classify safety", detail: "Check side effects, idempotency, fresh data/context, and cleanup." },
+  { text: "Preserve all attempts", detail: "Prove the first error and each later trace remain available." },
+  { text: "Expose confidence cost", detail: "Report first-pass, flaky, final failure, added time, and retry budget." },
+]} />
+You now know whether retries diagnose instability or merely conceal it.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Only the final green result appears.", fix: "Configure attempt-aware reporting and store first-attempt evidence separately." },
+  { symptom: "A retried test creates duplicate records.", fix: "Use idempotency keys, unique attempt data, verified cleanup, or do not retry the whole operation." },
+  { symptom: "One failure triggers many more than configured retries.", fix: "Inventory nested framework, job, workflow, HTTP-client, and manual retry layers; define one total budget." },
+  { symptom: "Retry cost makes CI much slower.", fix: "Measure added wall time by fingerprint, cap attempts, fail fast for deterministic errors, and fix/quarantine the cause." },
+]} />
+
+<WhereToCheck>
+- **Framework and CI config** — every retry layer and total attempt budget.
+- **Attempt report** — first, retry, and final classifications.
+- **Artifacts per attempt** — original evidence not overwritten.
+- **Data/idempotency records** — duplicate side effects.
+- **Dashboard** — first-pass gap, retry rate, and lost time.
+</WhereToCheck>
+
+<WorkedExample title="a retry that creates two orders">
+1. Checkout submits an order, but the UI response times out before the confirmation appears.
+2. Whole-test retry uses the same user but no idempotency key and submits again.
+3. Attempt two passes; CI reports green while two orders exist.
+4. The team stops whole-flow retry, adds an idempotency key, and polls the first order's status.
+5. A single diagnostic retry remains for safe read-only assertions, with both attempts visible.
+</WorkedExample>
+
+<Quiz question="When is a retry most defensible?" options={[
+  "Whenever it makes CI green",
+  "For a bounded, safe-to-repeat attempt that preserves evidence and remains classified as flaky after fail-pass",
+  "For every destructive end-to-end flow",
+  "Instead of investigating flakes"
+]} answer={1} explain="A retry can aid diagnosis or tolerate a known transient boundary only when bounded, observable, and safe. It never converts instability into a clean pass." />
+
+<Flashcards cards={[
+  { front: "Retry budget", back: "Maximum attempts across all nested retry layers." },
+  { front: "Flaky outcome", back: "At least one failed and one passed attempt for the same logical test execution." },
+  { front: "Idempotency", back: "Repeating an operation has no additional unintended effect." },
+  { front: "First-pass rate", back: "Share of cases successful without any retry." },
+  { front: "Retry amplification", back: "Nested retry layers multiplying attempts, cost, and side effects." },
+]} />
+
+<Challenge>
+Map every retry layer in one pipeline and compute maximum attempts. Force a fail-pass case and a
+destructive timeout; prove first evidence survives and that repeated execution cannot duplicate state.
+</Challenge>
+
+<AskCommunity prompt="Test [ID] uses retry layers [list] with total budget [n]. Attempt statuses/evidence are [values], operation safety/idempotency is [evidence], and first-pass/final rates are [values].">
+This exposes hidden amplification and whether recovery is trustworthy.
+</AskCommunity>
+
+<Resources links={[
+  { href: "https://playwright.dev/docs/test-retries", title: "Playwright Docs — test retries", kind: "read" },
+  { href: "https://playwright.dev/docs/trace-viewer-intro", title: "Playwright Docs — traces on first retry", kind: "read" },
+]} />
+
+<Video href="https://www.youtube.com/watch?v=DUZN6j0W0UU" title="How To Retry Failed Test Cases: Retries and Test Flakiness — SDET-QA" minutes={14} />
+
+<Takeaways points={[
+  "Retries recover or diagnose; they do not fix nondeterminism.",
+  "Preserve each attempt and classify fail-pass as flaky, never simply passed.",
+  "Audit nested retry layers and enforce one small total budget.",
+  "Retry only safe/idempotent work with isolated state.",
+  "Measure first-pass gap, added time, and side effects so green cannot hide confidence loss.",
+]} />
+
+<Complete xp={10} />
