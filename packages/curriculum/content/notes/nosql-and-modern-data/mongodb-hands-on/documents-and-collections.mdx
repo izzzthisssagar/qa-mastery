@@ -1,0 +1,172 @@
+---
+title: "Documents and collections"
+summary: "Read MongoDB's BSON document model precisely, inspect mixed shapes safely, and test the collection contracts that flexible schemas do not enforce for you."
+tags: ["mongodb", "bson", "documents", "collections", "track-d"]
+updated: "2026-07-17"
+related:
+  - "nosql-and-modern-data/mongodb-hands-on/crud-and-query-operators"
+  - "nosql-and-modern-data/mongodb-hands-on/embedding-vs-referencing"
+  - "nosql-and-modern-data/the-nosql-landscape/document-key-value-graph-columnar"
+---
+
+<Hook>
+Two MongoDB documents can sit in the same collection while one has `price` as a number, another has
+`price` as text, and a third has no `price` at all. The database accepted all three. Your application
+still has to survive them—and your tests must find them before a production reader does.
+</Hook>
+
+<Callout type="analogy">
+A card catalogue groups records by purpose, but every card can carry different annotations. The
+drawer is the collection; one card is a document; its printed and handwritten fields are BSON values.
+</Callout>
+
+<Term define="A MongoDB document is an ordered set of field-value pairs encoded as BSON, a binary representation that extends JSON with types such as dates, ObjectIds, and 64-bit integers. Documents live in collections, and every standard collection document has a unique, immutable _id primary key.">BSON document</Term>
+
+## Shape is flexible; contracts are not optional
+
+MongoDB documents can contain scalar values, arrays, embedded documents, and arrays of documents.
+Collections group documents, and databases group collections. MongoDB does not require every document
+in a collection to expose identical fields or types, though schema validation can enforce rules.
+
+That flexibility supports evolution, but it moves testing attention toward:
+
+- missing versus explicit `null`;
+- numeric BSON types and driver conversions;
+- old and new field names living together;
+- duplicate business identifiers despite unique `_id` values;
+- arrays whose element shape or size changes over time;
+- the 16 MiB BSON document limit and unbounded growth.
+
+<Callout type="tip">
+Build a shape census before a migration: group by field presence and BSON type. A sample of the newest
+ten documents proves almost nothing about historical production data.
+</Callout>
+
+<Callout type="mistake">
+Comparing serialized JSON text. BSON types and field order can differ while business meaning remains
+the same. Assert required fields, types, values, and arrays deliberately.
+</Callout>
+
+<HotspotImage src="/notes/nosql-and-modern-data/mongodb-hands-on/documents-and-collections.jpg" alt="Rows of wooden card catalogue drawers with labels and metal pulls" credit="Card catalogue drawers — Carolina Prysyazhnyuk, CC BY-SA 2.0" creditHref="https://commons.wikimedia.org/wiki/File:Card_catalogue_drawers.jpg" pins={[
+  { x: 28, y: 32, label: "Collection", desc: "A named drawer groups documents for one application concern; it does not force every card to share one shape." },
+  { x: 50, y: 51, label: "Document", desc: "One card-like record contains field-value pairs, nested values, and its unique _id." },
+  { x: 74, y: 28, label: "Index label", desc: "Indexes create lookup paths over chosen fields; _id receives a unique index by default in standard collections." },
+  { x: 78, y: 72, label: "Historical shapes", desc: "Older drawers remain after application releases. Readers and migrations must handle every supported shape." },
+]}/>
+
+<FlowAnimation title="From application object to stored document" intervalMs={1700} nodes={[
+  { label: "Application builds values", desc: "The driver receives strings, numbers, dates, arrays, objects, and an optional _id." },
+  { label: "Driver encodes BSON", desc: "Language values map to BSON types; lossy or mismatched conversions can begin here." },
+  { label: "Validation runs", desc: "Configured collection validators may reject shape or type violations; absent rules accept more variation." },
+  { label: "Document is stored", desc: "The record enters one collection with a unique immutable _id." },
+  { label: "Reader decodes", desc: "A possibly different driver and application version must interpret the stored BSON safely." },
+  { label: "Test samples history", desc: "Checks cover old, new, missing, null, extreme, and malformed-but-existing shapes." },
+]}/>
+
+<CodePlayground language="python" title="Run it — census mixed document shapes (Python)" code={```docs = [
+    {"_id": 1, "price": 12.50, "tags": ["sale"]},
+    {"_id": 2, "price": "12.50"},
+    {"_id": 3, "price": None},
+    {"_id": 4},
+]
+for doc in docs:
+    state = "missing" if "price" not in doc else type(doc["price"]).__name__
+    print(doc["_id"], state)
+assert sum(isinstance(d.get("price"), (int, float)) for d in docs) == 1```}/>
+
+<CodePlayground language="java" title="Run it — census mixed document shapes (Java)" code={```import java.util.*;
+
+public class Main {
+    public static void main(String[] args) {
+        var docs = List.<Map<String,Object>>of(
+            new HashMap<>(Map.of("_id", 1, "price", 12.50)),
+            new HashMap<>(Map.of("_id", 2, "price", "12.50")),
+            new HashMap<>(), new HashMap<>(Map.of("_id", 4))
+        );
+        docs.get(2).put("_id", 3); docs.get(2).put("price", null);
+        long numbers = 0;
+        for (var d : docs) {
+            Object value = d.get("price");
+            String state = !d.containsKey("price") ? "missing" : value == null ? "null" : value.getClass().getSimpleName();
+            System.out.println(d.get("_id") + " " + state);
+            if (value instanceof Number) numbers++;
+        }
+        if (numbers != 1) throw new AssertionError();
+    }
+}```}/>
+
+<FirstTime title="Your mission: inspect one collection's real shape">
+<StepChecklist steps={[
+  { text: "Choose five contract fields", detail: "Include _id, one nested field, one array, and one field changed by a past release." },
+  { text: "Count missing, null, and BSON types", detail: "Do not collapse these states into truthy and falsy." },
+  { text: "Find the oldest surviving shape", detail: "Verify the current reader handles it or that a controlled migration removes it." },
+  { text: "Record enforcement", detail: "Separate collection validation, unique indexes, and application-only assumptions." },
+]}/>
+You now have a collection contract based on stored evidence.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "A numeric comparison skips some documents.", fix: "Group the field by BSON type; strings that look numeric are still strings." },
+  { symptom: "A new reader crashes only on old accounts.", fix: "Compare version-era shapes and add tolerant reading or a verified migration." },
+  { symptom: "Duplicate users exist despite unique _id values.", fix: "_id uniqueness protects only _id; add and test the intended unique business index." },
+  { symptom: "An embedded array approaches the document limit.", fix: "Measure BSON size and growth; bound or reference unbounded child data." },
+]}/>
+
+<WhereToCheck>
+- **MongoDB Compass or `mongosh`** — inspect stored BSON types, not API serialization alone.
+- **Collection validators** — check validation level/action and deployment drift.
+- **Indexes** — confirm business uniqueness exists and is actually usable.
+- **Driver codec configuration** — dates, decimals, UUIDs, and 64-bit integers can map differently.
+- **Historical records** — migrations fail on the rare old shape, not the ideal fixture.
+</WhereToCheck>
+
+<WorkedExample title="a price filter that lost products silently">
+1. An importer stores some prices as strings while the API stores numbers.
+2. A sale query asks for numeric values below 20 and returns only correctly typed documents.
+3. UI tests use recently created numeric fixtures, so the gap stays invisible.
+4. A shape census finds both `double` and `string`; the team validates new writes and migrates old values.
+5. Tests verify counts, rejected invalid writes, conversion failures, and rollback evidence.
+</WorkedExample>
+
+<Quiz question="What does MongoDB's flexible document model guarantee?" options={[
+  "Every document in a collection has the same fields and types",
+  "A standard collection document has a unique _id, while other shape rules require validation, indexes, or application logic",
+  "Every number is stored as the same BSON type",
+  "Documents can grow without a size limit"
+]} answer={1} explain="MongoDB requires a unique _id in standard collections. Other field, type, and business rules are not implied merely by collection membership." />
+
+<Flashcards cards={[
+  { front: "BSON", back: "MongoDB's binary document representation, extending JSON with additional types." },
+  { front: "Collection", back: "A named group of documents; membership alone does not force identical shape." },
+  { front: "Missing versus null", back: "Missing means no field; null is a stored field value. Queries and application behavior can differ." },
+  { front: "_id", back: "A unique, immutable primary key required for documents in standard collections." },
+  { front: "Maximum BSON document size", back: "16 MiB; unbounded embedded arrays require design scrutiny." },
+]}/>
+
+<Challenge>
+Create eight representative documents for one entity: current, oldest, missing optional field, explicit
+null, wrong historical type, empty array, maximal array, and duplicate business identifier. Predict
+which layer accepts each, then verify.
+</Challenge>
+
+<AskCommunity prompt="Collection [name] contains [field] as BSON types [types], with [missing/null counts]. Validation enforces [rules], while the app assumes [contract]. What migration or tolerant-read risk am I missing?">
+Include engine/driver versions and anonymized shape counts, not production values.
+</AskCommunity>
+
+<Resources links={[
+  { href: "https://www.mongodb.com/docs/manual/core/document/", title: "MongoDB Manual — Documents", kind: "read" },
+  { href: "https://www.mongodb.com/docs/manual/core/databases-and-collections/", title: "MongoDB Manual — Databases and collections", kind: "read" },
+  { href: "https://www.mongodb.com/docs/manual/core/schema-validation/", title: "MongoDB Manual — Schema validation", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=ojKJqNQYaOI" title="Collections & Documents — Net Ninja" minutes={4} />
+
+<Takeaways points={[
+  "MongoDB stores BSON documents in collections, with nested values and typed fields.",
+  "Flexible shape does not remove schema; it changes where schema is enforced.",
+  "Missing, null, and wrong BSON type are distinct test cases.",
+  "_id uniqueness does not enforce business-key uniqueness.",
+  "Historical shape censuses reveal risks that fresh fixtures conceal.",
+]}/>
+
+<Complete xp={10} />

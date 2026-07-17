@@ -1,0 +1,162 @@
+---
+title: "Aggregation pipeline, gently"
+summary: "Build and test MongoDB aggregation one observable stage at a time, from selective matching through grouping, reshaping, sorting, and joins."
+tags: ["mongodb", "aggregation", "pipelines", "data-testing", "track-d"]
+updated: "2026-07-17"
+related:
+  - "nosql-and-modern-data/mongodb-hands-on/crud-and-query-operators"
+  - "nosql-and-modern-data/mongodb-hands-on/embedding-vs-referencing"
+  - "relational-databases-engineer-level/sql-mastery/window-functions"
+---
+
+<Hook>
+A final dashboard total can be wrong even when its `$group` formula is perfect. One earlier `$unwind`
+may have multiplied rows, one `$match` may have dropped missing values, or one `$lookup` may have joined
+duplicates. The pipeline is testable because every stage has an observable input and output.
+</Hook>
+
+<Callout type="analogy">
+Water entering a pipeline passes gates, branches, meters, and outlets. Inspect only the final bucket and
+you cannot tell which stage lost, duplicated, or redirected the flow.
+</Callout>
+
+<Term define="A MongoDB aggregation pipeline is an ordered array of stages that transform a stream of documents. Stages such as $match, $unwind, $group, $project, $sort, and $lookup can filter, multiply, combine, reshape, or reorder documents before returning results.">aggregation pipeline</Term>
+
+## Learn six stages first
+
+- `$match` filters documents; place selective, index-supported filters early when possible.
+- `$project` selects or computes output fields.
+- `$unwind` emits one document per array element and can multiply the stream.
+- `$group` collects documents by a key and applies accumulators such as `$sum` or `$avg`.
+- `$sort` orders results and may require memory or an index.
+- `$lookup` brings matching documents from another collection and can create arrays or fan-out.
+
+Most aggregation pipelines do not modify source data. `$out` and `$merge` are important exceptions and
+deserve explicit destructive-write review. Optimization can reorder work internally, so use `explain`
+for execution evidence rather than assuming written order equals physical work.
+
+<Callout type="tip">
+Develop with stage checkpoints: run the first stage, then the first two, recording count, key set, and
+one representative document. The first unexpected delta locates the bug.
+</Callout>
+
+<Callout type="mistake">
+Grouping money with binary floating-point and comparing rounded display values. Preserve an appropriate
+numeric type and define when rounding occurs in the business contract.
+</Callout>
+
+<HotspotImage src="/notes/nosql-and-modern-data/mongodb-hands-on/aggregation-pipeline-gently.png" alt="Public-domain line drawing of a long water pipeline crossing terrain" credit="Pipeline (PSF) — Pearson Scott Foresman, public domain" creditHref="https://commons.wikimedia.org/wiki/File:Pipeline_(PSF).png" pins={[
+  { x: 48, y: 90, label: "$match inlet", desc: "Restrict the stream with exact business and tenant conditions before expensive transformations." },
+  { x: 54, y: 65, label: "$unwind expansion", desc: "One input can become many outputs; measure cardinality before grouping." },
+  { x: 60, y: 42, label: "$group meter", desc: "Accumulators depend on the exact stream produced by every earlier stage." },
+  { x: 71, y: 20, label: "$project outlet", desc: "Shape the final contract and verify required identifiers and numeric types remain." },
+]}/>
+
+<FlowAnimation title="Debug an aggregation by stage" intervalMs={1600} nodes={[
+  { label: "Freeze representative input", desc: "Include missing, null, empty-array, duplicate-join, and boundary-value documents." },
+  { label: "Run $match", desc: "Assert surviving identifiers and count, including tenant boundaries." },
+  { label: "Run expansion stages", desc: "After $unwind or $lookup, assert expected cardinality and preserved empties." },
+  { label: "Run $group", desc: "Compare group keys, counts, sums, and numeric types with an independent oracle." },
+  { label: "Shape and order", desc: "Verify projection, field names, sort ties, and limit behavior." },
+  { label: "Inspect explain", desc: "Check index use, scanned volume, blocking stages, spills, and production-shaped performance." },
+]}/>
+
+<CodePlayground language="python" title="Run it — stage-by-stage order totals (Python)" code={```orders = [
+    {"tenant":"A", "status":"paid", "lines":[10, 5]},
+    {"tenant":"A", "status":"open", "lines":[100]},
+    {"tenant":"B", "status":"paid", "lines":[7]},
+]
+matched = [o for o in orders if o["tenant"] == "A" and o["status"] == "paid"]
+unwound = [price for o in matched for price in o["lines"]]
+total = sum(unwound)
+print("matched", len(matched), "line rows", len(unwound), "total", total)
+assert (len(matched), len(unwound), total) == (1, 2, 15)```}/>
+
+<CodePlayground language="java" title="Run it — stage-by-stage order totals (Java)" code={```import java.util.*;
+
+public class Main {
+    record Order(String tenant, String status, List<Integer> lines) {}
+    public static void main(String[] args) {
+        var orders = List.of(new Order("A","paid",List.of(10,5)), new Order("A","open",List.of(100)), new Order("B","paid",List.of(7)));
+        var matched = orders.stream().filter(o -> o.tenant().equals("A") && o.status().equals("paid")).toList();
+        var lines = matched.stream().flatMap(o -> o.lines().stream()).toList();
+        int total = lines.stream().mapToInt(Integer::intValue).sum();
+        System.out.println("matched " + matched.size() + " line rows " + lines.size() + " total " + total);
+        if (matched.size()!=1 || lines.size()!=2 || total!=15) throw new AssertionError();
+    }
+}```}/>
+
+<FirstTime title="Your mission: test one pipeline in checkpoints">
+<StepChecklist steps={[
+  { text: "Create adversarial input", detail: "Include empty and missing arrays, duplicate lookup keys, null group key, and a tenant neighbor." },
+  { text: "Record identifiers after $match", detail: "Counts alone can hide one missing and one extra document." },
+  { text: "Record cardinality after expansion", detail: "Explain every multiplication or disappearance after $unwind and $lookup." },
+  { text: "Build an independent oracle", detail: "Calculate the final groups with simple trusted code or SQL, not a copy of the pipeline." },
+]}/>
+You now know which stage establishes each final claim.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Totals are exact multiples of the expected value.", fix: "Inspect fan-out from $unwind or $lookup and whether joined keys are unique." },
+  { symptom: "Documents with empty arrays disappear.", fix: "Review $unwind preserveNullAndEmptyArrays and the intended business rule." },
+  { symptom: "A pipeline is correct but slow.", fix: "Use explain; move selective $match early, verify indexes, and inspect blocking sorts/groups or disk spills." },
+  { symptom: "Output order changes between runs.", fix: "Add an explicit deterministic $sort with a unique tie-breaker before limit or pagination." },
+]}/>
+
+<WhereToCheck>
+- **Per-stage preview and count** — identify the first unexpected transformation.
+- **Identifier sets** — counts can balance while the wrong documents pass.
+- **Explain output** — inspect indexes, examined documents, memory, and spills.
+- **Join-key uniqueness** — `$lookup` fan-out may be valid or accidental.
+- **Numeric BSON types and rounding** — aggregation can promote or coerce values.
+</WhereToCheck>
+
+<WorkedExample title="a revenue report doubled by a lookup">
+1. Orders join a promotions collection on `code` before revenue is grouped.
+2. Promotions accidentally contains two active documents with the same code.
+3. `$lookup` returns two matches, `$unwind` duplicates each order, and `$sum` doubles revenue.
+4. Stage tests catch the cardinality jump before grouping.
+5. The team enforces promotion-key uniqueness and keeps a fan-out assertion in the report test.
+</WorkedExample>
+
+<Quiz question="After adding $unwind, 100 input documents become 260. What should you check first?" options={[
+  "Whether MongoDB randomly duplicated data",
+  "Array cardinality and the stage's empty/null preservation behavior",
+  "Only the final $sort order",
+  "Whether _id indexes are unique"
+]} answer={1} explain="$unwind emits one output per array element and may drop empty or missing arrays depending on options. Its cardinality is the first evidence to inspect." />
+
+<Flashcards cards={[
+  { front: "$match", back: "Filters the document stream; verify identifiers, types, tenant scope, and index support." },
+  { front: "$unwind", back: "Emits one document per array element and changes cardinality." },
+  { front: "$group", back: "Groups by a key and applies accumulators to the exact incoming stream." },
+  { front: "$lookup", back: "Joins another collection into an array and can introduce fan-out." },
+  { front: "Write-capable stages", back: "$out and $merge can modify collections; most other aggregation pipelines return results only." },
+]}/>
+
+<Challenge>
+Create a pipeline for paid revenue by tenant with line arrays and promotion lookup. Add fixtures for
+empty lines, duplicate promotion keys, null amount, wrong tenant, equal-sort ties, and decimal rounding.
+</Challenge>
+
+<AskCommunity prompt="Pipeline cardinality changes [a→b] at stage [stage]. Input edge case is [shape], expected rule is [rule], and explain shows [evidence]. Is this stage behaving correctly?">
+Share a minimal pipeline and synthetic documents, not production records.
+</AskCommunity>
+
+<Resources links={[
+  { href: "https://www.mongodb.com/docs/manual/core/aggregation-pipeline/", title: "MongoDB Manual — Aggregation pipeline", kind: "read" },
+  { href: "https://www.mongodb.com/docs/current/reference/operator/aggregation-pipeline/", title: "MongoDB Manual — Aggregation stages", kind: "read" },
+  { href: "https://www.mongodb.com/docs/v8.0/core/aggregation-pipeline-optimization/", title: "MongoDB Manual — Pipeline optimization", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=acvyf-Im-NU" title="Master MongoDB Aggregation Pipeline — MongoDB" minutes={5} />
+
+<Takeaways points={[
+  "Treat every aggregation stage as an observable transformation.",
+  "$unwind and $lookup commonly change cardinality before totals are computed.",
+  "Assert identifier sets and per-stage counts, not final values alone.",
+  "Use an independent oracle and explicit deterministic sorting.",
+  "Explain output connects logical correctness with production performance.",
+]}/>
+
+<Complete xp={10} />

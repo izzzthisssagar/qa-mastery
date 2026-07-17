@@ -1665,10 +1665,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "mongodb-hands-on",
         title: "MongoDB hands-on",
         topics: [
-          { slug: "documents-and-collections", title: "Documents & collections", planned: true },
-          { slug: "crud-and-query-operators", title: "CRUD & query operators", planned: true },
-          { slug: "embedding-vs-referencing", title: "Embedding vs referencing", planned: true },
-          { slug: "aggregation-pipeline-gently", title: "Aggregation pipeline, gently", planned: true },
+          { slug: "documents-and-collections", title: "Documents & collections" },
+          { slug: "crud-and-query-operators", title: "CRUD & query operators" },
+          { slug: "embedding-vs-referencing", title: "Embedding vs referencing" },
+          { slug: "aggregation-pipeline-gently", title: "Aggregation pipeline, gently" },
         ],
       },
       {
