@@ -1,0 +1,375 @@
+---
+title: "Pods, deployments, services"
+summary: "A Pod is the smallest deployable unit (one or more tightly-coupled containers). A Deployment declares how many Pod copies should exist and replaces them when they die. A Service is a stable address that routes to whichever Pods are currently healthy, even as their names and IPs keep changing."
+tags: ["kubernetes-and-test-infrastructure", "kubernetes-in-plain-words", "track-d"]
+updated: "2026-07-17"
+related:
+  - "kubernetes-and-test-infrastructure/kubernetes-in-plain-words/what-k8s-solves"
+  - "kubernetes-and-test-infrastructure/kubernetes-in-plain-words/kubectl-survival-kit"
+  - "kubernetes-and-test-infrastructure/test-workloads-on-k8s/running-tests-as-jobs"
+---
+
+<Hook>
+A pod holding the checkout service crashes and gets replaced. Its replacement has a completely
+different name and a completely different internal IP address - Kubernetes doesn't try to resurrect
+the exact same pod, it just makes a new one. And yet every request that was already in flight to
+"the checkout service" keeps landing successfully, with zero code change anywhere in the app that's
+calling it. Something in between the caller and the ever-changing pods is holding a STABLE address
+steady while everything behind it churns - and that something has a name.
+</Hook>
+
+<Callout type="analogy">
+Picture a busy container port at night: individual shipping containers get craned on and off ships
+constantly, each one physically relocated, none of them staying in the same spot for long. A
+shipping order says "load 3 containers of this cargo onto whichever ship is heading to this route" -
+it doesn't care WHICH physical containers, just that 3 of the right kind are always accounted for
+and moving. And the port's berth number - "Gate 12, always" - stays the same address regardless of
+which specific ship, with which specific containers, happens to be docked there on a given day.
+Three different concerns, three different jobs: the containers themselves (Pods), the standing order
+for how many of a kind should exist (Deployments), and the fixed address everyone else uses to find
+whatever is currently there (Services).
+</Callout>
+
+<Term define="A Pod is the smallest deployable unit in Kubernetes: one or more containers that are scheduled together onto the same machine, share the same internal IP address and storage, and are always created and destroyed as a single group - never partially. A Deployment is a declaration of how many identical copies (replicas) of a Pod template should exist at all times; it doesn't run anything itself, it watches the actual Pod count and creates or deletes Pods to keep it matching the declared number, including replacing any Pod that crashes. A Service is a stable network address (a fixed internal DNS name and IP) that sits in front of a group of Pods matched by a label selector, and forwards each incoming request to one of whichever Pods currently match and are healthy - so callers never need to know individual Pod names or IPs, which change constantly as Pods are replaced.">Pods, Deployments, and Services</Term>
+
+## Three objects, three separate jobs
+
+- **A Pod is disposable by design.** It's expected to die and be replaced - from a crash, a
+  deliberate update, or the machine it's on being retired. Nothing in a healthy Kubernetes workflow
+  treats an individual Pod as precious or long-lived; the Pod's NAME is not something calling code
+  should ever hard-code or depend on.
+- **A Deployment is the standing order, not the worker.** Saying "Deployment: 3 replicas of the
+  checkout Pod" doesn't run 3 containers by itself - it continuously compares the actual Pod count
+  against 3 and creates or removes Pods until they match, the exact reconciliation loop from the
+  previous note, applied specifically to Pod counts.
+- **A Service is the one address that DOESN'T change.** While Pod names and IPs churn underneath it
+  constantly, the Service's own DNS name (like `checkout-service`) and virtual IP stay fixed for as
+  long as the Service exists - that stability is the entire reason callers can depend on it instead
+  of tracking individual Pods.
+- **The relationship is layered, not tangled.** A Service finds its Pods by label match (for
+  example, every Pod labeled `app: checkout` regardless of which Deployment created it), not by
+  asking the Deployment directly - this is what lets a Service keep routing correctly straight
+  through a rolling update where old and new Pods briefly coexist side by side.
+
+<Callout type="tip">
+When a bug report says "the checkout SERVICE is down," always ask a follow-up before assuming it's
+one thing: is the SERVICE object failing to route to ANY healthy Pod (nothing behind the stable
+address works), or is the underlying application logic inside otherwise-healthy Pods returning wrong
+data? `kubectl get endpoints <service-name>` shows exactly which Pod IPs a Service is currently
+routing to - an empty list means the Service genuinely has nothing healthy to send traffic to, which
+is a very different bug than "a healthy Pod is misbehaving."
+</Callout>
+
+<Callout type="mistake">
+Testing against a specific Pod's IP address directly (found once via `kubectl get pods -o wide`) and
+treating that as "testing the service." The next Pod replacement - a routine, expected event -
+changes that IP, silently breaking anything hard-coded to it. The Service's stable DNS name is the
+thing meant to be tested and depended on; an individual Pod IP is meant to be disposable and should
+never appear in a test's configuration.
+</Callout>
+
+{/* IMAGE: Port of Oakland container cranes photographed at night, dramatic long exposure showing the tall gantry cranes against an orange sky, stacked containers and a small boat docked in the foreground water */}
+<HotspotImage
+  src="/notes/kubernetes-and-test-infrastructure/kubernetes-in-plain-words/pods-deployments-services.jpg"
+  alt="Tall gantry container cranes at the Port of Oakland photographed at night against an orange sky, with a small boat docked in the foreground"
+  credit="Port of Oakland Cranes — Tony Webster, Wikimedia Commons, CC BY 2.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Port_of_Oakland_Cranes_(15389761152).jpg"
+  pins={[
+    { x: 88, y: 40, label: "The gantry crane itself — the Deployment doing the work", desc: "It doesn't carry cargo personally; it continuously picks up and places individual containers to match a loading plan. This is the Deployment's job with Pods: not BEING the workload, but continuously creating/replacing Pod instances to match a declared count." },
+    { x: 78, y: 55, label: "A single suspended container mid-move — one Pod, replaceable at any moment", desc: "This exact container will be set down and, on a future visit, an entirely different physical container will occupy the same logical slot in the loading plan. A Pod is the same: disposable, individually unimportant, replaced without ceremony." },
+    { x: 60, y: 68, label: "The stacked containers in the yard — several Pod replicas, same kind, sitting side by side", desc: "Multiple containers of the same cargo type, stacked together, satisfying one standing order ('load 40 of these'). This is a Deployment's replica count made physical - several interchangeable units fulfilling one declaration." },
+    { x: 15, y: 78, label: "The fixed berth / dock position — the Service's stable address", desc: "Ships and cargo constantly change at this dock, but 'this berth' as a location never moves. Anyone told to deliver to 'this berth' doesn't need to know which ship or which containers are there today - exactly how a Service's fixed DNS name works regardless of which Pods are currently behind it." },
+  ]}
+/>
+
+<FlowAnimation
+  title="A Pod crashes mid-rollout - watch what the Service does - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Starting state: Deployment 'checkout' declares 3 replicas, Service 'checkout-svc' routes to all 3 Pods matching label app=checkout", desc: "3 Pods, all healthy, all labeled the same way, all receiving traffic through the one stable Service address." },
+    { label: "One Pod crashes", desc: "The Deployment's reconciliation loop notices actual (2) no longer matches desired (3) and schedules a replacement Pod - new name, new IP, same label." },
+    { label: "Meanwhile, the Service updates its endpoint list automatically", desc: "The crashed Pod's IP is removed from the routing list within seconds; the new replacement Pod's IP is added the moment it becomes Ready - no manual reconfiguration of the Service." },
+    { label: "Requests during this whole window", desc: "The Service never stops accepting requests at its one fixed address - it simply routes to fewer healthy Pods for a few seconds, then back to the full count once the replacement is Ready." },
+    { label: "Verdict", desc: "The caller's address (checkout-svc) never changed. Everything that changed - which Pod, which IP - happened entirely behind that one stable name, which is the whole point of separating Pods from Services." },
+  ]}
+/>
+
+The layering, one more time: Pods are the disposable workers, Deployments are the standing order for
+how many should exist, Services are the one address that never has to change while the other two
+churn underneath it.
+
+<CodePlayground
+  language="python"
+  title="Run it - a tiny Pod/Deployment/Service simulator (Python)"
+  code={`import itertools
+
+pod_id_counter = itertools.count(1)
+
+class Pod:
+    def __init__(self, label):
+        self.id = f"pod-{next(pod_id_counter)}"
+        self.label = label
+        self.healthy = True
+
+    def crash(self):
+        self.healthy = False
+
+
+class Deployment:
+    """The standing order: keep exactly 'desired' healthy Pods matching 'label'."""
+    def __init__(self, label, desired):
+        self.label = label
+        self.desired = desired
+        self.pods = [Pod(label) for _ in range(desired)]
+
+    def reconcile(self):
+        self.pods = [p for p in self.pods if p.healthy]  # drop crashed pods
+        while len(self.pods) < self.desired:
+            self.pods.append(Pod(self.label))            # create replacements
+        return [p.id for p in self.pods]
+
+
+class Service:
+    """A stable address that routes only to CURRENTLY healthy pods matching a label."""
+    def __init__(self, name, label):
+        self.name = name
+        self.label = label
+
+    def route_request(self, deployment):
+        candidates = [p for p in deployment.pods if p.label == self.label and p.healthy]
+        if not candidates:
+            return f"{self.name}: NO healthy pods available"
+        # a real Service load-balances; picking the first is enough to show routing works
+        target = candidates[0]
+        return f"{self.name}: routed request -> {target.id}"
+
+
+deployment = Deployment(label="checkout", desired=3)
+service = Service(name="checkout-svc", label="checkout")
+
+print("--- Initial state ---")
+print("Pods:", [p.id for p in deployment.pods])
+print(service.route_request(deployment))
+
+print()
+print("--- One Pod crashes ---")
+crashed = deployment.pods[0]
+crashed_id = crashed.id
+crashed.crash()
+print(f"Crashed: {crashed_id}")
+print("Service still answers requests using the SAME address, routed to a survivor:")
+print(" ", service.route_request(deployment))
+
+print()
+print("--- Deployment reconciles: replaces the crashed pod ---")
+new_pod_ids = deployment.reconcile()
+print("Pods after reconciliation:", new_pod_ids)
+print(f"Note: {crashed_id} is gone for good; a brand-new pod id replaced it.")
+print("Service address never changed throughout:", service.name)
+print(" ", service.route_request(deployment))`}
+/>
+
+Same Pod/Deployment/Service simulator in Java:
+
+<CodePlayground
+  language="java"
+  title="Run it - a tiny Pod/Deployment/Service simulator (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static int podCounter = 1;
+
+    static class Pod {
+        String id;
+        String label;
+        boolean healthy = true;
+
+        Pod(String label) {
+            this.id = "pod-" + (podCounter++);
+            this.label = label;
+        }
+
+        void crash() {
+            healthy = false;
+        }
+    }
+
+    static class Deployment {
+        String label;
+        int desired;
+        List<Pod> pods = new ArrayList<>();
+
+        Deployment(String label, int desired) {
+            this.label = label;
+            this.desired = desired;
+            for (int i = 0; i < desired; i++) pods.add(new Pod(label));
+        }
+
+        List<String> reconcile() {
+            pods.removeIf(p -> !p.healthy);
+            while (pods.size() < desired) pods.add(new Pod(label));
+            List<String> ids = new ArrayList<>();
+            for (Pod p : pods) ids.add(p.id);
+            return ids;
+        }
+    }
+
+    static class Service {
+        String name;
+        String label;
+
+        Service(String name, String label) {
+            this.name = name;
+            this.label = label;
+        }
+
+        String routeRequest(Deployment deployment) {
+            for (Pod p : deployment.pods) {
+                if (p.label.equals(label) && p.healthy) {
+                    return name + ": routed request -> " + p.id;
+                }
+            }
+            return name + ": NO healthy pods available";
+        }
+    }
+
+    public static void main(String[] args) {
+        Deployment deployment = new Deployment("checkout", 3);
+        Service service = new Service("checkout-svc", "checkout");
+
+        System.out.println("--- Initial state ---");
+        List<String> ids = new ArrayList<>();
+        for (Pod p : deployment.pods) ids.add(p.id);
+        System.out.println("Pods: " + ids);
+        System.out.println(service.routeRequest(deployment));
+
+        System.out.println();
+        System.out.println("--- One Pod crashes ---");
+        Pod crashed = deployment.pods.get(0);
+        String crashedId = crashed.id;
+        crashed.crash();
+        System.out.println("Crashed: " + crashedId);
+        System.out.println("Service still answers requests using the SAME address, routed to a survivor:");
+        System.out.println("  " + service.routeRequest(deployment));
+
+        System.out.println();
+        System.out.println("--- Deployment reconciles: replaces the crashed pod ---");
+        List<String> newIds = deployment.reconcile();
+        System.out.println("Pods after reconciliation: " + newIds);
+        System.out.println("Note: " + crashedId + " is gone for good; a brand-new pod id replaced it.");
+        System.out.println("Service address never changed throughout: " + service.name);
+        System.out.println("  " + service.routeRequest(deployment));
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: watch a Pod get replaced without the Service address changing">
+<StepChecklist
+  steps={[
+    { text: "On any Kubernetes cluster you're allowed to experiment on, run `kubectl get pods -l app=<some-label>` and note the exact Pod name(s)", detail: "Also run `kubectl get svc` and note the Service's name - it should look nothing like a Pod name (no random suffix)." },
+    { text: "Run `kubectl get endpoints <service-name>` and note which Pod IPs it currently lists", detail: "This is the live, real-time list a Service is routing to right now." },
+    { text: "Delete one of the Pods you noted", detail: "`kubectl delete pod <name>` - a routine, expected action, not a special case." },
+    { text: "Re-run both commands again after ~10-30 seconds", detail: "Confirm: the Pod list now shows a DIFFERENT name, `kubectl get endpoints` now lists a DIFFERENT IP, but the Service's own name from `kubectl get svc` is completely unchanged throughout." },
+  ]}
+/>
+You've now directly observed the layering this note describes: Pods and their IPs churned, the
+Service's address didn't move at all.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "`kubectl get endpoints <service-name>` returns an empty list, even though `kubectl get pods` shows healthy-looking Pods running.",
+      fix: "The Service's label selector doesn't match the Pods' actual labels - a very common misconfiguration (a typo, or a Deployment template using a slightly different label than the Service selector expects). Compare the Service's `selector` field against the Pods' `labels` field exactly, character for character.",
+    },
+    {
+      symptom: "A rolling update finishes, `kubectl get pods` shows all-new Pod names, but the app's behavior looks like it's still running the OLD version for some requests.",
+      fix: "During a rolling update, old and new Pods briefly coexist and the Service load-balances across both - if old Pods are slow to terminate or a readiness probe is misconfigured, some requests keep landing on old Pods longer than expected. Check how many Pods of each version exist simultaneously with `kubectl get pods -o wide` and their AGE column.",
+    },
+    {
+      symptom: "A Deployment shows the desired replica count reached, but the Service still reports fewer healthy endpoints than that count.",
+      fix: "A Pod can be RUNNING without being READY - readiness probes exist specifically so a Service won't route traffic to a Pod that's up but not yet able to serve requests (still warming up, still loading data). Check the Pod's readiness probe configuration and its current probe status with `kubectl describe pod`.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **`kubectl get pods -o wide`** — current Pod names, IPs, and which machine each is scheduled on, all expected to change over time.
+- **`kubectl get svc` and `kubectl get endpoints <name>`** — the Service's stable identity versus the live, churning list of Pod IPs it's actually routing to right now.
+- **Label selectors on both the Service and the Deployment's Pod template** — the single most common source of "healthy Pods, but the Service can't find them" bugs.
+- **[[kubernetes-and-test-infrastructure/kubernetes-in-plain-words/kubectl-survival-kit]]** — the exact commands used above, explained as a compact, repeatable toolkit.
+</WhereToCheck>
+
+<WorkedExample title="a Service with healthy Pods behind it that still failed every request">
+1. A tester reports that a newly deployed `inventory-service` returns connection-refused errors on
+   every single request, despite `kubectl get pods` showing 3/3 Pods in a `Running` state.
+2. `kubectl get endpoints inventory-service` returns an empty list - zero Pod IPs, even though 3
+   Pods that LOOK healthy clearly exist.
+3. Comparing the Service's `selector: app: inventory` against the Deployment's Pod template reveals
+   the Pod template actually labels its Pods `app: inventory-svc` - a one-word mismatch.
+4. The Service was never able to find ANY Pod matching its selector, from the moment it was created -
+   the 3 Running Pods were real and healthy, they simply weren't Pods this particular Service was
+   configured to look for.
+5. Finding: "`inventory-service` has an empty endpoint list due to a label selector mismatch with its
+   own Deployment's Pod template (`app: inventory` vs `app: inventory-svc`) - not a Pod health
+   problem. Fixing the selector to match immediately populated endpoints and requests succeeded."
+   Found by checking `kubectl get endpoints` instead of stopping at "the Pods look fine."
+</WorkedExample>
+
+<Quiz
+  question="A Deployment declares 3 replicas and `kubectl get pods` shows 3 Pods, all Running. A Service in front of them uses selector `app: web`. The Pods are labeled `app: web-app` (not `app: web`). What will `kubectl get endpoints <service-name>` show, and why?"
+  options={[
+    "3 endpoints, one per Pod - Kubernetes matches Services to Deployments directly, not by label",
+    "An empty endpoint list - the Service finds Pods purely by label selector match, and 'app: web' does not match 'app: web-app'",
+    "1 endpoint - only the first Pod created gets registered automatically",
+    "3 endpoints, but requests will randomly fail half the time"
+  ]}
+  answer={1}
+  explain="Services never look at Deployments directly - they match Pods purely by label selector, independent of which Deployment (if any) created those Pods. 'app: web' and 'app: web-app' are different label values, so none of the 3 Pods match the Service's selector, and `kubectl get endpoints` will show an empty list even though all 3 Pods are perfectly healthy. This is exactly the kind of bug where 'the Pods look fine' is true and irrelevant - the problem is entirely in how the Service is (mis)configured to find them. Option 1 misunderstands the mechanism (no direct Deployment-to-Service link exists); option 3 invents a first-Pod-only rule that isn't real; option 4 assumes partial matching that label selectors don't do - it's all-or-nothing per Pod."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Pod, in one line", back: "The smallest deployable unit - one or more containers scheduled together, sharing an IP, created and destroyed as a group. Disposable by design." },
+    { front: "Deployment, in one line", back: "A standing declaration of how many Pod replicas should exist - reconciles the actual count against the desired count continuously, replacing crashed Pods." },
+    { front: "Service, in one line", back: "A stable network address that routes to whichever Pods currently match its label selector and are healthy - the one thing that doesn't change while Pods churn underneath it." },
+    { front: "How a Service finds its Pods", back: "By label selector match, not by asking a Deployment directly - which is why it keeps routing correctly straight through rolling updates where old and new Pods coexist." },
+    { front: "The most common 'healthy Pods, broken Service' bug", back: "A label mismatch between the Service's selector and the Pods' actual labels - `kubectl get endpoints` shows an empty list even though the Pods themselves are Running." },
+  ]}
+/>
+
+<Challenge>
+On any cluster you're allowed to experiment on, deploy a small app with a Service in front of it.
+Run `kubectl get endpoints <service-name>` to confirm it lists healthy Pod IPs. Then deliberately
+edit the Service's selector (or the Deployment's Pod template label) to introduce a one-character
+mismatch, and re-run `kubectl get endpoints`. Write down exactly what you observe, then fix the
+mismatch and confirm endpoints repopulate.
+</Challenge>
+
+<AskCommunity prompt="A Service's `kubectl get endpoints` shows an empty list even though `kubectl get pods` shows healthy Running pods that I believe should match. What are the most common causes besides a plain label typo?">
+Useful replies usually mention checking the Pod's readiness probe status (a Running-but-not-Ready
+Pod is correctly excluded from endpoints), the Service's target port versus the container's actual
+listening port, and namespace mismatches between the Service and the Pods it's trying to select.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://kubernetes.io/docs/concepts/workloads/pods/", title: "Kubernetes docs — Pods", kind: "read" },
+    { href: "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/", title: "Kubernetes docs — Deployments", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=B_X4l4HSgtc", title: "Anton Putra — Kubernetes Basics: Pods, Nodes, Containers, Deployments and Clusters", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=B_X4l4HSgtc" title="Anton Putra — Kubernetes Basics: Pods, Nodes, Containers, Deployments and Clusters" minutes={6} />
+
+<Takeaways
+  points={[
+    "A Pod is the smallest deployable unit - one or more containers scheduled together, disposable by design, never meant to be depended on by name.",
+    "A Deployment declares how many Pod replicas should exist and reconciles the actual count against that number, replacing crashed Pods automatically.",
+    "A Service is a stable address that routes to whichever Pods currently match its label selector and are healthy - the one thing that stays fixed while Pods churn.",
+    "Services find Pods purely by label match, not by asking a Deployment directly - keep the Service selector and the Pod template's labels in exact sync.",
+    "Test the Service, not an individual Pod's IP - and when a Service seems broken, check `kubectl get endpoints` first to see if it has any healthy Pods to route to at all.",
+  ]}
+/>
+
+<Complete xp={10} />

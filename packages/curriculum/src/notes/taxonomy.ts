@@ -2169,10 +2169,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "kubernetes-in-plain-words",
         title: "Kubernetes in plain words",
         topics: [
-          { slug: "what-k8s-solves", title: "What K8s solves", planned: true },
-          { slug: "pods-deployments-services", title: "Pods, deployments, services", planned: true },
-          { slug: "kubectl-survival-kit", title: "kubectl survival kit", planned: true },
-          { slug: "namespaces-and-contexts", title: "Namespaces & contexts", planned: true },
+          { slug: "what-k8s-solves", title: "What K8s solves" },
+          { slug: "pods-deployments-services", title: "Pods, deployments, services" },
+          { slug: "kubectl-survival-kit", title: "kubectl survival kit" },
+          { slug: "namespaces-and-contexts", title: "Namespaces & contexts" },
         ],
       },
       {

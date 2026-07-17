@@ -1,0 +1,367 @@
+---
+title: "kubectl survival kit"
+summary: "You don't need to master kubectl's hundreds of flags to be useful on a K8s-backed project - five commands (get, describe, logs, apply, delete) cover almost every question a tester actually asks: what's running, why did it fail, and what did it print."
+tags: ["kubernetes-and-test-infrastructure", "kubernetes-in-plain-words", "track-d"]
+updated: "2026-07-17"
+related:
+  - "kubernetes-and-test-infrastructure/kubernetes-in-plain-words/pods-deployments-services"
+  - "kubernetes-and-test-infrastructure/kubernetes-in-plain-words/namespaces-and-contexts"
+  - "kubernetes-and-test-infrastructure/test-workloads-on-k8s/reading-pod-logs"
+---
+
+<Hook>
+A test run fails against a staging environment and the error is useless: "connection refused." Is
+the service down? Crashed? Never started? Running but broken internally? A developer with cluster
+access answers this in under thirty seconds by typing two commands. Learning those two commands -
+and three more just like them - turns "I have no idea what's happening in that cluster" into "I can
+answer that myself," without ever needing to become a Kubernetes administrator.
+</Hook>
+
+<Callout type="analogy">
+A socket wrench set doesn't need every socket in existence to be useful - a compact case with a
+ratchet, a handful of the RIGHT sizes, and a couple of extensions covers the overwhelming majority
+of real jobs a mechanic actually faces day to day, all reachable without digging. Contrast that with
+a warehouse of every tool ever made: more complete, but useless in the thirty seconds you actually
+have during an incident. `kubectl` has dozens of subcommands and hundreds of flags total - almost
+none of which most testers will ever need. The survival kit is deliberately small on purpose: a
+handful of commands you can reach for without thinking, covering the handful of questions that
+actually come up.
+</Callout>
+
+<Term define="kubectl is the command-line tool used to interact with a Kubernetes cluster's control plane - every command sends a request to the cluster's API server and either reads back current state or asks for a change. A small, repeatedly-useful subset covers most testing needs: `kubectl get <type>` lists current objects of a kind (pods, services, deployments) and their high-level status; `kubectl describe <type> <name>` shows detailed configuration AND a chronological Events list for one specific object, which is usually where the actual reason for a failure appears; `kubectl logs <pod>` prints what a container has actually written to its own stdout/stderr, the same output you'd see running it locally; `kubectl apply -f <file>` sends a declared desired state to the cluster (creating or updating objects to match); and `kubectl delete <type> <name>` removes an object, which - for a Pod under a Deployment - immediately triggers reconciliation to replace it, making delete a useful, safe way to deliberately test recovery.">kubectl survival kit</Term>
+
+## Five commands, five different questions
+
+- **`kubectl get <type>`** answers "what currently exists, and roughly how's it doing?" -
+  `kubectl get pods` is the single most-run command on any real cluster, showing every Pod's name,
+  READY count, STATUS, and how many times it's RESTARTED - a fast first look before digging deeper
+  into anything specific.
+- **`kubectl describe <type> <name>`** answers "why, specifically, is THIS one object in the state
+  it's in?" - it prints full configuration plus an Events section, a chronological log of everything
+  the control plane has done or tried to do to that object (scheduled, pulled image, failed
+  readiness probe, and so on). This is usually where the real story of a failure is written down.
+- **`kubectl logs <pod>`** answers "what did the APPLICATION itself actually print?" - this is
+  application-level output (stack traces, log lines, error messages your code wrote), completely
+  separate from `describe`'s cluster-level Events. A crash with a clear stack trace shows up here,
+  not in `describe`.
+- **`kubectl apply -f <file.yaml>`** answers "make the cluster match what this file declares" -
+  the standard way real configuration changes get made, as opposed to one-off imperative commands
+  that don't leave a record of what was intended.
+- **`kubectl delete <type> <name>`** answers "remove this specific object" - and for anything managed
+  by a Deployment, this is also a legitimate, deliberate way to TEST that reconciliation actually
+  works, not just an emergency-only command.
+
+<Callout type="tip">
+When something's broken and you only have time for two commands, run `kubectl get pods` first (is
+anything obviously not Running/Ready?), then `kubectl describe pod <the suspicious one>` (what does
+the Events section say happened to it?). Together these two answer "what's wrong" for the large
+majority of real incidents before you'd even need `logs` - Events often already names the problem
+(ImagePullBackOff, CrashLoopBackOff, FailedScheduling) in plain text.
+</Callout>
+
+<Callout type="mistake">
+Reaching for `kubectl logs` first when a Pod shows `Pending` or `ImagePullBackOff` status.
+`logs` only shows output from a container that has actually STARTED running - a Pod stuck in
+`Pending` (can't be scheduled onto any machine) or `ImagePullBackOff` (can't download its image) has
+never started a container at all, so `logs` will return nothing useful or an error. `describe` is
+the right tool for anything happening BEFORE a container starts; `logs` is only useful for what
+happens AFTER.
+</Callout>
+
+{/* IMAGE: an open green metal socket wrench toolcase, viewed from above, with rows of neatly organized sockets, two ratchets, extension bars, and labeled screwdriver bits all fitted into foam cutouts */}
+<HotspotImage
+  src="/notes/kubernetes-and-test-infrastructure/kubernetes-in-plain-words/kubectl-survival-kit.jpg"
+  alt="An open green metal toolcase from above, showing an organized socket wrench set with two ratchets, extension bars, and labeled bits in foam cutouts"
+  credit="Socket set with two ratchets in metal box — Pittigrilli~commonswiki, Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Socket_set_with_two_ratchets_in_metal_box.jpeg"
+  pins={[
+    { x: 62, y: 78, label: "The main ratchet handle — kubectl get, the tool you reach for first", desc: "The single most-used tool in the whole case, reached for automatically before anything more specific. `kubectl get pods` plays the exact same role: the default first move to see what's going on." },
+    { x: 15, y: 45, label: "The row of numbered sockets — kubectl describe, one precise size for one specific bolt", desc: "You don't grab every socket at once - you pick the ONE that fits the ONE bolt in front of you. `kubectl describe <type> <name>` is the same: detailed information about exactly one object, not a broad overview." },
+    { x: 85, y: 30, label: "The reference chart in the lid — kubectl logs, reading what's actually written down", desc: "A printed size-conversion chart telling you exactly what a marking means, in the tool's own words. `kubectl logs` is the same idea applied to a container: reading exactly what the application itself already wrote, not inferring it secondhand." },
+    { x: 45, y: 55, label: "The extension bars and joints — kubectl apply, reaching a declared configuration from wherever you're starting", desc: "Extensions let one ratchet reach a bolt that's otherwise out of reach, without changing which bolt you're targeting. `kubectl apply -f` does the same for cluster state: it reaches from wherever the cluster currently is to whatever the file declares, without you manually working out every intermediate step." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Diagnosing 'connection refused' with the survival kit - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Symptom: a test run against staging fails with 'connection refused'", desc: "No other information yet - this could mean the service is down, crashed, never started, or something else entirely." },
+    { label: "Step 1: `kubectl get pods -l app=checkout`", desc: "Shows 1 Pod, STATUS = CrashLoopBackOff, RESTARTS = 14. Already a huge narrowing: it's not 'never started,' it's crashing repeatedly after starting." },
+    { label: "Step 2: `kubectl describe pod <name>`", desc: "Events section shows: 'Liveness probe failed... Container restarted.' Confirms the crash-loop is real and ongoing, but not yet WHY the app itself is failing." },
+    { label: "Step 3: `kubectl logs <name> --previous`", desc: "Shows the PREVIOUS (crashed) container's actual output: a stack trace, 'FATAL: could not connect to database, retrying...' - the real root cause, written by the application itself." },
+    { label: "Verdict", desc: "Three commands, in order, turned 'connection refused' into a specific, actionable finding: the checkout service can't reach its database and is crash-looping as a result - not a K8s problem at all, a downstream dependency problem K8s is faithfully reporting." },
+  ]}
+/>
+
+The pattern that covers most real investigations: `get` to see what's obviously wrong, `describe` to
+see what the cluster tried and noticed, `logs` to see what the application itself actually said.
+
+<CodePlayground
+  language="python"
+  title="Run it - a tiny fake kubectl over an in-memory cluster state (Python)"
+  code={`class FakeCluster:
+    """A minimal in-memory stand-in for real cluster state, just enough to
+    demonstrate what each kubectl subcommand is actually asking for."""
+    def __init__(self):
+        self.pods = {
+            "checkout-7d9f-abc12": {
+                "status": "CrashLoopBackOff",
+                "restarts": 14,
+                "events": [
+                    "Scheduled to node-3",
+                    "Pulled image checkout:1.4.0",
+                    "Started container checkout",
+                    "Liveness probe failed: HTTP 500",
+                    "Container restarted",
+                ],
+                "logs": [
+                    "INFO  starting checkout service on :8080",
+                    "FATAL could not connect to database, retrying...",
+                    "FATAL could not connect to database, giving up",
+                ],
+            },
+            "checkout-7d9f-def34": {
+                "status": "Running",
+                "restarts": 0,
+                "events": ["Scheduled to node-1", "Pulled image checkout:1.4.0", "Started container checkout"],
+                "logs": ["INFO  starting checkout service on :8080", "INFO  ready to accept requests"],
+            },
+        }
+
+
+def kubectl_get_pods(cluster):
+    lines = [f"{'NAME':<24}{'STATUS':<20}RESTARTS"]
+    for name, pod in cluster.pods.items():
+        lines.append(f"{name:<24}{pod['status']:<20}{pod['restarts']}")
+    return "\\n".join(lines)
+
+
+def kubectl_describe_pod(cluster, name):
+    pod = cluster.pods[name]
+    lines = [f"Name: {name}", f"Status: {pod['status']}", "Events:"]
+    lines += [f"  {e}" for e in pod["events"]]
+    return "\\n".join(lines)
+
+
+def kubectl_logs(cluster, name):
+    return "\\n".join(cluster.pods[name]["logs"])
+
+
+cluster = FakeCluster()
+
+print("--- kubectl get pods -l app=checkout ---")
+print(kubectl_get_pods(cluster))
+
+print()
+broken = "checkout-7d9f-abc12"
+print(f"--- kubectl describe pod {broken} ---")
+print(kubectl_describe_pod(cluster, broken))
+
+print()
+print(f"--- kubectl logs {broken} ---")
+print(kubectl_logs(cluster, broken))
+
+print()
+print("Diagnosis reached using only get, describe, and logs: the database connection is the root cause,")
+print("not a Kubernetes scheduling or image problem.")`}
+/>
+
+Same fake-kubectl idea in Java:
+
+<CodePlayground
+  language="java"
+  title="Run it - a tiny fake kubectl over an in-memory cluster state (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static class Pod {
+        String status;
+        int restarts;
+        List<String> events;
+        List<String> logs;
+
+        Pod(String status, int restarts, List<String> events, List<String> logs) {
+            this.status = status;
+            this.restarts = restarts;
+            this.events = events;
+            this.logs = logs;
+        }
+    }
+
+    static Map<String, Pod> buildCluster() {
+        Map<String, Pod> pods = new LinkedHashMap<>();
+        pods.put("checkout-7d9f-abc12", new Pod(
+            "CrashLoopBackOff", 14,
+            List.of("Scheduled to node-3", "Pulled image checkout:1.4.0", "Started container checkout",
+                    "Liveness probe failed: HTTP 500", "Container restarted"),
+            List.of("INFO  starting checkout service on :8080",
+                    "FATAL could not connect to database, retrying...",
+                    "FATAL could not connect to database, giving up")
+        ));
+        pods.put("checkout-7d9f-def34", new Pod(
+            "Running", 0,
+            List.of("Scheduled to node-1", "Pulled image checkout:1.4.0", "Started container checkout"),
+            List.of("INFO  starting checkout service on :8080", "INFO  ready to accept requests")
+        ));
+        return pods;
+    }
+
+    static String kubectlGetPods(Map<String, Pod> cluster) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("%-24s%-20sRESTARTS%n", "NAME", "STATUS"));
+        for (Map.Entry<String, Pod> e : cluster.entrySet()) {
+            sb.append(String.format("%-24s%-20s%d%n", e.getKey(), e.getValue().status, e.getValue().restarts));
+        }
+        return sb.toString().stripTrailing();
+    }
+
+    static String kubectlDescribePod(Map<String, Pod> cluster, String name) {
+        Pod pod = cluster.get(name);
+        StringBuilder sb = new StringBuilder();
+        sb.append("Name: ").append(name).append("\\n");
+        sb.append("Status: ").append(pod.status).append("\\n");
+        sb.append("Events:\\n");
+        for (String e : pod.events) sb.append("  ").append(e).append("\\n");
+        return sb.toString().stripTrailing();
+    }
+
+    static String kubectlLogs(Map<String, Pod> cluster, String name) {
+        return String.join("\\n", cluster.get(name).logs);
+    }
+
+    public static void main(String[] args) {
+        Map<String, Pod> cluster = buildCluster();
+
+        System.out.println("--- kubectl get pods -l app=checkout ---");
+        System.out.println(kubectlGetPods(cluster));
+
+        System.out.println();
+        String broken = "checkout-7d9f-abc12";
+        System.out.println("--- kubectl describe pod " + broken + " ---");
+        System.out.println(kubectlDescribePod(cluster, broken));
+
+        System.out.println();
+        System.out.println("--- kubectl logs " + broken + " ---");
+        System.out.println(kubectlLogs(cluster, broken));
+
+        System.out.println();
+        System.out.println("Diagnosis reached using only get, describe, and logs: the database connection is the root cause,");
+        System.out.println("not a Kubernetes scheduling or image problem.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: run all five survival-kit commands for real">
+<StepChecklist
+  steps={[
+    { text: "On any Kubernetes cluster you're allowed to experiment on, run `kubectl get pods`", detail: "Note the READY, STATUS, and RESTARTS columns for every pod listed - this is your baseline picture." },
+    { text: "Pick one Pod and run `kubectl describe pod <name>`", detail: "Scroll to the Events section at the bottom - read it top to bottom like a timeline of what the control plane has done." },
+    { text: "Run `kubectl logs <name>` on the same Pod", detail: "Compare what you see here to the Events from describe - notice these are two genuinely different sources of information." },
+    { text: "If you have a YAML file for a small test object (or write a trivial one), run `kubectl apply -f <file>`, then `kubectl delete <type> <name>` on something it created", detail: "Watch `kubectl get pods` before and after delete - for anything under a Deployment, confirm a replacement appears." },
+  ]}
+/>
+You've now used all five survival-kit commands for real, in an order that mirrors how an actual
+investigation usually goes: broad look, then narrow, then read what the app itself said, then
+deliberately change state and confirm the result.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "`kubectl logs <pod>` returns an error like 'container not found' or prints nothing at all.",
+      fix: "Check the Pod's STATUS with `kubectl get pods` first - if it's `Pending` or `ImagePullBackOff`, no container has ever started, so there's nothing for `logs` to show yet. If the Pod has MULTIPLE containers, `logs` needs `-c <container-name>` to pick which one - without it, kubectl may error asking you to specify.",
+    },
+    {
+      symptom: "A Pod just crashed and `kubectl logs <pod>` shows the NEW, already-running container's fresh startup output, not the crash you wanted to investigate.",
+      fix: "Add `--previous` (or `-p`) to see the logs from the container instance that just crashed and was replaced, not the brand-new one that's running now - `logs` without this flag always shows the CURRENT container, and reconciliation may have already replaced the one you actually care about.",
+    },
+    {
+      symptom: "`kubectl apply -f <file>` reports success, but nothing about the cluster's actual behavior changed.",
+      fix: "Confirm you applied to the namespace and cluster context you actually intended - `apply` succeeding only means the API server accepted a valid declaration, not that it landed where you expected. Check `kubectl config current-context` and add `-n <namespace>` explicitly if there's any doubt.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **`kubectl get pods` STATUS and RESTARTS columns** — the fastest possible first look at whether anything is obviously unhealthy.
+- **`kubectl describe pod` Events section** — a chronological, plain-text record of what the control plane tried and noticed for one specific object.
+- **`kubectl logs <pod> --previous`** — the crashed container's own last words, easy to miss if you only check the current, already-replaced container.
+- **[[kubernetes-and-test-infrastructure/kubernetes-in-plain-words/pods-deployments-services]]** — what `get`/`describe`/`logs` are actually pointed at: Pods, and the Deployments/Services layered around them.
+</WhereToCheck>
+
+<WorkedExample title="using only get, describe, and logs to find a misconfigured environment variable">
+1. A newly deployed test environment fails every API request with a generic 500 error and no other
+   information in the test report.
+2. `kubectl get pods -l app=api` shows the Pod as `Running`, 0 restarts - so it's not crashing, ruling
+   out the most obvious explanation immediately.
+3. `kubectl describe pod <name>` shows a clean Events history: scheduled, image pulled, container
+   started, readiness probe passing - nothing unusual at the cluster level at all.
+4. `kubectl logs <name>` shows the actual application output: `WARN missing required env var
+   DATABASE_URL, falling back to default (localhost) - connection refused` repeated for every
+   request.
+5. Finding: "The API Pod is healthy from Kubernetes' point of view (Running, Ready, no restarts) -
+   the 500s are caused by a missing `DATABASE_URL` environment variable in this environment's
+   configuration, which the application itself is reporting clearly in its own logs." Found entirely
+   by reading logs after `get`/`describe` had already ruled out a cluster-level problem.
+</WorkedExample>
+
+<Quiz
+  question="A Pod shows STATUS `CrashLoopBackOff` with RESTARTS climbing. You run `kubectl logs <pod-name>` and see only the freshly-restarted container's startup banner - no error, no crash evidence. What's the most likely reason you're not seeing the actual crash, and what should you try next?"
+  options={[
+    "kubectl logs is broken for CrashLoopBackOff pods and can never show useful output",
+    "The crash evidence is only in kubectl describe's Events section, never in logs at all",
+    "kubectl logs without a flag shows the CURRENT (already-restarted) container - add `--previous` to see the crashed container's own output instead",
+    "You need to delete and recreate the pod before logs will show anything useful"
+  ]}
+  answer={2}
+  explain="`kubectl logs` defaults to the currently running container instance - after a crash-loop restart, that's the NEW instance, which may not have hit the crashing code path yet (or hasn't had time to). The crashed instance's own output isn't gone, it's just not what `logs` shows by default; `--previous` specifically retrieves the log of the last terminated container in that Pod, which is exactly where the actual crash output usually lives. Option 1 overstates a real, well-known behavior as total breakage; option 2 is wrong because logs frequently DO contain the real crash reason, just under `--previous`; option 4 is unnecessary and would also destroy the very evidence you're trying to read."
+/>
+
+<Flashcards
+  cards={[
+    { front: "kubectl get, in one line", back: "Lists current objects and their high-level status - the fast first look, most often `kubectl get pods`." },
+    { front: "kubectl describe, in one line", back: "Full configuration plus a chronological Events list for ONE specific object - usually where the real reason for a cluster-level failure is written." },
+    { front: "kubectl logs, in one line", back: "What the application itself actually printed to stdout/stderr - completely separate from describe's cluster-level Events." },
+    { front: "kubectl apply -f, in one line", back: "Sends a declared desired state to the cluster from a file - the standard way real configuration changes are made and recorded." },
+    { front: "kubectl delete, in one line", back: "Removes an object - for anything under a Deployment, this deliberately triggers reconciliation, making it a legitimate way to test recovery, not just an emergency command." },
+    { front: "logs vs describe, the key difference", back: "describe shows what the CLUSTER tried and noticed (Events); logs shows what the APPLICATION itself actually wrote - two different sources, often needed together." },
+  ]}
+/>
+
+<Challenge>
+On any cluster you're allowed to experiment on, deliberately break something small and recoverable -
+for example, deploy a Pod referencing a container image name with a typo. Use only `get`, `describe`,
+and `logs` (in that order) to diagnose exactly what's wrong before looking anything up. Write down
+which command actually revealed the root cause, and whether it matched which command you expected to
+need beforehand.
+</Challenge>
+
+<AskCommunity prompt="I ran `kubectl describe pod` and the Events section shows `[specific event, e.g. Back-off restarting failed container]` but `kubectl logs --previous` shows no useful error. What else is worth checking when both the standard commands come up short?">
+Useful replies usually suggest checking the container's exit code with `kubectl get pod -o
+jsonpath='{.status.containerStatuses[0].lastState.terminated.exitCode}'`, whether a liveness probe
+(not the application itself) is what's actually killing the container, and resource limits - an
+out-of-memory kill often leaves no application log line at all, just an exit code.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://kubernetes.io/docs/reference/kubectl/quick-reference/", title: "Kubernetes docs — kubectl Quick Reference", kind: "read" },
+    { href: "https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/", title: "Kubernetes docs — Debug Running Pods", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=azuwXALfyRg", title: "TechWorld with Nana — Kubectl Basic Commands: Create and Debug Pod in a Minikube Cluster", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=azuwXALfyRg" title="TechWorld with Nana — Kubectl Basic Commands: Create and Debug Pod in a Minikube Cluster" minutes={18} />
+
+<Takeaways
+  points={[
+    "Five kubectl commands cover most real testing needs: get (what exists), describe (why is this one object like this), logs (what did the app itself say), apply (declare desired state), delete (remove, or deliberately test recovery).",
+    "get then describe answers 'what's wrong' for most incidents before logs is even needed - describe's Events section often already names the problem in plain text.",
+    "logs only shows output from a container that has actually started - use describe instead for anything happening before startup (Pending, ImagePullBackOff).",
+    "kubectl logs --previous is essential after a crash-loop - the default shows the NEW container, not the one that actually crashed.",
+    "describe's Events (cluster-level) and logs (application-level) are two genuinely different sources of truth - real investigations usually need both.",
+  ]}
+/>
+
+<Complete xp={10} />

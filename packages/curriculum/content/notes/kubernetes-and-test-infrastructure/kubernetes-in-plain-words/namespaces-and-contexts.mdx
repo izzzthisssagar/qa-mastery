@@ -1,0 +1,325 @@
+---
+title: "Namespaces & contexts"
+summary: "A namespace is a named partition inside one cluster - the same resource name can exist independently in 'staging' and 'production' without colliding. A context is which cluster-plus-namespace your kubectl commands default to, and it's the #1 source of 'I swear I deployed that' bugs."
+tags: ["kubernetes-and-test-infrastructure", "kubernetes-in-plain-words", "track-d"]
+updated: "2026-07-17"
+related:
+  - "kubernetes-and-test-infrastructure/kubernetes-in-plain-words/kubectl-survival-kit"
+  - "kubernetes-and-test-infrastructure/kubernetes-in-plain-words/pods-deployments-services"
+  - "kubernetes-and-test-infrastructure/releases-and-environments/staging-vs-production"
+---
+
+<Hook>
+A tester deploys a fix, waits, then checks: "Deployment not found." Confused, they redeploy - same
+result. Twenty minutes of confusion later, the fix turns out to have worked perfectly the FIRST
+time - it's sitting there, healthy, exactly where it was deployed. The only thing that was ever
+wrong was which namespace `kubectl get` happened to be looking in. Same cluster, same command,
+completely different answer depending on one piece of invisible, currently-active state.
+</Hook>
+
+<Callout type="analogy">
+Walk into a historic post office building with a wall of small numbered boxes on the LEFT and a
+completely separate wall of numbered boxes on the RIGHT. Box "12" on the left wall and box "12" on
+the right wall are two entirely different boxes, holding entirely different mail, owned by
+completely different people - the same number means nothing on its own; which WALL you're standing
+in front of is what actually determines whose mail you're looking at. And "which wall am I currently
+in front of" isn't written on the box itself - it's simply wherever you're currently standing, easy
+to forget once you've walked to the other side of the room.
+</Callout>
+
+<Term define="A namespace is a way to partition a single Kubernetes cluster into multiple virtual sub-clusters that share the same underlying machines but keep most resources logically separate - a Deployment named 'web' in namespace 'staging' is a completely different object from a Deployment named 'web' in namespace 'production,' even though they share a name and run on the same physical cluster. A context is a saved combination of (cluster, namespace, user credentials) that tells kubectl which cluster to talk to and which namespace to assume by default when a command doesn't explicitly specify one with `-n`. Contexts don't change anything about the cluster itself - they only change where YOUR commands are currently pointed, which means the most common namespace-related bug isn't a cluster problem at all: it's running a perfectly correct command against the wrong context.">Namespaces and contexts</Term>
+
+## One cluster, many separate rooms
+
+- **A namespace is a logical boundary, not a physical one.** Pods in different namespaces can still
+  run on the exact same physical machine - namespaces don't isolate hardware, they isolate NAMES and
+  (with the right policies) network/permission boundaries, letting `staging` and `production` share
+  infrastructure while keeping their objects from colliding or being accidentally referenced by name
+  across the boundary.
+- **The same object name in two namespaces is not a conflict - it's two different objects.** This is
+  deliberate and extremely common: `staging/web` and `production/web` are unrelated as far as
+  Kubernetes is concerned, allowed to have completely different configuration, replica counts, and
+  even completely different code versions running.
+- **A context is entirely local, client-side state.** It lives in your own kubectl configuration file,
+  not on the cluster - switching contexts changes nothing about the cluster itself, only which
+  cluster and namespace YOUR next command will default to talking to. Two people can be looking at
+  the exact same cluster through two completely different contexts at the same moment.
+- **Most commands silently use "whatever the current context says" unless told otherwise.** Forgetting
+  this is the single most common cause of "it's not there" confusion: the object usually IS there,
+  just not in the namespace the current context happens to be defaulting to.
+
+<Callout type="tip">
+Before spending time debugging "my Deployment disappeared," run `kubectl config current-context`
+and `kubectl config view --minify` to see EXACTLY which cluster and namespace your commands are
+currently defaulting to. Then run `kubectl get deployments -A` (the `-A` flag means "all namespaces,
+ignore the current context's default") to see the object's actual location. Comparing those two
+answers resolves a surprising fraction of "it's missing" reports in under a minute.
+</Callout>
+
+<Callout type="mistake">
+Assuming a namespace provides real security isolation on its own. By default, a namespace boundary
+does NOT stop network traffic between namespaces, and it does NOT prevent someone with cluster
+access from reading or modifying objects in a namespace they didn't intend to touch - it's purely an
+organizational boundary until additional controls (NetworkPolicies, RBAC rules scoped per namespace)
+are deliberately layered on top. "It's in its own namespace" is not, by itself, a security or
+blast-radius guarantee worth reporting as one without checking what policies actually enforce it.
+</Callout>
+
+{/* IMAGE: interior hallway of a historic US post office with rows of small numbered brass post office boxes covering the left wall, right wall, and back wall, wood paneling and marble floor tiles, a poster about mail reading visible on the left doorway */}
+<HotspotImage
+  src="/notes/kubernetes-and-test-infrastructure/kubernetes-in-plain-words/namespaces-and-contexts.jpg"
+  alt="A historic post office hallway with rows of small numbered brass post office boxes covering the left wall, right wall, and back wall"
+  credit="Vancouver, WA - Post Office - post office boxes 01 — Joe Mabel, Wikimedia Commons, CC BY-SA 3.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Vancouver,_WA_-_Post_Office_-_post_office_boxes_01.jpg"
+  pins={[
+    { x: 20, y: 40, label: "The left wall of boxes — one namespace, e.g. 'staging'", desc: "A complete, self-contained set of numbered boxes. Box 12 here belongs to a specific staging tenant and has nothing to do with any other wall's box 12 - exactly how a namespace's objects are scoped." },
+    { x: 80, y: 42, label: "The right wall of boxes — a different namespace, e.g. 'production'", desc: "Same numbering scheme, same physical room, completely independent set of boxes. Reusing box number 12 here causes zero conflict with the left wall's box 12 - two different namespaces can reuse the same object name freely." },
+    { x: 50, y: 38, label: "The back wall of boxes — a third namespace, all sharing one building", desc: "Three separate walls, three separate box inventories, one shared building (one cluster). This is the 'logical boundary, not physical hardware isolation' point made visual - all three walls exist inside the exact same room." },
+    { x: 50, y: 82, label: "The hallway floor you're standing on — your current context", desc: "Where you're physically standing determines which wall (which namespace) is directly in front of you without you having to walk anywhere - exactly like a kubectl context quietly determining which namespace your NEXT command defaults to, until you deliberately walk (switch context) somewhere else." },
+  ]}
+/>
+
+<FlowAnimation
+  title="The same command, two different contexts, two different answers - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "A Deployment named 'web' is created in namespace 'staging' only", desc: "It does not exist anywhere in 'production' - it was never deployed there." },
+    { label: "Context A is currently set to namespace 'staging'", desc: "Running `kubectl get deployment web` (no -n flag) here defaults to staging, where it exists - returns the Deployment successfully." },
+    { label: "Context B is currently set to namespace 'production'", desc: "Running the EXACT SAME command, `kubectl get deployment web`, here defaults to production, where it does not exist - returns 'Error: deployments.apps \"web\" not found.'" },
+    { label: "Both commands were typed identically, on the same cluster, seconds apart", desc: "The only difference between 'found' and 'not found' was which context was currently active when the command ran - nothing about the Deployment itself changed." },
+    { label: "Verdict", desc: "'Not found' is not proof something failed to deploy - it's proof the CURRENT CONTEXT'S namespace doesn't have it. Always confirm which namespace you're actually looking in before concluding a deploy failed." },
+  ]}
+/>
+
+The habit worth building: before trusting any "not found," check the current context's namespace
+first - the object is very often exactly where it should be, just not where you were looking.
+
+<CodePlayground
+  language="python"
+  title="Run it - the same object name, isolated per namespace, resolved through a context (Python)"
+  code={`class FakeMultiNamespaceCluster:
+    """Objects are keyed by (namespace, name) - identical names in different
+    namespaces are completely independent objects."""
+    def __init__(self):
+        self.objects = {}  # (namespace, name) -> config dict
+
+    def create(self, namespace, name, config):
+        self.objects[(namespace, name)] = config
+
+    def get(self, namespace, name):
+        return self.objects.get((namespace, name), "NOT FOUND")
+
+
+class Context:
+    """Client-side only: which namespace THIS context currently defaults to."""
+    def __init__(self, name, namespace):
+        self.name = name
+        self.namespace = namespace
+
+    def kubectl_get(self, cluster, object_type_name, explicit_namespace=None):
+        ns = explicit_namespace or self.namespace
+        result = cluster.get(ns, object_type_name)
+        return f"[context={self.name}, ns={ns}] kubectl get deployment {object_type_name} -> {result}"
+
+
+cluster = FakeMultiNamespaceCluster()
+cluster.create("staging", "web", {"replicas": 2, "image": "web:1.4.0-rc"})
+cluster.create("production", "web", {"replicas": 10, "image": "web:1.3.0"})
+
+context_a = Context("dev-laptop", namespace="staging")
+context_b = Context("release-laptop", namespace="production")
+
+print("--- Same object name 'web' exists independently in two namespaces ---")
+print(cluster.get("staging", "web"))
+print(cluster.get("production", "web"))
+
+print()
+print("--- The SAME kubectl command, run from two different contexts ---")
+print(context_a.kubectl_get(cluster, "web"))
+print(context_b.kubectl_get(cluster, "web"))
+
+print()
+print("--- What happens if you're in 'staging' context but MEANT to check production? ---")
+print(context_a.kubectl_get(cluster, "web"))
+print("(This looks successful! But it silently checked staging, not production - a real 'not found'")
+print(" report for THIS 'web' Deployment would require explicitly specifying -n production:)")
+print(context_a.kubectl_get(cluster, "web", explicit_namespace="does-not-exist-yet"))`}
+/>
+
+Same namespace/context simulator in Java:
+
+<CodePlayground
+  language="java"
+  title="Run it - the same object name, isolated per namespace, resolved through a context (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static class FakeMultiNamespaceCluster {
+        Map<String, Map<String, Object>> objects = new HashMap<>(); // key: "namespace/name"
+
+        void create(String namespace, String name, Map<String, Object> config) {
+            objects.put(namespace + "/" + name, config);
+        }
+
+        String get(String namespace, String name) {
+            Map<String, Object> found = objects.get(namespace + "/" + name);
+            return found == null ? "NOT FOUND" : found.toString();
+        }
+    }
+
+    static class Context {
+        String name;
+        String namespace;
+
+        Context(String name, String namespace) {
+            this.name = name;
+            this.namespace = namespace;
+        }
+
+        String kubectlGet(FakeMultiNamespaceCluster cluster, String objectName, String explicitNamespace) {
+            String ns = explicitNamespace != null ? explicitNamespace : namespace;
+            String result = cluster.get(ns, objectName);
+            return "[context=" + name + ", ns=" + ns + "] kubectl get deployment " + objectName + " -> " + result;
+        }
+    }
+
+    public static void main(String[] args) {
+        FakeMultiNamespaceCluster cluster = new FakeMultiNamespaceCluster();
+        cluster.create("staging", "web", Map.of("replicas", 2, "image", "web:1.4.0-rc"));
+        cluster.create("production", "web", Map.of("replicas", 10, "image", "web:1.3.0"));
+
+        Context contextA = new Context("dev-laptop", "staging");
+        Context contextB = new Context("release-laptop", "production");
+
+        System.out.println("--- Same object name 'web' exists independently in two namespaces ---");
+        System.out.println(cluster.get("staging", "web"));
+        System.out.println(cluster.get("production", "web"));
+
+        System.out.println();
+        System.out.println("--- The SAME kubectl command, run from two different contexts ---");
+        System.out.println(contextA.kubectlGet(cluster, "web", null));
+        System.out.println(contextB.kubectlGet(cluster, "web", null));
+
+        System.out.println();
+        System.out.println("--- What happens if you're in 'staging' context but MEANT to check production? ---");
+        System.out.println(contextA.kubectlGet(cluster, "web", null));
+        System.out.println("(This looks successful! But it silently checked staging, not production - a real 'not found'");
+        System.out.println(" report for THIS 'web' Deployment would require explicitly specifying -n production:)");
+        System.out.println(contextA.kubectlGet(cluster, "web", "does-not-exist-yet"));
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: get confused by a context switch, then fix it correctly">
+<StepChecklist
+  steps={[
+    { text: "On any cluster you're allowed to experiment on, run `kubectl config get-contexts`", detail: "Note which context has a `*` next to it - that's the currently active one." },
+    { text: "Run `kubectl config current-context` and `kubectl get deployments` (no -n flag)", detail: "Write down exactly what namespace you're implicitly looking at and what it returned." },
+    { text: "Run `kubectl get deployments -A`", detail: "Compare the full, all-namespaces list against your previous, namespace-scoped result - note anything present in the full list that was missing from the scoped one." },
+    { text: "If more than one namespace exists, deliberately switch (`kubectl config set-context --current --namespace=<other>`) and re-run `kubectl get deployments`", detail: "Confirm the exact same command now returns a completely different list - that's the context doing its job, not the cluster changing." },
+  ]}
+/>
+You've now directly experienced the 'it's not missing, you're just looking in the wrong namespace'
+situation this note is built around, and know the exact commands to resolve it fast next time.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "`kubectl get <object>` reports 'not found' immediately after a deploy that appeared to succeed.",
+      fix: "Check `kubectl config current-context` and compare against the namespace the deploy actually targeted (often visible in CI logs or the deploy command's own `-n` flag). Re-run with `-A` (all namespaces) to confirm whether the object exists somewhere other than where you're currently looking, before assuming the deploy failed.",
+    },
+    {
+      symptom: "Two people on the same team get different results running what looks like the exact same kubectl command.",
+      fix: "Contexts are per-machine, client-side state - it's entirely possible for two people to have different current contexts pointed at different namespaces (or even different clusters entirely) without either of them realizing it. Have both people run `kubectl config current-context` and compare before assuming a cluster-side inconsistency.",
+    },
+    {
+      symptom: "An object was accidentally created in the wrong namespace (for example, a test resource landed in 'production' instead of 'staging').",
+      fix: "This is exactly the risk a wrong or stale current-context creates - always verify the active namespace before running any `apply` or `create` command, especially ones with production consequences. Consider setting up a visible prompt indicator or confirmation step for any context pointed at a production namespace.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **`kubectl config current-context` and `kubectl config view --minify`** — the ground truth for exactly which cluster and namespace your commands are currently defaulting to.
+- **`kubectl get <object> -A`** — bypasses the current context's namespace default entirely, showing an object's real location across every namespace.
+- **`kubectl config get-contexts`** — the full list of saved contexts, useful for spotting whether you're even pointed at the right CLUSTER, not just the right namespace.
+- **[[kubernetes-and-test-infrastructure/releases-and-environments/staging-vs-production]]** — how namespaces are typically used in practice to separate real environments on shared infrastructure.
+</WhereToCheck>
+
+<WorkedExample title="a 'the fix didn't deploy' report that was actually a stale context">
+1. A tester reports that a bug fix deployed by a developer "isn't showing up" - `kubectl get pods
+   -l app=web` on their own machine shows only old pods, no sign of the new version.
+2. The developer insists the deploy succeeded and even pastes their own terminal output showing
+   `deployment.apps/web configured` with no errors.
+3. Both are telling the truth. The tester runs `kubectl config current-context` and finds their
+   context is set to namespace `staging-old` - a namespace left over from an earlier project phase
+   that nobody has deployed to in weeks.
+4. The developer's deploy targeted `staging` (no `-old` suffix) the whole time - a completely
+   different, valid, actively-used namespace that the tester's context was simply never pointed at.
+5. Finding: "The fix deployed successfully to `staging` - it never touched `staging-old`, which is
+   where the tester's stale context was silently defaulting every `kubectl` command to. No
+   deployment problem existed; the investigation needed to start with `kubectl config
+   current-context`, not with re-deploying." Found by checking context before doubting the deploy.
+</WorkedExample>
+
+<Quiz
+  question="A Deployment named 'api' exists in namespace 'production' only. Your kubectl context's current namespace is set to 'staging'. You run `kubectl get deployment api` with no `-n` flag. What happens, and why?"
+  options={[
+    "It returns the production Deployment, because kubectl searches all namespaces by default when a name is unambiguous",
+    "It returns 'not found', because the command defaults to the context's current namespace ('staging'), where no Deployment named 'api' exists - even though one exists elsewhere in 'production'",
+    "It returns an error demanding you specify a namespace explicitly before running any get command",
+    "It returns both the staging and production versions side by side for comparison"
+  ]}
+  answer={1}
+  explain="kubectl does not search across all namespaces by default - without an explicit `-n`/`--namespace` flag, every command defaults to whatever namespace the CURRENT CONTEXT specifies, here 'staging'. Since no Deployment named 'api' exists in 'staging' (it only exists in 'production'), the command correctly reports 'not found' - not because the Deployment doesn't exist anywhere, but because it doesn't exist in the one namespace being checked. Option 1 describes behavior that would require `-A`/`--all-namespaces`, which wasn't used; option 3 invents a mandatory-flag behavior kubectl doesn't have (a missing namespace flag silently defaults rather than erroring); option 4 similarly invents behavior that doesn't exist - kubectl never merges results across namespaces unless explicitly asked to with `-A`."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Namespace, in one line", back: "A logical partition inside one cluster - the same object name can exist independently in different namespaces without colliding." },
+    { front: "Context, in one line", back: "Client-side, local state (in your own kubectl config) specifying which cluster and namespace your commands currently default to - changes nothing on the cluster itself." },
+    { front: "Why 'not found' doesn't always mean 'not deployed'", back: "Most kubectl commands silently default to the current context's namespace - the object is very often exactly where it should be, just not the namespace currently being looked at." },
+    { front: "The two-command check before trusting a 'not found'", back: "`kubectl config current-context` (what am I pointed at?) then `kubectl get <object> -A` (where does it actually exist, across every namespace?)." },
+    { front: "The post office box analogy", back: "Box 12 on the left wall and box 12 on the right wall are unrelated boxes with unrelated mail - the wall you're standing in front of (your context) determines which one 'box 12' actually means." },
+    { front: "What namespaces do NOT provide by default", back: "Real security isolation - network traffic and access aren't automatically blocked between namespaces; that requires deliberately added NetworkPolicies and RBAC rules." },
+  ]}
+/>
+
+<Challenge>
+On any cluster you're allowed to experiment on with at least two namespaces (create a second one if
+needed with `kubectl create namespace test-ns-b`), deploy the same small app's manifest into both,
+giving both instances the identical object name. Confirm with `kubectl get deployments -A` that both
+exist independently with no conflict. Then switch your context's namespace between the two and run
+the identical `kubectl get deployment <name>` command from each - write down the two different
+results you get from the one unchanged command.
+</Challenge>
+
+<AskCommunity prompt="Two of us ran what looked like the exact same `kubectl get` command against what we both assumed was the same cluster, and got different results. What's the fastest way to confirm whether this is a context/namespace mismatch versus an actual cluster inconsistency?">
+Useful replies usually suggest both people paste the full output of `kubectl config current-context`
+and `kubectl config view --minify` side by side first - a mismatched cluster or namespace in either
+of those explains the vast majority of "we're seeing different things" reports without needing to
+suspect the cluster itself.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/", title: "Kubernetes docs — Namespaces", kind: "read" },
+    { href: "https://kubernetes.io/docs/tasks/access-application-cluster/configure-access-multiple-clusters/", title: "Kubernetes docs — Configure Access to Multiple Clusters (contexts)", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=plB3kyZLHe8", title: "Google Cloud Tech — Namespaces in Kubernetes", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=plB3kyZLHe8" title="Google Cloud Tech — Namespaces in Kubernetes" minutes={6} />
+
+<Takeaways
+  points={[
+    "A namespace is a logical partition inside one cluster - the same object name in different namespaces are completely independent objects, no conflict.",
+    "A context is local, client-side state that determines which cluster and namespace your kubectl commands default to - it changes nothing on the cluster itself.",
+    "Most kubectl commands silently default to the current context's namespace unless you pass -n explicitly - the #1 cause of false 'not found' confusion.",
+    "Before trusting a 'not found,' check `kubectl config current-context` first, then `kubectl get <object> -A` to see the object's real location across every namespace.",
+    "Namespaces are an organizational boundary, not automatic security isolation - network and access controls require deliberately added policies on top.",
+  ]}
+/>
+
+<Complete xp={10} />
