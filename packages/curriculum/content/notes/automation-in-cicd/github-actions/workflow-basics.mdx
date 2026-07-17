@@ -1,0 +1,188 @@
+---
+title: "Workflow basics"
+summary: "A GitHub Actions workflow is a reviewed YAML file under .github/workflows that maps repository events to jobs, runners, and ordered steps whose exit codes produce visible checks."
+tags: ["github-actions", "ci-cd", "yaml", "track-d"]
+updated: "2026-07-17"
+related:
+  - "automation-in-cicd/github-actions/triggers"
+  - "automation-in-cicd/github-actions/matrix-runs"
+  - "automation-in-cicd/running-tests-in-ci/running-the-suite"
+---
+
+<Hook>
+GitHub Actions is not magic attached to a repository. It is a versioned program with an event as its
+input, temporary runners as its computers, and check results as its output. Once you read those three
+layers, a 200-line workflow stops looking like a wall of YAML.
+</Hook>
+
+<Callout type="analogy">
+A flowchart gives shapes different responsibilities: a start, a decision, a process, and an end. A
+workflow file does the same with `on`, `jobs`, `runs-on`, and `steps`. Indentation is the connector
+between them; put one block at the wrong depth and you have drawn a different process.
+</Callout>
+
+<Term define="A GitHub Actions workflow is a YAML file committed under .github/workflows. Its on key declares triggering events; jobs define independent units of work; each job chooses a runner with runs-on; and steps execute shell commands or reusable actions in order. Jobs run in parallel by default unless needs creates a dependency. A step's non-zero exit normally fails its job and exposes a check on the commit or pull request.">GitHub Actions workflow</Term>
+
+## Read it from the outside inward
+
+```yaml
+name: CI
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+```
+
+- `name` is the human-readable workflow label.
+- `on` selects events; this example reacts to pull requests.
+- `permissions` narrows the repository token instead of accepting broad defaults.
+- `jobs.test` is the job identifier used by status checks and dependencies.
+- `runs-on` chooses the runner environment.
+- `steps` are ordered inside the job. `uses` invokes an action; `run` invokes the shell.
+
+<Callout type="tip">
+Give jobs stable, risk-based names such as `unit-tests` or `browser-chromium`. Branch protection
+requires check names, so renaming a vague `build` job later can quietly break the gate configuration.
+</Callout>
+
+<Callout type="mistake">
+Copying marketplace actions without pinning a reviewed version or minimizing token permissions. A
+workflow executes code with repository context; treat changes to `uses` and `permissions` like
+production dependency changes, not harmless YAML formatting.
+</Callout>
+
+<HotspotImage
+  src="/notes/automation-in-cicd/github-actions/workflow-basics.png"
+  alt="Four glossy flowchart shapes: red and green endpoints, an orange decision diamond, and a blue process rectangle"
+  credit="Workflow icon set — RRZEicons, CC BY-SA 3.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Workflow.svg"
+  pins={[
+    { x: 20, y: 17, label: "Event starts", desc: "The workflow's on block decides which repository event creates a run." },
+    { x: 75, y: 17, label: "Conditions decide", desc: "Event filters and if expressions decide whether work is relevant." },
+    { x: 75, y: 55, label: "Job processes", desc: "A job reserves one runner and executes its steps in order." },
+    { x: 75, y: 86, label: "Result ends", desc: "Step exit codes roll into a job result and visible repository check." },
+  ]}
+/>
+
+<FlowAnimation title="From committed YAML to status check" intervalMs={1600} nodes={[
+  { label: "Workflow discovered", desc: "GitHub reads a .yml or .yaml file under .github/workflows." },
+  { label: "Event matches", desc: "The on block and branch/path filters decide whether to create a run." },
+  { label: "Jobs planned", desc: "Independent jobs become parallel work; needs creates explicit order." },
+  { label: "Runner allocated", desc: "Each job receives a fresh hosted or selected self-hosted runner." },
+  { label: "Steps execute", desc: "Reusable actions and shell commands run sequentially inside the job." },
+  { label: "Check reported", desc: "Success, failure, cancellation, or skip attaches to the revision." },
+]} />
+
+<CodePlayground language="python" title="Run it — model jobs and needs (Python)" code={```jobs = {
+    "lint": [],
+    "unit-tests": [],
+    "browser-tests": ["unit-tests"],
+}
+completed = {"lint", "unit-tests"}
+for job, needs in jobs.items():
+    ready = all(item in completed for item in needs)
+    print(f"{job}: {'ready' if ready else 'waiting'}")```} />
+
+<CodePlayground language="java" title="Run it — model jobs and needs (Java)" code={```import java.util.*;
+
+public class Main {
+    public static void main(String[] args) {
+        var jobs = new LinkedHashMap<String, List<String>>();
+        jobs.put("lint", List.of());
+        jobs.put("unit-tests", List.of());
+        jobs.put("browser-tests", List.of("unit-tests"));
+        var completed = Set.of("lint", "unit-tests");
+        jobs.forEach((job, needs) -> {
+            boolean ready = completed.containsAll(needs);
+            System.out.println(job + ": " + (ready ? "ready" : "waiting"));
+        });
+    }
+}```} />
+
+<FirstTime title="Your mission: create one truthful pull-request check">
+<StepChecklist steps={[
+  { text: "Create .github/workflows/ci.yml on a branch", detail: "Use pull_request, read-only contents permission, one clearly named job, and a hosted runner." },
+  { text: "Check out the repository and prepare its runtime", detail: "Use current reviewed action versions and an explicit runtime version." },
+  { text: "Run the clean install and one fast test command", detail: "Do not hide its exit status or add deployment yet." },
+  { text: "Open a pull request and inspect the job log", detail: "Confirm the intended SHA, commands, and check name; then deliberately fail one test." },
+]} />
+You have a useful first workflow when the same check turns green and red for honest reasons.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "GitHub never discovers the workflow.", fix: "Confirm the file is committed under .github/workflows with a .yml or .yaml extension and Actions is enabled." },
+  { symptom: "The YAML is rejected before any runner starts.", fix: "Use the Actions error annotation and workflow syntax reference; check indentation, key placement, and expression delimiters." },
+  { symptom: "A job starts but cannot see repository files.", fix: "Add or inspect actions/checkout and confirm the subsequent working directory." },
+  { symptom: "A later job begins before tests finish.", fix: "Jobs are parallel by default. Add needs only where a real data or safety dependency exists." },
+]} />
+
+<WhereToCheck>
+- **Actions workflow list** — discovery, syntax errors, disabled status, and run history.
+- **Run summary and visualization graph** — job parallelism, dependencies, skips, and cancellations.
+- **Expanded step log** — exact action version, shell command, exit code, and first causal error.
+- **Workflow permissions** — effective `GITHUB_TOKEN` access for the job.
+- **Pull-request checks** — the stable job name reviewers and branch protection actually consume.
+</WhereToCheck>
+
+<WorkedExample title="a test job that ran without any source code">
+1. A learner creates a job with `runs-on` and `run: npm test` but no checkout step.
+2. The runner starts in an empty workspace; npm reports that `package.json` is missing.
+3. The failure is not an npm or test problem. Hosted runners do not automatically clone the repository.
+4. The learner adds `actions/checkout@v6` as the first step and reruns the same commit.
+5. Installation and tests now operate on the recorded revision, and the check becomes meaningful.
+</WorkedExample>
+
+<Quiz question="Which GitHub Actions unit gets one runner and executes its steps sequentially?" options={[
+  "The repository",
+  "A job",
+  "An event filter",
+  "A pull-request review"
+]} answer={1} explain="A job selects a runner with runs-on and performs its steps in order. Separate jobs are parallel by default unless needs connects them." />
+
+<Flashcards cards={[
+  { front: "Where must workflow files live?", back: "In .github/workflows with a .yml or .yaml extension." },
+  { front: "on", back: "Declares the repository events and filters that may create workflow runs." },
+  { front: "Job versus step", back: "A job owns a runner; its steps run in order on that runner." },
+  { front: "uses versus run", back: "uses invokes a reusable action; run executes a shell command." },
+  { front: "How are jobs ordered?", back: "They run in parallel by default; needs declares dependencies." },
+]} />
+
+<Challenge>
+Review one existing workflow without running it. Draw event → jobs → runners → steps → checks, mark
+every external action version and token permission, then compare your prediction with the visualization
+graph of a real run.
+</Challenge>
+
+<AskCommunity prompt="Workflow [path] should create check [name] on [event], but [missing/failing/skipped]. The relevant YAML and first causal log line are [paste].">
+Include indentation and the event payload context; paraphrased YAML often removes the actual defect.
+</AskCommunity>
+
+<Resources links={[
+  { href: "https://docs.github.com/en/actions/get-started/quickstart", title: "GitHub Docs — Actions quickstart", kind: "read" },
+  { href: "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax", title: "GitHub Docs — Workflow syntax", kind: "read" },
+]} />
+
+<Video href="https://www.youtube.com/watch?v=R8_veQiYBjI" title="GitHub Actions Tutorial — TechWorld with Nana" minutes={32} />
+
+<Takeaways points={[
+  "A workflow is reviewed code under .github/workflows, not invisible provider configuration.",
+  "Read its hierarchy as event, jobs, runners, ordered steps, and reported checks.",
+  "Jobs are parallel unless needs creates an explicit dependency.",
+  "Checkout is required before commands can use repository files on a fresh hosted runner.",
+  "Pin reviewed action versions and grant the smallest practical token permissions.",
+]} />
+
+<Complete xp={10} />

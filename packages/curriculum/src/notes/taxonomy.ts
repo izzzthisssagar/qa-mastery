@@ -1451,10 +1451,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "github-actions",
         title: "GitHub Actions",
         topics: [
-          { slug: "workflow-basics", title: "Workflow basics", planned: true },
-          { slug: "triggers", title: "Triggers", planned: true },
-          { slug: "matrix-runs", title: "Matrix runs", planned: true },
-          { slug: "caching", title: "Caching", planned: true },
+          { slug: "workflow-basics", title: "Workflow basics" },
+          { slug: "triggers", title: "Triggers" },
+          { slug: "matrix-runs", title: "Matrix runs" },
+          { slug: "caching", title: "Caching" },
         ],
       },
       {

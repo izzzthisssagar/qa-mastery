@@ -1,0 +1,164 @@
+---
+title: "Matrix runs"
+summary: "A GitHub Actions matrix expands one job definition into explicit environment combinations, making compatibility coverage visible while include, exclude, fail-fast, and parallel limits control cost."
+tags: ["github-actions", "matrix", "cross-browser", "track-d"]
+updated: "2026-07-17"
+related:
+  - "automation-in-cicd/github-actions/workflow-basics"
+  - "automation-in-cicd/github-actions/caching"
+  - "playwright/parallel-and-cross-browser/projects-and-browsers"
+---
+
+<Hook>
+Copy-pasting the same test job for three operating systems and four runtime versions creates twelve
+places to drift. A matrix makes the combinations data and keeps the job procedure singular — but it
+also makes twelve runners, so every axis must represent a compatibility question worth paying for.
+</Hook>
+
+<Callout type="analogy">
+A multiplication table turns two input axes into a grid of results. A job matrix does the same: every
+operating system crosses every runtime version unless you deliberately include or exclude cells.
+Adding one innocent-looking axis can multiply the bill.
+</Callout>
+
+<Term define="A GitHub Actions job matrix is a strategy that declares one or more variables whose values expand a single job into multiple job combinations. Each generated job reads values through the matrix context. include can add values or special combinations; exclude removes unwanted combinations; fail-fast controls whether one failure cancels siblings; and max-parallel limits how many generated jobs run simultaneously.">job matrix</Term>
+
+## Make coverage a table, not duplicated YAML
+
+```yaml
+strategy:
+  fail-fast: false
+  max-parallel: 4
+  matrix:
+    os: [ubuntu-latest, windows-latest]
+    node: [22, 24]
+
+runs-on: ${{ matrix.os }}
+steps:
+  - uses: actions/checkout@v6
+  - uses: actions/setup-node@v6
+    with:
+      node-version: ${{ matrix.node }}
+  - run: npm ci
+  - run: npm test
+```
+
+This is four jobs, not one job that loops. Each gets an isolated runner, log, status, and cost.
+
+<Callout type="tip">
+Start from supported production combinations. Put exotic or expensive combinations in a scheduled
+workflow rather than multiplying every pull-request run.
+</Callout>
+
+<Callout type="mistake">
+Adding axes for browser, OS, runtime, database, and locale all at once. A 3 × 3 × 3 × 2 × 4 grid is
+216 jobs before a single test has run.
+</Callout>
+
+<HotspotImage src="/notes/automation-in-cicd/github-actions/matrix-runs.jpg" alt="A multiplication table written as many equations across a rough outdoor surface" credit="Multiplication table — Denis Mihailov, CC BY 2.0" creditHref="https://commons.wikimedia.org/wiki/File:Multiplication_table_(4643804213).jpg" pins={[
+  { x: 24, y: 23, label: "First axis", desc: "Operating systems or browser engines form one set of values." },
+  { x: 68, y: 23, label: "Second axis", desc: "Runtime versions cross the first set to create combinations." },
+  { x: 43, y: 55, label: "Expanded cell", desc: "Each combination becomes an independently visible job and runner." },
+  { x: 75, y: 75, label: "Multiplication cost", desc: "Every new axis multiplies combinations; count them before committing." },
+]} />
+
+<FlowAnimation title="How a matrix becomes jobs" intervalMs={1500} nodes={[
+  { label: "Declare axes", desc: "Choose compatibility dimensions and supported values." },
+  { label: "Cartesian expansion", desc: "GitHub creates every default combination." },
+  { label: "Apply exclude", desc: "Unsupported or redundant cells are removed." },
+  { label: "Apply include", desc: "Special cells or per-cell metadata are added." },
+  { label: "Schedule runners", desc: "max-parallel limits simultaneous generated jobs." },
+  { label: "Collect statuses", desc: "Each cell reports separately; fail-fast may cancel siblings." },
+]} />
+
+<CodePlayground language="python" title="Run it — expand and exclude a matrix (Python)" code={```oses = ["ubuntu", "windows"]
+versions = [22, 24]
+excluded = {("windows", 22)}
+jobs = [(os, version) for os in oses for version in versions if (os, version) not in excluded]
+for os, version in jobs:
+    print(f"{os} / node-{version}")
+print("job count:", len(jobs))```} />
+
+<CodePlayground language="java" title="Run it — expand and exclude a matrix (Java)" code={```import java.util.*;
+
+public class Main {
+    public static void main(String[] args) {
+        var oses = List.of("ubuntu", "windows");
+        var versions = List.of(22, 24);
+        var jobs = new ArrayList<String>();
+        for (String os : oses) for (int version : versions)
+            if (!(os.equals("windows") && version == 22))
+                jobs.add(os + " / node-" + version);
+        jobs.forEach(System.out::println);
+        System.out.println("job count: " + jobs.size());
+    }
+}```} />
+
+<FirstTime title="Your mission: prove two compatibility dimensions">
+<StepChecklist steps={[
+  { text: "Choose two supported values on one axis", detail: "For example the current and previous runtime, or two browser engines." },
+  { text: "Reference the matrix value in runner or setup", detail: "Print it in the log so the job identity is undeniable." },
+  { text: "Introduce one combination-specific failure", detail: "Confirm its cell is red while the other remains independently visible." },
+  { text: "Set fail-fast intentionally", detail: "Use false for full compatibility evidence; use true only when sibling results add no value." },
+]} />
+The matrix is useful when each cell answers a named support question.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "All generated jobs use the same version.", fix: "Check that setup inputs reference matrix.variable rather than a hard-coded value." },
+  { symptom: "One failure cancels combinations you wanted to inspect.", fix: "Set strategy.fail-fast to false for diagnostic compatibility runs." },
+  { symptom: "The matrix creates far more jobs than expected.", fix: "Multiply axis lengths, then inspect include entries. Remove axes that do not protect supported behavior." },
+  { symptom: "A special include cell lacks expected values.", fix: "Remember include can add or augment combinations; inspect the generated job list and pass explicit metadata." },
+]} />
+
+<WhereToCheck>
+- **Visualization graph and generated job names** — actual expansion and cancelled cells.
+- **Printed matrix context** — values each job received.
+- **include/exclude blocks** — special combinations and omissions.
+- **fail-fast and max-parallel** — cancellation and concurrency behavior.
+- **Billing/runtime metrics** — whether coverage value justifies multiplied runner time.
+</WhereToCheck>
+
+<WorkedExample title="the accidental 36-job pull request">
+1. A team adds three OS values, three Node versions, and four browsers: 3 × 3 × 4 = 36 jobs.
+2. Most browser/OS pairs duplicate engine behavior; pull requests slow dramatically.
+3. They keep two Node versions on Linux for every pull request and three OS smoke jobs on main.
+4. A scheduled workflow runs the broader compatibility matrix nightly.
+5. Coverage now matches decisions: fast merge feedback plus periodic breadth.
+</WorkedExample>
+
+<Quiz question="A matrix has 3 OS values, 2 runtimes, and 4 browsers with no exclusions. How many jobs are generated?" options={["9", "12", "24", "48"]} answer={2} explain="Matrix axes form a Cartesian product: 3 × 2 × 4 = 24 independently generated jobs." />
+
+<Flashcards cards={[
+  { front: "Matrix expansion", back: "The Cartesian product of declared axis values, adjusted by include and exclude." },
+  { front: "fail-fast false", back: "Keeps sibling combinations running after one cell fails, producing full compatibility evidence." },
+  { front: "max-parallel", back: "Caps how many matrix jobs execute simultaneously without removing combinations." },
+  { front: "include", back: "Adds special combinations or augments matching combinations with extra values." },
+  { front: "Matrix design test", back: "Every cell should answer a supported compatibility question worth its runner time." },
+]} />
+
+<Challenge>
+Calculate the current job count and runner-minutes for one matrix. Redesign it into pull-request,
+post-merge, and scheduled layers while preserving every explicitly supported compatibility claim.
+</Challenge>
+
+<AskCommunity prompt="Our matrix axes are [values], producing [count] jobs and [minutes]. We support [environments], and failures differ by [evidence]. Which combinations are redundant?">
+State the support promise before optimizing; otherwise job reduction is only guesswork.
+</AskCommunity>
+
+<Resources links={[
+  { href: "https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/run-job-variations", title: "GitHub Docs — Run job variations", kind: "read" },
+  { href: "https://playwright.dev/docs/test-sharding", title: "Playwright — Sharding tests", kind: "read" },
+]} />
+
+<Video href="https://www.youtube.com/watch?v=FSQDtRMtSHo" title="GitHub Actions Matrix Strategy: Run Jobs Faster & Smarter — Techi Nik" minutes={7} />
+
+<Takeaways points={[
+  "A matrix turns compatibility values into independently visible jobs from one definition.",
+  "Job count is the product of axes, so calculate cost before adding dimensions.",
+  "Use include and exclude to express real support combinations, not arbitrary grids.",
+  "Choose fail-fast based on whether sibling results remain diagnostically valuable.",
+  "Keep pull-request coverage focused and move expensive breadth to post-merge or scheduled runs.",
+]} />
+
+<Complete xp={10} />
