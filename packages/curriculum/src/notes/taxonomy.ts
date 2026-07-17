@@ -1433,6 +1433,74 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   },
   // END playwright
   {
+    slug: "automation-in-cicd",
+    title: "Automation in CI/CD",
+    summary: "Make automated tests useful to the whole team — run them reliably in CI, configure GitHub Actions, Jenkins and GitLab pipelines, publish evidence, enforce quality gates, and manage flakes without hiding failures.",
+    chapters: [
+      {
+        slug: "running-tests-in-ci",
+        title: "Running tests in CI",
+        topics: [
+          { slug: "what-ci-is", title: "What CI is" },
+          { slug: "running-the-suite", title: "Running the suite" },
+          { slug: "headless-mode", title: "Headless mode" },
+          { slug: "artifacts", title: "Artifacts" },
+        ],
+      },
+      {
+        slug: "github-actions",
+        title: "GitHub Actions",
+        topics: [
+          { slug: "workflow-basics", title: "Workflow basics", planned: true },
+          { slug: "triggers", title: "Triggers", planned: true },
+          { slug: "matrix-runs", title: "Matrix runs", planned: true },
+          { slug: "caching", title: "Caching", planned: true },
+        ],
+      },
+      {
+        slug: "jenkins",
+        title: "Jenkins",
+        topics: [
+          { slug: "jobs-and-the-classic-ui", title: "Jobs & the classic UI", planned: true },
+          { slug: "jenkinsfile-pipeline-as-code", title: "Jenkinsfile — pipeline as code", planned: true },
+          { slug: "agents-and-plugins", title: "Agents & plugins", planned: true },
+          { slug: "when-teams-still-pick-jenkins", title: "When teams still pick Jenkins", planned: true },
+        ],
+      },
+      {
+        slug: "gitlab-ci-and-quality-gates",
+        title: "GitLab CI & quality gates",
+        topics: [
+          { slug: "stages-jobs-and-runners", title: "Stages, jobs & runners", planned: true },
+          { slug: "gitlab-ci-yml", title: ".gitlab-ci.yml", planned: true },
+          { slug: "quality-gates-coverage-and-sonar", title: "Quality gates (coverage, Sonar)", planned: true },
+          { slug: "blocking-a-merge-on-failure", title: "Blocking a merge on failure", planned: true },
+        ],
+      },
+      {
+        slug: "scheduling-and-reporting",
+        title: "Scheduling & reporting",
+        topics: [
+          { slug: "scheduled-runs", title: "Scheduled runs", planned: true },
+          { slug: "publishing-reports", title: "Publishing reports", planned: true },
+          { slug: "notifications", title: "Notifications", planned: true },
+          { slug: "dashboards", title: "Dashboards", planned: true },
+        ],
+      },
+      {
+        slug: "flake-management",
+        title: "Flake management",
+        topics: [
+          { slug: "detecting-flakes", title: "Detecting flakes", planned: true },
+          { slug: "quarantine", title: "Quarantine", planned: true },
+          { slug: "retries", title: "Retries", planned: true },
+          { slug: "stability-practices", title: "Stability practices", planned: true },
+        ],
+      },
+    ],
+  },
+  // END automation-in-cicd
+  {
     slug: "foundations",
     title: "QA Foundations",
     summary: "The vocabulary and mental models every tester needs.",

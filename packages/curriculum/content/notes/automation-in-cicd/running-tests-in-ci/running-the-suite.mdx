@@ -1,0 +1,186 @@
+---
+title: "Running the suite"
+summary: "A CI test command must install from the lockfile, select the intended suite, return a truthful exit code, and publish enough context that a failure can be reproduced from the exact commit."
+tags: ["ci-cd", "test-suites", "exit-codes", "track-d"]
+updated: "2026-07-17"
+related:
+  - "automation-in-cicd/running-tests-in-ci/what-ci-is"
+  - "automation-in-cicd/running-tests-in-ci/headless-mode"
+  - "automation-in-cicd/running-tests-in-ci/artifacts"
+---
+
+<Hook>
+Typing a test command into YAML is easy. Knowing that it ran the right tests, against the right build,
+and made the job fail when a test failed is the real work. A pipeline that prints red assertions but
+exits zero is theatre with excellent logs.
+</Hook>
+
+<Callout type="analogy">
+At a race start, every runner begins behind one line, follows one course, and is timed by the same
+clock. Running a suite in CI needs the same controlled start: one revision, locked dependencies, a
+declared command, and one unambiguous finish signal.
+</Callout>
+
+<Term define="Running a test suite in CI means executing a deliberate set of automated tests from a clean checkout with reproducible dependencies and configuration, then allowing the test runner's process exit code to determine job success. Exit code 0 means the command completed successfully; a non-zero code means the job must fail. Reports explain the result, but the exit code controls the pipeline.">CI suite run</Term>
+
+## Make the command tell the truth
+
+A dependable test step answers five questions:
+
+- **What revision?** The checkout must match the pull request or commit shown by CI.
+- **What dependencies?** Use the repository lockfile and a clean install such as `npm ci`.
+- **What tests?** Name a project, tag, directory, or configuration rather than relying on accidental defaults.
+- **What environment?** Supply URLs and credentials through scoped CI configuration, never hard-code them.
+- **What result?** Preserve the test process's non-zero exit code when anything fails.
+
+<Callout type="tip">
+Run the exact CI command locally before debugging the provider. If CI uses `npm ci` followed by
+`npx playwright test --project=chromium`, reproducing with a different install and every browser is
+not the same experiment.
+</Callout>
+
+<Callout type="mistake">
+Appending `|| true`, swallowing an exception, or piping through a reporting command that returns zero.
+The log still contains failures, but the job becomes green and can approve a broken merge.
+</Callout>
+
+<HotspotImage
+  src="/notes/automation-in-cicd/running-tests-in-ci/running-the-suite.jpg"
+  alt="A historic group of runners launching together from the same start line"
+  credit="Start of a running race — YMCA / Archives of Ontario, public domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:Start_of_a_running_race_(I0009285).jpg"
+  pins={[
+    { x: 22, y: 61, label: "One start line", desc: "Every run starts from a clean checkout and lockfile, not leftover state from yesterday." },
+    { x: 50, y: 50, label: "Declared field", desc: "Suite selection controls which tests enter this run; accidental discovery makes coverage unpredictable." },
+    { x: 77, y: 45, label: "Shared signal", desc: "The runner's exit code gives CI one machine-readable pass or fail result." },
+    { x: 91, y: 34, label: "Finish with evidence", desc: "Reports and logs explain the result after the exit code has made the job decision." },
+  ]}
+/>
+
+<FlowAnimation
+  title="A reproducible suite run"
+  intervalMs={1600}
+  nodes={[
+    { label: "Checkout revision", desc: "Record the SHA and use that exact source tree." },
+    { label: "Install from lockfile", desc: "Recreate dependencies rather than inheriting a developer machine." },
+    { label: "Prepare services", desc: "Start required databases or APIs and wait for readiness." },
+    { label: "Select suite", desc: "Choose the intended project, tags, or directory explicitly." },
+    { label: "Run tests once", desc: "Let the runner own timeouts, isolation, and the final exit status." },
+    { label: "Publish evidence", desc: "Upload reports and failure diagnostics even when the command is non-zero." },
+  ]}
+/>
+
+<CodePlayground language="python" title="Run it — aggregate tests without hiding failure (Python)" code={```results = {"login": True, "checkout": False, "search": True}
+failed = [name for name, passed in results.items() if not passed]
+
+for name, passed in results.items():
+    print(f"{name}: {'PASS' if passed else 'FAIL'}")
+
+exit_code = 1 if failed else 0
+print(f"suite exit code: {exit_code}")
+print("failed tests:", ", ".join(failed) if failed else "none")```} />
+
+<CodePlayground language="java" title="Run it — aggregate tests without hiding failure (Java)" code={```import java.util.*;
+
+public class Main {
+    public static void main(String[] args) {
+        var results = new LinkedHashMap<String, Boolean>();
+        results.put("login", true);
+        results.put("checkout", false);
+        results.put("search", true);
+
+        var failed = new ArrayList<String>();
+        results.forEach((name, passed) -> {
+            System.out.println(name + ": " + (passed ? "PASS" : "FAIL"));
+            if (!passed) failed.add(name);
+        });
+        int exitCode = failed.isEmpty() ? 0 : 1;
+        System.out.println("suite exit code: " + exitCode);
+        System.out.println("failed tests: " + (failed.isEmpty() ? "none" : String.join(", ", failed)));
+    }
+}```} />
+
+<FirstTime title="Your mission: prove the CI command fails correctly">
+<StepChecklist
+  steps={[
+    { text: "Copy the pipeline's install and test commands exactly", detail: "Run them from a fresh clone or clean worktree so cached local state cannot help." },
+    { text: "Confirm the expected number of tests", detail: "Record discovered, skipped, passed, and failed counts; zero tests is not a successful suite." },
+    { text: "Break one assertion deliberately", detail: "The command and CI job must both become non-zero and red." },
+    { text: "Restore it and rerun once", detail: "Confirm green without changing the command, environment, or selected suite." },
+  ]}
+/>
+This small sabotage test proves the wiring, not just the tests.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    { symptom: "CI reports success after the test log shows failures.", fix: "Inspect shell operators, wrappers, and reporters for swallowed exit codes. Make the test process's status the step status." },
+    { symptom: "The job runs zero tests and stays green.", fix: "Check working directory, file patterns, tags, and project selection. Add an expected-count or forbid-only style guard where the runner supports it." },
+    { symptom: "Tests start before the application is ready.", fix: "Add an explicit health/readiness check with a bounded timeout; a fixed sleep is slower and still races." },
+    { symptom: "Only the full CI suite times out.", fix: "Measure setup and each test layer separately, then split independent layers or shard only after isolation is proven." },
+  ]}
+/>
+
+<WhereToCheck>
+- **Checkout step** — SHA, fetch depth, submodules, and working directory.
+- **Install logs** — lockfile use, runtime version, and unexpected dependency resolution.
+- **Discovery line** — test count, selected project, skipped tests, and filters.
+- **Shell step definition** — pipes, wrappers, and continue-on-error settings that alter status.
+- **Process exit code** — the machine-readable truth CI uses, independent of report styling.
+</WhereToCheck>
+
+<WorkedExample title="a report generator that accidentally turns red into green">
+1. A script runs `npx playwright test | tee test.log`.
+2. The test process exits 1, but the shell reports the final pipeline command's status; the logging
+   command exits 0.
+3. CI marks the job green even though `test.log` contains a failed checkout test.
+4. The team enables pipe-failure handling or lets Playwright write its own report, preserving exit 1.
+5. They deliberately fail one assertion and confirm the whole job is red before trusting the gate.
+</WorkedExample>
+
+<Quiz
+  question="A test report contains two failures, but the CI job is green. Which signal did CI most likely receive?"
+  options={[
+    "A non-zero exit code from the test process",
+    "Exit code 0 from a wrapper, pipe, or ignored-error setting",
+    "A branch protection rejection",
+    "A missing HTML stylesheet"
+  ]}
+  answer={1}
+  explain="CI uses the step process's exit status, not the visual contents of a report. A wrapper, pipe, or ignored-error option can replace the runner's non-zero status with zero."
+/>
+
+<Flashcards cards={[
+  { front: "What controls CI job success?", back: "The command's process exit code: zero succeeds, non-zero fails." },
+  { front: "Why install from a lockfile?", back: "It recreates reviewed dependency versions instead of resolving a different set during CI." },
+  { front: "Why check the discovered test count?", back: "A syntactically successful command may select zero tests and prove nothing." },
+  { front: "Readiness check versus fixed sleep", back: "A readiness check proceeds as soon as the service is healthy and fails clearly at a bound; sleep is both slow and racy." },
+  { front: "Best wiring test for a new pipeline", back: "Break one assertion deliberately and prove the command and CI job both fail." },
+]} />
+
+<Challenge>
+Take one real suite command and make its contract explicit: clean-install command, required services,
+selection filter, expected discovery count, timeout, exit behavior, and failure artifacts. Then run the
+deliberate-failure test.
+</Challenge>
+
+<AskCommunity prompt="Our suite command is [exact command]. CI discovered [count] tests and showed [result], but the job status was [status]. Here are the shell step and final 30 log lines: [paste].">
+The exact command and final status lines expose selection and exit-code mistakes faster than a full log dump.
+</AskCommunity>
+
+<Resources links={[
+  { href: "https://playwright.dev/docs/ci", title: "Playwright — Continuous Integration", kind: "read" },
+  { href: "https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-nodejs", title: "GitHub Docs — Building and testing Node.js", kind: "read" },
+]} />
+
+<Video href="https://www.youtube.com/watch?v=1crAeA3ZPAM" title="How to Create and Run Your First Test — Playwright JavaScript Tutorial Part 1 — TestMu AI (LambdaTest)" minutes={48} />
+
+<Takeaways points={[
+  "A CI suite run begins from a precise revision and reproducible dependency set.",
+  "Select the intended tests explicitly and verify the discovery count.",
+  "The process exit code controls the job; reports only explain it.",
+  "Use readiness checks for dependencies instead of guessing with sleeps.",
+  "Deliberately fail one assertion to prove a new pipeline really blocks failure.",
+]} />
+
+<Complete xp={10} />
