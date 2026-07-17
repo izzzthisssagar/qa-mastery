@@ -30,6 +30,15 @@ const nextConfig: NextConfig = {
       "../../pnpm-workspace.yaml",
     ],
   },
+  // The trace for every function was independently pulling in all of
+  // apps/platform/public (330MB+ of note images) — pushing api/help-agent/chat
+  // over Vercel's 250MB uncompressed function limit. Public assets are always
+  // served by Vercel as static files regardless of what a function's bundle
+  // contains, so excluding them here only shrinks the Lambda zip; it has no
+  // effect on any /notes/**/*.jpg URL actually resolving at runtime.
+  outputFileTracingExcludes: {
+    "/**": ["public/**/*"],
+  },
   // Baseline security headers (OWASP A05). No script/style CSP — that would risk
   // breaking Supabase/Paddle/fonts and can't be fully verified per-route here;
   // these are the safe, non-breaking set. The platform is never iframed, so it
