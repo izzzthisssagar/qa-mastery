@@ -1,0 +1,294 @@
+---
+title: "ExtentReports"
+summary: "ExtentReports turns a bare pass/fail verdict into a rich HTML dashboard: each test logs its steps through ExtentTest, failures carry their data and screenshot, and a teammate who never watched the run can read exactly which step broke and why."
+tags: ["framework-design", "logging-and-reporting", "track-d"]
+updated: "2026-07-17"
+related:
+  - "framework-design/logging-and-reporting/logging-log4j"
+  - "framework-design/logging-and-reporting/allure"
+  - "framework-design/logging-and-reporting/screenshots-on-failure"
+---
+
+<Hook>
+The nightly run posts one line to the team channel: `checkoutTotalAfterPromo FAILED`. The engineer
+reading it at 9am wasn't there at 2am. Which step failed - login, adding items, the promo, the
+total? What did the page look like? "The test failed" answers none of that, so the failure has to
+be re-run just to be seen. ExtentReports exists so the run itself leaves behind a dashboard rich
+enough that nobody has to have been there.
+</Hook>
+
+<Callout type="analogy">
+A stadium scoreboard doesn't say "Australia is winning." It says which bowler took how many
+wickets for how many runs, which batsman is out and how, what the total stands at, and what time
+it is - all at once, readable from every seat. A spectator who arrives an hour late can
+reconstruct the whole day from the board alone. That's the difference between a verdict and a
+report: the verdict tells you the outcome; the report lets someone who wasn't watching understand
+how the outcome happened.
+</Callout>
+
+<Term define="ExtentReports is an open-source Java reporting library that generates a rich, self-contained HTML test report. The framework creates one ExtentReports instance for the whole run and attaches a reporter (ExtentSparkReporter, pointed at an output HTML file). Each test gets an ExtentTest node via extent.createTest(name), and the test's progress is logged step by step through its API - test.info(...) for context, test.pass(...) and test.fail(...) for step outcomes - with screenshots and other media attached to individual steps via MediaEntityBuilder. A final extent.flush() writes everything to disk. The result is a pass/fail dashboard where every failure carries its step history, its data, and its screenshot - readable by anyone, with no IDE and no re-run.">ExtentReports</Term>
+
+## From a red verdict to a readable dashboard
+
+Without a reporting layer, the only artifact a failed run leaves is the assertion's last words:
+
+```java
+@Test
+public void checkoutTotalAfterPromo() {
+    loginPage.signIn("standard_user", "secret_sauce");
+    cartPage.addItems(2);
+    cartPage.applyPromo("SAVE20");
+    Assert.assertEquals(cartPage.total(), 33.58, 0.001);
+}
+// All a teammate sees the next morning:
+// checkoutTotalAfterPromo FAILED
+// java.lang.AssertionError: expected [33.58] but found [41.97]
+```
+
+With ExtentReports, the same test narrates itself into an HTML dashboard as it runs:
+
+```java
+ExtentReports extent = new ExtentReports();
+extent.attachReporter(new ExtentSparkReporter("target/report/index.html"));
+
+ExtentTest test = extent.createTest("Checkout total after promo");
+test.info("Logged in as standard_user");
+test.info("Added 2 items, cart total 41.97");
+test.pass("Applied promo code SAVE20");
+test.fail("Expected total 33.58 but found 41.97",
+        MediaEntityBuilder.createScreenCaptureFromPath("cart.png").build());
+
+extent.flush();  // writes the dashboard to disk
+```
+
+- **One `ExtentReports` instance per run, one `ExtentTest` per test** - the instance collects
+  everything; each test's node holds that test's step history.
+- **Steps are logged with their data** - `test.info("Added 2 items, cart total 41.97")` is worth
+  ten copies of "step passed", because the data is what a post-mortem actually reads.
+- **Screenshots attach to the exact step** - `MediaEntityBuilder` pins the image to the failing
+  step, so the picture sits next to the sentence describing what was being attempted.
+- **`extent.flush()` writes the file** - nothing appears on disk until it runs, which is why it
+  belongs in an `@AfterSuite` (or a listener's `onFinish`), not sprinkled per test.
+- **The output is one self-contained HTML file** - attach it to a CI run as an artifact, or paste
+  a link in the team channel, and anyone can open it in a browser. No IDE, no re-run, no "you had
+  to be there."
+
+<Callout type="tip">
+Wire the ExtentReports lifecycle into a TestNG listener or a shared BaseTest - create the instance
+in `onStart`/`@BeforeSuite`, create each `ExtentTest` in `@BeforeMethod`, flush in
+`onFinish`/`@AfterSuite`. Reporting should be something the framework guarantees for every test,
+not a courtesy each test author has to remember.
+</Callout>
+
+<Callout type="mistake">
+Creating a `new ExtentReports()` inside each test class (or worse, each test method). Every new
+instance re-attaches a reporter aimed at the same HTML file, and the last flush wins - so the
+"report" contains only the final test that ran, and the team concludes the library is broken. The
+instance is per RUN: one object, shared, created once, flushed once.
+</Callout>
+
+{/* IMAGE: a real photograph of the heritage manual scoreboard at Adelaide Oval during the Australia v New Zealand Test match in November 2008 - a large black board with yellow lettering showing per-bowler wickets and runs, a batsmen column with OUT/B/RUNS details, innings and total rows on the left, a clock at the top, and a dense crowd of spectators on the grass bank below */}
+<HotspotImage
+  src="/notes/framework-design/logging-and-reporting/extentreports.jpg"
+  alt="The heritage manual scoreboard at Adelaide Oval during a Test match, a large black board with yellow lettering showing bowlers with wickets and runs, batsmen with how each got out, innings totals on the left, a clock on top, and a crowd of spectators watching from the grass below"
+  credit="Adelaide Oval scoreboard, Australia v New Zealand Test, 2008 — Wikimedia Commons, CC BY-SA 2.0 (Richard Woods, cropped by Blackcat)"
+  creditHref="https://commons.wikimedia.org/wiki/File:Adelaide_Oval_scoreboard_2008.jpg"
+  pins={[
+    { x: 42, y: 48, label: "Per-bowler rows - every actor's contribution, itemized", desc: "Lee: 2 wickets for 5. Not 'the bowling is going well' - names and numbers per row, the way an ExtentTest logs each step with its own data instead of one summary line." },
+    { x: 64, y: 40, label: "The OUT column - not just that a batsman fell, but how", desc: "HOW is out, caught by the wicketkeeper for 3. A failure entry with its manner and its data attached - exactly what test.fail with a message and screenshot gives a red step." },
+    { x: 20, y: 68, label: "The TOTAL row - the verdict, kept in its place", desc: "The total matters, but it's one row among many. A bare FAILED is this row without the rest of the board - technically true, useless for understanding what happened." },
+    { x: 50, y: 88, label: "The crowd below - readers who didn't watch every ball", desc: "Thousands of people glance up and instantly know the state of the day. A shared HTML report plays to the same audience: teammates who weren't watching the run but need the whole story." },
+  ]}
+/>
+
+<FlowAnimation
+  title="How one failing test becomes a report a teammate can read"
+  intervalMs={1800}
+  nodes={[
+    { label: "The suite starts; one ExtentReports instance is created", desc: "A listener builds it in onStart and attaches an ExtentSparkReporter aimed at target/report/index.html." },
+    { label: "Each test gets its own ExtentTest node", desc: "extent.createTest('Checkout total after promo') - the container this test's steps will live in." },
+    { label: "Steps are logged with their data as the test runs", desc: "info: logged in as standard_user; info: 2 items, total 41.97; pass: promo SAVE20 applied." },
+    { label: "The assertion fails - the step logs red, with evidence", desc: "test.fail('Expected 33.58 but found 41.97') plus a screenshot pinned to that exact step." },
+    { label: "extent.flush() writes the dashboard; CI archives it", desc: "At 9am a teammate opens index.html: three green steps, one red one, the data, the picture. No re-run needed." },
+  ]}
+/>
+
+Strip away the HTML and the charts, and the core idea is bookkeeping: record the outcome of each
+step with its data, instead of one verdict for the whole test. Here is that difference, simulated.
+
+<CodePlayground
+  language="python"
+  title="Run it - a flat verdict versus a step-level report of the same failure (Python)"
+  code={`# One failing checkout test, reported two ways.
+
+steps = [
+    ("Log in as standard_user", "PASS", ""),
+    ("Add 2 items to the cart", "PASS", ""),
+    ("Apply promo code SAVE20", "PASS", ""),
+    ("Verify total is 33.58", "FAIL", "expected 33.58, found 41.97 [cart.png attached]"),
+]
+
+print("Flat verdict (what the console gives a teammate):")
+print("  checkout_test ... FAILED")
+print()
+print("Step-level report (what ExtentReports-style logging gives them):")
+for i, (step, status, detail) in enumerate(steps, start=1):
+    line = f"  {i}. [{status}] {step}"
+    if detail:
+        line += f" - {detail}"
+    print(line)
+print()
+print("Same failure - but this version says which step, with what data, and holds the screenshot.")`}
+/>
+
+Same step-level bookkeeping in Java.
+
+<CodePlayground
+  language="java"
+  title="Run it - a flat verdict versus a step-level report of the same failure (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    record Step(String name, String status, String detail) {}
+
+    public static void main(String[] args) {
+        List<Step> steps = List.of(
+            new Step("Log in as standard_user", "PASS", ""),
+            new Step("Add 2 items to the cart", "PASS", ""),
+            new Step("Apply promo code SAVE20", "PASS", ""),
+            new Step("Verify total is 33.58", "FAIL",
+                     "expected 33.58, found 41.97 [cart.png attached]")
+        );
+
+        System.out.println("Flat verdict (what the console gives a teammate):");
+        System.out.println("  checkout_test ... FAILED");
+        System.out.println();
+        System.out.println("Step-level report (what ExtentReports-style logging gives them):");
+        int i = 1;
+        for (Step s : steps) {
+            String line = "  " + i++ + ". [" + s.status() + "] " + s.name();
+            if (!s.detail().isEmpty()) {
+                line += " - " + s.detail();
+            }
+            System.out.println(line);
+        }
+        System.out.println();
+        System.out.println("Same failure - but this version says which step, with what data, and holds the screenshot.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: make one failing test explain itself to someone who wasn't there">
+<StepChecklist
+  steps={[
+    { text: "Add the extentreports dependency to a scratch Maven project", detail: "groupId com.aventstack, artifactId extentreports - version 5.x. One dependency, no other setup." },
+    { text: "Create the instance and reporter once, and flush once", detail: "ExtentReports + ExtentSparkReporter('target/report/index.html') in @BeforeSuite, extent.flush() in @AfterSuite." },
+    { text: "Narrate one real test: an ExtentTest with three or four steps, data included", detail: "test.info per action - the user logged in as, the items added, the totals read from the page." },
+    { text: "Break the test on purpose, log the failure with test.fail plus a screenshot, and open index.html", detail: "Read the report as if you were a teammate: can you tell which step broke and what the page showed, without the code?" },
+  ]}
+/>
+You've now produced the artifact this whole topic is about: a failure a colleague can understand
+without re-running anything.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "The suite ran, but target/report/index.html is missing or empty.",
+      fix: "extent.flush() never executed - it's the call that actually writes the file. Move it to @AfterSuite or the listener's onFinish so it runs exactly once, even when tests fail (a failed assertion must not skip the flush).",
+    },
+    {
+      symptom: "The report only ever shows the last test that ran.",
+      fix: "A new ExtentReports instance is being created per class or per method, and each flush overwrites the same file. Make the instance a shared singleton for the run - created once in suite setup, flushed once at the end.",
+    },
+    {
+      symptom: "Screenshots show as broken image icons when the report is opened from CI.",
+      fix: "The report references absolute local paths that don't exist on the machine viewing it. Attach images as base64 (createScreenCaptureFromBase64String) or keep paths relative to the report file and archive the whole folder together.",
+    },
+    {
+      symptom: "With parallel execution, steps from different tests interleave into the wrong report nodes.",
+      fix: "One shared ExtentTest field is being written by multiple threads. Hold the current test node in a ThreadLocal (set in @BeforeMethod, read wherever steps are logged) so each thread narrates only its own test.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The reporter's output path** (the string passed to `ExtentSparkReporter`) — when "there's no
+  report", the file usually exists, just not where anyone is looking.
+- **The listener or BaseTest that owns the lifecycle** — one instance created, one flush, one
+  ExtentTest per test method; every report bug so far lives in this wiring.
+- **Your CI job's artifact config** — a beautiful report that CI deletes with the workspace helps
+  nobody; the report folder must be archived and linkable.
+- **The ExtentReports official docs (extentreports.com)** — the Spark reporter's configuration
+  (themes, timelines, system info blocks) is bigger than most teams realize.
+</WhereToCheck>
+
+<WorkedExample title="the 2am failure a teammate diagnosed at 9am without re-running it">
+1. The nightly suite fails one test: `checkoutTotalAfterPromo`. The CI log shows the assertion -
+   expected 33.58, found 41.97 - and nothing else.
+2. The run's ExtentReports dashboard is archived as a CI artifact. The engineer on triage duty -
+   who was asleep at 2am - opens index.html and clicks the red test.
+3. The step history reads: logged in as standard_user (pass), added 2 items, total 41.97 (pass),
+   applied promo SAVE20 (pass), verify total 33.58 (fail) - with a screenshot pinned to the red step.
+4. The screenshot shows the cart page with the promo field cleared and no discount row - the
+   promo was accepted by the UI but never applied to the total.
+5. The bug report is filed by 9:15 with the step list and the screenshot attached. Nobody
+   re-ran the suite; nobody had to have been there. The report was the witness.
+</WorkedExample>
+
+<Quiz
+  question="A team adds ExtentReports, but each test class creates its own new ExtentReports() pointing at target/report/index.html. After a 50-test run, the report shows 3 tests - the last class that ran. What went wrong?"
+  options={[
+    "The report file needs a unique name per class, so the classes overwrote each other legitimately",
+    "extent.flush() was called too many times, which corrupts the report",
+    "The ExtentReports instance is meant to be one per run - each new instance starts an empty report over the same file, so the final class's flush overwrote everything before it",
+    "ExtentSparkReporter can only hold a limited number of tests per file"
+  ]}
+  answer={2}
+  explain="The instance is the report: it accumulates every ExtentTest created from it, and flush writes what that one instance knows. Twenty instances aimed at one path means twenty separate empty-start reports racing for the same file, and the last flush wins. Option one describes a workaround (fifty fragment files), not the design - the whole value is one dashboard for the run. Option two is backwards: flushing repeatedly from ONE instance is merely wasteful, not corrupting. Option four invents a limit that doesn't exist. One instance, created once, flushed once - the report then holds all 50 tests."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The three core ExtentReports objects and their scope", back: "ExtentReports - one per run, collects everything; ExtentSparkReporter - attached once, aimed at the output HTML file; ExtentTest - one per test, holds that test's step history." },
+    { front: "What does extent.flush() do, and where does it belong?", back: "It writes the accumulated report to disk - nothing appears without it. It belongs in @AfterSuite or a listener's onFinish, exactly once per run." },
+    { front: "How do screenshots attach to a specific step?", back: "Pass a MediaEntityBuilder screen capture (from path or base64) into test.fail(...)/test.pass(...) - the image is pinned to that step, next to its message." },
+    { front: "Why isn't 'the test failed' enough for a teammate?", back: "A verdict has no step, no data, no page state - it forces a re-run just to see the failure. A step-level report with data and a screenshot lets someone who wasn't there diagnose it directly." },
+    { front: "The scoreboard analogy for ExtentReports", back: "A verdict says who's winning; the scoreboard shows per-bowler figures, how each batsman got out, and the total - so a spectator who missed the play can reconstruct the day. A report serves teammates who missed the run." },
+  ]}
+/>
+
+<Challenge>
+Take a suite you have access to and pick its most recent real failure. Write down what the CI
+output alone told you: which step, what data, what the page showed. Then wire ExtentReports in
+(instance and flush in suite setup/teardown, an ExtentTest with per-step info logging in that one
+test), re-trigger the same failure, and compare: how many of those three questions does the
+dashboard now answer without touching the code?
+</Challenge>
+
+<AskCommunity prompt="My ExtentReports setup logs steps like this: `[paste a few test.info/test.pass lines]` - but teammates say the reports still don't help them diagnose failures. Here's what a failed test looks like in our dashboard: `[describe or screenshot it]`. What's missing?">
+Reports fail their readers in predictable ways - steps without data, screenshots missing from red
+steps, one giant info dump instead of step-by-step entries. Showing a real failed-test view lets
+reviewers spot which one you have in seconds.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.extentreports.com/docs/versions/5/java/index.html", title: "ExtentReports 5 — official Java documentation", kind: "read" },
+    { href: "https://github.com/extent-framework/extentreports-java", title: "extentreports-java — official GitHub repository", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=eF_Vb-d4kIo" title="Selenium Framework for Beginners 10 | What is Extent Reports | How to use Extent Reports in Selenium — Automation Step by Step" minutes={24} />
+
+<Takeaways
+  points={[
+    "A verdict says a test failed; a report lets a teammate who wasn't there see which step, with what data, and what the page looked like.",
+    "ExtentReports' shape: one ExtentReports instance per run, one ExtentTest per test, steps logged with their data, one flush that writes the HTML.",
+    "Screenshots belong pinned to the failing step via MediaEntityBuilder - evidence next to the sentence describing the attempt.",
+    "Wire the lifecycle into a listener or BaseTest so reporting is a framework guarantee, not a per-test courtesy.",
+    "The output is a self-contained HTML dashboard - archive it in CI, because a report that dies with the workspace answers no one's questions.",
+  ]}
+/>
+
+<Complete xp={10} />

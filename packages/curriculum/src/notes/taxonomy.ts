@@ -1318,9 +1318,9 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         title: "Logging & reporting",
         topics: [
           { slug: "logging-log4j", title: "Logging (Log4j)" },
-          { slug: "extentreports", title: "ExtentReports", planned: true },
-          { slug: "allure", title: "Allure", planned: true },
-          { slug: "screenshots-on-failure", title: "Screenshots on failure", planned: true },
+          { slug: "extentreports", title: "ExtentReports" },
+          { slug: "allure", title: "Allure" },
+          { slug: "screenshots-on-failure", title: "Screenshots on failure" },
         ],
       },
     ],
