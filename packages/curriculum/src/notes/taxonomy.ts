@@ -1971,10 +1971,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "databases-in-plain-words",
         title: "Databases in plain words",
         topics: [
-          { slug: "what-a-database-is", title: "What a database is", planned: true },
-          { slug: "tables-rows-and-columns", title: "Tables, rows, columns", planned: true },
-          { slug: "relational-vs-nosql", title: "Relational vs NoSQL", planned: true },
-          { slug: "where-your-apps-data-lives", title: "Where your app's data lives", planned: true },
+          { slug: "what-a-database-is", title: "What a database is" },
+          { slug: "tables-rows-and-columns", title: "Tables, rows, columns" },
+          { slug: "relational-vs-nosql", title: "Relational vs NoSQL" },
+          { slug: "where-your-apps-data-lives", title: "Where your app's data lives" },
         ],
       },
       {
