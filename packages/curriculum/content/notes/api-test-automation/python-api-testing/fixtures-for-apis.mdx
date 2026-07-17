@@ -1,0 +1,132 @@
+---
+title: "Fixtures for APIs"
+summary: "pytest fixtures provide named setup, dependency injection, scope, and teardown for API tests; use them to share clients and disposable data without turning test order into a hidden contract."
+tags: ["api-test-automation", "python-api-testing", "track-d"]
+updated: "2026-07-17"
+related:
+  - "api-test-automation/python-api-testing/requests-and-pytest"
+  - "api-test-automation/python-api-testing/parameterized-endpoint-tests"
+  - "test-frameworks/lifecycle-and-annotations/pytest-fixtures"
+---
+
+<Hook>A fixture is not a cupboard where every test dumps state. It is a named promise: here is the setup you asked for, and here is how I will clean it up even when your assertion throws a tantrum.</Hook>
+<Callout type="analogy">Test tubes are prepared for specific experiments, labeled, handed to the procedure, and cleaned or discarded afterward. Fixtures do the same for clients, users, tickets, and tokens.</Callout>
+<Term define="A pytest fixture is a function marked with @pytest.fixture whose returned or yielded value is injected into tests that request it by name. Scope controls reuse; code after yield performs teardown.">fixture</Term>
+
+## Compose small, visible dependencies
+
+```python
+@pytest.fixture
+def api(base_url):
+    with requests.Session() as session:
+        session.headers.update({"Accept": "application/json"})
+        yield ApiClient(base_url, session)
+
+@pytest.fixture
+def ticket(api):
+    created = api.create_ticket({"title": "Fixture ticket"})
+    yield created
+    api.delete_ticket(created["id"])
+```
+
+Function scope is the default and safest for mutable test data. Broader scopes reduce setup cost but
+increase sharing, so use them for immutable configuration or carefully managed clients.
+
+<Callout type="tip">Let fixtures depend on fixtures. A `ticket` can request `api`; the test then asks only for the behavior-level object it needs.</Callout>
+<Callout type="mistake">Making every fixture `autouse=True`. Invisible setup spreads faster than gossip and is harder to debug.</Callout>
+
+{/* IMAGE: rows of labeled test tubes prepared for controlled laboratory work */}
+<HotspotImage src="/notes/api-test-automation/python-api-testing/fixtures-for-apis.jpg" alt="Rows of test tubes in a laboratory rack" credit="Test tubes in a laboratory — Sarka Na kopci, Wikimedia Commons, CC BY-SA 4.0" creditHref="https://commons.wikimedia.org/wiki/File:Test_tubes_in_a_laboratory.jpg" pins={[
+  { x: 25, y: 54, label: "Named fixture", desc: "Each prepared dependency has a clear purpose." },
+  { x: 55, y: 40, label: "Scope", desc: "The rack determines which experiments share preparation." },
+  { x: 78, y: 64, label: "Teardown", desc: "Cleanup follows use even when the experiment fails." },
+]}/>
+
+<FlowAnimation title="A yield fixture's lifecycle" intervalMs={1500} nodes={[
+  { label: "Test requests fixture", desc: "The argument name makes dependency visible." },
+  { label: "Dependencies set up", desc: "pytest resolves the fixture graph." },
+  { label: "Fixture yields value", desc: "The test receives client or data." },
+  { label: "Test runs", desc: "Assertions pass or fail." },
+  { label: "Teardown executes", desc: "Code after yield cleans up regardless of test outcome." },
+]}/>
+
+<CodePlayground language="python" title="Run it — setup, use, teardown order (Python)" code={`events = []
+def fixture():
+    events.append("setup client")
+    yield {"base_url": "http://test"}
+    events.append("close client")
+
+gen = fixture()
+client = next(gen)
+events.append(f"test uses {client['base_url']}")
+try: next(gen)
+except StopIteration: pass
+print(" -> ".join(events))
+
+# setup client -> test uses http://test -> close client`}/>
+
+<CodePlayground language="java" title="Run it — setup, use, teardown order (Java)" code={`public class Main {
+  static class Client implements AutoCloseable {
+    Client() { System.out.println("setup client"); }
+    void use() { System.out.println("test uses http://test"); }
+    public void close() { System.out.println("close client"); }
+  }
+  public static void main(String[] args) {
+    try (Client client = new Client()) { client.use(); }
+  }
+}
+
+/* setup client
+   test uses http://test
+   close client */`}/>
+
+<FirstTime title="Your mission: extract setup without hiding intent"><StepChecklist steps={[
+  { text: "Extract base_url as a fixture", detail: "Keep environment selection in one visible place." },
+  { text: "Create a function-scoped Session fixture", detail: "Use yield and close it in teardown." },
+  { text: "Create one disposable resource fixture", detail: "Yield the created object and delete it afterward." },
+  { text: "Force the test assertion to fail", detail: "Confirm teardown still executes and the resource is gone." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Fixture not found.", fix: "Check spelling and visibility: local module, conftest.py directory ancestry, or installed plugin." },
+  { symptom: "Cleanup never runs.", fix: "Use yield correctly and place teardown after it; avoid returning before cleanup is registered." },
+  { symptom: "Tests pass alone but fail together.", fix: "Reduce scope for mutable data and remove shared state or order dependencies." },
+]}/>
+
+<WhereToCheck>
+- `pytest --fixtures` for available fixtures and source locations.
+- `pytest --setup-show` for setup/teardown order.
+- Fixture scope and mutable objects shared across tests.
+- Cleanup response status and service state after forced failure.
+</WhereToCheck>
+
+<WorkedExample title="cleanup survives an assertion failure">A `ticket` fixture creates `T-42`, yields it, and the test fails on title validation. pytest still resumes the fixture after `yield` and deletes `T-42`. The next test starts clean instead of inheriting yesterday's corpse.</WorkedExample>
+
+<Quiz question="What happens to code after yield in a pytest fixture?" options={["It is ignored", "It runs as teardown regardless of the test outcome", "It runs before the test", "It runs only on success"]} answer={1} explain="pytest's fixture reference specifies that post-yield code is teardown and runs regardless of test outcome." />
+
+<Flashcards cards={[
+  { front: "Default fixture scope", back: "Function: a fresh instance for each requesting test." },
+  { front: "yield fixture", back: "Setup before yield, injected value at yield, teardown after yield." },
+  { front: "Fixture dependency", back: "A fixture requests another fixture by naming it as an argument." },
+  { front: "Autouse risk", back: "Setup becomes invisible to tests and can create surprising global behavior." },
+]}/>
+
+<Challenge>Build fixtures for a Session and disposable ticket, then prove cleanup runs after both a pass and a deliberate failure.</Challenge>
+
+<AskCommunity prompt="My fixture `[name]` has scope `[scope]` and leaks `[state]` between tests; here is setup/teardown output.">Show the fixture dependency graph and order, with credentials removed.</AskCommunity>
+
+<Resources links={[
+  { href: "https://docs.pytest.org/en/stable/how-to/fixtures.html", title: "pytest — official fixtures guide", kind: "read" },
+  { href: "https://docs.pytest.org/en/stable/reference/reference.html#pytest-fixture", title: "pytest — official fixture reference", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=mlqlrH2p114" title="Super SQA — mastering pytest fixtures" minutes={18} />
+
+<Takeaways points={[
+  "Fixtures are explicit named dependencies injected into tests.",
+  "Function scope is the safe default for mutable API data.",
+  "Code after yield performs teardown even when the test fails.",
+  "Fixture composition is useful; invisible autouse state needs restraint.",
+]}/>
+
+<Complete xp={10} />

@@ -1,0 +1,214 @@
+---
+title: "WireMock hands-on"
+summary: "WireMock is an HTTP server you control: match an incoming request, return a deliberate response, inspect what arrived, and reset state so the next test starts clean."
+tags: ["api-test-automation", "mocking-and-service-virtualization", "track-e", "wiremock"]
+updated: "2026-07-17"
+related:
+  - "api-test-automation/mocking-and-service-virtualization/stubs-mocks-and-fakes"
+  - "api-test-automation/mocking-and-service-virtualization/record-and-playback"
+  - "api-test-automation/mocking-and-service-virtualization/simulating-errors-latency-and-chaos"
+---
+
+<Hook>
+WireMock is a tiny HTTP service with a suspiciously useful superpower: it tells the exact lie your
+test asks for. Point the application at it, teach it that `GET /rates/NPR` returns one controlled
+response, run the behavior, then inspect what the application actually sent. No payment gateway was
+bothered during the making of this test.
+</Hook>
+
+<Callout type="analogy">
+A manual telephone switchboard does not imitate the entire telephone network. An operator connects
+one incoming line to one chosen destination by placing the correct plug in the correct socket.
+WireMock does the same routing with request matchers: method, path, header, or body in; selected stub
+response out.
+</Callout>
+
+<Term define="WireMock is an open-source HTTP mock server for defining request-to-response stub mappings, verifying received requests, recording traffic, and injecting delays or faults. It can run inside JVM tests, as a standalone JAR, in Docker, or as a remote service. The application under test must use WireMock's base URL instead of the real dependency.">WireMock</Term>
+
+## The smallest useful mapping
+
+WireMock's Java DSL expresses the same two halves as its JSON admin API:
+
+```
+stubFor(get(urlPathEqualTo("/rates/NPR"))
+  .withHeader("Accept", equalTo("application/json"))
+  .willReturn(okJson("{\"currency\":\"NPR\",\"rate\":133.40}")));
+```
+
+- **Request matcher:** `GET`, path `/rates/NPR`, and the required `Accept` header.
+- **Response definition:** status `200`, JSON content type, and a controlled body.
+- **Priority:** when several mappings match, lower numeric priority wins; unspecified mappings use
+  WireMock's default priority.
+- **Unmatched request:** WireMock returns `404`. Treat that as evidence that the test or mapping is
+  wrong, not as a reason to add `anyUrl()` until the red light goes away.
+
+<Callout type="tip">
+Match only what matters to the contract. Matching an entire JSON body byte-for-byte makes harmless
+field order or whitespace changes break the test; matching too little lets a malformed request earn
+a cheerful `200`. Method, path, required headers, and meaningful JSON fields are the usual boundary.
+</Callout>
+
+<Callout type="mistake">
+Pointing the test at `localhost:8080` in one place and leaving the production URL hard-coded in
+another. The suite passes because nobody checks WireMock's request journal, while the real sandbox
+quietly receives your test traffic. Assert the configured base URL and verify the expected request.
+</Callout>
+
+<HotspotImage
+  src="/notes/api-test-automation/mocking-and-service-virtualization/wiremock-hands-on.jpg"
+  alt="Three United States Army Signal Corps operators connecting cables on a portable telephone switchboard"
+  credit="Portable telephone switchboard operators — U.S. Army Signal Corps, public domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:3_men_working_on_a_portable_phone_switchboard.jpg"
+  pins={[
+    { x: 45, y: 63, label: "Incoming request", desc: "The handset carries a specific call, just as method, URL, headers, and body describe one HTTP request." },
+    { x: 68, y: 56, label: "Request matcher", desc: "The operator chooses the socket; WireMock selects the highest-priority mapping that matches." },
+    { x: 61, y: 77, label: "Stub wiring", desc: "Each cable is an explicit mapping between an input pattern and a controlled destination response." },
+    { x: 79, y: 37, label: "Request journal", desc: "The other operators can inspect what was connected; WireMock records received requests for verification and debugging." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One WireMock-backed test"
+  intervalMs={1800}
+  nodes={[
+    { label: "Start and reset", desc: "Start an isolated server and clear mappings and requests." },
+    { label: "Register the mapping", desc: "Describe the meaningful request and controlled response." },
+    { label: "Inject the base URL", desc: "Configure the application to call WireMock, never the real provider." },
+    { label: "Exercise the application", desc: "Call the application's public behavior, not WireMock directly." },
+    { label: "Assert and verify", desc: "Assert the outcome, then inspect the request journal when interaction matters." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="Match requests like a tiny WireMock"
+  code={`mappings = [
+    {"method": "GET", "path": "/rates/NPR", "status": 200, "body": "NPR=133.40"},
+    {"method": "ANY", "path": "*", "status": 404, "body": "No stub matched"},
+]
+
+def serve(method, path):
+    for stub in mappings:
+        method_ok = stub["method"] in ("ANY", method)
+        path_ok = stub["path"] in ("*", path)
+        if method_ok and path_ok:
+            return stub["status"], stub["body"]
+
+for request in [("GET", "/rates/NPR"), ("POST", "/rates/NPR")]:
+    status, body = serve(*request)
+    print(request, "->", status, body)`}
+/>
+
+<CodePlayground
+  language="java"
+  title="Run the same matcher in Java"
+  code={`import java.util.*;
+
+public class Main {
+    record Stub(String method, String path, int status, String body) {}
+
+    static Stub serve(List<Stub> mappings, String method, String path) {
+        return mappings.stream()
+            .filter(s -> (s.method().equals("ANY") || s.method().equals(method))
+                      && (s.path().equals("*") || s.path().equals(path)))
+            .findFirst().orElseThrow();
+    }
+
+    public static void main(String[] args) {
+        var mappings = List.of(
+            new Stub("GET", "/rates/NPR", 200, "NPR=133.40"),
+            new Stub("ANY", "*", 404, "No stub matched")
+        );
+        for (String method : List.of("GET", "POST")) {
+            Stub hit = serve(mappings, method, "/rates/NPR");
+            System.out.println(method + " -> " + hit.status() + " " + hit.body());
+        }
+    }
+}`}
+/>
+
+<FirstTime title="Stub one dependency end to end">
+<StepChecklist
+  steps={[
+    { text: "Start WireMock on a random or dedicated test port", detail: "Use the official JUnit integration, standalone JAR, or Docker image; avoid a port shared by parallel tests." },
+    { text: "Register one exact mapping", detail: "Match the method, URL path, and one header or body field that the contract requires." },
+    { text: "Inject WireMock's base URL", detail: "Log or assert the effective URL before the application call." },
+    { text: "Assert outcome and request", detail: "Check the application's response first; verify the downstream request only if it is part of the requirement." },
+  ]}
+/>
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    { symptom: "WireMock returns 404 although the mapping exists.", fix: "Inspect the unmatched-request diff and compare method, path vs full URL, query parameters, headers, and JSON matching rules." },
+    { symptom: "The wrong stub responds.", fix: "Two mappings overlap. Make matchers more specific or assign explicit priorities; remember that priority 1 outranks 5." },
+    { symptom: "Tests pass alone but fail in parallel.", fix: "They share a server, port, or request journal. Use per-test instances or isolate mappings and reset safely between tests." },
+    { symptom: "Verification finds calls from a previous test.", fix: "Reset requests or the full server state during setup; do not rely on test execution order." },
+  ]}
+/>
+
+<WhereToCheck>
+- `GET /__admin/requests/unmatched` or the library's unmatched-request diagnostics.
+- `GET /__admin/mappings` to see loaded mappings, matchers, IDs, and priorities.
+- `GET /__admin/requests` to inspect the request journal and exact received traffic.
+- The application's effective dependency base URL and test logs.
+</WhereToCheck>
+
+<WorkedExample title="proving the client sends the required correlation ID">
+1. Register a `POST /notifications` stub requiring `Content-Type: application/json` and an
+   `X-Correlation-Id` header matching a non-empty pattern.
+2. Configure the ticket service's notification base URL to the WireMock server.
+3. Create a ticket through the ticket service. Assert that it reports notification accepted.
+4. Verify one downstream request with the expected ticket ID and correlation header. Then reset the
+   journal. If the header disappears in a refactor, the mapping no longer matches and the test fails
+   with the actual unmatched request available for diagnosis.
+</WorkedExample>
+
+<Quiz
+  question="Two WireMock mappings match the same request. One has priority 1 and the other priority 5. Which response is selected?"
+  options={["Priority 5, because the larger number wins", "Priority 1, because lower numeric priority wins", "Both responses are concatenated", "Selection is random"]}
+  answer={1}
+  explain="WireMock treats lower numeric values as higher priority. Explicit priorities are useful for a specific mapping plus a lower-priority catch-all response."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Stub mapping", back: "A request matcher paired with a response definition." },
+    { front: "Unmatched default", back: "WireMock normally returns 404 when no mapping matches." },
+    { front: "Priority", back: "Lower numeric values win; unspecified mappings use the default priority." },
+    { front: "Request journal", back: "Recorded incoming requests used for verification and diagnosis." },
+    { front: "Test isolation", back: "Separate server state or reliable resets so mappings and requests cannot leak between tests." },
+  ]}
+/>
+
+<Challenge>
+Create a specific mapping for `GET /tickets?status=open` and a low-priority catch-all JSON `404`.
+Send one matching and two deliberately wrong requests. Use the unmatched-request diagnostics to
+explain each mismatch without weakening the specific mapping.
+</Challenge>
+
+<AskCommunity prompt="My WireMock request did not match. Mapping: `[paste]`. Actual unmatched request: `[paste]`. I expected `[field]` to match because `[reason]`.">
+Include both sides. "WireMock returns 404" without the mapping and actual request is a mystery novel.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://wiremock.org/docs/stubbing/", title: "WireMock — Stubbing", kind: "read" },
+    { href: "https://wiremock.org/docs/request-matching/", title: "WireMock — Request matching", kind: "read" },
+    { href: "https://wiremock.org/docs/verifying/", title: "WireMock — Verifying requests", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=kIgl7Yxmd4M" title="Setup WireMock Standalone Server Locally — Create Basic JSON Stub — Amod Mahajan" minutes={14} />
+
+<Takeaways
+  points={[
+    "A WireMock mapping is a deliberate request matcher paired with a controlled response.",
+    "Inject and assert the mock base URL so tests never leak to a real dependency.",
+    "Match contract-significant details without coupling to irrelevant whitespace or field order.",
+    "Use the request journal and unmatched-request diagnostics before weakening a mapping.",
+    "Isolate or reset server state so parallel tests cannot share mappings or history.",
+  ]}
+/>
+
+<Complete xp={10} />

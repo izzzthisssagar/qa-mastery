@@ -1,0 +1,120 @@
+---
+title: "Requests & pytest"
+summary: "Requests performs the HTTP exchange; pytest discovers cases, injects fixtures, and reports assertions. Together they make small API tests readable without pretending a response object is self-validating."
+tags: ["api-test-automation", "python-api-testing", "track-d"]
+updated: "2026-07-17"
+related:
+  - "api-test-automation/python-api-testing/fixtures-for-apis"
+  - "api-test-automation/python-api-testing/parameterized-endpoint-tests"
+  - "api-test-automation/rest-assured-java/setup-and-first-test"
+---
+
+<Hook>`requests.get()` is an HTTP call, not a test. The test begins when pytest compares the response with a contract and is willing to ruin your green checkmark over it.</Hook>
+<Callout type="analogy">A lab technician operates instruments and records evidence; the laboratory procedure decides whether the evidence passes. Requests is the instrument, pytest is the procedure and report.</Callout>
+<Term define="An API test with Requests and pytest calls an HTTP method through Requests, inspects the returned Response, and uses plain Python assertions inside pytest-discovered test functions to decide pass or fail.">Requests + pytest test</Term>
+
+## One request, explicit timeout, useful assertions
+
+```python
+import requests
+
+def test_health(base_url):
+    response = requests.get(f"{base_url}/health", timeout=5)
+    assert response.status_code == 200
+    assert response.headers["Content-Type"].startswith("application/json")
+    assert response.json()["status"] == "ok"
+```
+
+Requests does not time out unless you set a timeout. In a test suite, an unlimited wait is not
+patience; it is a runner occupying a machine while teaching nobody what failed.
+
+<Callout type="tip">Use `response.raise_for_status()` in client code when any error status should raise. In tests, explicit status assertions often produce expectations that better match the endpoint's intended behavior.</Callout>
+<Callout type="mistake">Calling `response.json()` before checking that the response is actually JSON. An HTML gateway error then becomes a distracting decoder exception.</Callout>
+
+{/* IMAGE: a working biochemistry laboratory bench with instruments and containers */}
+<HotspotImage src="/notes/api-test-automation/python-api-testing/requests-and-pytest.jpg" alt="Biochemistry laboratory bench with equipment and containers" credit="Lab bench — Magnus Manske, Wikimedia Commons, CC BY 1.0" creditHref="https://commons.wikimedia.org/wiki/File:Lab_bench.jpg" pins={[
+  { x: 29, y: 62, label: "Requests", desc: "The instrument sends HTTP and returns a Response." },
+  { x: 57, y: 40, label: "Assertion", desc: "The procedure compares evidence with the contract." },
+  { x: 78, y: 68, label: "pytest report", desc: "Discovery and failure output make the result actionable." },
+]}/>
+
+<FlowAnimation title="A Python API test's real lifecycle" intervalMs={1500} nodes={[
+  { label: "pytest discovers test", desc: "A test_ function is collected." },
+  { label: "Requests sends HTTP", desc: "Method, URL, headers, body, and timeout define the exchange." },
+  { label: "Response is classified", desc: "Status and content type are checked before parsing." },
+  { label: "Assertions report", desc: "Business fields decide the final result." },
+]}/>
+
+<CodePlayground language="python" title="Run it — response evidence under pytest-style assertions (Python)" code={`response = {"status_code": 200, "content_type": "application/json", "json": {"status": "ok"}}
+assert response["status_code"] == 200
+assert response["content_type"].startswith("application/json")
+assert response["json"]["status"] == "ok"
+print("3 assertions passed")
+
+# 3 assertions passed`}/>
+
+<CodePlayground language="java" title="Run it — the same evidence, language changed (Java)" code={`import java.util.*;
+public class Main {
+  public static void main(String[] args) {
+    int status = 200; String contentType = "application/json";
+    Map<String,String> json = Map.of("status", "ok");
+    if (status != 200) throw new AssertionError("status");
+    if (!contentType.startsWith("application/json")) throw new AssertionError("content type");
+    if (!"ok".equals(json.get("status"))) throw new AssertionError("body status");
+    System.out.println("3 assertions passed");
+  }
+}
+
+/* 3 assertions passed */`}/>
+
+<FirstTime title="Your mission: build one pytest API check"><StepChecklist steps={[
+  { text: "Install Requests and pytest in an isolated environment", detail: "Record dependencies in the project's chosen lock or requirements file." },
+  { text: "Put one test_health function in a test_*.py file", detail: "First confirm pytest collects it." },
+  { text: "Send a GET with an explicit timeout", detail: "Use a disposable local or test environment." },
+  { text: "Assert status, content type, and one body field", detail: "Break each expectation once and read pytest's introspected failure." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "pytest collects zero tests.", fix: "Check test file/function naming and run pytest --collect-only before debugging HTTP." },
+  { symptom: "The run hangs on a dead service.", fix: "Add an explicit connect/read timeout; Requests has no default timeout." },
+  { symptom: "response.json() raises a decode error.", fix: "Inspect status, Content-Type, and a sanitized body preview for HTML or empty content." },
+]}/>
+
+<WhereToCheck>
+- `pytest --collect-only` for discovery.
+- `response.status_code`, headers, elapsed time, and sanitized body.
+- The prepared request URL and headers when parameters look wrong.
+- Service logs only after the client-side evidence is preserved.
+</WhereToCheck>
+
+<WorkedExample title="the gateway page disguised as an API failure">The endpoint returns `502` with `text/html`. A test that immediately calls `.json()` fails with a decoder traceback. Checking status and content type first reports the real condition: an upstream gateway error, not malformed application JSON.</WorkedExample>
+
+<Quiz question="What happens when no timeout is supplied to Requests?" options={["It defaults to five seconds", "It does not time out by default", "pytest supplies one", "Only POST requests wait"]} answer={1} explain="The official Requests advanced guide states that requests do not time out unless a timeout is set explicitly." />
+
+<Flashcards cards={[
+  { front: "Requests' job", back: "Build and send HTTP requests and return Response objects." },
+  { front: "pytest's job", back: "Discover tests, provide fixtures/parametrization, evaluate assertions, and report failures." },
+  { front: "Why explicit timeout?", back: "Requests has no default timeout; an unavailable service can otherwise stall a run." },
+  { front: "Safe parse order", back: "Check expected status and JSON content type, then parse and assert fields." },
+]}/>
+
+<Challenge>Add a tuple timeout for connect/read behavior and make a failure message include method and sanitized URL without leaking query secrets.</Challenge>
+
+<AskCommunity prompt="My Requests + pytest case fails at `[status/content type/JSON assertion]`; here is the sanitized response and exact pytest traceback.">Include the timeout and environment, but remove auth headers and cookies.</AskCommunity>
+
+<Resources links={[
+  { href: "https://requests.readthedocs.io/en/stable/user/quickstart/", title: "Requests — official quickstart", kind: "read" },
+  { href: "https://docs.pytest.org/en/stable/getting-started.html", title: "pytest — official getting started", kind: "read" },
+  { href: "https://requests.readthedocs.io/en/stable/user/advanced/#timeouts", title: "Requests — official timeout guidance", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=vcJhW1fL7a4" title="Joshua Morony — how to test like an API developer" minutes={5} />
+
+<Takeaways points={[
+  "Requests performs HTTP; pytest supplies collection, fixtures, assertions, and reporting.",
+  "Set timeouts explicitly because Requests has no default timeout.",
+  "Check status and content type before parsing JSON.",
+  "A useful first test verifies protocol evidence and one stable business field.",
+]}/>
+
+<Complete xp={10} />

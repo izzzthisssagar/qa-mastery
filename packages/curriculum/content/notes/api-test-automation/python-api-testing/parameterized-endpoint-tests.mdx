@@ -1,0 +1,128 @@
+---
+title: "Parameterized endpoint tests"
+summary: "Use pytest.mark.parametrize to turn a table of endpoint cases into separately reported tests with readable IDs, without smuggling several unrelated failures through one loop."
+tags: ["api-test-automation", "python-api-testing", "track-d"]
+updated: "2026-07-17"
+related:
+  - "api-test-automation/python-api-testing/fixtures-for-apis"
+  - "api-test-automation/python-api-testing/sessions-and-auth"
+  - "test-frameworks/data-driven-testing/parameterized-tests"
+---
+
+<Hook>Copy-pasted tests are a spreadsheet wearing Python syntax. Parameterization keeps the table and fires the photocopier.</Hook>
+<Callout type="analogy">A caliper checks many parts against their own expected dimensions. The measuring procedure stays fixed; the part and acceptable result change per row.</Callout>
+<Term define="pytest parameterization generates a distinct test invocation for each supplied parameter set. @pytest.mark.parametrize names arguments, supplies rows, and can assign IDs that appear in collection and failure reports.">parameterization</Term>
+
+## One behavior, many meaningful rows
+
+```python
+@pytest.mark.parametrize(
+    "path, expected",
+    [
+        pytest.param("/health", 200, id="health-public"),
+        pytest.param("/v1/tickets/missing", 404, id="ticket-not-found"),
+    ],
+)
+def test_get_status(api, path, expected):
+    response = api.get(path)
+    assert response.status_code == expected
+```
+
+Parameterize variations of one behavior. If rows require completely different setup or assertions,
+they are different tests and deserve different names.
+
+<Callout type="tip">Give rows semantic IDs. `ticket-not-found` is useful in CI; `case1-404` is a cry for help.</Callout>
+<Callout type="mistake">Passing mutable dictionaries and modifying them in the test. pytest passes parameter values as-is; mutations can affect later cases.</Callout>
+
+{/* IMAGE: a precision caliper ready to measure multiple pieces against exact expectations */}
+<HotspotImage src="/notes/api-test-automation/python-api-testing/parameterized-endpoint-tests.jpg" alt="Vernier caliper on a work surface" credit="Vernier caliper 2016 — Santeri Viinamäki, Wikimedia Commons, CC BY-SA 4.0" creditHref="https://commons.wikimedia.org/wiki/File:Vernier_caliper_2016.jpg" pins={[
+  { x: 20, y: 53, label: "Test function", desc: "One consistent measuring procedure." },
+  { x: 52, y: 43, label: "Parameter row", desc: "Each endpoint and expectation is a separate specimen." },
+  { x: 80, y: 50, label: "Test ID", desc: "The report names which exact specimen failed." },
+]}/>
+
+<FlowAnimation title="From case table to report" intervalMs={1500} nodes={[
+  { label: "Define argument names", desc: "Columns describe the changing inputs and expectations." },
+  { label: "Add focused rows", desc: "Each row represents the same behavior." },
+  { label: "Assign readable IDs", desc: "Collection and CI reports identify cases semantically." },
+  { label: "pytest generates tests", desc: "Each row passes or fails independently." },
+]}/>
+
+<CodePlayground language="python" title="Run it — a tiny generated endpoint matrix (Python)" code={`cases = [
+    ("health-public", "/health", 200, 200),
+    ("ticket-not-found", "/v1/tickets/missing", 404, 404),
+    ("private-missing-auth", "/v1/me", 401, 401),
+]
+for case_id, path, expected, actual in cases:
+    print(f"{case_id}: {path} -> {'PASS' if actual == expected else 'FAIL'}")
+
+# health-public: /health -> PASS
+# ticket-not-found: /v1/tickets/missing -> PASS
+# private-missing-auth: /v1/me -> PASS`}/>
+
+<CodePlayground language="java" title="Run it — a tiny generated endpoint matrix (Java)" code={`public class Main {
+  record Case(String id, String path, int expected, int actual) {}
+  public static void main(String[] args) {
+    Case[] cases = {
+      new Case("health-public", "/health", 200, 200),
+      new Case("ticket-not-found", "/v1/tickets/missing", 404, 404),
+      new Case("private-missing-auth", "/v1/me", 401, 401)
+    };
+    for (Case c : cases) System.out.println(c.id() + ": " + c.path() + " -> " + (c.actual() == c.expected() ? "PASS" : "FAIL"));
+  }
+}
+
+/* health-public: /health -> PASS
+   ticket-not-found: /v1/tickets/missing -> PASS
+   private-missing-auth: /v1/me -> PASS */`}/>
+
+<FirstTime title="Your mission: replace repetition with a case table"><StepChecklist steps={[
+  { text: "Find three copied endpoint status tests", detail: "Confirm they exercise the same behavior and assertions." },
+  { text: "Extract only changing values into columns", detail: "Keep setup and assertion logic in the test body." },
+  { text: "Add a semantic id to every row", detail: "Run pytest --collect-only to inspect generated names." },
+  { text: "Break one row", detail: "Confirm only that parameter instance fails and is easy to select." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Failure name is unreadable.", fix: "Use explicit ids or pytest.param(..., id=...) based on behavior." },
+  { symptom: "Later cases inherit mutated input.", fix: "Treat parameter objects as immutable or create fresh copies in fixtures/test setup." },
+  { symptom: "The test body is full of if statements.", fix: "Split different behaviors into separately named tests instead of parameterizing unlike cases." },
+]}/>
+
+<WhereToCheck>
+- `pytest --collect-only` for generated IDs.
+- The failed node ID for the exact row.
+- Parameter tables for shared mutable values.
+- Whether every row truly uses the same setup and assertion logic.
+</WhereToCheck>
+
+<WorkedExample title="one endpoint row fails without hiding two passes">Three GET cases run independently. `/v1/me` unexpectedly returns `403` instead of `401`; pytest reports only `test_get_status[private-missing-auth]` failed. The health and not-found cases remain visible passes, unlike a manual loop that stops at the first assertion.</WorkedExample>
+
+<Quiz question="Why give parameter rows explicit IDs?" options={["They make HTTP faster", "They make collection, selection, and failure reports identify behavior", "They copy input values", "pytest requires them"]} answer={1} explain="IDs are optional but turn generated node names into useful diagnostic labels." />
+
+<Flashcards cards={[
+  { front: "Parametrized invocation", back: "A separately collected test instance for one parameter row." },
+  { front: "Good test ID", back: "A short behavior label such as ticket-not-found." },
+  { front: "Mutation warning", back: "pytest passes parameter values as-is; mutable values are not copied." },
+  { front: "Split instead of parameterize", back: "When cases need different setup, actions, or assertions." },
+]}/>
+
+<Challenge>Build a five-row negative status matrix with readable IDs, then select and run one row by its node ID.</Challenge>
+
+<AskCommunity prompt="Should these endpoint cases be one parametrized test or separate tests? Here are the rows and shared assertion logic: `[sanitized table]`">Call out any row needing different setup or meaning; that is the split signal.</AskCommunity>
+
+<Resources links={[
+  { href: "https://docs.pytest.org/en/stable/how-to/parametrize.html", title: "pytest — official parametrization guide", kind: "read" },
+  { href: "https://docs.pytest.org/en/stable/example/parametrize.html", title: "pytest — official parametrization examples and IDs", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=_b9LYhzzdHg" title="Alexander Sergeenko — parameterized test concepts" minutes={10} />
+
+<Takeaways points={[
+  "Parameterization generates a separate test instance for every data row.",
+  "Use it when setup, action, and assertion logic stay the same.",
+  "Semantic IDs make generated failures selectable and readable.",
+  "Treat mutable parameter values carefully because pytest does not copy them.",
+]}/>
+
+<Complete xp={10} />

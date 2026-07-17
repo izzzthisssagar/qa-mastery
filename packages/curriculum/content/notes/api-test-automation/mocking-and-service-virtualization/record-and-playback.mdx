@@ -1,0 +1,197 @@
+---
+title: "Record & playback"
+summary: "WireMock can proxy a real API, capture observed exchanges as stub mappings, and replay them locally—but recordings are raw material that must be filtered, sanitized, reviewed, and maintained."
+tags: ["api-test-automation", "mocking-and-service-virtualization", "track-e", "wiremock"]
+updated: "2026-07-17"
+related:
+  - "api-test-automation/mocking-and-service-virtualization/wiremock-hands-on"
+  - "api-test-automation/mocking-and-service-virtualization/simulating-errors-latency-and-chaos"
+  - "api-test-automation/contract-and-schema-testing/breaking-change-detection"
+---
+
+<Hook>
+Recording an API is seductive: click Record, send traffic, click Stop, and suddenly stub files appear.
+The machine has done your homework! Except it also copied yesterday's IDs, timestamps, headers,
+possibly credentials, and every accidental request you made while the red light was on. Playback is
+fast; trustworthy playback begins with editing.
+</Hook>
+
+<Callout type="analogy">
+A reel-to-reel recorder captures exactly what reaches the microphone—not the clean performance you
+meant to make. Coughs, wrong notes, and private background chatter become part of the tape. WireMock's
+recorder is equally literal: it proxies real traffic and turns what it observed into mappings.
+</Callout>
+
+<Term define="Record and playback is a service-virtualization workflow where a proxy forwards requests to a real target, captures selected request/response exchanges as reusable stub mappings, then serves those mappings locally without contacting the target. A recording is an observed example, not proof of the provider's full contract.">record and playback</Term>
+
+## What actually happens
+
+1. WireMock starts proxying to an allowed target.
+2. Recording begins with filters that limit methods and paths.
+3. The client sends representative requests through WireMock.
+4. WireMock forwards them and records the resulting exchanges.
+5. Recording stops; mappings are produced and become immediately playable.
+6. A human removes secrets and noise, generalizes unstable values, and reviews matchers.
+
+WireMock supports recording and snapshotting; both produce mappings from observed traffic. Recorded
+JSON and XML requests get content-aware matching by default, and repeat requests can be represented
+as scenarios. None of that knows whether a captured authorization token is safe to commit.
+
+<Callout type="tip">
+Use an allowlist before recording: one host, a narrow path pattern, test accounts, and synthetic data.
+Sanitizing after capture is necessary; preventing sensitive traffic from entering the recording is
+better.
+</Callout>
+
+<Callout type="mistake">
+Treating a captured `200` as the entire contract. The recorder saw one happy example. It did not see
+required-field validation, `401`, `404`, rate limiting, pagination edges, or the provider's next
+version. Add those deliberately from the specification.
+</Callout>
+
+<HotspotImage
+  src="/notes/api-test-automation/mocking-and-service-virtualization/record-and-playback.jpg"
+  alt="An EMI reel-to-reel tape recorder with two reels, tape path, controls, and an analog level meter"
+  credit="EMI reel-to-reel tape recorder — Badseed, CC BY-SA 3.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:EMI_reel-to-reel_tape_recorder.JPG"
+  pins={[
+    { x: 26, y: 19, label: "Source reel", desc: "The real provider is the source. Recording depends on exactly what it emits during the session." },
+    { x: 55, y: 48, label: "Tape path", desc: "WireMock proxies traffic through a controlled path where exchanges can be selected and captured." },
+    { x: 73, y: 19, label: "Captured mapping", desc: "The take-up reel holds observed examples, not every response the provider could produce." },
+    { x: 51, y: 81, label: "Monitor and edit", desc: "Review matchers, bodies, secrets, and unstable data before a recording becomes a test fixture." },
+  ]}
+/>
+
+<FlowAnimation
+  title="From live traffic to trustworthy fixture"
+  intervalMs={1800}
+  nodes={[
+    { label: "Constrain", desc: "Allow one target and only the paths and headers needed." },
+    { label: "Record", desc: "Proxy synthetic test traffic and capture representative exchanges." },
+    { label: "Sanitize", desc: "Remove credentials, personal data, volatile IDs, dates, and irrelevant headers." },
+    { label: "Generalize", desc: "Keep strict contract fields while relaxing unstable incidental values." },
+    { label: "Augment and review", desc: "Add missing errors from the contract and review the diff like code." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="Sanitize a captured exchange"
+  code={`captured = {
+    "request": {"path": "/users/42", "authorization": "Bearer secret-token"},
+    "response": {"id": 42, "email": "real.person@example.com", "created_at": "2026-07-17T10:03:00Z"},
+}
+
+safe = {
+    "request": {"path_pattern": "/users/[0-9]+", "authorization": "Bearer test-token"},
+    "response": {"id": 1001, "email": "learner@example.test", "created_at": "<ISO-8601>"},
+}
+
+for section in safe:
+    print(section, safe[section])`}
+/>
+
+<CodePlayground
+  language="java"
+  title="Flag volatile captured fields"
+  code={`import java.util.*;
+
+public class Main {
+    public static void main(String[] args) {
+        var captured = new LinkedHashMap<String, String>();
+        captured.put("Authorization", "Bearer secret-token");
+        captured.put("created_at", "2026-07-17T10:03:00Z");
+        captured.put("Content-Type", "application/json");
+
+        var volatileNames = Set.of("authorization", "created_at", "set-cookie", "request-id");
+        captured.forEach((name, value) -> {
+            String verdict = volatileNames.contains(name.toLowerCase()) ? "REVIEW" : "KEEP";
+            System.out.printf("%-6s %s%n", verdict, name);
+        });
+    }
+}`}
+/>
+
+<FirstTime title="Record safely, then prove playback is offline">
+<StepChecklist
+  steps={[
+    { text: "Use a test tenant and synthetic records", detail: "Never learn sanitization by leaking real customer data into Git." },
+    { text: "Configure target and request filters", detail: "Capture only the required host, path pattern, method, and meaningful headers." },
+    { text: "Record a small representative flow", detail: "Stop promptly; fewer deliberate exchanges are easier to review than a traffic dump." },
+    { text: "Sanitize, disconnect, and replay", detail: "Disable network access to the provider and prove the edited mapping still serves the test." },
+  ]}
+/>
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    { symptom: "Playback returns 404 for a different test user.", fix: "The recorded matcher captured a literal ID or token. Generalize only the volatile part while keeping method, path shape, and meaningful fields strict." },
+    { symptom: "A secret scanner flags the mappings directory.", fix: "Revoke the exposed credential immediately, remove it from history, then add automated fixture scanning and safer recording inputs." },
+    { symptom: "Several identical requests replay surprising responses in sequence.", fix: "The recorder represented repeats as a scenario. Review scenario state or disable repeat-as-scenarios when one stable response is intended." },
+    { symptom: "The recording passes while the provider changed.", fix: "Playback is isolated by design. Run contract-drift checks and a small live integration suite separately." },
+  ]}
+/>
+
+<WhereToCheck>
+- `mappings/` for request matchers and response definitions.
+- `__files/` for extracted large or binary response bodies.
+- `/__admin/mappings` and the recorder UI for loaded mappings.
+- Git secret scanning, fixture schema validation, and the provider's current contract diff.
+</WhereToCheck>
+
+<WorkedExample title="capturing a safe exchange-rate fixture">
+1. Restrict recording to a test provider host and `GET /rates/*`; capture `Accept`, not `Authorization`.
+2. Request two synthetic currencies through the proxy, then stop recording.
+3. Replace volatile response timestamps with stable examples and change literal currency paths into
+   intentional separate mappings. Add documented `404` and `429` cases manually.
+4. Disconnect from the network and replay the consumer suite. In a separate scheduled job, validate
+   those fixtures against the provider's current schema.
+</WorkedExample>
+
+<Quiz
+  question="What does a successful recorded 200 response prove about the provider contract?"
+  options={["Every documented response is covered", "Only that one observed exchange occurred in that session", "The provider cannot introduce breaking changes", "Authentication data is safe to commit"]}
+  answer={1}
+  explain="A recording is evidence of one observed exchange. It must be sanitized and supplemented with documented error and edge cases; it does not replace a contract or live integration checks."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Recording", back: "Proxy live requests and create mappings from the observed exchanges when recording stops." },
+    { front: "Playback", back: "Serve captured mappings locally; no explicit playback mode is required once mappings are loaded." },
+    { front: "Sanitize", back: "Remove or replace credentials, personal data, volatile IDs, timestamps, cookies, and request IDs." },
+    { front: "Generalize", back: "Relax only unstable values while keeping contract-significant matching strict." },
+    { front: "Observed example", back: "Evidence of what happened once, not a complete specification of what may happen." },
+  ]}
+/>
+
+<Challenge>
+Record two requests to a safe demo API, inspect every generated matcher and body, then make playback
+work with a different synthetic user while offline. Document every field you generalized and why.
+</Challenge>
+
+<AskCommunity prompt="I recorded `[endpoint]` using synthetic data. These fields were captured: `[list]`; I sanitized `[list]` and generalized `[list]`. What contract-significant field might I be weakening?">
+Share sanitized mapping fragments only. Never paste real tokens to ask whether they are sensitive.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://wiremock.org/docs/record-playback/", title: "WireMock — Record and Playback", kind: "read" },
+    { href: "https://wiremock.org/docs/proxying/", title: "WireMock — Proxying", kind: "read" },
+    { href: "https://wiremock.org/docs/request-matching/", title: "WireMock — Request matching", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=YEc6EwiHrjM" title="Fake It until You Make It! API Integration Testing with Containers & WireMock — Oleg Nenashev" minutes={44} />
+
+<Takeaways
+  points={[
+    "Recordings are observed examples and raw fixture material, not complete API contracts.",
+    "Constrain capture before it begins and use synthetic data to reduce privacy and secret risk.",
+    "Sanitize secrets and volatile data, then generalize only fields that are truly incidental.",
+    "Review generated mappings as code and add documented errors the happy recording never saw.",
+    "Prove offline playback, then use separate contract and live checks to detect provider drift.",
+  ]}
+/>
+
+<Complete xp={10} />

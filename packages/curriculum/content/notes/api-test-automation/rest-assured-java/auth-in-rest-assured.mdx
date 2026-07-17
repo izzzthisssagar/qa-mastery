@@ -1,0 +1,128 @@
+---
+title: "Authentication in REST Assured"
+summary: "Apply Basic, bearer, OAuth2, or other supported authentication at request or specification scope, keep secrets out of code and logs, and test both access and refusal."
+tags: ["api-test-automation", "rest-assured-java", "track-d"]
+updated: "2026-07-17"
+related:
+  - "api-test-automation/rest-assured-java/validating-json-and-status"
+  - "api-test-automation/python-api-testing/sessions-and-auth"
+  - "api-testing-fundamentals/auth-manually/bearer-and-jwt"
+---
+
+<Hook>A test suite that proves valid tokens work but never proves invalid tokens fail has tested the welcome mat and skipped the lock.</Hook>
+<Callout type="analogy">A clear padlock shows the mechanism: the correct key aligns every pin, while a near-match must still be refused. Auth tests need the same positive and negative evidence.</Callout>
+<Term define="Authentication supplies evidence of identity with a request. REST Assured supports request-scoped and reusable authentication for schemes including Basic, digest, OAuth, certificates, and form auth; bearer tokens can be sent through OAuth2 support or an Authorization header.">authentication</Term>
+
+## Scope credentials deliberately
+
+```java
+given()
+  .baseUri(baseUri)
+  .auth().oauth2(System.getenv("API_TOKEN"))
+.when()
+  .get("/v1/me")
+.then()
+  .statusCode(200);
+```
+
+For Basic auth, know which behavior you are testing. Preemptive Basic sends credentials immediately;
+challenged Basic waits for the server's challenge and may require an additional request.
+
+<Callout type="tip">Build an authenticated `RequestSpecification` from environment-provided secrets, then override or omit auth in dedicated negative tests.</Callout>
+<Callout type="mistake">Turning on full request logging and shipping `Authorization: Bearer ...` into CI artifacts. Debug output is still data exfiltration when the secret wears monospace.</Callout>
+
+{/* IMAGE: a transparent padlock and two keys showing the internal pin mechanism */}
+<HotspotImage src="/notes/api-test-automation/rest-assured-java/auth-in-rest-assured.jpg" alt="Transparent practice padlock with two metal keys" credit="Clear padlock and keys — zaphad1, Wikimedia Commons, CC BY 2.0" creditHref="https://commons.wikimedia.org/wiki/File:Clear_padlock_and_keys.jpg" pins={[
+  { x: 36, y: 48, label: "Credential", desc: "The presented key: password, token, or certificate." },
+  { x: 61, y: 42, label: "Auth scheme", desc: "The mechanism determines how the credential travels and is challenged." },
+  { x: 73, y: 70, label: "Authorization result", desc: "The server must grant the right identity and reject missing or invalid evidence." },
+]}/>
+
+<FlowAnimation title="Prove the lock, not just the key" intervalMs={1500} nodes={[
+  { label: "Load secret safely", desc: "Read it from environment or a secret manager." },
+  { label: "Apply correct scheme", desc: "Basic, bearer/OAuth2, certificate, or the API's documented mechanism." },
+  { label: "Assert authorized behavior", desc: "The intended identity receives the intended resource." },
+  { label: "Assert refusal paths", desc: "Missing, malformed, expired, and wrong-scope credentials fail correctly." },
+]}/>
+
+<CodePlayground language="python" title="Run it — a tiny authorization matrix (Python)" code={`def authorize(token, required_scope):
+    tokens = {"good": {"read:tickets"}, "wrong-scope": {"read:profile"}}
+    if token not in tokens: return 401
+    return 200 if required_scope in tokens[token] else 403
+
+for name, token in [("valid", "good"), ("missing", None), ("bad", "nope"), ("scope", "wrong-scope")]:
+    print(f"{name}: HTTP {authorize(token, 'read:tickets')}")
+
+# valid: HTTP 200
+# missing: HTTP 401
+# bad: HTTP 401
+# scope: HTTP 403`}/>
+
+<CodePlayground language="java" title="Run it — a tiny authorization matrix (Java)" code={`import java.util.*;
+public class Main {
+  static int authorize(String token, String scope) {
+    Map<String, Set<String>> tokens = Map.of("good", Set.of("read:tickets"), "wrong-scope", Set.of("read:profile"));
+    if (token == null || !tokens.containsKey(token)) return 401;
+    return tokens.get(token).contains(scope) ? 200 : 403;
+  }
+  public static void main(String[] args) {
+    String[][] cases = {{"valid","good"},{"missing",null},{"bad","nope"},{"scope","wrong-scope"}};
+    for (String[] c : cases) System.out.println(c[0] + ": HTTP " + authorize(c[1], "read:tickets"));
+  }
+}
+
+/* valid: HTTP 200
+   missing: HTTP 401
+   bad: HTTP 401
+   scope: HTTP 403 */`}/>
+
+<FirstTime title="Your mission: test an auth matrix"><StepChecklist steps={[
+  { text: "Load a test credential outside source control", detail: "Fail clearly when it is absent without printing its value." },
+  { text: "Prove the valid credential reaches the right identity", detail: "Assert an identity or scope field, not only 200." },
+  { text: "Test missing and malformed credentials", detail: "Expect the documented authentication failure, commonly 401." },
+  { text: "Test valid identity with insufficient permission", detail: "Expect the documented authorization failure, commonly 403." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Basic auth causes two requests.", fix: "Use preemptive Basic if the goal is ordinary authenticated access; keep challenged mode when testing the challenge itself." },
+  { symptom: "A bearer token works locally but not in CI.", fix: "Check secret availability, whitespace/newlines, environment scope, and expiration without logging the token." },
+  { symptom: "A redirect loses Authorization.", fix: "Inspect redirect hosts and policy; credentials should not casually cross hosts." },
+]}/>
+
+<WhereToCheck>
+- The API's documented authentication scheme and required scopes.
+- Sanitized request logs showing the scheme, never the secret value.
+- CI secret scope and expiration metadata.
+- Separate 401 authentication and 403 authorization expectations.
+</WhereToCheck>
+
+<WorkedExample title="a token that opens too much">A read-only token successfully calls `GET /v1/tickets`, then unexpectedly receives `204` from `DELETE /v1/tickets/T-7`. The negative scope test fails, revealing excess authorization. A happy-path-only suite would advertise the token as healthy.</WorkedExample>
+
+<Quiz question="What is the key behavioral difference between preemptive and challenged Basic auth?" options={["Preemptive sends credentials before a challenge; challenged waits and may make another request", "Challenged encrypts the password", "Preemptive uses bearer tokens", "There is no difference"]} answer={0} explain="The official REST Assured usage guide documents the request-timing difference; neither mode makes plain HTTP safe, so use TLS." />
+
+<Flashcards cards={[
+  { front: "401 vs 403", back: "401 commonly means missing/invalid authentication; 403 means the identity is known but not allowed." },
+  { front: "Preemptive Basic", back: "Sends credentials immediately instead of waiting for a server challenge." },
+  { front: "Safe secret source", back: "Environment or secret manager, never committed code or fixtures." },
+  { front: "Complete auth coverage", back: "Valid identity plus missing, invalid, expired, and insufficient-scope cases." },
+]}/>
+
+<Challenge>Create a reusable authenticated request specification and four isolated auth tests while ensuring failure logs redact the Authorization value.</Challenge>
+
+<AskCommunity prompt="My auth test gets `[401/403/redirect]` using `[scheme]`; here is the sanitized request flow and documented scope.">Never paste a live token, cookie, password, private key, or raw CI artifact.</AskCommunity>
+
+<Resources links={[
+  { href: "https://github.com/rest-assured/rest-assured/wiki/Usage#authentication", title: "REST Assured — official authentication usage", kind: "read" },
+  { href: "https://github.com/rest-assured/rest-assured/wiki/Usage#basic-authentication", title: "REST Assured — official Basic authentication behavior", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=0WH9oiYMS3M" title="JayPMedia — JWT explained visually" minutes={4} />
+
+<Takeaways points={[
+  "Apply the API's documented scheme at request or reusable specification scope.",
+  "Keep credentials outside source and redact them from logs and artifacts.",
+  "Preemptive Basic sends immediately; challenged Basic waits for a challenge.",
+  "Test valid access and refusal for missing, bad, expired, and under-scoped credentials.",
+]}/>
+
+<Complete xp={10} />

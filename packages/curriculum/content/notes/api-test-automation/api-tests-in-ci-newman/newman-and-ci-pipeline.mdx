@@ -1,0 +1,107 @@
+---
+title: "Newman and the CI pipeline"
+summary: "Wire a versioned Postman collection into CI as a deterministic gate, with pinned tooling, protected secrets, useful timeouts, and failure propagation."
+tags: ["api-test-automation", "api-tests-in-ci-newman", "track-d"]
+updated: "2026-07-17"
+related:
+  - "api-test-automation/api-tests-in-ci-newman/running-postman-collections-headlessly"
+  - "api-test-automation/api-tests-in-ci-newman/reporting-api-results"
+  - "automation-in-cicd/running-tests-in-ci/what-ci-is"
+---
+
+<Hook>A local command is a promising audition. A CI gate is the job: clean machine, known inputs, every pull request, and no human allowed to click “ignore.”</Hook>
+
+<Callout type="analogy">A 1913 assembly line moved every car through the same stations. CI does the same to changes: checkout, install, start the service, run the API suite, publish evidence.</Callout>
+
+<Term define="A CI API-test gate is a pipeline job whose reproducible setup runs an API suite and fails the workflow when the runner exits non-zero. It must control tool versions, target availability, secrets, timeouts, and artifacts rather than relying on a developer machine's state.">CI API-test gate</Term>
+
+## A gate, not a background decoration
+
+A robust job checks out the same collection reviewed with the code, installs a pinned Node and dependency lockfile, starts or reaches the intended test target, then runs `npx newman run`. Use request and overall timeouts so a dead service does not occupy a runner forever. Newman returns a status CI can use; the shell step must propagate it.
+
+<Callout type="tip">Put the fast, deterministic smoke collection on pull requests. Keep broader regression in a later or scheduled lane so feedback stays useful without shrinking coverage to nothing.</Callout>
+
+<Callout type="mistake">Fetching an unversioned collection from a mutable workspace during CI means the tested artifact may differ from the pull request. Either version the export or pin the remote revision through a controlled workflow.</Callout>
+
+<HotspotImage src="/notes/api-test-automation/api-tests-in-ci-newman/newman-and-ci-pipeline.jpg" alt="Workers along an early Ford automobile assembly line" credit="Ford assembly line, 1913 — unknown author, public domain, via Wikimedia Commons" creditHref="https://commons.wikimedia.org/wiki/File:AssemblyLine.jpg" pins={[
+  { x: 16, y: 44, label: "First station", desc: "Checkout and dependency installation prepare a known starting state." },
+  { x: 48, y: 52, label: "Work moves forward", desc: "The API target must be ready before the suite reaches its execution stage." },
+  { x: 82, y: 43, label: "Final inspection", desc: "Assertions and exit status decide whether this change proceeds." },
+]}/>
+
+<FlowAnimation title="Pull request to API gate" intervalMs={1400} nodes={[
+  { label: "Checkout + pinned Node", desc: "Recreate the reviewed repository state." },
+  { label: "Install with lockfile", desc: "Resolve the exact Newman dependency." },
+  { label: "Provision target + secrets", desc: "Wait for health; inject protected values." },
+  { label: "Run Newman", desc: "Apply explicit request and run timeouts." },
+  { label: "Publish report; propagate exit", desc: "Evidence survives while failures still block." },
+]}/>
+
+<CodePlayground language="python" title="Run it - decide a pipeline gate from stages (Python)" code={`stages = {"checkout": True, "service_ready": True, "newman": False, "report_uploaded": True}
+for name, ok in stages.items():
+    print(f"{name}={'ok' if ok else 'failed'}")
+gate = stages["checkout"] and stages["service_ready"] and stages["newman"]
+print(f"gate={'PASS' if gate else 'BLOCK'}")`}/>
+
+<CodePlayground language="java" title="Run it - decide the same pipeline gate (Java)" code={`import java.util.*;
+public class Main {
+  public static void main(String[] args) {
+    Map<String, Boolean> stages = new LinkedHashMap<>();
+    stages.put("checkout", true); stages.put("service_ready", true);
+    stages.put("newman", false); stages.put("report_uploaded", true);
+    stages.forEach((n, ok) -> System.out.println(n + "=" + (ok ? "ok" : "failed")));
+    boolean gate = stages.get("checkout") && stages.get("service_ready") && stages.get("newman");
+    System.out.println("gate=" + (gate ? "PASS" : "BLOCK"));
+  }
+}`}/>
+
+<FirstTime title="Your mission: add a truthful API gate"><StepChecklist steps={[
+  { text: "Use a pinned Node version and frozen lockfile install", detail: "The runner should not improvise dependencies." },
+  { text: "Wait on the target health endpoint", detail: "A retrying readiness check separates startup delay from product failure." },
+  { text: "Inject the API key from CI secrets", detail: "Never echo it or commit it in an environment export." },
+  { text: "Upload JUnit even on failure", detail: "Use the CI platform's always-run condition for evidence, not for the gate itself." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "The suite starts before the API is ready.", fix: "Add a bounded readiness loop against /api/health before Newman." },
+  { symptom: "A failed run has no report artifact.", fix: "Keep the Newman failure status, but place artifact upload in an always-run step." },
+  { symptom: "CI and local results disagree.", fix: "Compare Node/Newman versions, collection revision, base URL, and environment inputs." },
+]}/>
+
+<WhereToCheck>
+- CI logs for the exact collection SHA, Newman version, and target URL.
+- Secret masking and environment-variable names.
+- Health-check timing, Newman timeouts, and the original process status.
+</WhereToCheck>
+
+<WorkedExample title="a pull-request smoke gate">
+The job installs from the lockfile, waits up to 60 seconds for BuggyAPI `/api/health`, then runs a read-only smoke collection with `--timeout-request 5000`. JUnit upload runs even if Newman fails, while the Newman step remains red. Reviewers get both a blocked merge and the failing assertion name.
+</WorkedExample>
+
+<Quiz question="How should a CI job preserve a report when Newman fails?" options={["Suppress Newman's exit code", "Upload artifacts in an always-run step while preserving the failure", "Retry forever", "Commit the report"]} answer={1} explain="Evidence collection and gate outcome are separate concerns. Always-run upload preserves evidence without lying about the test result."/>
+
+<Flashcards cards={[
+  { front: "What makes a CI test a gate?", back: "Its non-zero result blocks the workflow or merge path." },
+  { front: "Why pin Newman?", back: "To keep local and CI behavior reproducible across runner updates." },
+  { front: "Readiness versus assertion failure?", back: "Readiness proves the target can accept tests; assertions evaluate its behavior." },
+]}/>
+
+<Challenge>Sketch a CI job with checkout, locked install, bounded health wait, Newman execution, and always-run report upload. Mark exactly which step owns the gate status.</Challenge>
+
+<AskCommunity prompt="My Newman CI gate differs from local at `[stage]`; versions, target, and redacted inputs are `[details]`.">Bring comparable facts, not a screenshot of one red icon.</AskCommunity>
+
+<Resources links={[
+  { href: "https://learning.postman.com/docs/reference/newman-cli/continuous-integration/", title: "Postman Docs — Newman in continuous integration", kind: "read" },
+  { href: "https://learning.postman.com/docs/reference/newman-cli/newman-options", title: "Postman Docs — Newman options and exit status", kind: "reference" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=90auAVyZswc" title="Building Quality Gates in DevOps CI/CD Pipelines — DheerajTechInsight" minutes={7} />
+
+<Takeaways points={[
+  "Pin tools and version the collection so CI tests the reviewed artifact.",
+  "Wait for target readiness and bound network waits with explicit timeouts.",
+  "Inject secrets at runtime and keep logs/reporters from exposing them.",
+  "Upload evidence independently while preserving Newman's failure status as the gate.",
+]}/>
+
+<Complete xp={10} />

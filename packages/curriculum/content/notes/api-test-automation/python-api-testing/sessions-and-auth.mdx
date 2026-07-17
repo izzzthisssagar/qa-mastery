@@ -1,0 +1,128 @@
+---
+title: "Sessions & authentication"
+summary: "Requests Sessions persist cookies and defaults and reuse connections; configure authentication deliberately, close sessions, and prove refusal paths without donating secrets to logs."
+tags: ["api-test-automation", "python-api-testing", "track-d"]
+updated: "2026-07-17"
+related:
+  - "api-test-automation/python-api-testing/parameterized-endpoint-tests"
+  - "api-test-automation/rest-assured-java/auth-in-rest-assured"
+  - "api-testing-fundamentals/auth-manually/basic-auth"
+---
+
+<Hook>A Session is a reusable client, not a communal junk drawer. Persist the headers and cookies every request needs; keep the one dangerous override visible at the call site.</Hook>
+<Callout type="analogy">A passport carries identity evidence across checkpoints, while each entry stamp belongs to one crossing. A Session carries shared headers, auth, cookies, and connection pooling; method arguments describe one request.</Callout>
+<Term define="A Requests Session persists selected parameters and cookies across its requests and uses urllib3 connection pooling. Method-level dictionary values merge with session defaults and override matching keys for that request without automatically persisting the override.">Session</Term>
+
+## Configure shared state, then close it
+
+```python
+with requests.Session() as session:
+    session.headers.update({"Accept": "application/json"})
+    session.headers.update({"Authorization": f"Bearer {token}"})
+    response = session.get(f"{base_url}/v1/me", timeout=5)
+    assert response.status_code == 200
+```
+
+Basic auth can use `auth=(user, password)` or `HTTPBasicAuth`. Requests may also read Basic
+credentials from `netrc` when no auth argument is supplied; set `session.trust_env = False` when a
+hermetic test must ignore environment credentials and proxies.
+
+<Callout type="tip">Use a context manager or fixture teardown so the Session closes even after an assertion failure.</Callout>
+<Callout type="mistake">Assuming a method-level cookie or header update persists forever. Session dictionaries merge with request values, but request-only values do not become new Session defaults.</Callout>
+
+{/* IMAGE: passport pages filled with entry stamps from multiple checkpoints */}
+<HotspotImage src="/notes/api-test-automation/python-api-testing/sessions-and-auth.jpg" alt="Passport pages containing multiple international entry stamps" credit="Passport stamps acquired on this trip — mroach, Wikimedia Commons, CC BY-SA 2.0" creditHref="https://commons.wikimedia.org/wiki/File:Passport_stamps_acquired_on_this_trip.jpg" pins={[
+  { x: 30, y: 46, label: "Session identity", desc: "Shared auth, cookies, and headers travel across requests." },
+  { x: 59, y: 62, label: "One request", desc: "A method-level override belongs to one checkpoint." },
+  { x: 79, y: 38, label: "Server decision", desc: "Each crossing still grants or refuses the requested action." },
+]}/>
+
+<FlowAnimation title="Use a Session without leaking state" intervalMs={1500} nodes={[
+  { label: "Create Session", desc: "Connection pooling and cookie persistence begin." },
+  { label: "Apply safe defaults", desc: "Base headers and documented auth are configured." },
+  { label: "Send scoped requests", desc: "Method-level values override defaults for one call." },
+  { label: "Test refusal", desc: "A separate client omits or changes credentials deliberately." },
+  { label: "Close Session", desc: "Context manager or fixture teardown releases resources." },
+]}/>
+
+<CodePlayground language="python" title="Run it — session defaults and request overrides (Python)" code={`session_headers = {"Accept": "application/json", "X-Role": "reader"}
+request_headers = {**session_headers, "X-Role": "admin", "X-Trace": "case-7"}
+print("request role:", request_headers["X-Role"])
+print("request trace:", request_headers["X-Trace"])
+print("session role after request:", session_headers["X-Role"])
+print("trace persisted:", "X-Trace" in session_headers)
+
+# request role: admin
+# request trace: case-7
+# session role after request: reader
+# trace persisted: False`}/>
+
+<CodePlayground language="java" title="Run it — session defaults and request overrides (Java)" code={`import java.util.*;
+public class Main {
+  public static void main(String[] args) {
+    Map<String,String> defaults = new LinkedHashMap<>();
+    defaults.put("Accept", "application/json"); defaults.put("X-Role", "reader");
+    Map<String,String> request = new LinkedHashMap<>(defaults);
+    request.put("X-Role", "admin"); request.put("X-Trace", "case-7");
+    System.out.println("request role: " + request.get("X-Role"));
+    System.out.println("request trace: " + request.get("X-Trace"));
+    System.out.println("session role after request: " + defaults.get("X-Role"));
+    System.out.println("trace persisted: " + defaults.containsKey("X-Trace"));
+  }
+}
+
+/* request role: admin
+   request trace: case-7
+   session role after request: reader
+   trace persisted: false */`}/>
+
+<FirstTime title="Your mission: build a scoped authenticated client"><StepChecklist steps={[
+  { text: "Create a Session fixture with Accept and User-Agent defaults", detail: "Close it after yield." },
+  { text: "Load a test token outside source control", detail: "Fail safely if absent and never print the value." },
+  { text: "Prove two requests share intended defaults", detail: "Check behavior, not only internal dictionaries." },
+  { text: "Use a separate unauthenticated client for refusal", detail: "Avoid mutating a shared Session in a way that contaminates later tests." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Unexpected Basic auth appears in a hermetic test.", fix: "Check netrc behavior and set trust_env=False if environment credentials must be ignored." },
+  { symptom: "A cookie leaks between tests.", fix: "Reduce fixture scope, clear the cookie jar, or create a fresh Session per test identity." },
+  { symptom: "Connections are not reused during streaming.", fix: "Read the full response body or close it so the connection can return to the pool." },
+]}/>
+
+<WhereToCheck>
+- `response.request.headers` after redaction for what was actually sent.
+- Session headers, auth, and cookie jar before each identity-sensitive case.
+- netrc and proxy environment behavior when local and CI results differ.
+- Fixture scope and Session close/teardown paths.
+</WhereToCheck>
+
+<WorkedExample title="an innocent cookie contaminates a negative test">A module-scoped Session logs in during the first test. The next “missing auth” case removes the Authorization header but retains the session cookie and returns `200`. A fresh unauthenticated Session correctly returns `401`, proving the shared cookie—not the endpoint—invalidated the test.</WorkedExample>
+
+<Quiz question="Do method-level headers passed to session.get persist as new Session defaults?" options={["Yes, always", "No; they merge for that request and matching values override only that call", "Only in pytest", "Only for Authorization"]} answer={1} explain="The official Requests advanced guide distinguishes Session-level persisted defaults from method-level parameters." />
+
+<Flashcards cards={[
+  { front: "Session persistence", back: "Cookies and configured defaults persist across requests made by that Session." },
+  { front: "Connection pooling", back: "A Session can reuse underlying connections to the same host." },
+  { front: "Method-level override", back: "Merges for one request and does not automatically become a persisted default." },
+  { front: "trust_env=False", back: "Stops a Session from relying on environment settings such as netrc credentials when hermetic behavior is needed." },
+]}/>
+
+<Challenge>Prove an unauthenticated case stays unauthenticated after a logged-in case by isolating Sessions and inspecting sanitized prepared-request headers.</Challenge>
+
+<AskCommunity prompt="My Requests Session unexpectedly sends `[cookie/header/auth]` in a later test; here are fixture scope and sanitized prepared-request headers.">Never post live cookies, passwords, bearer tokens, or netrc contents.</AskCommunity>
+
+<Resources links={[
+  { href: "https://requests.readthedocs.io/en/stable/user/advanced/#session-objects", title: "Requests — official Session objects guide", kind: "read" },
+  { href: "https://requests.readthedocs.io/en/stable/user/authentication/", title: "Requests — official authentication guide", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=rhi1eIjSbvk" title="OktaDev — Basic authentication in five minutes" minutes={5} />
+
+<Takeaways points={[
+  "Sessions persist cookies and configured defaults and reuse connections.",
+  "Method-level dictionaries override matching Session values for one request without persisting automatically.",
+  "Requests can use netrc credentials unless hermetic tests disable environment trust.",
+  "Isolate identities, close Sessions, and test missing or insufficient auth without leaking secrets.",
+]}/>
+
+<Complete xp={10} />

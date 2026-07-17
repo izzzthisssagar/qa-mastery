@@ -1,0 +1,134 @@
+---
+title: "Queries, mutations, and schema"
+summary: "GraphQL's schema is the map; queries read and mutations request side effects. Learn variables, nullability, operation names, and selection-driven assertions without string-concatenation chaos."
+tags: ["api-test-automation", "graphql-and-soap-testing", "track-d"]
+updated: "2026-07-17"
+related:
+  - "api-test-automation/graphql-and-soap-testing/graphql-vs-rest"
+  - "api-test-automation/graphql-and-soap-testing/testing-a-graphql-api"
+  - "api-test-automation/contract-and-schema-testing/schema-validation"
+---
+
+<Hook>An unnamed GraphQL operation assembled by string concatenation is the API-test equivalent of mailing a form written in pencil, with the answer boxes moved halfway through. It may arrive. Nobody should build a suite around that hope.</Hook>
+
+<Callout type="analogy">A questionnaire separates the printed questions from the respondent's answers. A named operation is the stable form; variables are the answers supplied separately.</Callout>
+
+<Term define="A GraphQL schema defines object, scalar, enum, interface, union, input-object, and root operation types plus their fields and arguments. Queries read through the query root; mutations request writes or side effects through the mutation root and must include a selection set for returned object fields.">GraphQL operation and schema</Term>
+
+## Read the type signature before writing the test
+
+- `ID!` means a non-null ID input; `String` is nullable.
+- Use named operations for tracing and diagnostics.
+- Declare variables in the operation signature and send values separately.
+- A query selects fields; a mutation also selects the result fields you want returned.
+- Aliases rename response keys; fragments reuse selection sets; `__typename` identifies concrete union/interface results.
+
+<Callout type="tip">Keep operation documents static and vary the JSON variables. This lets GraphQL validate syntax and types before execution and keeps test reports readable.</Callout>
+
+<Callout type="mistake">Interpolating untrusted values into operation text. Variables exist specifically to separate dynamic values from the document and its type declarations.</Callout>
+
+<HotspotImage src="/notes/api-test-automation/graphql-and-soap-testing/queries-mutations-and-schema.jpg" alt="A photographed paper questionnaire containing printed questions and handwritten answers" credit="Questionnaire — tup wanders, Wikimedia Commons, CC BY 2.0" creditHref="https://commons.wikimedia.org/wiki/File:Questionnaire.jpg" pins={[
+  { x: 28, y: 24, label: "Printed structure", desc: "The static named operation declares variables and a selection shape." },
+  { x: 63, y: 48, label: "Supplied answers", desc: "Variables carry changing values separately from the operation document." },
+  { x: 45, y: 78, label: "Required boxes", desc: "Non-null markers and input types let validation reject invalid requests before execution." },
+]}/>
+
+<FlowAnimation title="A mutation from schema to assertion" intervalMs={1500} nodes={[
+  { label: "Inspect the mutation field signature", desc: "Read argument types, required markers, payload type, and possible errors." },
+  { label: "Write a named static operation", desc: "Declare variable types and select only result fields the test needs." },
+  { label: "Send variables separately", desc: "Let the server coerce and validate typed inputs." },
+  { label: "Inspect data and errors", desc: "Distinguish request validation errors from field execution errors." },
+  { label: "Verify the side effect", desc: "Query the changed entity or observe the externally visible outcome." },
+]}/>
+
+<CodePlayground language="python" title="Run it — validate operation variables (Python)" code={`variable_spec = {"id": {"type": str, "required": True}, "status": {"type": str, "required": True}}
+variables = {"id": "T-7", "status": None}
+
+errors = []
+for name, rule in variable_spec.items():
+    value = variables.get(name)
+    if rule["required"] and value is None:
+        errors.append(f"${name}: non-null variable was null")
+    elif value is not None and not isinstance(value, rule["type"]):
+        errors.append(f"${name}: wrong type")
+
+print("VALID" if not errors else "INVALID: " + "; ".join(errors))
+
+# INVALID: $status: non-null variable was null`}/>
+
+<CodePlayground language="java" title="Run it — select only requested mutation fields (Java)" code={`import java.util.*;
+
+public class Main {
+  public static void main(String[] args) {
+    Set<String> selection = new LinkedHashSet<>(List.of("id", "status"));
+    Map<String, Object> resolverResult = new LinkedHashMap<>();
+    resolverResult.put("id", "T-7"); resolverResult.put("status", "done"); resolverResult.put("internalNote", "hidden");
+    Map<String, Object> response = new LinkedHashMap<>();
+    selection.forEach(field -> response.put(field, resolverResult.get(field)));
+    System.out.println(response);
+    System.out.println("internalNote returned: " + response.containsKey("internalNote"));
+  }
+}
+
+/* {id=T-7, status=done}
+   internalNote returned: false */`}/>
+
+<FirstTime title="Your mission: automate one named mutation">
+<StepChecklist steps={[
+  { text: "Inspect the mutation in the schema", detail: "Write down input type, required arguments, and payload type." },
+  { text: "Create a named operation", detail: "Declare variables and a minimal result selection." },
+  { text: "Run valid and null-required cases", detail: "Observe validation before resolver execution." },
+  { text: "Query the entity afterward", detail: "A returned payload alone may not prove the side effect persisted." },
+]}/>
+You have tested the type boundary and the resulting state, not just the response's optimism.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Server says a variable was not provided.", fix: "Match the JSON variable key to the declared dollar-name and ensure its declared type is compatible with the argument." },
+  { symptom: "Mutation returns data but nothing changed.", fix: "Add a follow-up query or observable side-effect assertion; payload shape is not persistence proof." },
+  { symptom: "A union result lacks expected fields.", fix: "Select __typename and use inline fragments for fields available only on concrete types." },
+]}/>
+
+<WhereToCheck>
+- Schema signatures and non-null markers.
+- Named operation, variable definitions, and JSON variables object.
+- Response `data`, `errors`, `locations`, and `path`.
+- Follow-up state or external side effects after mutations.
+</WhereToCheck>
+
+<WorkedExample title="the mutation that returned success but saved nothing">
+1. `UpdateTicket` accepts `id: ID!` and `status: Status!` and returns a ticket payload.
+2. The test sends variables and receives `{id: T-7, status: DONE}` with no errors.
+3. A resolver bug returns the proposed object before persistence fails.
+4. A follow-up `TicketById` query still reports `OPEN`.
+5. The test correctly fails on state, proving why payload validation and side-effect verification are separate.
+</WorkedExample>
+
+<Quiz question="Why should dynamic GraphQL inputs be sent as variables instead of interpolated into operation text?" options={["Variables make HTTP unnecessary", "They separate values from the static typed document and allow proper coercion and validation", "They bypass authorization", "They make every field non-null"]} answer={1} explain="Variables are declared with GraphQL types and supplied separately, avoiding fragile string construction while enabling validation and coercion." />
+
+<Flashcards cards={[
+  { front: "Non-null marker", back: "An exclamation mark means null is not a valid value at that type position." },
+  { front: "Operation name", back: "Stable name used for tracing, logs, reports, and selecting among multiple operations." },
+  { front: "Mutation proof", back: "Validate the payload and independently verify the requested side effect." },
+]}/>
+
+<Challenge>Write one named query and one named mutation using the same ID variable. Add a null-variable negative case and a follow-up query proving the mutation persisted.</Challenge>
+
+<AskCommunity prompt="My operation `[name]` declares `[variables]` against schema field `[signature]`, but receives `[error]`. Is the mismatch in variable type, nullability, or selection?">Include the schema signature, operation, variables JSON, and full error path.</AskCommunity>
+
+<Resources links={[
+  { href: "https://graphql.org/learn/queries/", title: "GraphQL Foundation — Queries and variables", kind: "read" },
+  { href: "https://graphql.org/learn/mutations/", title: "GraphQL Foundation — Mutations", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=qux4-yWeZvo" title="Modern GraphQL Crash Course — Laiture" minutes={210} />
+
+<Takeaways points={[
+  "The schema defines operations, arguments, result fields, types, and nullability.",
+  "Queries read; mutations request side effects and still require result selections.",
+  "Named static operations plus separate variables improve validation, tracing, and safety.",
+  "Use __typename and fragments for interface or union results.",
+  "Verify mutation side effects independently from the returned payload.",
+]}/>
+
+<Complete xp={10} />

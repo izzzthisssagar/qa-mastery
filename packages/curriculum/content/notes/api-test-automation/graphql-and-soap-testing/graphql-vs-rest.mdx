@@ -1,0 +1,138 @@
+---
+title: "GraphQL vs REST"
+summary: "GraphQL is not REST with curly braces. Learn how one typed field-selection endpoint changes test design, error assertions, caching assumptions, and coverage."
+tags: ["api-test-automation", "graphql-and-soap-testing", "track-d"]
+updated: "2026-07-17"
+related:
+  - "api-testing-fundamentals/status-codes-and-rest/rest-in-plain-words"
+  - "api-test-automation/graphql-and-soap-testing/queries-mutations-and-schema"
+  - "api-test-automation/graphql-and-soap-testing/testing-a-graphql-api"
+---
+
+<Hook>REST gives you a menu of resource endpoints. GraphQL gives you one kitchen door and lets every customer write a precise order. Reusing the same test checklist for both is how you verify the door and miss the meal.</Hook>
+
+<Callout type="analogy">A fixed menu item arrives with the chef's chosen sides; a custom order names only what you want. REST commonly returns a server-shaped representation, while a GraphQL selection set shapes the response field by field.</Callout>
+
+<Term define="GraphQL is a typed query language and execution specification for APIs. Clients send operations against a schema and select fields down to scalar or enum leaves; the response data mirrors the selection shape, with errors represented separately.">GraphQL API</Term>
+
+## The test surface moves
+
+- REST commonly spreads behavior across resource URLs and HTTP methods; GraphQL commonly exposes operations through one HTTP endpoint.
+- GraphQL selection sets let clients request nested related fields in one operation.
+- The schema defines types, fields, arguments, nullability, and root operation types.
+- A GraphQL response may contain both partial `data` and `errors`; HTTP 200 alone is not a pass.
+- Test operation complexity, authorization at field boundaries, aliases, variables, and null propagation.
+
+<Callout type="tip">Compare architectures by contract, not slogans. GraphQL can reduce round trips for a particular screen, but a deliberately designed REST endpoint can also return the needed representation.</Callout>
+
+<Callout type="mistake">Asserting only HTTP status against GraphQL. Execution errors can coexist with partial data, so inspect both top-level `data` and `errors`.</Callout>
+
+<HotspotImage src="/notes/api-test-automation/graphql-and-soap-testing/graphql-vs-rest.jpg" alt="An open restaurant menu with many individually listed choices" credit="A restaurant menu — Sergiy Galyonkin, Wikimedia Commons, CC BY-SA 2.0" creditHref="https://commons.wikimedia.org/wiki/File:A_restaurant_menu_(52369791551).jpg" pins={[
+  { x: 34, y: 66, label: "Fixed offerings", desc: "REST resources commonly expose server-designed representations at distinct routes." },
+  { x: 58, y: 64, label: "Selected details", desc: "A GraphQL client names exactly the fields required for this operation." },
+  { x: 75, y: 73, label: "One order, many choices", desc: "Related objects can be traversed in one selection tree, with cost and authorization still needing tests." },
+]}/>
+
+<FlowAnimation title="How the same screen drives different tests" intervalMs={1600} nodes={[
+  { label: "List the screen's data needs", desc: "Ticket identity, reporter, and project name." },
+  { label: "REST follows resource representations", desc: "Call one or more documented URLs and assert each response contract." },
+  { label: "GraphQL follows a selection tree", desc: "Send one named operation selecting nested fields." },
+  { label: "Validate protocol-specific failure signals", desc: "REST status/body rules differ from GraphQL data/errors and null propagation." },
+  { label: "Assert the same business outcome", desc: "Architecture changes transport evidence, not the user's expectation." },
+]}/>
+
+<CodePlayground language="python" title="Run it — compare response shape to a selection (Python)" code={`selection = {"ticket": {"id": None, "status": None, "project": {"name": None}}}
+response = {"ticket": {"id": "T-7", "status": "open", "project": {"name": "Apollo"}}}
+
+def shape_matches(selected, actual, path="data"):
+    errors = []
+    for field, nested in selected.items():
+        if field not in actual:
+            errors.append(f"{path}.{field}: selected field missing")
+        elif nested is not None:
+            errors += shape_matches(nested, actual[field], f"{path}.{field}")
+    return errors
+
+errors = shape_matches(selection, response)
+print("PASS: response mirrors selection" if not errors else "FAIL: " + str(errors))
+
+# PASS: response mirrors selection`}/>
+
+<CodePlayground language="java" title="Run it — distinguish transport and GraphQL verdicts (Java)" code={`import java.util.*;
+
+public class Main {
+  public static void main(String[] args) {
+    int httpStatus = 200;
+    Map<String, Object> graphql = new LinkedHashMap<>();
+    Map<String, Object> partialData = new LinkedHashMap<>();
+    partialData.put("ticket", null);
+    graphql.put("data", partialData);
+    graphql.put("errors", List.of(Map.of("message", "Not authorized", "path", List.of("ticket"))));
+    System.out.println("HTTP check: " + (httpStatus == 200 ? "PASS" : "FAIL"));
+    boolean executionPass = !graphql.containsKey("errors");
+    System.out.println("GraphQL execution check: " + (executionPass ? "PASS" : "FAIL"));
+  }
+}
+
+/* HTTP check: PASS
+   GraphQL execution check: FAIL */`}/>
+
+<FirstTime title="Your mission: translate one REST check into GraphQL">
+<StepChecklist steps={[
+  { text: "Choose one REST-backed screen", detail: "List the exact fields the UI consumes." },
+  { text: "Write a named GraphQL query", detail: "Select the same data, including nested fields." },
+  { text: "Assert response shape and errors", detail: "Do not stop at HTTP 200." },
+  { text: "Test one forbidden nested field", detail: "Field-level authorization is part of the new surface." },
+]}/>
+You now compare equivalent user evidence without pretending the protocols are identical.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "A GraphQL test passes on HTTP 200 despite a blank widget.", fix: "Inspect errors, its path, and null propagation in data." },
+  { symptom: "One query becomes slow as fields are added.", fix: "Measure resolver behavior and operation complexity; one HTTP request is not one backend operation." },
+  { symptom: "REST cache assumptions fail.", fix: "GraphQL over HTTP often posts operations to one URL; verify the actual caching layer and persisted-query strategy." },
+]}/>
+
+<WhereToCheck>
+- GraphQL schema root types, fields, arguments, and nullability.
+- Named operation, variables, selection set, and top-level response keys.
+- Resolver traces and authorization at nested fields.
+- GraphQL-over-HTTP configuration rather than generic REST assumptions.
+</WhereToCheck>
+
+<WorkedExample title="the HTTP 200 that still broke the ticket card">
+1. A ticket query selects `id`, `status`, and nested `project.name`.
+2. The server returns HTTP 200 and `data.ticket.project: null` plus an `errors` entry at that path.
+3. A REST-style status-only test passes.
+4. A GraphQL-aware assertion fails on the error path and unexpected null propagation.
+5. The defect points to the project resolver or field authorization, not the transport.
+</WorkedExample>
+
+<Quiz question="Why is HTTP 200 insufficient as a GraphQL success assertion?" options={["GraphQL never uses HTTP", "A response can include partial data and execution errors", "Every GraphQL response is XML", "Status codes are random"]} answer={1} explain="The GraphQL response contract permits partial data alongside field errors, so the response body carries essential execution status." />
+
+<Flashcards cards={[
+  { front: "Selection set", back: "Fields the client requests, nested down to scalar or enum leaves." },
+  { front: "Response shape", back: "The data result mirrors the requested field structure." },
+  { front: "Protocol-aware assertion", back: "Checks GraphQL data/errors semantics in addition to HTTP transport." },
+]}/>
+
+<Challenge>Take one REST test and design an equivalent GraphQL operation. Identify three new cases caused by selection flexibility: omitted field, forbidden nested field, and partial error.</Challenge>
+
+<AskCommunity prompt="For feature `[screen]`, REST needs `[calls]` while GraphQL operation `[name]` selects `[fields]`. Which GraphQL-specific failure paths should the automation add?">Include schema nullability and authorization boundaries, not just query text.</AskCommunity>
+
+<Resources links={[
+  { href: "https://graphql.org/learn/queries/", title: "GraphQL Foundation — Queries", kind: "read" },
+  { href: "https://spec.graphql.org/September2025/#sec-Response", title: "GraphQL Specification — Response", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=eIQh02xuVw4" title="GraphQL Explained in 100 Seconds — Fireship" minutes={2} />
+
+<Takeaways points={[
+  "GraphQL clients select response fields through a typed schema; REST commonly exposes server-shaped resources.",
+  "One GraphQL request can traverse nested data, but one request is not automatically cheap.",
+  "GraphQL tests must inspect data, errors, paths, and null propagation in addition to HTTP status.",
+  "Selection flexibility adds field authorization and complexity cases.",
+  "Compare equivalent business outcomes while respecting each protocol's contract.",
+]}/>
+
+<Complete xp={10} />

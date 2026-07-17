@@ -1501,6 +1501,84 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   },
   // END automation-in-cicd
   {
+    slug: "api-test-automation",
+    title: "API Test Automation",
+    summary: "Move from manual API checks to maintainable automation with REST Assured, pytest and Requests, schema and contract testing, GraphQL and SOAP, Newman in CI, production-shaped suites, and controlled service virtualization.",
+    chapters: [
+      {
+        slug: "rest-assured-java",
+        title: "REST Assured (Java)",
+        topics: [
+          { slug: "setup-and-first-test", title: "Setup & first test" },
+          { slug: "given-when-then-style", title: "Given / when / then style" },
+          { slug: "validating-json-and-status", title: "Validating JSON & status" },
+          { slug: "auth-in-rest-assured", title: "Auth in REST Assured" },
+        ],
+      },
+      {
+        slug: "python-api-testing",
+        title: "Python API testing",
+        topics: [
+          { slug: "requests-and-pytest", title: "Requests + pytest" },
+          { slug: "fixtures-for-apis", title: "Fixtures for APIs" },
+          { slug: "parameterized-endpoint-tests", title: "Parameterized endpoint tests" },
+          { slug: "sessions-and-auth", title: "Sessions & auth" },
+        ],
+      },
+      {
+        slug: "contract-and-schema-testing",
+        title: "Contract & schema testing",
+        topics: [
+          { slug: "openapi-as-the-contract", title: "OpenAPI as the contract" },
+          { slug: "schema-validation", title: "Schema validation" },
+          { slug: "consumer-driven-contracts", title: "Consumer-driven contracts" },
+          { slug: "breaking-change-detection", title: "Breaking-change detection" },
+        ],
+      },
+      {
+        slug: "graphql-and-soap-testing",
+        title: "GraphQL & SOAP testing",
+        topics: [
+          { slug: "graphql-vs-rest", title: "How GraphQL differs from REST" },
+          { slug: "queries-mutations-and-schema", title: "Queries, mutations & the schema" },
+          { slug: "testing-a-graphql-api", title: "Testing a GraphQL API" },
+          { slug: "soap-wsdl-when-you-meet-it", title: "SOAP/WSDL, when you meet it" },
+        ],
+      },
+      {
+        slug: "api-tests-in-ci-newman",
+        title: "API tests in CI (Newman)",
+        topics: [
+          { slug: "running-postman-collections-headlessly", title: "Running Postman collections headlessly" },
+          { slug: "newman-and-ci-pipeline", title: "Newman + CI pipeline" },
+          { slug: "scheduled-api-regression", title: "Scheduled API regression" },
+          { slug: "reporting-api-results", title: "Reporting API results" },
+        ],
+      },
+      {
+        slug: "real-world-api-suites",
+        title: "Real-world API suites",
+        topics: [
+          { slug: "test-pyramids-for-apis", title: "Test pyramids for APIs" },
+          { slug: "data-setup-via-api", title: "Data setup via API" },
+          { slug: "chaining-and-state", title: "Chaining & state" },
+          { slug: "full-api-suite-on-buggyapi", title: "Full API suite on BuggyAPI" },
+        ],
+      },
+      {
+        slug: "mocking-and-service-virtualization",
+        title: "Mocking & service virtualization",
+        topics: [
+          { slug: "stubs-mocks-and-fakes", title: "Stubs, mocks & fakes" },
+          { slug: "wiremock-hands-on", title: "WireMock hands-on" },
+          { slug: "record-and-playback", title: "Record & playback" },
+          { slug: "simulating-errors-latency-and-chaos", title: "Simulating errors, latency & chaos" },
+        ],
+      },
+    ],
+  },
+  // END api-test-automation
+  {
     slug: "foundations",
     title: "QA Foundations",
     summary: "The vocabulary and mental models every tester needs.",

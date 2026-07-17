@@ -1,0 +1,111 @@
+---
+title: "Data setup via API"
+summary: "Create test prerequisites through fast supported interfaces, isolate every run, and clean up only what the test owns."
+tags: ["api-test-automation", "real-world-api-suites", "track-d"]
+updated: "2026-07-17"
+related:
+  - "api-test-automation/real-world-api-suites/chaining-and-state"
+  - "api-test-automation/real-world-api-suites/full-api-suite-on-buggyapi"
+  - "api-test-automation/real-world-api-suites/test-pyramids-for-apis"
+---
+
+<Hook>Five minutes of clicking to create one prerequisite is not realistic setup. It is a hostage negotiation with the UI.</Hook>
+
+<Callout type="analogy">A laboratory labels each sample before the experiment. API setup should do the same: known recipe, unique identity, controlled inputs, scoped disposal.</Callout>
+
+<Term define="API-based test-data setup creates prerequisites through supported service endpoints rather than UI flows or direct database edits. Good setup is deterministic, uniquely namespaced, minimal, observable, and paired with cleanup that deletes only resources created by that run.">API-based test-data setup</Term>
+
+## Arrange quickly without cheating invisibly
+
+Use authenticated create endpoints to arrange only the records a scenario needs. Generate a run id and carry it in names or metadata. Capture returned resource ids immediately; cleanup should use those ids, not a broad “delete all test data” query. Direct database setup can be valid for lower-level tests, but an API suite should not silently depend on schema internals unless that dependency is explicit.
+
+<Callout type="tip">Prefer create-and-capture over search-and-guess. The POST response gives the authoritative id; use it for action, assertion, and cleanup.</Callout>
+
+<Callout type="mistake">Shared fixtures named `Test Project` guarantee collisions under parallel execution. Namespacing is not polish—it is isolation.</Callout>
+
+<HotspotImage src="/notes/api-test-automation/real-world-api-suites/data-setup-via-api.jpg" alt="A researcher preparing labeled samples and equipment in a laboratory" credit="Sample preparation laboratory — Sofiia Baletska, CC BY 4.0, via Wikimedia Commons" creditHref="https://commons.wikimedia.org/wiki/File:Sample_preparation_laboratory.jpg" pins={[
+  { x: 43, y: 69, label: "Prepared sample tools", desc: "Each scenario receives the minimum prerequisite data it needs." },
+  { x: 37, y: 82, label: "Separate white sample containers", desc: "Unique run identities prevent parallel tests from sharing state accidentally." },
+  { x: 34, y: 72, label: "Labeled bottle on the workspace", desc: "Captured resource ids make teardown scoped and auditable." },
+]}/>
+
+<FlowAnimation title="Arrange, use, and clean one resource" intervalMs={1400} nodes={[
+  { label: "Generate run id", desc: "Create a collision-resistant namespace." },
+  { label: "POST prerequisite", desc: "Use the public create endpoint with valid auth." },
+  { label: "Capture returned id", desc: "Store the server-assigned identity immediately." },
+  { label: "Exercise scenario", desc: "Act on that exact resource." },
+  { label: "Delete owned ids", desc: "Cleanup only what this run created." },
+]}/>
+
+<CodePlayground language="python" title="Run it - create deterministic names and cleanup ids (Python)" code={`run_id = "run-2042"
+created = []
+for index in range(1, 4):
+    server_id = 700 + index
+    name = f"{run_id}-project-{index}"
+    created.append(server_id)
+    print(f"create {name} -> id={server_id}")
+print("cleanup ids=" + ",".join(map(str, reversed(created))))`}/>
+
+<CodePlayground language="java" title="Run it - create the same setup ledger (Java)" code={`import java.util.*;
+public class Main {
+  public static void main(String[] args) {
+    String runId = "run-2042"; List<Integer> created = new ArrayList<>();
+    for (int i = 1; i <= 3; i++) {
+      int id = 700 + i; created.add(id);
+      System.out.println("create " + runId + "-project-" + i + " -> id=" + id);
+    }
+    Collections.reverse(created);
+    System.out.println("cleanup ids=" + created.toString().replace("[", "").replace("]", "").replace(" ", ""));
+  }
+}`}/>
+
+<FirstTime title="Your mission: build an isolated setup helper"><StepChecklist steps={[
+  { text: "Generate one run id per suite execution", detail: "Use it consistently in created names." },
+  { text: "Create a project through POST /api/v1/projects", detail: "Use your sandbox's public credentials; do not copy anyone else's." },
+  { text: "Capture the returned project id", detail: "Never discover it later by an ambiguous name search." },
+  { text: "Delete only that id in teardown", detail: "Keep cleanup safe even when another run is active." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Parallel runs modify each other's records.", fix: "Add a per-run namespace and stop selecting records by shared display names." },
+  { symptom: "Cleanup deletes another test's data.", fix: "Maintain an owned-id ledger and delete only ids created by this run." },
+  { symptom: "Setup failure causes dozens of assertion failures.", fix: "Fail fast during arrange with the setup response status and body, before executing dependent checks." },
+]}/>
+
+<WhereToCheck>
+- Setup request payload, auth scope, response status, and returned id.
+- Run-id propagation through names, logs, and report metadata.
+- Owned-id ledger and teardown order, including partial setup failure.
+</WhereToCheck>
+
+<WorkedExample title="isolated BuggyAPI project setup">
+The suite creates `reg-2042-project` through `POST /api/v1/projects`, records its returned id, then creates scenario data beneath that project. Tests never search for “the test project.” Teardown deletes child resources then the captured project id. No database table or private implementation detail is required.
+</WorkedExample>
+
+<Quiz question="What is the safest cleanup selector?" options={["All names containing test", "Everything created today", "The exact resource ids recorded by this run", "The first list result"]} answer={2} explain="An ownership ledger is explicit and collision-safe; broad text or time queries can delete unrelated data."/>
+
+<Flashcards cards={[
+  { front: "Why setup via API?", back: "It is faster than UI setup while exercising supported service behavior." },
+  { front: "What should a create helper return?", back: "The authoritative server-assigned resource id plus any data the scenario needs." },
+  { front: "Cleanup rule", back: "Delete only resources recorded as owned by this run." },
+]}/>
+
+<Challenge>Design setup for five parallel workers. Show the run/worker namespace, returned-id ledger, teardown order, and behavior if the third create call fails.</Challenge>
+
+<AskCommunity prompt="Our setup collides on `[resource]`; naming rule, captured ids, and teardown selector are `[details]`.">Do not post live credentials or another learner's sandbox data.</AskCommunity>
+
+<Resources links={[
+  { href: "https://learning.postman.com/docs/tests-and-scripts/write-scripts/test-scripts", title: "Postman Docs — Write post-response test scripts", kind: "read" },
+  { href: "https://learning.postman.com/docs/use/send-requests/variables/variables", title: "Postman Docs — Variables and scopes", kind: "reference" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=sUJjHU9oFzI" title="Postman Beginner Tutorial 9: Environments — Automation Step by Step" minutes={12} />
+
+<Takeaways points={[
+  "Use supported create endpoints for fast setup without UI dependence.",
+  "Give every run a unique namespace and capture every returned id.",
+  "Fail during arrange when setup fails instead of producing misleading downstream failures.",
+  "Cleanup must delete only resources explicitly owned by the current run.",
+]}/>
+
+<Complete xp={10} />

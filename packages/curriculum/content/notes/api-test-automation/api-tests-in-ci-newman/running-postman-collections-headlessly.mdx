@@ -1,0 +1,115 @@
+---
+title: "Running Postman collections headlessly"
+summary: "Turn a collection from a click-only artifact into a repeatable command, with explicit environments, useful exit codes, and no desktop app required."
+tags: ["api-test-automation", "api-tests-in-ci-newman", "track-d"]
+updated: "2026-07-17"
+related:
+  - "api-test-automation/api-tests-in-ci-newman/newman-and-ci-pipeline"
+  - "api-test-automation/api-tests-in-ci-newman/reporting-api-results"
+  - "api-testing-fundamentals/postman-and-curl/collections-and-environments"
+---
+
+<Hook>
+A collection that only runs when Priya clicks Runner is not automation. It is a ritual with orange buttons. Headless execution makes the same requests and assertions runnable by a terminal, a teammate, or a build agent.
+</Hook>
+
+<Callout type="analogy">
+The command line is a railway timetable: the route, stops, and inputs are written down, so the journey does not depend on one driver remembering the sequence.
+</Callout>
+
+<Term define="Headless collection execution runs a Postman Collection without the desktop UI. Newman runs exported Collection v2.1 JSON from Node.js; Postman's newer CLI is the path for v3 collections. The collection still owns requests and scripts, while command-line arguments select environments, data, reporters, and timeouts.">Headless collection execution</Term>
+
+## The smallest honest run
+
+Install Newman as a pinned development dependency, export a v2.1 collection, and invoke it through the project-local binary: `npm install --save-dev newman` then `npx newman run postman/smoke.postman_collection.json -e postman/local.postman_environment.json`. Pinning keeps laptops and CI on the same runner version. A successful process exits zero; assertion or runtime failures produce a non-zero result that automation can use.
+
+<Callout type="tip">Commit non-secret collection and environment templates. Inject tokens through CI secrets or command-line variables; never export a real token into Git and call it “test data.”</Callout>
+
+<Callout type="mistake">Do not add `--suppress-exit-code` to make a red run look green. That flag deliberately returns zero even after failures, which converts a quality gate into decorative theatre.</Callout>
+
+<HotspotImage
+  src="/notes/api-test-automation/api-tests-in-ci-newman/running-postman-collections-headlessly.png"
+  alt="A Linux terminal showing several commands and their text output"
+  credit="Linux command-line, Bash, GNOME Terminal — The GNOME Project, GPL 2.0 or later, via Wikimedia Commons"
+  creditHref="https://commons.wikimedia.org/wiki/File:Linux_command-line._Bash._GNOME_Terminal._screenshot.png"
+  pins={[
+    { x: 20, y: 3, label: "Typed command", desc: "The repeatable entry point: command and options are visible instead of hidden in UI state." },
+    { x: 38, y: 45, label: "Process output", desc: "A headless runner reports each request and assertion where humans and CI logs can inspect them." },
+    { x: 73, y: 96, label: "Live progress and completion", desc: "The terminal owns the process until it completes and returns an exit status that automation can trust." },
+  ]}
+/>
+
+<FlowAnimation title="From exported collection to signal" intervalMs={1500} nodes={[
+  { label: "Export v2.1 JSON", desc: "Store the runnable collection beside the code." },
+  { label: "Select environment", desc: "Point Newman at non-secret values for this target." },
+  { label: "Run headlessly", desc: "Requests and post-response scripts execute without Postman Desktop." },
+  { label: "Read exit status", desc: "Zero passes; a failure makes automation stop." },
+]}/>
+
+<CodePlayground language="python" title="Run it - model a headless run's exit decision (Python)" code={`results = [("health", True), ("list tickets", True), ("schema", False)]
+for name, passed in results:
+    print(f"{name}: {'PASS' if passed else 'FAIL'}")
+exit_code = 0 if all(passed for _, passed in results) else 1
+print(f"exit_code={exit_code}")`}/>
+
+<CodePlayground language="java" title="Run it - model the same exit decision (Java)" code={`import java.util.*;
+public class Main {
+  public static void main(String[] args) {
+    Map<String, Boolean> results = new LinkedHashMap<>();
+    results.put("health", true); results.put("list tickets", true); results.put("schema", false);
+    results.forEach((name, passed) -> System.out.println(name + ": " + (passed ? "PASS" : "FAIL")));
+    int exitCode = results.values().stream().allMatch(Boolean::booleanValue) ? 0 : 1;
+    System.out.println("exit_code=" + exitCode);
+  }
+}`}/>
+
+<FirstTime title="Your mission: make one collection terminal-runnable"><StepChecklist steps={[
+  { text: "Export the collection as v2.1 JSON", detail: "Newman does not run Postman's v3 collection format." },
+  { text: "Create a secret-free environment template", detail: "Keep placeholders, not credentials, in version control." },
+  { text: "Run with npx newman run", detail: "Use the project dependency rather than an unknown global install." },
+  { text: "Intentionally break one assertion", detail: "Confirm the shell receives a non-zero exit status." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Newman rejects the collection format.", fix: "Export Collection v2.1 JSON, or migrate the workflow to Postman CLI for v3 collections." },
+  { symptom: "Variables resolve in Postman but are blank in Newman.", fix: "Pass the correct environment with -e and check variable scope; desktop current values are not magically in the export." },
+  { symptom: "CI passes although assertions fail.", fix: "Remove -x/--suppress-exit-code and ensure the shell is not swallowing the command's status." },
+]}/>
+
+<WhereToCheck>
+- The collection export format and committed file diff.
+- The exact `-e`, `--env-var`, timeout, and data options in the command.
+- The final Newman summary and shell exit status.
+</WhereToCheck>
+
+<WorkedExample title="a smoke collection leaves the desktop">
+The team exports `smoke.postman_collection.json`, commits `ci.postman_environment.json` with `baseUrl` but no key, and runs `npx newman run ... -e ... --env-var apiKey=$API_KEY`. A deliberately failing status assertion returns non-zero. The same command now works locally and in CI; only the secret source changes.
+</WorkedExample>
+
+<Quiz question="Why is --suppress-exit-code dangerous in a CI quality gate?" options={["It disables network access", "It can return success even when tests fail", "It deletes the environment", "It converts v2.1 to v3"]} answer={1} explain="CI primarily trusts the process status. Suppressing failure status hides a broken suite from the pipeline."/>
+
+<Flashcards cards={[
+  { front: "What does headless mean here?", back: "The collection runs without Postman Desktop through a command-line runner." },
+  { front: "What collection format does Newman expect?", back: "Exported Postman Collection v2.1 JSON; current Postman docs direct v3 users toward Postman CLI." },
+  { front: "Why use npx with a dev dependency?", back: "It runs the repository-pinned Newman version consistently." },
+]}/>
+
+<Challenge>Add a `test:api:smoke` package script around a secret-free collection. Break one assertion and capture the non-zero status, then restore it.</Challenge>
+
+<AskCommunity prompt="My exported collection runs in Postman but Newman reports `[exact error]`; collection format is `[version]` and command is `[redacted command]`.">Include format and command options, but redact keys and tokens.</AskCommunity>
+
+<Resources links={[
+  { href: "https://learning.postman.com/docs/reference/newman-cli/installing-running-newman", title: "Postman Docs — Install and run Newman", kind: "read" },
+  { href: "https://learning.postman.com/docs/reference/newman-cli/newman-options", title: "Postman Docs — Newman command reference", kind: "reference" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=ee-T6skoMjM" title="Postman Newman Tutorial | Postman API Testing — SDET Unicorns" minutes={12} />
+
+<Takeaways points={[
+  "A collection becomes automation only when a repeatable command can run it without desktop state.",
+  "Newman is for exported v2.1 JSON; current v3 workflows should evaluate Postman CLI.",
+  "Keep environment templates in Git and inject secrets at runtime.",
+  "Preserve Newman's non-zero failure status so CI can enforce the result.",
+]}/>
+
+<Complete xp={10} />

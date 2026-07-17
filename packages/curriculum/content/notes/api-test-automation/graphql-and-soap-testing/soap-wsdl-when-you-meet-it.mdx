@@ -1,0 +1,138 @@
+---
+title: "SOAP & WSDL — when you meet it"
+summary: "SOAP is an XML messaging framework; WSDL describes service operations and concrete bindings. Learn envelopes, namespaces, faults, and contract-first tests without calling all XML SOAP."
+tags: ["api-test-automation", "graphql-and-soap-testing", "track-d"]
+updated: "2026-07-17"
+related:
+  - "api-testing-fundamentals/http-for-testers/json-and-xml"
+  - "api-test-automation/contract-and-schema-testing/schema-validation"
+  - "api-test-automation/contract-and-schema-testing/openapi-as-the-contract"
+---
+
+<Hook>SOAP is not "the old API with angle brackets." XML is the paper; SOAP is the envelope rules; WSDL is the service directory and wiring diagram. Mixing those up makes every failure look like "XML weirdness."</Hook>
+
+<Callout type="analogy">A mailed letter has an outer envelope, optional routing marks, a body, and a known destination. SOAP defines that message envelope; WSDL says which letters the service accepts, where, and through which binding.</Callout>
+
+<Term define="SOAP 1.2 is an XML-based messaging framework whose message has one Envelope, an optional Header, and a mandatory Body that may contain application content or a Fault. WSDL describes service interfaces, operations, messages, bindings, and concrete endpoints.">SOAP and WSDL</Term>
+
+## Read the layers in order
+
+- Confirm SOAP version by its envelope namespace; SOAP 1.1 and 1.2 differ.
+- Inspect optional headers, including role and `mustUnderstand` behavior.
+- Validate body XML namespaces and element qualification, not just local names.
+- Use WSDL operation/message definitions plus the binding to derive wire details.
+- Assert SOAP Fault structure as well as HTTP transport behavior.
+- SOAP 1.2 XML over HTTP uses `application/soap+xml`; do not blindly copy SOAP 1.1 headers.
+
+<Callout type="tip">Generate a sample request from the exact WSDL version, then reduce it carefully. Namespaces that look decorative are part of element identity.</Callout>
+
+<Callout type="mistake">Validating only that XML parses. Well-formed XML can have the wrong SOAP namespace, wrong body element, wrong operation, or a perfectly structured Fault.</Callout>
+
+<HotspotImage src="/notes/api-test-automation/graphql-and-soap-testing/soap-wsdl-when-you-meet-it.jpg" alt="A white envelope icon with a letter visibly emerging from it" credit="Envelope-letter icon — paomedia, Wikimedia Commons, CC0 1.0" creditHref="https://commons.wikimedia.org/wiki/File:Envelope-letter-icon.png" pins={[
+  { x: 50, y: 30, label: "Header area", desc: "SOAP headers carry processing instructions and intermediaries' metadata when present." },
+  { x: 50, y: 54, label: "The envelope", desc: "Its namespace identifies the SOAP version and frames the message." },
+  { x: 50, y: 73, label: "Body payload", desc: "The body carries application content or a SOAP Fault, constrained by the service contract." },
+]}/>
+
+<FlowAnimation title="From WSDL to a verified SOAP exchange" intervalMs={1600} nodes={[
+  { label: "Locate service and endpoint", desc: "Read the concrete address associated with the binding." },
+  { label: "Choose an operation", desc: "Trace its input, output, and declared faults." },
+  { label: "Inspect the binding", desc: "Determine protocol, message format, action, and style details." },
+  { label: "Build the SOAP envelope", desc: "Use the correct version namespace, headers, body, and application namespaces." },
+  { label: "Validate response or Fault", desc: "Check transport, envelope structure, body schema, and business result." },
+]}/>
+
+<CodePlayground language="python" title="Run it — inspect a SOAP envelope (Python)" code={`import xml.etree.ElementTree as ET
+
+xml = '''<env:Envelope xmlns:env="http://www.w3.org/2003/05/soap-envelope"
+ xmlns:t="urn:tickets"><env:Body><t:GetTicket><t:id>T-7</t:id></t:GetTicket></env:Body></env:Envelope>'''
+root = ET.fromstring(xml)
+soap = "{http://www.w3.org/2003/05/soap-envelope}"
+body = root.find(soap + "Body")
+operation = list(body)[0]
+print("SOAP 1.2 envelope:", root.tag == soap + "Envelope")
+print("Body operation:", operation.tag)
+print("Ticket id:", list(operation)[0].text)
+
+# SOAP 1.2 envelope: True
+# Body operation: {urn:tickets}GetTicket
+# Ticket id: T-7`}/>
+
+<CodePlayground language="java" title="Run it — classify a SOAP body or fault (Java)" code={`import javax.xml.parsers.*;
+import org.w3c.dom.*;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+
+public class Main {
+  public static void main(String[] args) throws Exception {
+    String xml = "<e:Envelope xmlns:e='http://www.w3.org/2003/05/soap-envelope'><e:Body><e:Fault><e:Code><e:Value>e:Sender</e:Value></e:Code><e:Reason><e:Text xml:lang='en'>Bad id</e:Text></e:Reason></e:Fault></e:Body></e:Envelope>";
+    var factory = DocumentBuilderFactory.newInstance(); factory.setNamespaceAware(true);
+    Document doc = factory.newDocumentBuilder().parse(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
+    NodeList faults = doc.getElementsByTagNameNS("http://www.w3.org/2003/05/soap-envelope", "Fault");
+    System.out.println("SOAP fault present: " + (faults.getLength() == 1));
+    System.out.println("Reason: " + doc.getElementsByTagNameNS("http://www.w3.org/2003/05/soap-envelope", "Text").item(0).getTextContent());
+  }
+}
+
+/* SOAP fault present: true
+   Reason: Bad id */`}/>
+
+<FirstTime title="Your mission: test one WSDL operation">
+<StepChecklist steps={[
+  { text: "Find the service endpoint and binding", detail: "Do not infer wire details from operation names alone." },
+  { text: "Generate one valid envelope", detail: "Preserve SOAP and application namespaces." },
+  { text: "Send valid and invalid requests", detail: "Capture both normal body and SOAP Fault." },
+  { text: "Validate at four layers", detail: "Transport, envelope, body schema, and business result." },
+]}/>
+You have turned a wall of XML into four ordinary, diagnosable checks.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Server reports version mismatch.", fix: "Check the Envelope namespace and media type; SOAP 1.1 and SOAP 1.2 are not interchangeable labels." },
+  { symptom: "Operation is not recognized.", fix: "Inspect binding details, action, body namespace, and qualified operation element from the exact WSDL." },
+  { symptom: "XML assertion finds no element that visibly exists.", fix: "Use namespace-aware parsing; a local name without its namespace is not the same expanded name." },
+]}/>
+
+<WhereToCheck>
+- WSDL service/port endpoint, interface or portType operation, and binding.
+- SOAP Envelope namespace, Header, Body, and Fault.
+- XML Schema imports and target namespaces.
+- HTTP media type and action rules for the SOAP version in use.
+</WhereToCheck>
+
+<WorkedExample title="the request that looked identical but used the wrong namespace">
+1. A generated request uses SOAP 1.2's envelope namespace.
+2. A copied test replaces it with the SOAP 1.1 namespace but keeps identical local element names.
+3. The XML remains well formed, so a parse-only test passes.
+4. The service rejects the message as a version mismatch.
+5. A namespace-aware assertion catches the wrong expanded Envelope name before transmission.
+</WorkedExample>
+
+<Quiz question="Why must a SOAP test parse XML with namespace awareness?" options={["Namespaces only change indentation", "Namespace URI plus local name defines element identity", "SOAP forbids prefixes", "WSDL is JSON"]} answer={1} explain="Two elements with the same local name but different namespace URIs are different elements, including the version-defining SOAP Envelope." />
+
+<Flashcards cards={[
+  { front: "SOAP Envelope", back: "Versioned XML wrapper containing optional Header and mandatory Body." },
+  { front: "WSDL binding", back: "Concrete protocol and message-format details for abstract operations." },
+  { front: "SOAP Fault", back: "Structured SOAP error carried in the Body; inspect it rather than relying only on HTTP." },
+]}/>
+
+<Challenge>Take one SOAP response and write four assertions: expected media type/status, SOAP version namespace, expected body operation or Fault, and one business value. Break each layer independently.</Challenge>
+
+<AskCommunity prompt="WSDL operation `[name]` through binding `[binding]` rejects this envelope with `[fault]`. SOAP version/media type/action are `[values]`. Which contract layer is inconsistent?">Include namespace URIs and exact Fault; pretty-printed XML without them hides the bug.</AskCommunity>
+
+<Resources links={[
+  { href: "https://www.w3.org/TR/soap12-part1/", title: "W3C SOAP 1.2 Part 1 — Messaging Framework", kind: "read" },
+  { href: "https://www.w3.org/TR/wsdl", title: "W3C WSDL 2.0 Core Language", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=mKjvKPlb1rA" title="SOAP Web Services 01 — Introduction To Web Services, Java Brains" minutes={11} />
+
+<Takeaways points={[
+  "SOAP defines a versioned XML message envelope; WSDL describes operations, messages, bindings, and endpoints.",
+  "Envelope namespaces distinguish SOAP versions and are not decorative.",
+  "Inspect WSDL bindings for concrete wire details rather than guessing from abstract operations.",
+  "Validate SOAP Fault structure as well as HTTP behavior.",
+  "Layer assertions across transport, envelope, body schema, and business outcome.",
+]}/>
+
+<Complete xp={10} />

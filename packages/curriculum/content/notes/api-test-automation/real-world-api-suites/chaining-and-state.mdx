@@ -1,0 +1,111 @@
+---
+title: "Chaining and state"
+summary: "Carry server-issued values between requests without hiding dependencies, leaking state across scenarios, or making one early failure poison the entire suite."
+tags: ["api-test-automation", "real-world-api-suites", "track-d"]
+updated: "2026-07-17"
+related:
+  - "api-test-automation/real-world-api-suites/data-setup-via-api"
+  - "api-test-automation/real-world-api-suites/full-api-suite-on-buggyapi"
+  - "api-testing-fundamentals/postman-and-curl/postman-tests-and-variables"
+---
+
+<Hook>Create returns an id. Update needs that id. Delete needs it again. Hard-code `42` and the suite is not chained—it is haunted.</Hook>
+
+<Callout type="analogy">Each chain link transfers force to the next. A request chain transfers a validated token or id; one broken link should stop that scenario, not quietly feed garbage downstream.</Callout>
+
+<Term define="Request chaining captures a value from one response—such as a token, project id, or ticket id—and supplies it to a later request. Scenario state should be explicit, narrowly scoped, validated before use, and reset between independent scenarios.">Request chaining</Term>
+
+## State is useful when ownership is visible
+
+After a create response, assert success and schema before storing `id`. In Postman, prefer a scope whose lifetime matches the scenario; clear temporary values when done. Collection-wide mutable variables can make cases order-dependent. A chain is appropriate for one business lifecycle, not as a way to make every test depend on the previous test's leftovers.
+
+<Callout type="tip">Name variables by meaning and owner—`createdTicketId` beats `id`. Validate before storing, and log the run id rather than the secret token.</Callout>
+
+<Callout type="mistake">A 401 login response followed by `pm.response.json().token` can overwrite good state with undefined. Assert the prerequisite response first and stop the scenario on failure.</Callout>
+
+<HotspotImage src="/notes/api-test-automation/real-world-api-suites/chaining-and-state.jpg" alt="A close view of connected metal chain links" credit="Chains — Bernard Spragg, CC0 1.0, via Wikimedia Commons" creditHref="https://commons.wikimedia.org/wiki/File:Chains._(50630851101).jpg" pins={[
+  { x: 27, y: 51, label: "Producer link", desc: "A create or login response produces a server-issued value." },
+  { x: 51, y: 48, label: "Validated handoff", desc: "Assertions prove the value is safe before state is stored." },
+  { x: 74, y: 50, label: "Consumer link", desc: "A later request uses the exact captured id or token." },
+]}/>
+
+<FlowAnimation title="A safe project lifecycle chain" intervalMs={1400} nodes={[
+  { label: "Create project", desc: "POST with a unique run name." },
+  { label: "Assert + capture projectId", desc: "Store only after status and shape pass." },
+  { label: "Read and patch same id", desc: "Consumers reference explicit scenario state." },
+  { label: "Delete same id", desc: "Teardown closes the lifecycle." },
+  { label: "Unset temporary state", desc: "The next scenario starts clean." },
+]}/>
+
+<CodePlayground language="python" title="Run it - validate a state handoff (Python)" code={`responses = [{"status": 201, "id": 314}, {"status": 200, "id": 314}, {"status": 204}]
+state = {}
+if responses[0]["status"] == 201 and isinstance(responses[0].get("id"), int):
+    state["createdProjectId"] = responses[0]["id"]
+print(f"captured={state['createdProjectId']}")
+print(f"same_resource={responses[1]['id'] == state['createdProjectId']}")
+state.clear()
+print(f"state_after_cleanup={state}")`}/>
+
+<CodePlayground language="java" title="Run it - validate the same handoff (Java)" code={`import java.util.*;
+public class Main {
+  public static void main(String[] args) {
+    int createStatus = 201, createdId = 314, fetchedId = 314;
+    Map<String,Integer> state = new HashMap<>();
+    if (createStatus == 201) state.put("createdProjectId", createdId);
+    System.out.println("captured=" + state.get("createdProjectId"));
+    System.out.println("same_resource=" + (fetchedId == state.get("createdProjectId")));
+    state.clear();
+    System.out.println("state_after_cleanup=" + state);
+  }
+}`}/>
+
+<FirstTime title="Your mission: chain one resource lifecycle"><StepChecklist steps={[
+  { text: "Create a uniquely named project", detail: "Assert success and an integer id before capture." },
+  { text: "Store createdProjectId", detail: "Use scenario-level state rather than a mysterious global id." },
+  { text: "GET and PATCH that exact id", detail: "Prove each response refers to the captured resource." },
+  { text: "Delete and clear state", detail: "Leave no id for the next independent run." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "A later request sends /undefined.", fix: "Fail the producer step before capture and guard that the expected field has the right type." },
+  { symptom: "Tests pass only in collection order.", fix: "Split independent scenarios and give each its own setup; keep chains only inside genuine lifecycles." },
+  { symptom: "Parallel workers reuse one id.", fix: "Use per-run/per-worker variable scopes and unique data instead of shared mutable collection state." },
+]}/>
+
+<WhereToCheck>
+- Producer response status and body before variable assignment.
+- Variable scope, current value, and accidental overwrites.
+- Collection order, cleanup, and parallel-run namespaces.
+</WhereToCheck>
+
+<WorkedExample title="create, read, patch, delete without magic ids">
+`POST /api/v1/projects` returns the project id. The scenario validates and stores it as `createdProjectId`, then uses that value in GET, PATCH, and DELETE URLs. If create fails, consumers do not run. Cleanup unsets the variable, so a future run cannot accidentally act on an old project.
+</WorkedExample>
+
+<Quiz question="When should a response value be stored for later requests?" options={["Before checking the response", "After validating the producer response and value type", "Only in a global variable", "By hard-coding it into the collection"]} answer={1} explain="A validated handoff prevents a failed producer from contaminating later requests with missing or stale state."/>
+
+<Flashcards cards={[
+  { front: "Producer", back: "The request that returns a value needed later." },
+  { front: "Consumer", back: "A later request that reads explicitly captured scenario state." },
+  { front: "Order dependence warning", back: "Independent tests should create their own prerequisites rather than inherit previous test state." },
+]}/>
+
+<Challenge>Model login → create project → create ticket → update ticket → delete ticket → delete project. Mark every produced value, assertion gate, scope, and cleanup action.</Challenge>
+
+<AskCommunity prompt="Our chain loses `[variable]` after `[producer]`; response status, scope, and redacted script are `[details]`.">Never paste bearer tokens, API keys, or sandbox credentials.</AskCommunity>
+
+<Resources links={[
+  { href: "https://learning.postman.com/docs/tests-and-scripts/write-scripts/test-scripts", title: "Postman Docs — Post-response scripts", kind: "read" },
+  { href: "https://learning.postman.com/docs/use/send-requests/variables/variables", title: "Postman Docs — Variables and scopes", kind: "reference" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=oXW-C2bM0wE" title="Postman — How to Write and Automate API Tests in Postman" minutes={13} />
+
+<Takeaways points={[
+  "Capture server-issued values instead of hard-coding ids and tokens.",
+  "Validate the producer response before storing or consuming state.",
+  "Scope variables to the real scenario lifetime and clear temporary state.",
+  "Use chains for coherent lifecycles, not to make independent tests order-dependent.",
+]}/>
+
+<Complete xp={10} />
