@@ -1,0 +1,288 @@
+---
+title: "How teams deploy"
+summary: "Rolling updates, blue-green, and canary releases move traffic from an old version to a new one in different ways — and during a rolling update, both versions can genuinely be live at once. Knowing which strategy is in play changes how you interpret a flaky-looking bug."
+tags: ["kubernetes-and-test-infrastructure", "releases-and-environments", "track-d"]
+updated: "2026-07-17"
+related:
+  - "kubernetes-and-test-infrastructure/releases-and-environments/staging-vs-production"
+  - "kubernetes-and-test-infrastructure/kubernetes-in-plain-words/pods-deployments-services"
+  - "kubernetes-and-test-infrastructure/releases-and-environments/what-qa-verifies-after-a-deploy"
+---
+
+<Hook>
+You retest a bug five minutes after filing it. It's gone. Nobody touched the code. You retest AGAIN
+ten minutes later and it's back. You didn't imagine either result — you hit two different running
+versions of the same service, back to back, because a deploy was in progress the whole time and
+you had no idea. The bug was always real. The deploy strategy is what made it look intermittent.
+</Hook>
+
+<Callout type="analogy">
+A relay race baton handoff. For a brief, very real window, BOTH runners have a hand on the baton —
+the runner finishing their leg hasn't let go yet, and the runner starting their leg is already
+running alongside them. Neither runner is wrong or broken during that overlap; it's simply how a
+handoff works. A rolling deploy is the same overlap, stretched out: for a real window of time, both
+the old version and the new version are simultaneously answering requests, and neither one is "the
+bug" just for existing during that window.
+</Callout>
+
+<Term define="A deployment strategy is the specific way a team moves live traffic from an old version of a service to a new one. A rolling update replaces old instances with new ones a few at a time, so both versions answer real requests during the transition. Blue-green keeps two complete, separate environments (old = blue, new = green) and switches ALL traffic at once, so there's no mixed-version window, at the cost of running double the infrastructure during the switch. Canary sends a small, deliberate slice of real traffic to the new version first (often 1-10%) while most traffic still hits the old version, so a bug's blast radius is capped before a full rollout — closest in spirit to a rolling update, but the split is controlled and measured rather than incidental.">Deployment strategies</Term>
+
+## The strategy decides what "in progress" looks like
+
+- **Rolling update** is Kubernetes' default `Deployment` behavior: new pods start, pass their
+  readiness probe, start receiving traffic, and only THEN does an old pod get terminated — repeated
+  until every old pod is replaced. No extra infrastructure needed, but there's a real window where
+  some requests hit the old version and some hit the new one, purely by chance of which pod answers.
+- **Blue-green** avoids that mixed window entirely: a second, fully-built environment (green) is
+  stood up next to the live one (blue), verified, and then a router/load balancer flips ALL traffic
+  over in one move. Rollback is just flipping back. The cost is running two full environments at
+  once, even if only briefly.
+- **Canary** deliberately keeps a small percentage of traffic on the new version for a period, often
+  using weighted routing rather than pod count, specifically so a bad release affects the fewest
+  possible real users before anyone decides to promote it further or roll it back.
+- **None of these make mixed-version behavior a bug by itself.** A rolling update's whole design
+  assumes both versions answer requests for a while. What IS worth investigating is behavior that's
+  still mixed well after the rollout should have finished, or a canary's error rate exceeding what
+  its traffic percentage should account for.
+
+<Callout type="tip">
+To tell whether you're mid-rollout, don't guess — check. Hit a version or health endpoint (or read
+a response header like `X-App-Version` if the service sets one) several times in a row during your
+test window. If the value flips between two values across consecutive requests, you're watching a
+rolling update in progress, not a flaky endpoint.
+</Callout>
+
+<Callout type="mistake">
+Assuming a bug that "goes away on retest" was never real. If you retested during an active rolling
+deploy, you may have simply landed on the new (fixed, or not-yet-broken) pod on your second attempt.
+That doesn't erase the fact that a real user could have hit the buggy old pod during that same
+window — it's still worth filing, with the version/timestamp evidence attached, rather than shrugged
+off as a one-off.
+</Callout>
+
+{/* IMAGE: two relay runners mid-baton-handoff at an outdoor sporting event, both hands touching the baton simultaneously, both runners in motion, a cheering crowd of onlookers in white team shirts in the background, a stadium structure visible behind them */}
+<HotspotImage
+  src="/notes/kubernetes-and-test-infrastructure/releases-and-environments/how-teams-deploy.jpg"
+  alt="Two relay race runners mid-handoff, both hands touching the baton at the same moment, with teammates and a crowd watching in the background"
+  credit="US Navy 040528-N-4936C-128 A Sailor assigned to the guided missile cruiser USS Anzio (CG-682) passes a baton to his shipmate during a relay race — U.S. Navy photo by Journalist 3rd Class David P. Coleman, Wikimedia Commons, Public domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:US_Navy_040528-N-4936C-128_A_Sailor_assigned_to_the_guided_missile_cruiser_USS_Anzio_(CG-682)_passes_a_baton_to_his_shipmate_during_a_relay_race.jpg"
+  pins={[
+    { x: 42, y: 55, label: "The baton, touched by both hands at once", desc: "This exact instant is the mixed-version window of a rolling deploy: for a real, measurable stretch of time, both the old and new version are simultaneously capable of answering a request — neither one has fully taken over yet." },
+    { x: 18, y: 42, label: "The runner releasing — the old version finishing its last work", desc: "This runner hasn't stopped running yet. The old pod doesn't vanish instantly either — it keeps answering in-flight requests until it's drained and terminated, not the moment the new pod starts." },
+    { x: 58, y: 48, label: "The runner accelerating into the handoff — the new version already live", desc: "The new pod started receiving real traffic as soon as it passed its readiness probe, WHILE the old pod was still up — that overlap is intentional, not a race condition to be afraid of." },
+    { x: 80, y: 40, label: "The crowd, watching the whole thing without missing a beat", desc: "Real users during a healthy rolling update — they keep getting served throughout, unaware a handoff is even happening, as long as both versions behave correctly during the overlap." },
+  ]}
+/>
+
+<FlowAnimation
+  title="A rolling deploy, one pod at a time — press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "A new version is requested", desc: "The Deployment's pod template is updated to the new image; nothing live has changed yet." },
+    { label: "One new pod starts alongside the old ones", desc: "Kubernetes creates a new pod. It isn't sent traffic until it passes its readiness probe." },
+    { label: "The new pod passes readiness, starts receiving traffic", desc: "From this instant, BOTH old and new pods can answer requests — the mixed-version window begins." },
+    { label: "One old pod is terminated", desc: "Only after the new one proved healthy. In-flight requests to the old pod are allowed to finish (draining), not dropped mid-response." },
+    { label: "Repeat until every pod is replaced", desc: "The mixed-version window closes only once the last old pod is gone — not at the moment the rollout 'started.'" },
+  ]}
+/>
+
+The rolling-deploy simulator below makes the mixed-version window concrete: watch how many of the
+steps served BOTH versions to real, randomly-arriving requests.
+
+<CodePlayground
+  language="python"
+  title="Run it — simulate a rolling deploy and count the mixed-version steps (Python)"
+  code={`import random
+
+def rolling_deploy(pod_count, old_version="v1", new_version="v2"):
+    pods = [old_version] * pod_count
+    timeline = [list(pods)]
+    for i in range(pod_count):
+        pods[i] = new_version
+        timeline.append(list(pods))
+    return timeline
+
+def simulate_requests(timeline, requests_per_step=6, seed=7):
+    random.seed(seed)
+    mixed_steps = 0
+    for step, pods in enumerate(timeline):
+        hits = [random.choice(pods) for _ in range(requests_per_step)]
+        versions_seen = set(hits)
+        marker = "MIXED" if len(versions_seen) > 1 else "uniform"
+        if marker == "MIXED":
+            mixed_steps += 1
+        print(f"step {step}: pods={pods} requests={hits} -> {marker}")
+    print(f"\\n{mixed_steps} of {len(timeline)} steps served a mix of both versions to real requests")
+
+timeline = rolling_deploy(pod_count=4)
+simulate_requests(timeline)
+
+# step 0: pods=['v1', 'v1', 'v1', 'v1'] requests=['v1', 'v1', 'v1', 'v1', 'v1', 'v1'] -> uniform
+# step 1: pods=['v2', 'v1', 'v1', 'v1'] requests=['v1', 'v2', 'v1', 'v2', 'v2', 'v1'] -> MIXED
+# step 2: pods=['v2', 'v2', 'v1', 'v1'] requests=['v1', 'v2', 'v2', 'v2', 'v1', 'v2'] -> MIXED
+# step 3: pods=['v2', 'v2', 'v2', 'v1'] requests=['v2', 'v2', 'v2', 'v1', 'v2', 'v2'] -> MIXED
+# step 4: pods=['v2', 'v2', 'v2', 'v2'] requests=['v2', 'v2', 'v2', 'v2', 'v2', 'v2'] -> uniform
+#
+# 3 of 5 steps served a mix of both versions to real requests`}
+/>
+
+Same simulator, same idea, in Java:
+
+<CodePlayground
+  language="java"
+  title="Run it — simulate a rolling deploy and count the mixed-version steps (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static List<List<String>> rollingDeploy(int podCount, String oldVersion, String newVersion) {
+        List<String> pods = new ArrayList<>();
+        for (int i = 0; i < podCount; i++) pods.add(oldVersion);
+        List<List<String>> timeline = new ArrayList<>();
+        timeline.add(new ArrayList<>(pods));
+        for (int i = 0; i < podCount; i++) {
+            pods.set(i, newVersion);
+            timeline.add(new ArrayList<>(pods));
+        }
+        return timeline;
+    }
+
+    static void simulateRequests(List<List<String>> timeline, int requestsPerStep, long seed) {
+        Random rnd = new Random(seed);
+        int mixedSteps = 0;
+        for (int step = 0; step < timeline.size(); step++) {
+            List<String> pods = timeline.get(step);
+            List<String> hits = new ArrayList<>();
+            for (int i = 0; i < requestsPerStep; i++) {
+                hits.add(pods.get(rnd.nextInt(pods.size())));
+            }
+            Set<String> versionsSeen = new HashSet<>(hits);
+            String marker = versionsSeen.size() > 1 ? "MIXED" : "uniform";
+            if (marker.equals("MIXED")) mixedSteps++;
+            System.out.println("step " + step + ": pods=" + pods + " requests=" + hits + " -> " + marker);
+        }
+        System.out.println();
+        System.out.println(mixedSteps + " of " + timeline.size() + " steps served a mix of both versions to real requests");
+    }
+
+    public static void main(String[] args) {
+        List<List<String>> timeline = rollingDeploy(4, "v1", "v2");
+        simulateRequests(timeline, 6, 7L);
+    }
+}
+
+// step 0: pods=[v1, v1, v1, v1] requests=[v1, v1, v1, v1, v1, v1] -> uniform
+// step 1: pods=[v2, v1, v1, v1] requests=[v1, v1, v1, v1, v1, v1] -> uniform
+// step 2: pods=[v2, v2, v1, v1] requests=[v2, v2, v1, v1, v2, v1] -> MIXED
+// step 3: pods=[v2, v2, v2, v1] requests=[v1, v2, v2, v2, v1, v2] -> MIXED
+// step 4: pods=[v2, v2, v2, v2] requests=[v2, v2, v2, v2, v2, v2] -> uniform
+//
+// 2 of 5 steps served a mix of both versions to real requests`}
+/>
+
+<FirstTime title="Your mission: catch a rollout in progress">
+<StepChecklist
+  steps={[
+    { text: "Find a deploy you can watch (a real one you're notified about, or trigger one on a practice app)", detail: "Note the exact time it starts." },
+    { text: "During the deploy window, hit a version/health endpoint repeatedly, a few seconds apart", detail: "Log each response's version value or a distinguishing header/timestamp." },
+    { text: "Compare responses across your requests", detail: "Did the value ever flip between two answers? That's the mixed-version window, directly observed." },
+    { text: "Check `kubectl get pods` or `kubectl rollout status` for the same service during that window, if you have access", detail: "Confirm your observed flip lines up with old pods actually terminating and new ones becoming ready." },
+  ]}
+/>
+You've now watched a rolling deploy's mixed-version window happen in real time, instead of just
+reading about it — the exact evidence you'd want attached to a bug report filed during a deploy.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "Intermittent errors or subtly different responses for roughly a minute after every deploy, then it stops on its own.",
+      fix: "Check whether the service uses a rolling update and look at its readiness probe and `maxUnavailable`/`maxSurge` settings. If the window is short and both versions were individually correct, this may be expected transient overlap rather than a defect — but if the window is unusually long, the readiness probe itself may be too lenient.",
+    },
+    {
+      symptom: "A bug 'disappears' on retest a few minutes later, with nobody having fixed anything.",
+      fix: "You likely landed on a different pod on retest during an active rollout. File it anyway with the version/timestamp evidence — a real user could have hit the buggy pod during that same window, even though your retest didn't.",
+    },
+    {
+      symptom: "A canary release shows an elevated error rate, but only affecting a small slice of traffic.",
+      fix: "Check whether that slice roughly matches the configured canary weight (5% canary should mean roughly 5% of traffic affected, not 50%). If it matches, the canary is working as designed — the decision now is whether that error rate is acceptable enough to promote, or high enough to roll back before a full rollout.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **A version or health endpoint, hit repeatedly during the deploy window** — the most direct evidence of a mixed-version state, more reliable than assuming from timing alone.
+- **`kubectl rollout status` / `kubectl get pods`** — ground truth for how many old vs. new pods are currently up, if you have cluster access.
+- **The Deployment's strategy configuration** (`rollingUpdate` settings, or a canary/blue-green tool's traffic-split config) — explains WHY a given window looks the way it does.
+- **[[kubernetes-and-test-infrastructure/kubernetes-in-plain-words/pods-deployments-services]]** — the underlying pod/Deployment mechanics a rolling update is built on.
+</WhereToCheck>
+
+<WorkedExample title="a bug that was real, closed as 'can't reproduce,' then reopened with evidence">
+1. A tester finds that submitting a coupon code with a trailing space fails checkout with a raw 500
+   error instead of a friendly validation message.
+2. They file it immediately. Ten minutes later, a developer retests it and can't reproduce it — the
+   500 is gone, coupon codes with trailing spaces now show the friendly message.
+3. The tester checks their notes: their original test happened four minutes after a deploy started.
+   They re-check the version endpoint from their original test window — it shows the OLD version.
+4. They reopen the bug, attaching both timestamps and both version-endpoint responses as evidence:
+   "This was real. I hit the old pod before the rollout finished. It's fixed in the new version, but
+   real users hit the old version too during that same four-minute window before this was reopened."
+5. Outcome: the team confirms the fix did land in the new version, but adds the tester's evidence to
+   the postmortem — because "can't reproduce ten minutes later" almost closed a real, if short-lived,
+   production bug as invalid.
+</WorkedExample>
+
+<Quiz
+  question="A tester repeatedly hits a service's version endpoint during an active rolling deploy and sees the response alternate between the old and new version across consecutive requests. What does this indicate?"
+  options={[
+    "The version endpoint itself is broken and returning random values",
+    "This is the expected mixed-version window of a rolling update — both versions are legitimately live and answering real requests until every old pod is replaced",
+    "The deploy has failed and needs to be rolled back immediately",
+    "The tester's test script has a bug causing it to hit a cached response"
+  ]}
+  answer={1}
+  explain="A rolling update replaces pods a few at a time, and each new pod starts receiving traffic as soon as it passes its readiness probe — WHILE old pods are still up and being drained. Seeing both versions answer during that window is the strategy working as designed, not a broken endpoint, a failed deploy, or a test-script bug. The window only becomes worth investigating if it persists long after the rollout should have completed, or if error rates spike beyond what the traffic split should explain."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Rolling update", back: "Replaces pods a few at a time; both old and new versions can legitimately answer requests during the transition — no extra infrastructure needed." },
+    { front: "Blue-green deployment", back: "Two full, separate environments; traffic switches from one to the other all at once, avoiding any mixed-version window, at the cost of running double infrastructure briefly." },
+    { front: "Canary deployment", back: "A small, deliberate percentage of real traffic is routed to the new version first, capping a bad release's blast radius before a full rollout." },
+    { front: "How to confirm you're mid-rollout", back: "Hit a version/health endpoint repeatedly during the deploy window and check whether the response flips between two values across consecutive requests." },
+    { front: "The relay-race baton analogy", back: "Both runners touch the baton during the handoff — neither is 'wrong' for that overlap. A rolling deploy's mixed-version window works the same way." },
+  ]}
+/>
+
+<Challenge>
+Pick a service you can redeploy (a practice app, or a personal project). Trigger a rolling deploy,
+then immediately start hitting its version or health endpoint every couple of seconds. Log every
+response with a timestamp. Afterward, mark exactly which requests fell inside the mixed-version
+window and how long that window lasted in wall-clock time.
+</Challenge>
+
+<AskCommunity prompt="I saw `[behavior]` during a deploy of `[service]`. My evidence: version endpoint returned `[old value]` at `[time]` and `[new value]` at `[time]`. The deploy strategy is `[rolling / blue-green / canary, or unknown]`. Is this expected overlap, or does the window look too long/inconsistent for the strategy in use?">
+Useful replies usually ask for the exact `maxUnavailable`/`maxSurge` (or canary weight) configured,
+since that number predicts how long or how wide the mixed-version window SHOULD be.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#rolling-update-deployment", title: "Kubernetes docs — Rolling Update Deployment", kind: "read" },
+    { href: "https://martinfowler.com/bliki/BlueGreenDeployment.html", title: "Martin Fowler — BlueGreenDeployment", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=CJ2pAOAJSzg", title: "Kubernetes Deployment Strategies Explained | Rolling vs Blue-Green vs Canary", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=CJ2pAOAJSzg" title="Kubernetes Deployment Strategies Explained | Rolling vs Blue-Green vs Canary" minutes={12} />
+
+<Takeaways
+  points={[
+    "Rolling updates replace pods a few at a time — both old and new versions genuinely answer requests during a real mixed-version window.",
+    "Blue-green switches all traffic at once between two full environments, avoiding the mixed window at the cost of double infrastructure.",
+    "Canary sends a small, controlled slice of traffic to the new version first, capping a bad release's blast radius before full rollout.",
+    "A bug that 'disappears on retest' during a deploy window may simply mean you hit a different pod — it's still real evidence worth filing.",
+    "Confirm you're mid-rollout with direct evidence (a version endpoint hit repeatedly), not by assuming from timing alone.",
+  ]}
+/>
+
+<Complete xp={10} />

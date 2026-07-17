@@ -1,0 +1,305 @@
+---
+title: "Staging vs production"
+summary: "Staging should run the same real build as production, just with synthetic data and sandboxed integrations standing in for real users — 'works in staging' only means something if you know exactly which environment differences are expected and which ones are silent drift."
+tags: ["kubernetes-and-test-infrastructure", "releases-and-environments", "track-d"]
+updated: "2026-07-17"
+related:
+  - "kubernetes-and-test-infrastructure/releases-and-environments/how-teams-deploy"
+  - "kubernetes-and-test-infrastructure/releases-and-environments/config-and-secrets"
+  - "kubernetes-and-test-infrastructure/kubernetes-in-plain-words/namespaces-and-contexts"
+---
+
+<Hook>
+A checkout bug reproduces every single time in production and never once in staging. Same code,
+same commit hash, same container image even — and yet one environment shows the bug and the other
+doesn't. The code isn't the difference. Something ABOUT the two environments is, and finding exactly
+what is the entire job.
+</Hook>
+
+<Callout type="analogy">
+A crash test. The car is a real, genuine production model — the exact same one a customer drives off
+the lot, same engine, same seatbelts, same steering column. What's different is who's in the driver's
+seat: a fully-instrumented dummy instead of a real person, and calibration markers taped on that a
+retail buyer's car would never have. Staging works the same way — as close to the real build as
+possible, deliberately swapping out only the parts (real users, real payment processors, real
+customer data) that would be dangerous or irreversible to test against directly.
+</Callout>
+
+<Term define="A staging environment is a deployment of the application that mirrors production's infrastructure and configuration as closely as practical, but serves no real users. It runs against synthetic or anonymized ('dummy') data and sandboxed versions of third-party integrations (test-mode payment processors, sandboxed email providers) instead of the live ones, so a release can be validated for real before it reaches production, where real users, real money, and real data are actually at stake. The value of staging depends entirely on how closely it actually matches production — a staging environment that has quietly drifted from production's real configuration can pass tests that mean nothing.">Staging vs production</Term>
+
+## Same build, deliberately different surroundings
+
+- **Infrastructure should match as closely as possible.** Ideally the same container image, the
+  same Kubernetes manifests, parameterized only by environment-specific config — not a different
+  Dockerfile or a hand-maintained "staging version" of the app that can quietly fall out of sync.
+- **Traffic differs on purpose.** Staging gets test traffic (automated suites, manual exploratory
+  testing); production gets real users doing unpredictable things at a scale staging rarely matches.
+- **Data differs on purpose.** Staging typically runs seeded or anonymized data — often far smaller
+  and far cleaner than production's real, messy, years-accumulated dataset.
+- **External integrations differ on purpose.** Payment gateways, email providers, and third-party
+  APIs usually run in a sandboxed "test mode" in staging and the real, live mode in production —
+  which means staging literally cannot exercise everything a live integration can.
+- **Some differences are dangerous BECAUSE they're unexpected.** A feature flag, a config value, or
+  a resource limit that quietly differs between staging and production — without anyone deciding it
+  should — is "staging drift," and it's the difference that makes staging results misleading instead
+  of just incomplete.
+
+<Callout type="tip">
+Don't assume staging matches production — verify it periodically. Diff the actual deployed
+config/manifests (not just what's supposed to be deployed) between environments. A staging
+environment that was correctly configured six months ago can still have drifted since, one small
+unreviewed change at a time.
+</Callout>
+
+<Callout type="mistake">
+Treating "it works in staging" as equivalent to "it will work in production" without checking scale
+and integration differences. A query with no index can return instantly against staging's 200 seeded
+rows and time out against production's 200 million real rows — same code, same query, wildly
+different outcome, purely because of what data each environment actually holds.
+</Callout>
+
+{/* IMAGE: side profile view into the driver's seat of a real production sedan mid-crash-test, a crash test dummy with a pink calibrated head buckled into the seat with a seatbelt, yellow-and-black checkered calibration tape wrapped around the steering wheel, an EXIT sign visible through the windshield in the test facility background */}
+<HotspotImage
+  src="/notes/kubernetes-and-test-infrastructure/releases-and-environments/staging-vs-production.jpg"
+  alt="A crash test dummy buckled into the driver's seat of a real production car, with calibration tape wrapped around the steering wheel"
+  credit="IIHS crash test dummy in Hyundai Tucson — Brady Holt, Wikimedia Commons, CC BY 3.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:IIHS_crash_test_dummy_in_Hyundai_Tucson.jpg"
+  pins={[
+    { x: 30, y: 60, label: "Calibration tape wrapped around the steering wheel", desc: "Instrumentation added purely for the test — a real retail customer's car never has this. Comparable to extra debug logging or test-only feature flags that staging runs but production doesn't." },
+    { x: 78, y: 48, label: "The crash test dummy, buckled in exactly like a real driver", desc: "A synthetic stand-in for a real person — the seeded, anonymized test account and data staging uses instead of a real customer's actual information." },
+    { x: 82, y: 78, label: "The real seatbelt and seat, genuine production hardware", desc: "This is NOT a mockup car — it's the actual model customers buy. Staging's value depends on running the same real build and infrastructure as production, not an approximation of it." },
+    { x: 8, y: 62, label: "The dashboard warning label, still fully legible", desc: "Safety and compliance details staging exists to validate BEFORE a real customer ever encounters them for real — the whole reason to crash the dummy instead of skipping straight to production." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One release, two environments — press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "One build produces one artifact", desc: "The same container image is what will eventually run everywhere — nothing environment-specific is baked into it yet." },
+    { label: "Deployed to staging first", desc: "Synthetic data, sandboxed third-party integrations, and staging-specific config are layered on at deploy time, not baked into the image." },
+    { label: "Testers and automated checks validate behavior", desc: "Against staging's data scale and sandboxed integrations — which is real signal, but not the FULL picture." },
+    { label: "The same artifact is promoted to production", desc: "Still the identical image — only the surrounding config, data, and integrations change." },
+    { label: "Now real users, real data, real integrations", desc: "The code never changed between steps. Only the environment around it did — which is exactly why environment differences deserve deliberate attention, not assumption." },
+  ]}
+/>
+
+The config-diff checker below compares a staging config against a production config and flags any
+difference that WASN'T on the expected list — the kind of silent drift that makes staging results
+misleading.
+
+<CodePlayground
+  language="python"
+  title="Run it — flag unexpected config drift between staging and production (Python)"
+  code={`staging_config = {
+    "replica_count": 2,
+    "database_host": "staging-db.internal",
+    "feature_flag_new_checkout": True,
+    "payment_gateway_mode": "sandbox",
+    "log_level": "debug",
+    "rate_limit_per_minute": 1000,
+}
+prod_config = {
+    "replica_count": 12,
+    "database_host": "prod-db.internal",
+    "feature_flag_new_checkout": False,
+    "payment_gateway_mode": "live",
+    "log_level": "info",
+    "rate_limit_per_minute": 1000,
+}
+expected_to_differ = {"replica_count", "database_host", "payment_gateway_mode", "log_level"}
+
+def diff_configs(staging, prod, expected):
+    unexpected = []
+    for key in sorted(set(staging) | set(prod)):
+        s_val = staging.get(key, "<missing>")
+        p_val = prod.get(key, "<missing>")
+        if s_val == p_val:
+            continue
+        tag = "expected" if key in expected else "UNEXPECTED DRIFT"
+        if tag == "UNEXPECTED DRIFT":
+            unexpected.append(key)
+        print(f"{key}: staging={s_val!r} prod={p_val!r} -> {tag}")
+    return unexpected
+
+unexpected = diff_configs(staging_config, prod_config, expected_to_differ)
+print(f"\\n{len(unexpected)} unexpected drift key(s): {unexpected}")
+print("Testing in staging right now would NOT cover prod's real behavior for these keys.")
+
+# database_host: staging='staging-db.internal' prod='prod-db.internal' -> expected
+# feature_flag_new_checkout: staging=True prod=False -> UNEXPECTED DRIFT
+# log_level: staging='debug' prod='info' -> expected
+# payment_gateway_mode: staging='sandbox' prod='live' -> expected
+# replica_count: staging=2 prod=12 -> expected
+#
+# 1 unexpected drift key(s): ['feature_flag_new_checkout']
+# Testing in staging right now would NOT cover prod's real behavior for these keys.`}
+/>
+
+Same drift check, same result, in Java:
+
+<CodePlayground
+  language="java"
+  title="Run it — flag unexpected config drift between staging and production (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    public static void main(String[] args) {
+        Map<String, Object> staging = new LinkedHashMap<>();
+        staging.put("replica_count", 2);
+        staging.put("database_host", "staging-db.internal");
+        staging.put("feature_flag_new_checkout", true);
+        staging.put("payment_gateway_mode", "sandbox");
+        staging.put("log_level", "debug");
+        staging.put("rate_limit_per_minute", 1000);
+
+        Map<String, Object> prod = new LinkedHashMap<>();
+        prod.put("replica_count", 12);
+        prod.put("database_host", "prod-db.internal");
+        prod.put("feature_flag_new_checkout", false);
+        prod.put("payment_gateway_mode", "live");
+        prod.put("log_level", "info");
+        prod.put("rate_limit_per_minute", 1000);
+
+        Set<String> expectedToDiffer = new HashSet<>(List.of(
+            "replica_count", "database_host", "payment_gateway_mode", "log_level"));
+
+        Set<String> allKeys = new TreeSet<>();
+        allKeys.addAll(staging.keySet());
+        allKeys.addAll(prod.keySet());
+
+        List<String> unexpected = new ArrayList<>();
+        for (String key : allKeys) {
+            Object sVal = staging.getOrDefault(key, "<missing>");
+            Object pVal = prod.getOrDefault(key, "<missing>");
+            if (Objects.equals(sVal, pVal)) continue;
+            boolean isExpected = expectedToDiffer.contains(key);
+            String tag = isExpected ? "expected" : "UNEXPECTED DRIFT";
+            if (!isExpected) unexpected.add(key);
+            System.out.println(key + ": staging=" + sVal + " prod=" + pVal + " -> " + tag);
+        }
+        System.out.println();
+        System.out.println(unexpected.size() + " unexpected drift key(s): " + unexpected);
+        System.out.println("Testing in staging right now would NOT cover prod's real behavior for these keys.");
+    }
+}
+
+// database_host: staging=staging-db.internal prod=prod-db.internal -> expected
+// feature_flag_new_checkout: staging=true prod=false -> UNEXPECTED DRIFT
+// log_level: staging=debug prod=info -> expected
+// payment_gateway_mode: staging=sandbox prod=live -> expected
+// replica_count: staging=2 prod=12 -> expected
+//
+// 1 unexpected drift key(s): [feature_flag_new_checkout]
+// Testing in staging right now would NOT cover prod's real behavior for these keys.`}
+/>
+
+<FirstTime title="Your mission: find one real staging/production difference">
+<StepChecklist
+  steps={[
+    { text: "Locate the environment-specific config for a service you can access (env-specific values files, ConfigMaps, or deploy-time environment variables)", detail: "Look for a staging version and a production version of the same setting." },
+    { text: "Diff them, line by line", detail: "Note anything that differs and whether you'd have EXPECTED it to." },
+    { text: "Check whether a bug you're currently testing touches one of those differing values", detail: "Feature flags and integration mode are the most common culprits." },
+    { text: "Ask a developer to confirm whether the difference you found is intentional", detail: "'Intentional but undocumented' and 'accidental drift' look identical from the outside — only someone with context can tell you which." },
+  ]}
+/>
+You've now found a real, specific environment difference instead of vaguely knowing that
+"environments differ" — the exact kind of evidence that turns "works in staging, fails in prod"
+from a shrug into a diagnosis.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A feature works reliably in staging but fails or behaves differently in production.",
+      fix: "Check data scale (an unindexed query is the classic culprit), real vs. sandboxed third-party integration behavior, and whether a feature flag or config value differs between the two environments before assuming the code itself is broken.",
+    },
+    {
+      symptom: "A bug is invisible in staging because a feature flag masks the old, buggy code path there.",
+      fix: "Don't assume 'same code' means 'same behavior' — explicitly compare feature flag values across environments, since a flag flipped differently is functionally a different build.",
+    },
+    {
+      symptom: "Staging's synthetic data can't reproduce a bug a specific real customer is hitting.",
+      fix: "Request an anonymized snapshot of the relevant real data, or specific edge-case seed data matching the customer's situation, rather than continuing to test against generic fixtures that were never designed to hit that edge case.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Environment-specific config or values files** (e.g., separate staging vs. production manifests/values) — the most direct source of intentional AND accidental differences.
+- **A feature-flag dashboard, filtered per environment** — flags are one of the most common sources of "works here, not there" surprises.
+- **[[kubernetes-and-test-infrastructure/releases-and-environments/config-and-secrets]]** — the deeper mechanics of how config and secrets actually reach a running pod differently per environment.
+- **Third-party integration mode (sandbox vs. live)** for each environment — an integration's SANDBOX behavior is not guaranteed to match its LIVE behavior under real load or real edge cases.
+</WhereToCheck>
+
+<WorkedExample title="a checkout bug that only reproduced in production">
+1. A tester files a bug: applying a specific discount code plus a gift card together produces an
+   incorrect total in production. They try to reproduce it in staging using the same discount code
+   and gift card format — it works correctly every time in staging.
+2. Instead of concluding "must be a data issue, can't reproduce," the tester diffs the
+   environment-specific feature flags for the checkout service.
+3. Finding: `feature_flag_new_checkout` is `true` in staging and `false` in production. Staging has
+   been testing the NEW checkout code path this whole time — the one where this exact bug was
+   already fixed. Production is still running the OLD checkout path, where the bug still exists.
+4. This isn't a data problem at all — it's a flag mismatch making two environments run functionally
+   different code despite sharing the same underlying image and commit.
+5. Outcome: the bug report is updated to note the flag currently masks it in staging entirely, and
+   the team schedules the flag flip to production directly, rather than re-testing a "fix" that was
+   never actually live for real users.
+</WorkedExample>
+
+<Quiz
+  question="A tester finds that a bug reproduces reliably in production but never in staging, despite both environments running the exact same container image and commit hash. What's the most useful next step?"
+  options={[
+    "Conclude the bug report is invalid, since it can't be reproduced in the test environment",
+    "Assume production's infrastructure is simply less reliable than staging's",
+    "Compare environment-specific config and feature flags between the two environments, since identical code can still behave differently if the surrounding configuration differs",
+    "Redeploy production from scratch and hope the bug resolves itself"
+  ]}
+  answer={2}
+  explain="Same image and commit hash rules out 'different code' as the explanation — which means the difference has to live in what surrounds the code: config, feature flags, data scale, or integration mode. Declaring the bug invalid throws away a real production issue just because staging's environment doesn't currently reproduce it. Blaming production's infrastructure in general is a guess with no evidence. A blind redeploy doesn't investigate anything — it just hopes the problem goes away, which isn't a diagnosis."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Staging environment, in one line", back: "Mirrors production's infrastructure and config as closely as practical, but runs synthetic data and sandboxed integrations instead of real users." },
+    { front: "Why staging and production are supposed to differ", back: "Traffic, data scale, and third-party integration mode differ ON PURPOSE — testing against real users, real money, or real customer data directly would be dangerous or irreversible." },
+    { front: "Staging drift", back: "An UNEXPECTED difference between staging and production config/infrastructure that nobody decided on — this is what makes staging results misleading instead of just incomplete." },
+    { front: "The crash test analogy", back: "Same real production car, but a calibrated dummy in the driver's seat instead of a real person — full fidelity everywhere it's safe to have it, a stand-in everywhere it isn't." },
+    { front: "The direct fix for 'works in staging, fails in prod'", back: "Diff the actual environment-specific config and feature flags between the two — don't assume from 'same code' that behavior must also be the same." },
+  ]}
+/>
+
+<Challenge>
+Using the config-diff checker's approach, take any two environments you have config access to (or
+two values files from a real or practice project). List every key that differs between them, then
+classify each one as "expected difference" or "needs a developer to confirm" — and for at least one
+"needs confirming" key, actually go ask.
+</Challenge>
+
+<AskCommunity prompt="A feature behaves as `[behavior A]` in staging and `[behavior B]` in production, despite matching image/commit `[value]`. I diffed config and found these differences: `[list]`. Which of these, if any, would plausibly explain the behavior gap?">
+Useful replies usually ask specifically about feature flags and third-party integration mode first —
+those two account for most "identical code, different behavior" surprises.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://kubernetes.io/docs/concepts/configuration/configmap/", title: "Kubernetes docs — Configure a Pod to Use a ConfigMap", kind: "read" },
+    { href: "https://martinfowler.com/bliki/FeatureToggle.html", title: "Martin Fowler — Feature Toggles (an environment-aware overview)", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=ikK8JSuddPc", title: "Staging Environments Explained: Why Staging Is Essential for Safe, Reliable Software Releases", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=ikK8JSuddPc" title="Staging Environments Explained: Why Staging Is Essential for Safe, Reliable Software Releases" minutes={2} />
+
+<Takeaways
+  points={[
+    "Staging should run the same real build as production — the deliberate differences are data, traffic, and third-party integration mode, not the code itself.",
+    "Staging drift (an UNEXPECTED config or infrastructure difference nobody decided on) is what makes staging results misleading rather than just incomplete.",
+    "'Works in staging, fails in prod' with identical code points at the surrounding config — data scale, feature flags, and integration mode are the usual suspects.",
+    "Diff environment-specific config directly instead of assuming two environments match just because the code deployed to them does.",
+    "A feature flag differing between environments is functionally a different build, even with an identical image and commit hash.",
+  ]}
+/>
+
+<Complete xp={10} />
