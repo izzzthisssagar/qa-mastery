@@ -1,0 +1,125 @@
+---
+title: "Images, containers, and registries"
+summary: "Trace an immutable image reference from a registry into a running container, and learn why tags alone are weak evidence for reproducible testing."
+tags: ["docker-and-containers-for-testers", "containers-in-plain-words", "track-e"]
+updated: "2026-07-17"
+related:
+  - "docker-and-containers-for-testers/containers-in-plain-words/vm-vs-container"
+  - "docker-and-containers-for-testers/containers-in-plain-words/install-and-first-run"
+  - "docker-and-containers-for-testers/docker-hands-on/run-exec-logs-and-stop"
+---
+
+<Hook>“We tested `latest`” is not a build identity. A mutable tag can point at different image content between two runs while every command in the test report looks identical.</Hook>
+
+<Callout type="analogy">An image is a sealed blueprint, a container is one building created from it, and a registry is the catalogue that distributes blueprints. A tag is a movable label; a digest is the blueprint's content address.</Callout>
+
+<Term define="A container image is an immutable, layered package of filesystem content and configuration. A container is a runnable instance of an image. A registry stores and distributes image manifests and layers by repository, tag, or digest.">image lifecycle</Term>
+
+## Follow identity, not just names
+
+- `docker pull repo/app:1.4` resolves a tag to a manifest and downloads missing layers.
+- `docker run` creates a writable container layer above the image layers and starts its configured process.
+- Several containers can run independently from the same image.
+- Tags can move; a digest such as `sha256:...` identifies exact manifest content.
+- Private registries require authentication and deliberate credential handling.
+
+<Callout type="tip">Record the pulled digest in test evidence and deployment metadata. Keep a friendly version tag too, but do not confuse it with immutable identity.</Callout>
+
+<Callout type="mistake">Debugging by editing a running container and then assuming the image changed. The writable container layer disappears when that container is removed.</Callout>
+
+<HotspotImage src="/notes/docker-and-containers-for-testers/containers-in-plain-words/images-containers-and-registries.jpg" alt="Freight containers stacked in rows at a port" credit="Container at Mongla port — Nahian shuvo, CC BY-SA 4.0" creditHref="https://commons.wikimedia.org/wiki/File:Container_at_mongla_port.jpg" pins={[
+  { x: 20, y: 26, label: "Repository", desc: "A named collection groups related image versions." },
+  { x: 55, y: 49, label: "Layer reuse", desc: "Shared layers reduce repeated transfer and storage." },
+  { x: 84, y: 71, label: "Exact unit", desc: "A digest identifies content more reliably than a movable tag." },
+]}/>
+
+<FlowAnimation title="From registry reference to process" intervalMs={1400} nodes={[
+  { label: "Resolve tag or digest", desc: "The registry returns an image manifest." },
+  { label: "Fetch missing layers", desc: "The local content store reuses layers already present." },
+  { label: "Create writable layer", desc: "Container-specific filesystem changes stay above image layers." },
+  { label: "Start configured process", desc: "Entrypoint, command, environment, and mounts form the runtime." },
+]}/>
+
+<CodePlayground language="python" title="Run it — expose mutable tag risk (Python)" code={`registry = {"app:latest": "sha256:aaa", "app:1.4": "sha256:aaa"}
+first = registry["app:latest"]
+registry["app:latest"] = "sha256:bbb"
+second = registry["app:latest"]
+print(f"same tag: {first == second}")
+print(f"first={first}, second={second}")
+
+# same tag: False
+# first=sha256:aaa, second=sha256:bbb`}/>
+
+<CodePlayground language="java" title="Run it — expose mutable tag risk (Java)" code={`import java.util.*;
+public class Main {
+  public static void main(String[] args) {
+    Map<String,String> registry = new HashMap<>();
+    registry.put("app:latest", "sha256:aaa");
+    String first = registry.get("app:latest");
+    registry.put("app:latest", "sha256:bbb");
+    String second = registry.get("app:latest");
+    System.out.println("same tag: " + first.equals(second));
+    System.out.println("first=" + first + ", second=" + second);
+  }
+}
+/* same tag: false
+   first=sha256:aaa, second=sha256:bbb */`}/>
+
+<FirstTime title="Your mission: preserve image identity">
+<StepChecklist steps={[
+  { text: "Pull a versioned image", detail: "Use a small trusted image and a deliberate tag." },
+  { text: "Inspect its repo digest", detail: "Capture the resolved content identity." },
+  { text: "Run two named containers", detail: "Observe independent writable state from one image." },
+  { text: "Remove containers, keep image", detail: "Separate runtime lifecycle from image storage." },
+]}/>
+You can now say exactly what artifact produced a test environment.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "A rerun with the same tag behaves differently.", fix: "Compare resolved digests and pin the intended image by digest in controlled runs." },
+  { symptom: "Pull returns an authentication error.", fix: "Confirm registry hostname, repository permission, and credential-helper state without printing secrets." },
+  { symptom: "A local edit vanishes after replacement.", fix: "Rebuild the image or mount deliberate persistent data; do not use container mutation as configuration management." },
+]}/>
+
+<WhereToCheck>
+- `docker image inspect IMAGE` for IDs, digests, layers, and config.
+- `docker container inspect NAME` for the image reference actually used.
+- Registry repository history and immutable-tag policy.
+- CI logs for pull output and promoted digest.
+</WhereToCheck>
+
+<WorkedExample title="the tag that moved overnight">
+1. CI tests `registry.example/app:qa` and records only the tag.
+2. A second pipeline pushes a new manifest to that tag.
+3. The rerun pulls new content and fails despite identical test code.
+4. The team compares digests and finds the environment changed.
+5. Promotion now records and reuses the tested digest.
+</WorkedExample>
+
+<Quiz question="Which reference best identifies exact image content?" options={["Container name", "A mutable tag", "A registry digest", "Dockerfile directory"]} answer={2} explain="A digest is content-addressed; tags are human-friendly pointers that can move." />
+
+<Flashcards cards={[
+  { front: "Image", back: "Immutable layered package and runtime configuration." },
+  { front: "Container", back: "A runnable image instance with its own writable layer." },
+  { front: "Registry digest", back: "Content identity returned for an image manifest." },
+]}/>
+
+<Challenge>Update one CI report so it records repository, tag, and resolved digest, then prove the deployment uses the tested digest.</Challenge>
+
+<AskCommunity prompt="Tag `[tag]` resolved to `[digest A]` during test and `[digest B]` later. Which registry or pipeline action moved it?">Include timestamps and repository history, never credentials.</AskCommunity>
+
+<Resources links={[
+  { href: "https://docs.docker.com/get-started/docker-concepts/the-basics/what-is-an-image/", title: "Docker Docs — What is an image?", kind: "read" },
+  { href: "https://docs.docker.com/docker-hub/", title: "Docker Docs — Docker Hub", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=Gjnup-PuquQ" title="Docker in 100 Seconds — Fireship" minutes={2} />
+
+<Takeaways points={[
+  "Images are immutable packages; containers are their runnable instances.",
+  "Registries distribute manifests and layers.",
+  "Tags can move while digests identify exact content.",
+  "Test evidence should preserve the resolved image digest.",
+]}/>
+
+<Complete xp={10} />

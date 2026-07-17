@@ -1,0 +1,112 @@
+---
+title: "Testcontainers for Database Fixtures"
+summary: "Give integration tests real, disposable database instances with pinned images, readiness-aware startup, isolated state, and explicit lifecycle ownership."
+tags: ["docker-and-containers-for-testers", "containers-in-automation", "testcontainers", "database-testing"]
+updated: "2026-07-17"
+related:
+  - "docker-and-containers-for-testers/containers-in-automation/selenium-grid-in-docker"
+  - "docker-and-containers-for-testers/containers-in-automation/running-your-suite-in-a-container"
+  - "docker-and-containers-for-testers/containers-in-automation/containers-in-ci"
+---
+
+<Hook>A fake database can confirm that your mock returns a row. A disposable real database can expose a broken migration, collation surprise, transaction bug, extension mismatch, or query the production engine rejects.</Hook>
+
+<Callout type="analogy">A scientist prepares a labeled sample, waits until the instrument is ready, records conditions, runs the experiment, and disposes of contamination safely. Testcontainers applies that lifecycle to infrastructure fixtures.</Callout>
+
+<Term define="Testcontainers is a family of libraries that starts Docker-compatible containers from test code, exposes mapped connection details, waits for readiness, and removes resources after the test lifecycle. Database modules add engine-specific convenience around that core lifecycle.">Testcontainers</Term>
+
+## Own a production-like database boundary
+
+Pin the same database major version and required extensions used by production. Start the container before the tests that own it, obtain its mapped JDBC or network URL from the library, apply real migrations, seed the smallest scenario-specific data, and stop it at the declared lifecycle boundary.
+
+Container startup is not database readiness. Use the module's wait strategy or a meaningful log/SQL check, not a blind sleep. Reuse can accelerate local feedback, but fresh state is the safer default for isolation and CI reproducibility.
+
+<Callout type="tip">Test behavior through the application repository or API. Use direct SQL for setup and diagnostic evidence only when that bypass is an explicit part of the fixture contract.</Callout>
+
+<Callout type="mistake">Starting one shared PostgreSQL container for the entire developer team. Tests now depend on order, stale rows, local manual fixes, and whoever last changed the schema.</Callout>
+
+<HotspotImage src="/notes/docker-and-containers-for-testers/containers-in-automation/testcontainers-for-database-fixtures.jpg" alt="A laboratory researcher handling labeled sample tools beside a row of small white containers" credit="Sample preparation laboratory — Sofiia Baletska, Wikimedia Commons, CC BY 4.0" creditHref="https://commons.wikimedia.org/wiki/File:Sample_preparation_laboratory.jpg" pins={[
+  { x: 41, y: 70, label: "Pinned fixture", desc: "A labeled database image and migration version define the infrastructure sample under test." },
+  { x: 48, y: 79, label: "Isolated state", desc: "Separate containers or schemas prevent one scenario's rows from contaminating another." },
+  { x: 36, y: 63, label: "Lifecycle controls", desc: "Startup, readiness, seeding, observation, and cleanup belong to the test harness." },
+]}/>
+
+<FlowAnimation title="A database integration fixture" intervalMs={1350} nodes={[
+  { label: "Start pinned image", desc: "The test requests the production-relevant database version and configuration." },
+  { label: "Wait for readiness", desc: "The library observes the engine-specific condition instead of sleeping blindly." },
+  { label: "Apply migrations", desc: "The same schema evolution path used by deployment creates the database." },
+  { label: "Seed one scenario", desc: "Deterministic, minimal data makes failures local and repeatable." },
+  { label: "Assert and dispose", desc: "The application is exercised, evidence captured, and owned infrastructure removed." },
+]}/>
+
+<CodePlayground language="python" title="Prove fixture isolation with unique databases (Python)" code={`runs = ["run-41", "run-42", "run-43"]
+databases = {run: f"qa_{run.replace('-', '_')}" for run in runs}
+
+assert len(set(databases.values())) == len(runs)
+for run, database in databases.items():
+    print(f"{run} -> {database}")
+# run-41 -> qa_run_41
+# run-42 -> qa_run_42
+# run-43 -> qa_run_43`}/>
+
+<CodePlayground language="java" title="Gate tests on migration and readiness (Java)" code={`import java.util.*;
+
+class Main {
+  public static void main(String[] args) {
+    Map<String, Boolean> gates = new LinkedHashMap<>();
+    gates.put("container-running", true);
+    gates.put("database-ready", true);
+    gates.put("migrations-applied", true);
+    gates.put("seed-loaded", true);
+    if (gates.containsValue(false)) throw new AssertionError(gates);
+    System.out.println("fixture ready: " + String.join(" -> ", gates.keySet()));
+  }
+}
+// fixture ready: container-running -> database-ready -> migrations-applied -> seed-loaded`}/>
+
+<FirstTime title="Test one repository against PostgreSQL"><StepChecklist steps={[
+  { text: "Pin the engine image", detail: "Match the production major version and declare required extensions and settings." },
+  { text: "Let the library expose connection data", detail: "Use the mapped host, port, database, and credentials returned at runtime." },
+  { text: "Migrate and seed", detail: "Apply real migrations, then insert the minimum deterministic scenario." },
+  { text: "Assert lifecycle cleanup", detail: "Close clients and verify the harness removes owned resources after pass and fail." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "The first query fails although the container is running.", fix: "Use an engine-aware readiness strategy; process start and database acceptance are different events." },
+  { symptom: "Tests pass locally but CI cannot reach Docker.", fix: "Verify the runner exposes a supported Docker environment or Testcontainers-compatible provider and inspect provider discovery logs." },
+  { symptom: "Parallel tests see each other's rows.", fix: "Use per-test containers, databases, or schemas and unique resource names; never rely on test order." },
+  { symptom: "The test schema differs from deployment.", fix: "Apply the same migration artifact in the fixture and assert the resulting version before seeding." },
+]}/>
+
+<WhereToCheck>Inspect the selected image and digest, Testcontainers provider discovery logs, mapped port and connection URL, wait strategy, container logs, migration version, seed identity, active connections, resource reuse settings, and cleanup/reaper behavior.</WhereToCheck>
+
+<WorkedExample title="A repository test that catches a real SQL defect">Start pinned PostgreSQL, wait for its module readiness, run Flyway migrations, insert two accounts, then call the repository transfer operation. Assert balances and one audit row inside a transaction-visible boundary. A query using a vendor-incompatible function now fails before merge instead of passing against an in-memory substitute.</WorkedExample>
+
+<Quiz question="Why should the test read the connection URL from Testcontainers instead of assuming port 5432?" options={["PostgreSQL changes its internal port", "The host port is dynamically mapped to avoid collisions and must be discovered at runtime", "JDBC forbids fixed ports", "Containers do not use TCP"]} answer={1} explain="The database can still listen on its normal internal port while Testcontainers assigns a free host port for isolated concurrent runs." />
+
+<Flashcards cards={[
+  { front: "Mapped port", back: "A dynamically assigned host port connected to the container's fixed internal service port." },
+  { front: "Wait strategy", back: "An observable condition that declares the service ready for tests, not merely started." },
+  { front: "Fixture ownership", back: "The test scope responsible for startup, migration, data, clients, and cleanup." },
+]}/>
+
+<Challenge>Replace one mocked repository integration test with a pinned database container. Make it apply production migrations, survive parallel execution, and fail if the expected cleanup or schema version is missing.</Challenge>
+
+<AskCommunity prompt="Library/language: [value]. Database image: [tag]. Docker provider: [value]. Wait strategy: [value]. Migration and container logs: [evidence]. Lifecycle scope: [value]. Where does startup fail?">Mask credentials but keep image, provider, mapped-port, and readiness evidence.</AskCommunity>
+
+<Resources links={[
+  { href: "https://java.testcontainers.org/modules/databases/", title: "Testcontainers for Java — database modules", kind: "read" },
+  { href: "https://java.testcontainers.org/modules/databases/jdbc/", title: "Testcontainers for Java — JDBC support", kind: "read" },
+  { href: "https://java.testcontainers.org/features/startup_and_waits/", title: "Testcontainers for Java — startup and wait strategies", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=ssRE0pBNvpE" title="Stop Mocking Your Database! Use Testcontainers in .NET" minutes={16} />
+
+<Takeaways points={[
+  "Use a real production-relevant engine when database behavior is part of the risk.",
+  "Discover mapped connection details and wait for meaningful readiness.",
+  "Apply real migrations and isolate deterministic data per lifecycle.",
+  "Treat Docker provider access and cleanup evidence as part of test reliability.",
+]}/>
+
+<Complete xp={10} />

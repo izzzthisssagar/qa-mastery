@@ -1,0 +1,102 @@
+---
+title: "Environment variables and networks"
+summary: "Inject non-secret configuration deliberately and connect containers through user-defined networks using service names instead of brittle container IP addresses."
+tags: ["docker-and-containers-for-testers", "docker-hands-on", "track-e"]
+updated: "2026-07-17"
+related:
+  - "docker-and-containers-for-testers/docker-hands-on/ports-and-volumes"
+  - "docker-and-containers-for-testers/docker-hands-on/debugging-a-container"
+  - "docker-and-containers-for-testers/containers-in-plain-words/why-qa-cares"
+---
+
+<Hook>A container should call `db:5432`, not yesterday's `172.18.0.4`. Names express service identity; container IPs are disposable implementation details.</Hook>
+<Callout type="analogy">A user-defined Docker network is an office directory: colleagues find “db” by name even when desks move. Environment variables are the day's configuration sheet, not a secure vault.</Callout>
+<Term define="A user-defined bridge network gives attached containers isolated connectivity and Docker-managed DNS by container name or network alias. Environment variables provide runtime process configuration but can be exposed through inspection and process context.">runtime configuration plane</Term>
+
+## Configure without coupling
+
+- Create a user-defined network and attach only services that need to communicate.
+- Address peers by container name or explicit network alias.
+- Use `-e NAME=value` or `--env-file` for non-secret runtime configuration.
+- Do not commit env files containing credentials or print them in diagnostics.
+- Use the platform's secret mechanism for sensitive values and rotate exposed credentials.
+
+<Callout type="tip">Assert configuration names and safe values at startup, then redact secrets. A missing variable should fail clearly before tests time out.</Callout>
+<Callout type="mistake">Using `localhost` from one container to reach another. Inside the container, localhost means that same container.</Callout>
+
+<HotspotImage src="/notes/docker-and-containers-for-testers/docker-hands-on/environment-variables-and-networks.jpg" alt="A container crane beside stacked freight containers at Oakland Seaport" credit="Container crane at Oakland Seaport — Cullen328, CC BY-SA 4.0" creditHref="https://commons.wikimedia.org/wiki/File:Container_crane_at_the_Oakland_Seaport.jpg" pins={[
+  { x: 20, y: 60, label: "Named services", desc: "Stable names identify peers while individual container addresses change." },
+  { x: 55, y: 40, label: "Shared network", desc: "Only attached containers participate in this communication boundary." },
+  { x: 84, y: 67, label: "Runtime settings", desc: "Each workload receives configuration appropriate to the test run." },
+]}/>
+
+<FlowAnimation title="A service-to-database connection" intervalMs={1300} nodes={[
+  { label: "Read DB_HOST=db", desc: "Runtime configuration supplies the logical service name." },
+  { label: "Docker DNS resolves db", desc: "The user-defined network returns a current container address." },
+  { label: "Connect to container port", desc: "Peer traffic uses the database's internal listening port." },
+  { label: "Emit redacted diagnostics", desc: "Logs report endpoint and outcome without credentials." },
+]}/>
+
+<CodePlayground language="python" title="Run it — validate safe runtime configuration (Python)" code={`env = {"DB_HOST": "db", "DB_PORT": "5432", "DB_PASSWORD": "secret"}
+required = ["DB_HOST", "DB_PORT"]
+print("missing=" + str([key for key in required if not env.get(key)]))
+print(f'endpoint={env["DB_HOST"]}:{env["DB_PORT"]}, password=REDACTED')
+
+# missing=[]
+# endpoint=db:5432, password=REDACTED`}/>
+
+<CodePlayground language="java" title="Run it — validate safe runtime configuration (Java)" code={`import java.util.*;
+public class Main {
+  public static void main(String[] args) {
+    Map<String,String> env = Map.of("DB_HOST", "db", "DB_PORT", "5432", "DB_PASSWORD", "secret");
+    List<String> missing = new ArrayList<>();
+    for (String key : List.of("DB_HOST", "DB_PORT")) if (!env.containsKey(key)) missing.add(key);
+    System.out.println("missing=" + missing);
+    System.out.println("endpoint=" + env.get("DB_HOST") + ":" + env.get("DB_PORT") + ", password=REDACTED");
+  }
+}
+/* missing=[]
+   endpoint=db:5432, password=REDACTED */`}/>
+
+<FirstTime title="Your mission: connect two named services">
+<StepChecklist steps={[
+  { text: "Create a user-defined bridge network", detail: "Give the test run a unique network name." },
+  { text: "Run a dependency named db", detail: "Do not publish its port unless the host needs access." },
+  { text: "Run a client with DB_HOST=db", detail: "Attach it to the same network and resolve by name." },
+  { text: "Inspect and remove the network", detail: "Prove membership and cleanup after capturing evidence." },
+]}/>
+You have replaced a disposable IP with a declared service relationship.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "The service cannot resolve its peer name.", fix: "Confirm both containers share the same user-defined network and the expected name or alias exists." },
+  { symptom: "The app connects to itself.", fix: "Replace localhost with the peer's network name and internal port." },
+  { symptom: "A secret appears in logs or inspect output.", fix: "Rotate it, remove logging, and use an appropriate secrets mechanism rather than plain environment injection." },
+]}/>
+
+<WhereToCheck>
+- `docker network inspect NETWORK` for members and aliases.
+- Container inspect output for attached networks and safe configuration names.
+- `getent hosts NAME` or application DNS diagnostics inside the client.
+- Application bind address and the peer's internal port.
+</WhereToCheck>
+
+<WorkedExample title="the hard-coded IP failure">
+1. A test stores a database container IP from yesterday's run.
+2. Recreation assigns the database a different address.
+3. The application times out against the stale IP.
+4. QA creates a user-defined network and configures `DB_HOST=db`.
+5. Docker DNS resolves the current peer on every recreation.
+</WorkedExample>
+
+<Quiz question="From an app container, what does `localhost` identify?" options={["The Docker host", "Every container on the network", "That same app container", "The first database container"]} answer={2} explain="Each container has its own network namespace; use the peer's network name to reach another container." />
+<Flashcards cards={[{ front: "Network alias", back: "A DNS name for a container on a specific Docker network." }, { front: "Internal port", back: "The port where the peer process listens inside its network namespace." }, { front: "Environment variable", back: "Runtime process configuration, not inherently secret storage." }]}/>
+<Challenge>Prove a service can be removed and recreated at a new IP while its peer continues to reach it by network name.</Challenge>
+<AskCommunity prompt="Containers `[names]` share networks `[networks]`; lookup of `[name]` returns `[result]`; target listens on `[address:port]`. Where is the break?">Redact credentials and tokens.</AskCommunity>
+<Resources links={[
+  { href: "https://docs.docker.com/engine/network/drivers/bridge/", title: "Docker Docs — Bridge network driver", kind: "read" },
+  { href: "https://docs.docker.com/reference/cli/docker/container/run/#env", title: "Docker Docs — Set environment variables", kind: "read" },
+]}/>
+<Video href="https://www.youtube.com/watch?v=3c-iBn73dDE" title="Docker Tutorial for Beginners [FULL COURSE in 3 Hours] — TechWorld with Nana" minutes={166} />
+<Takeaways points={["User-defined networks provide scoped connectivity and DNS.", "Use service names, not disposable container IP addresses.", "Localhost refers to the current container.", "Environment variables are visible configuration and require secret discipline."]}/>
+<Complete xp={10} />

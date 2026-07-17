@@ -1,0 +1,131 @@
+---
+title: "Compose: app and database"
+summary: "Define an application and database as one testable Compose project. Learn service DNS, readiness checks, configuration, data lifetime, and reliable startup and teardown with the current docker compose CLI."
+tags: ["docker-and-containers-for-testers", "dockerfiles-and-compose", "track-e"]
+updated: "2026-07-17"
+related:
+  - "docker-and-containers-for-testers/dockerfiles-and-compose/writing-a-dockerfile"
+  - "docker-and-containers-for-testers/dockerfiles-and-compose/multi-stage-builds"
+  - "docker-and-containers-for-testers/dockerfiles-and-compose/disposable-test-environment"
+---
+
+<Hook>Two containers can be running and still fail as a system. The application may call `localhost`, the database may still be replaying recovery logs, or yesterday's volume may quietly preserve today's test data.</Hook>
+
+<Callout type="analogy">Compose is an orchestra score: it names each service and how they coordinate. `depends_on` cues entry order; a healthcheck tells the conductor whether the database is actually ready to play.</Callout>
+
+<Term define="A YAML configuration, commonly compose.yaml, that declares a multi-container application's services, networks, volumes, configuration, and relationships for the docker compose CLI.">Compose file</Term>
+
+## Model the system, not just two processes
+
+- Give the application and database separate services in `compose.yaml`.
+- Inside the default network, connect to the database by service name such as `db`, not `localhost`.
+- Keep credentials out of the image and inject test configuration at runtime.
+- Add a database healthcheck and require `service_healthy` when startup readiness matters.
+- Decide whether a named volume is intentional persistence or a source of test contamination.
+- Use the integrated `docker compose` command; the hyphenated `docker-compose` name refers to the legacy standalone tool.
+
+<Callout type="mistake">Assuming `depends_on` alone means ready. Basic dependency ordering waits for a container to start, not for PostgreSQL or MySQL to accept the application's real workload.</Callout>
+
+<Callout type="tip">Run `docker compose config` before startup. It renders the merged, interpolated model and catches many YAML, environment, and profile surprises without launching a container.</Callout>
+
+<HotspotImage src="/notes/docker-and-containers-for-testers/dockerfiles-and-compose/compose-app-and-database.jpg" alt="A conductor leading a seated orchestra" credit="Conducting the Orchestra — Jonjobaker, Wikimedia Commons, CC BY-SA 4.0" creditHref="https://commons.wikimedia.org/wiki/File:Conducting_the_Orchestra.jpg" pins={[
+  { x: 50, y: 30, label: "Compose model", desc: "One declared project coordinates service configuration and lifecycle." },
+  { x: 24, y: 66, label: "Application service", desc: "The app reaches dependencies through service DNS names on the project network." },
+  { x: 78, y: 70, label: "Database service", desc: "A healthcheck establishes readiness beyond the mere running state." },
+]}/>
+
+<FlowAnimation title="Reliable Compose startup" intervalMs={1450} nodes={[
+  { label: "Render configuration", desc: "docker compose config resolves variables and validates the model." },
+  { label: "Create project network", desc: "Services receive DNS names matching their service keys." },
+  { label: "Start database", desc: "The database container enters running state." },
+  { label: "Pass healthcheck", desc: "A readiness command proves that the database accepts connections." },
+  { label: "Start app and test", desc: "The application uses db as hostname and the suite exercises the stack." },
+]}/>
+
+<CodePlayground language="python" title="Run it — evaluate dependency readiness (Python)" code={`states = {"db": "healthy", "app": "created"}
+dependency = "db"
+if states[dependency] == "healthy":
+    states["app"] = "started"
+print("db:", states["db"])
+print("app:", states["app"])
+print("connection: postgres://db:5432/testdb")
+
+# db: healthy
+# app: started
+# connection: postgres://db:5432/testdb`}/>
+
+<CodePlayground language="java" title="Run it — evaluate dependency readiness (Java)" code={`import java.util.*;
+public class Main {
+  public static void main(String[] args) {
+    Map<String, String> states = new LinkedHashMap<>();
+    states.put("db", "healthy");
+    states.put("app", "created");
+    if (states.get("db").equals("healthy")) states.put("app", "started");
+    System.out.println("db: " + states.get("db"));
+    System.out.println("app: " + states.get("app"));
+    System.out.println("connection: postgres://db:5432/testdb");
+  }
+}
+/* db: healthy
+   app: started
+   connection: postgres://db:5432/testdb */`}/>
+
+<FirstTime title="Your mission: launch a clean app-plus-database project">
+<StepChecklist steps={[
+  { text: "Write compose.yaml", detail: "Declare app and db services, test-only configuration, and a database healthcheck." },
+  { text: "Render the model", detail: "Run docker compose config and inspect resolved image, build, ports, and variables." },
+  { text: "Start and observe", detail: "Run docker compose up --build --wait, then inspect ps and service logs." },
+  { text: "Tear down intentionally", detail: "Use docker compose down --volumes when the test requires fresh database state." },
+]}/>
+Repeat the run to prove the setup is deterministic, not lucky.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "The app gets connection refused while db is running.", fix: "Use the db service name, add a meaningful healthcheck, require service_healthy, and keep application retry logic." },
+  { symptom: "Tests pass locally but see old rows in CI retries.", fix: "Identify named volumes and tear them down with --volumes or use a unique project name per run." },
+  { symptom: "A host port is already allocated.", fix: "Do not publish internal-only database ports, or choose a dynamic or non-conflicting host mapping." },
+]}/>
+
+<WhereToCheck>
+- `docker compose config` for the effective project model.
+- `docker compose ps --all` for service state, health, exit code, and ports.
+- `docker compose logs --timestamps app db` for startup chronology.
+- `docker compose exec db ...` for database-local readiness and schema checks.
+</WhereToCheck>
+
+<WorkedExample title="localhost was the wrong computer">
+1. An API container used `DB_HOST=localhost`, while PostgreSQL ran in the `db` service.
+2. Inside the API container, localhost referred to the API container itself, so every connection failed.
+3. The team changed the hostname to `db`, added `pg_isready` as a healthcheck, and required `service_healthy`.
+4. They removed the database's unnecessary published host port and added application retries for transient reconnects.
+5. Two clean `up --wait` and `down --volumes` cycles produced the same passing result.
+</WorkedExample>
+
+<Quiz question="What hostname should the app normally use for a Compose database service named db?" options={["localhost", "host.docker.internal in every environment", "db", "The container's changing IP address"]} answer={2} explain="Compose service discovery makes a service reachable by its service name on the project network." />
+
+<Flashcards cards={[
+  { front: "Service name", back: "The stable DNS hostname other services use on a Compose network." },
+  { front: "service_healthy", back: "A depends_on condition that waits for a dependency's healthcheck to pass." },
+  { front: "docker compose config", back: "Renders and validates the effective Compose application model." },
+]}/>
+
+<Challenge>Break the database healthcheck deliberately and prove the application does not start as healthy. Restore it and capture the startup sequence from timestamped logs.</Challenge>
+
+<AskCommunity prompt="My Compose app cannot reach `[service]`. The effective hostname, health state, and relevant config are `[details]`. Where is the lifecycle or network mismatch?">Share docker compose config and sanitized logs, not secret values.</AskCommunity>
+
+<Resources links={[
+  { href: "https://docs.docker.com/compose/gettingstarted/", title: "Docker Docs — Compose quickstart", kind: "read" },
+  { href: "https://docs.docker.com/compose/how-tos/startup-order/", title: "Docker Docs — Control startup order", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=3c-iBn73dDE" title="Docker Tutorial for Beginners [FULL COURSE in 3 Hours] — TechWorld with Nana" minutes={166} />
+
+<Takeaways points={[
+  "Compose defines the lifecycle and relationships of a multi-container application.",
+  "Service names provide stable container-to-container DNS.",
+  "Running is not ready; healthchecks establish a stronger dependency condition.",
+  "Named volumes preserve data until deliberately removed.",
+  "Use docker compose config, ps, and logs as your first evidence sources.",
+]}/>
+
+<Complete xp={10} />

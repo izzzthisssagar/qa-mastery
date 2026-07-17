@@ -1,0 +1,99 @@
+---
+title: "Ports and volumes"
+summary: "Separate container ports from host publishing, and separate ephemeral writable layers from bind mounts and managed volumes."
+tags: ["docker-and-containers-for-testers", "docker-hands-on", "track-e"]
+updated: "2026-07-17"
+related:
+  - "docker-and-containers-for-testers/docker-hands-on/run-exec-logs-and-stop"
+  - "docker-and-containers-for-testers/docker-hands-on/environment-variables-and-networks"
+  - "docker-and-containers-for-testers/docker-hands-on/debugging-a-container"
+---
+
+<Hook>`EXPOSE 8080` does not publish port 8080, and deleting a container does not necessarily delete its volume. Those two misconceptions create unreachable services and mysteriously persistent test data.</Hook>
+<Callout type="analogy">Port publishing is a forwarding address from host to container. A volume is a storage locker whose lifetime is independent of the tenant.</Callout>
+<Term define="Port publishing maps a host address and port to a container port. A volume is Docker-managed persistent storage; a bind mount maps a specific host path; the container writable layer is ephemeral with the container.">runtime attachment</Term>
+
+## Make attachments explicit
+
+- `-p 127.0.0.1:8080:80` maps host loopback port 8080 to container port 80.
+- Omitting the host IP can publish on all host interfaces, depending on configuration.
+- `--mount type=volume,src=testdb,dst=/var/lib/data` uses managed storage.
+- `--mount type=bind,src=/absolute/path,dst=/work,readonly` exposes a host path.
+- Remove test volumes deliberately when clean-state semantics require it.
+
+<Callout type="tip">Prefer `--mount` in teaching and CI because type, source, destination, and read-only intent are visible.</Callout>
+<Callout type="mistake">Publishing a database to every host interface just because a local test needs loopback access.</Callout>
+
+<HotspotImage src="/notes/docker-and-containers-for-testers/docker-hands-on/ports-and-volumes.jpg" alt="Freight containers secured on a ship with lashing rods" credit="Containers on MS Alexander B — Eduard47, CC BY-SA 4.0" creditHref="https://commons.wikimedia.org/wiki/File:Frachtschiffreise13_Container_auf_Feederschiff_MS_%22Alexander_B%22_Ladungssicherung.jpg" pins={[
+  { x: 22, y: 35, label: "Host endpoint", desc: "Published host address controls where clients can connect." },
+  { x: 56, y: 60, label: "Container endpoint", desc: "Traffic is forwarded to the port where the process listens." },
+  { x: 83, y: 43, label: "Persistent attachment", desc: "Mounted storage can outlive the container that used it." },
+]}/>
+
+<FlowAnimation title="Request and data paths" intervalMs={1300} nodes={[
+  { label: "Client calls host port", desc: "The published address is the external entry point." },
+  { label: "Docker forwards traffic", desc: "The mapping targets a container IP and port." },
+  { label: "Service handles request", desc: "The process must listen on the target interface and port." },
+  { label: "Writes reach mounted storage", desc: "A volume or bind mount controls persistence beyond the writable layer." },
+]}/>
+
+<CodePlayground language="python" title="Run it — render explicit attachments (Python)" code={`port = {"host": "127.0.0.1:8080", "container": 80}
+mount = {"type": "volume", "source": "testdb", "target": "/data"}
+print(f'{port["host"]} -> container:{port["container"]}')
+print(f'{mount["type"]}:{mount["source"]} -> {mount["target"]}')
+
+# 127.0.0.1:8080 -> container:80
+# volume:testdb -> /data`}/>
+
+<CodePlayground language="java" title="Run it — render explicit attachments (Java)" code={`public class Main {
+  public static void main(String[] args) {
+    System.out.println("127.0.0.1:8080 -> container:80");
+    System.out.println("volume:testdb -> /data");
+  }
+}
+/* 127.0.0.1:8080 -> container:80
+   volume:testdb -> /data */`}/>
+
+<FirstTime title="Your mission: prove networking and persistence separately">
+<StepChecklist steps={[
+  { text: "Run a service with a loopback-only port", detail: "Use an explicit host and container port." },
+  { text: "Inspect the published mapping", detail: "Confirm the runtime mapping rather than reading Dockerfile EXPOSE." },
+  { text: "Write a marker into a named volume", detail: "Then replace the container using the same volume." },
+  { text: "Remove the volume and recreate", detail: "Prove the difference between persistent and clean state." },
+]}/>
+You have independently tested connectivity and data lifetime.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "The host port is open but the request fails.", fix: "Confirm the app listens on the container target port and not only its loopback interface." },
+  { symptom: "A host port is already allocated.", fix: "Choose a free host port or let Docker assign one, then discover it from inspect output." },
+  { symptom: "Fresh containers contain old test data.", fix: "List attached volumes and remove or uniquely name the test volume when clean state is required." },
+]}/>
+
+<WhereToCheck>
+- `docker port` and inspect `NetworkSettings.Ports`.
+- Application bind address inside the container.
+- `docker volume inspect` and container mount metadata.
+- Host path permissions for bind mounts.
+</WhereToCheck>
+
+<WorkedExample title="the database that remembered">
+1. QA removes and recreates a database container before every suite.
+2. Old rows remain because every replacement mounts the same named volume.
+3. Inspect shows the volume source and database target path.
+4. Clean-state jobs receive unique volumes and remove them after evidence capture.
+5. Persistence tests intentionally reuse a named volume and assert retained data.
+</WorkedExample>
+
+<Quiz question="What does Dockerfile `EXPOSE 80` do by itself?" options={["Publishes host port 80", "Documents an intended container port without publishing it", "Opens every firewall", "Creates a volume"]} answer={1} explain="Publishing is a runtime choice made with `-p` or `--publish`; EXPOSE is image metadata." />
+<Flashcards cards={[{ front: "Published port", back: "Host address and port forwarded to a container port." }, { front: "Volume", back: "Docker-managed storage with lifecycle independent of a container." }, { front: "Bind mount", back: "A specific host path mapped into a container." }]}/>
+<Challenge>Demonstrate one ephemeral-write test and one persistence test, with commands proving exactly which storage layer held the marker.</Challenge>
+<AskCommunity prompt="Host mapping is `[mapping]`; process listens on `[address:port]`; mounts are `[mounts]`. Why is `[request/data]` behaving unexpectedly?">Include inspect excerpts without sensitive paths.</AskCommunity>
+<Resources links={[
+  { href: "https://docs.docker.com/engine/network/port-publishing/", title: "Docker Docs — Port publishing and mapping", kind: "read" },
+  { href: "https://docs.docker.com/engine/storage/volumes/", title: "Docker Docs — Volumes", kind: "read" },
+  { href: "https://docs.docker.com/engine/storage/bind-mounts/", title: "Docker Docs — Bind mounts", kind: "read" },
+]}/>
+<Video href="https://www.youtube.com/watch?v=3c-iBn73dDE" title="Docker Tutorial for Beginners [FULL COURSE in 3 Hours] — TechWorld with Nana" minutes={166} />
+<Takeaways points={["Published host and container ports are different endpoints.", "EXPOSE metadata does not publish a port.", "Volumes persist independently; bind mounts expose host paths.", "Scope network exposure and storage cleanup deliberately."]}/>
+<Complete xp={10} />

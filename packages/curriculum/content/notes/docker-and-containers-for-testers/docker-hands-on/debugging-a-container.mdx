@@ -1,0 +1,105 @@
+---
+title: "Debugging a container"
+summary: "Triage container failures from state, logs, inspect data, resource signals, networking, and image identity before changing the environment."
+tags: ["docker-and-containers-for-testers", "docker-hands-on", "track-e"]
+updated: "2026-07-17"
+related:
+  - "docker-and-containers-for-testers/docker-hands-on/run-exec-logs-and-stop"
+  - "docker-and-containers-for-testers/docker-hands-on/ports-and-volumes"
+  - "docker-and-containers-for-testers/docker-hands-on/environment-variables-and-networks"
+---
+
+<Hook>The fastest way to destroy a container failure is to restart it before recording its exit code, error, logs, mounts, network, and image digest.</Hook>
+<Callout type="analogy">Debugging is an incident scene: photograph state before moving objects. A restart may restore service while erasing the sequence that explains the defect.</Callout>
+<Term define="Evidence-first container triage captures immutable identity, runtime configuration, state transition, process output, resource use, and connectivity before any mutation or replacement.">evidence-first triage</Term>
+
+## A bounded triage order
+
+1. `docker ps -a` — locate the object and current state.
+2. `docker inspect` — capture image, command, environment names, mounts, networks, health, error, OOM flag, and exit code.
+3. `docker logs --timestamps` — align application output with the failure.
+4. `docker stats --no-stream` and daemon events — check resource and lifecycle signals.
+5. If running, use `docker exec` for read-only process, DNS, filesystem, and socket probes.
+
+<Callout type="tip">Save raw inspect JSON and logs as artifacts, then derive a human summary. Summaries alone omit the field you need next time.</Callout>
+<Callout type="mistake">Installing tools or editing config inside the failed container. You change the evidence and create a state that nobody can reproduce.</Callout>
+
+<HotspotImage src="/notes/docker-and-containers-for-testers/docker-hands-on/debugging-a-container.jpg" alt="Aerial view of a container terminal with organized rows of freight containers" credit="Container terminal from above — chuttersnap, CC0 1.0" creditHref="https://commons.wikimedia.org/wiki/File:Container_terminal_from_above_(Unsplash).jpg" pins={[
+  { x: 23, y: 35, label: "Preserve identity", desc: "Record the exact artifact and runtime configuration before repair." },
+  { x: 56, y: 62, label: "Inspect the failure", desc: "Exit, health, logs, resources, mounts, and network narrow the cause." },
+  { x: 84, y: 42, label: "Reproduce cleanly", desc: "The fix belongs in the image or declared runtime, not in a patched instance." },
+]}/>
+
+<FlowAnimation title="From symptom to reproducible cause" intervalMs={1300} nodes={[
+  { label: "Freeze observations", desc: "Avoid restart, removal, or in-container edits." },
+  { label: "Capture state and identity", desc: "Inspect exit, error, image digest, command, and attachments." },
+  { label: "Correlate logs and resources", desc: "Align timestamps with health, OOM, and daemon events." },
+  { label: "Probe the failing boundary", desc: "Check process, DNS, socket, files, or permission with read-only commands." },
+  { label: "Recreate from declarations", desc: "Validate the hypothesis on a clean container." },
+]}/>
+
+<CodePlayground language="python" title="Run it — classify exit evidence (Python)" code={`cases = [(0, False), (1, False), (137, True)]
+for code, oom in cases:
+    cause = "success" if code == 0 else ("memory kill" if oom else "application failure")
+    print(f"exit={code}, oom={str(oom).lower()} -> {cause}")
+
+# exit=0, oom=false -> success
+# exit=1, oom=false -> application failure
+# exit=137, oom=true -> memory kill`}/>
+
+<CodePlayground language="java" title="Run it — classify exit evidence (Java)" code={`public class Main {
+  public static void main(String[] args) {
+    int[] codes = {0, 1, 137}; boolean[] oom = {false, false, true};
+    for (int i = 0; i < codes.length; i++) {
+      String cause = codes[i] == 0 ? "success" : (oom[i] ? "memory kill" : "application failure");
+      System.out.println("exit=" + codes[i] + ", oom=" + oom[i] + " -> " + cause);
+    }
+  }
+}
+/* exit=0, oom=false -> success
+   exit=1, oom=false -> application failure
+   exit=137, oom=true -> memory kill */`}/>
+
+<FirstTime title="Your mission: diagnose without patching">
+<StepChecklist steps={[
+  { text: "Create one intentional failure", detail: "Use a missing safe configuration variable or invalid command." },
+  { text: "Capture inspect JSON and logs", detail: "Do this before restart or removal." },
+  { text: "State one evidence-backed hypothesis", detail: "Name the failing boundary and supporting fields." },
+  { text: "Fix declarations and recreate", detail: "A clean rerun proves the correction is repeatable." },
+]}/>
+You have a diagnosis that survives container replacement.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "The container exits immediately.", fix: "Inspect configured command, state error, exit code, and earliest logs; the main process may have completed or failed." },
+  { symptom: "Health is unhealthy while the process runs.", fix: "Inspect health-check output, timing, dependencies, and whether the probe tests the correct endpoint." },
+  { symptom: "Exit code 137 appears.", fix: "Check `OOMKilled`, resource limits, host memory pressure, and daemon events before assuming an application exception." },
+]}/>
+
+<WhereToCheck>
+- `State.ExitCode`, `State.Error`, `State.OOMKilled`, and `State.Health`.
+- Configured image, command, entrypoint, user, working directory, and environment names.
+- Mount and network inspect data.
+- Timestamped app logs, daemon logs, and events.
+</WhereToCheck>
+
+<WorkedExample title="the restart loop misdiagnosed as networking">
+1. A test reports connection refused and the team inspects port mappings.
+2. `docker ps -a` shows the service repeatedly restarting.
+3. Inspect reports exit code 1, and logs show an unreadable config file.
+4. Mount metadata reveals the file was bind-mounted with wrong permissions.
+5. QA fixes host permissions in setup and recreates the container cleanly.
+</WorkedExample>
+
+<Quiz question="What should happen before restarting a failed container?" options={["Install an editor inside it", "Capture state, identity, configuration, and logs", "Delete all volumes", "Change several settings together"]} answer={1} explain="Evidence-first triage preserves the failure and supports a testable hypothesis." />
+<Flashcards cards={[{ front: "OOMKilled", back: "Inspect state flag indicating the container process was killed for memory pressure." }, { front: "Health status", back: "Result of the configured health check, separate from process running state." }, { front: "Clean reproduction", back: "Recreate from corrected declarations rather than a patched instance." }]}/>
+<Challenge>Build a one-command evidence bundle that captures inspect JSON, timestamped logs, and resource state without printing secrets.</Challenge>
+<AskCommunity prompt="Container `[name]` has exit `[code]`, OOM `[flag]`, health `[status]`, image `[digest]`, and last logs `[lines]`. Which hypothesis best fits?">Redact values, tokens, and private paths.</AskCommunity>
+<Resources links={[
+  { href: "https://docs.docker.com/reference/cli/docker/container/inspect/", title: "Docker Docs — docker container inspect", kind: "read" },
+  { href: "https://docs.docker.com/reference/cli/docker/container/stats/", title: "Docker Docs — docker container stats", kind: "read" },
+  { href: "https://docs.docker.com/reference/cli/docker/system/events/", title: "Docker Docs — docker system events", kind: "read" },
+]}/>
+<Video href="https://www.youtube.com/watch?v=3c-iBn73dDE" title="Docker Tutorial for Beginners [FULL COURSE in 3 Hours] — TechWorld with Nana" minutes={166} />
+<Takeaways points={["Preserve evidence before restart, edit, or removal.", "State, logs, resources, mounts, networks, and image identity narrow failures.", "Running and healthy are different states.", "Fix declarations and validate on a clean recreation."]}/>
+<Complete xp={10} />

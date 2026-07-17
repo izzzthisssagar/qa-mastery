@@ -1695,6 +1695,54 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   },
   // END nosql-and-modern-data
   {
+    slug: "docker-and-containers-for-testers",
+    title: "Docker & Containers for Testers",
+    summary: "Eliminate environment guesswork with container fundamentals, practical Docker diagnostics, reproducible Dockerfiles and Compose stacks, and disposable infrastructure for automated tests and CI.",
+    chapters: [
+      {
+        slug: "containers-in-plain-words",
+        title: "Containers in plain words",
+        topics: [
+          { slug: "vm-vs-container", title: "VM vs container" },
+          { slug: "images-containers-and-registries", title: "Images, containers & registries" },
+          { slug: "why-qa-cares", title: "Why QA cares" },
+          { slug: "install-and-first-run", title: "Install & first run" },
+        ],
+      },
+      {
+        slug: "docker-hands-on",
+        title: "Docker hands-on",
+        topics: [
+          { slug: "run-exec-logs-and-stop", title: "Run / exec / logs / stop" },
+          { slug: "ports-and-volumes", title: "Ports & volumes" },
+          { slug: "environment-variables-and-networks", title: "Environment variables & networks" },
+          { slug: "debugging-a-container", title: "Debugging a container" },
+        ],
+      },
+      {
+        slug: "dockerfiles-and-compose",
+        title: "Dockerfiles & Compose",
+        topics: [
+          { slug: "writing-a-dockerfile", title: "Writing a Dockerfile" },
+          { slug: "multi-stage-builds", title: "Multi-stage builds" },
+          { slug: "compose-app-and-database", title: "Compose: app + database" },
+          { slug: "disposable-test-environment", title: "A disposable test environment" },
+        ],
+      },
+      {
+        slug: "containers-in-automation",
+        title: "Containers in automation",
+        topics: [
+          { slug: "selenium-grid-in-docker", title: "Selenium Grid in Docker" },
+          { slug: "running-your-suite-in-a-container", title: "Running your suite in a container" },
+          { slug: "testcontainers-for-database-fixtures", title: "Testcontainers for database fixtures" },
+          { slug: "containers-in-ci", title: "Containers in CI" },
+        ],
+      },
+    ],
+  },
+  // END docker-and-containers-for-testers
+  {
     slug: "foundations",
     title: "QA Foundations",
     summary: "The vocabulary and mental models every tester needs.",

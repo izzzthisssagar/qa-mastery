@@ -1,0 +1,113 @@
+---
+title: "Running Your Suite in a Container"
+summary: "Package the test runtime as a reproducible image, inject environment-specific configuration at execution, and make reports and exit status survive the container."
+tags: ["docker-and-containers-for-testers", "containers-in-automation", "test-runner", "reproducibility"]
+updated: "2026-07-17"
+related:
+  - "docker-and-containers-for-testers/containers-in-automation/selenium-grid-in-docker"
+  - "docker-and-containers-for-testers/containers-in-automation/testcontainers-for-database-fixtures"
+  - "docker-and-containers-for-testers/containers-in-automation/containers-in-ci"
+---
+
+<Hook>The useful artifact is not “tests in Docker.” It is an immutable test runtime that behaves the same on a laptop and a CI runner while inputs, secrets, reports, and exit status remain explicit.</Hook>
+
+<Callout type="analogy">The Svalbard Seed Vault stores labeled containers under controlled conditions. The box supplies a repeatable boundary; the label and inventory still say what is inside. A test image fixes tools and dependencies, while runtime configuration says which environment to test.</Callout>
+
+<Term define="A test runner image contains the language runtime, system libraries, dependency lock state, test code or a declared code mount, and one predictable entrypoint. It should not bake environment secrets or mutable test results into image layers.">test runner image</Term>
+
+## Separate build inputs from run inputs
+
+The Dockerfile should make expensive dependency layers cacheable and application-specific changes cheap. Copy lock files first, install with frozen or reproducible options, then copy tests. Use a non-root user where practical and a `.dockerignore` so local reports, secrets, and dependency directories do not enter the build context.
+
+At run time, pass the target base URL, browser choice, shard, and credentials through a secret-aware mechanism. Mount or copy reports to a host/CI-visible location. The container's process must return the suite's exit code; `docker run` then becomes a trustworthy gate.
+
+<Callout type="tip">Make the image entrypoint run exactly one suite command. Extra arguments should select a tag, shard, or browser—not replace a hidden chain of shell behavior.</Callout>
+
+<Callout type="mistake">Baking `TEST_PASSWORD`, a staging URL, and last run's screenshots into the image. The image becomes both a secret leak and an environment-specific snowflake.</Callout>
+
+<HotspotImage src="/notes/docker-and-containers-for-testers/containers-in-automation/running-your-suite-in-a-container.jpg" alt="A worker placing a gray storage box among labeled containers on blue and orange shelves inside the Svalbard Global Seed Vault" credit="Storage containers in Svalbard Global Seed Vault — Dag Endresen, Wikimedia Commons, public domain" creditHref="https://commons.wikimedia.org/wiki/File:Storage_containers_in_Svalbard_Global_Seed_Vault_01.jpg" pins={[
+  { x: 48, y: 16, label: "Versioned image", desc: "A labeled box identifies one immutable runtime built from a Dockerfile and dependency lock files." },
+  { x: 66, y: 31, label: "Repeatable inventory", desc: "Pinned runtimes and system libraries make the test environment inspectable and reproducible." },
+  { x: 52, y: 70, label: "Runtime placement", desc: "The same image can run in different environments when endpoints and credentials arrive at execution time." },
+]}/>
+
+<FlowAnimation title="Build once, run with evidence" intervalMs={1350} nodes={[
+  { label: "Define the runtime", desc: "Pin the base image and install locked system and language dependencies." },
+  { label: "Copy the suite", desc: "Add tests and a single predictable entrypoint after dependency layers." },
+  { label: "Inject run inputs", desc: "Provide target URL, browser, shard, and secrets without rebuilding." },
+  { label: "Execute as PID 1", desc: "The test process receives signals and determines the container exit code." },
+  { label: "Export artifacts", desc: "Reports, screenshots, traces, and logs leave the ephemeral filesystem." },
+]}/>
+
+<CodePlayground language="python" title="Build a deterministic container command (Python)" code={`config = {"base_url": "https://staging.example.test", "browser": "chromium", "shard": "2/4"}
+required = ("base_url", "browser", "shard")
+missing = [key for key in required if not config.get(key)]
+if missing:
+    raise SystemExit(f"missing: {missing}")
+
+command = ["pytest", "-m", "smoke", f"--base-url={config['base_url']}", f"--browser={config['browser']}"]
+print(" ".join(command))
+print("shard=" + config["shard"])
+# pytest -m smoke --base-url=https://staging.example.test --browser=chromium
+# shard=2/4`}/>
+
+<CodePlayground language="java" title="Preserve the suite verdict as an exit code (Java)" code={`import java.util.*;
+
+class Main {
+  public static void main(String[] args) {
+    List<Boolean> tests = List.of(true, true, false, true);
+    long failed = tests.stream().filter(passed -> !passed).count();
+    int exitCode = failed == 0 ? 0 : 1;
+    System.out.println("tests=" + tests.size() + " failed=" + failed);
+    System.out.println("container exit=" + exitCode);
+  }
+}
+// tests=4 failed=1
+// container exit=1`}/>
+
+<FirstTime title="Containerize one smoke suite"><StepChecklist steps={[
+  { text: "Pin and minimize", detail: "Choose a specific base image, locked dependencies, `.dockerignore`, and a non-root runtime." },
+  { text: "Define one entrypoint", detail: "Run the test process directly so signals and exit status remain accurate." },
+  { text: "Inject configuration", detail: "Supply environment URL and secret references only at execution time." },
+  { text: "Export evidence", detail: "Mount a report directory and verify it is populated on both pass and fail." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "The image rebuilds every dependency after a test edit.", fix: "Copy lock files and install dependencies before copying frequently changed suite sources." },
+  { symptom: "CI is green although tests failed.", fix: "Remove wrappers that swallow status; make the test process or an `exec`-replacing entrypoint determine the container exit code." },
+  { symptom: "Reports disappear after the run.", fix: "Write to a mounted workspace or copy artifacts before container removal, including on failure." },
+  { symptom: "The suite passes locally but fonts or browsers differ in CI.", fix: "Inspect image digests, architecture, runtime variables, and browser/system packages; avoid mutable tags." },
+]}/>
+
+<WhereToCheck>Inspect the image digest and history, Dockerfile layer order, `.dockerignore`, effective environment variable names without exposing values, container user, entrypoint and command, exit code, mounted report permissions, and CI artifact upload conditions.</WhereToCheck>
+
+<WorkedExample title="A Playwright smoke image">Pin a Playwright base image compatible with the project version, copy package manager metadata, install with a frozen lockfile, then copy the suite. Run as a non-root user with `BASE_URL` and shard inputs. Mount `/work/test-results`, execute the test process directly, and confirm a failing assertion returns container status 1 while the HTML report remains available.</WorkedExample>
+
+<Quiz question="Which item belongs at image build time rather than container run time?" options={["Staging password", "Current test target URL", "Pinned language and browser dependencies", "CI job identifier"]} answer={2} explain="The image owns the reproducible runtime. Environment targets, run identity, and secrets are runtime inputs." />
+
+<Flashcards cards={[
+  { front: "Build context", back: "Files sent to the Docker builder; restrict it with `.dockerignore`." },
+  { front: "Immutable image", back: "A content-addressed runtime artifact that should not change between laptop and CI execution." },
+  { front: "Artifact mount", back: "A host- or runner-visible path where ephemeral containers write durable reports." },
+]}/>
+
+<Challenge>Containerize one suite so a deliberate failing test produces status 1 and a readable report outside the container. Re-run from a clean checkout using only the documented image build and run commands.</Challenge>
+
+<AskCommunity prompt="Image digest/base: [values]. Entrypoint: [value]. Runtime inputs: [names only]. Container exit: [code]. Artifact mount and permissions: [evidence]. What differs between local and CI?">Do not post secret values; configuration shape and image identity are enough.</AskCommunity>
+
+<Resources links={[
+  { href: "https://docs.docker.com/build/building/best-practices/", title: "Docker — building best practices", kind: "read" },
+  { href: "https://docs.docker.com/build/cache/optimize/", title: "Docker — optimize build cache", kind: "read" },
+  { href: "https://docs.docker.com/guides/java/run-tests/", title: "Docker — run tests in a container", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=CEBbOFqTPnk" title="How to Run Automated Tests in Docker Container" minutes={4} />
+
+<Takeaways points={[
+  "The image fixes the test runtime; execution injects targets, shards, and secrets.",
+  "Layer order and `.dockerignore` control build speed and leakage risk.",
+  "The suite process must own the container exit status.",
+  "Export reports before the ephemeral filesystem disappears.",
+]}/>
+
+<Complete xp={10} />

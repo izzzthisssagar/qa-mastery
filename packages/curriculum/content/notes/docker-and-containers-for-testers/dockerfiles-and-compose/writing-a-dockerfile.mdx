@@ -1,0 +1,134 @@
+---
+title: "Writing a Dockerfile"
+summary: "Turn application source into a repeatable container image. Learn build context, layer-aware instruction order, executable defaults, non-root runtime users, and the checks that expose accidental baggage."
+tags: ["docker-and-containers-for-testers", "dockerfiles-and-compose", "track-e"]
+updated: "2026-07-17"
+related:
+  - "docker-and-containers-for-testers/dockerfiles-and-compose/multi-stage-builds"
+  - "docker-and-containers-for-testers/dockerfiles-and-compose/compose-app-and-database"
+  - "docker-and-containers-for-testers/dockerfiles-and-compose/disposable-test-environment"
+---
+
+<Hook>A Dockerfile is a packing list with consequences. Put the wrong thing in the build context and it can enter an image layer; put a frequently changing file too early and every build repacks the warehouse.</Hook>
+
+<Callout type="analogy">A shipping manifest names the container's base, cargo, destination, and opening instructions. A Dockerfile does the same for an image, one immutable layer at a time.</Callout>
+
+<Term define="A text file whose ordered instructions tell a Docker builder how to produce a container image. Common instructions include FROM, WORKDIR, COPY, RUN, USER, EXPOSE, ENTRYPOINT, and CMD.">Dockerfile</Term>
+
+## Build an image deliberately
+
+- Start with a trusted, suitably small base image and pin a version or digest according to your update policy.
+- Set `WORKDIR` instead of scattering absolute paths through later instructions.
+- Copy dependency manifests before application source so dependency layers can remain cached.
+- Use `.dockerignore` to keep secrets, VCS metadata, test artifacts, and bulky local folders out of the context.
+- Prefer JSON-array form for `CMD` or `ENTRYPOINT` so signals reach the process predictably.
+- Create and select a non-root runtime user when the workload does not require root.
+
+<Callout type="mistake">Treating `EXPOSE 8080` as port publishing. It documents an intended listening port; publishing still happens with `docker run -p` or a Compose `ports` mapping.</Callout>
+
+<Callout type="tip">Inspect the result, not only the build exit code: run the container, inspect its configured user and command, scan it, and verify no credentials or host-only files entered any layer.</Callout>
+
+<HotspotImage src="/notes/docker-and-containers-for-testers/dockerfiles-and-compose/writing-a-dockerfile.jpg" alt="Rows of multicolored shipping containers stacked at a port" credit="Shipping containers in a port — Chuttersnap, Wikimedia Commons, CC0" creditHref="https://commons.wikimedia.org/wiki/File:Shipping_containers_in_a_port_(Unsplash).jpg" pins={[
+  { x: 18, y: 35, label: "Base row", desc: "FROM establishes the filesystem and runtime assumptions beneath every later layer." },
+  { x: 50, y: 54, label: "Ordered layers", desc: "Each filesystem-changing instruction adds a layer whose cache depends on earlier inputs." },
+  { x: 83, y: 70, label: "Sealed cargo", desc: "The final image should contain runtime necessities, not local secrets or build debris." },
+]}/>
+
+<FlowAnimation title="From source tree to running process" intervalMs={1400} nodes={[
+  { label: "Choose build context", desc: "The final dot in docker build selects the files the builder can access." },
+  { label: "Read Dockerfile", desc: "BuildKit resolves instructions and their dependencies." },
+  { label: "Reuse or execute layers", desc: "Stable inputs can reuse cache; changed inputs invalidate dependent work." },
+  { label: "Export image", desc: "The result receives a content-addressed identity and optional tag." },
+  { label: "Run and verify", desc: "A container exercises the configured user, command, network, and filesystem." },
+]}/>
+
+<CodePlayground language="python" title="Run it — model cache invalidation (Python)" code={`steps = ["base", "dependency manifest", "install dependencies", "source", "start command"]
+changed = "source"
+invalidated = False
+for step in steps:
+    if step == changed:
+        invalidated = True
+    print(f"{step}: {'rebuild' if invalidated else 'cached'}")
+
+# base: cached
+# dependency manifest: cached
+# install dependencies: cached
+# source: rebuild
+# start command: rebuild`}/>
+
+<CodePlayground language="java" title="Run it — model cache invalidation (Java)" code={`import java.util.*;
+public class Main {
+  public static void main(String[] args) {
+    List<String> steps = List.of("base", "dependency manifest", "install dependencies", "source", "start command");
+    boolean invalidated = false;
+    for (String step : steps) {
+      if (step.equals("source")) invalidated = true;
+      System.out.println(step + ": " + (invalidated ? "rebuild" : "cached"));
+    }
+  }
+}
+/* base: cached
+   dependency manifest: cached
+   install dependencies: cached
+   source: rebuild
+   start command: rebuild */`}/>
+
+<FirstTime title="Your mission: build and interrogate one image">
+<StepChecklist steps={[
+  { text: "Write Dockerfile and .dockerignore", detail: "Keep manifests before source and exclude credentials and local outputs." },
+  { text: "Build with a descriptive tag", detail: "Run docker build -t ticket-api:test . from the intended context." },
+  { text: "Run as a disposable container", detail: "Publish only the required port and pass configuration at runtime." },
+  { text: "Inspect identity and contents", detail: "Check docker image inspect, docker history, runtime user, logs, and a clean shutdown." },
+]}/>
+You now have evidence about the artifact, not merely a green build line.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "COPY cannot find a file that exists locally.", fix: "Confirm the build-context path, .dockerignore rules, filename case, and that COPY sources are relative to the context." },
+  { symptom: "Every small source change reinstalls dependencies.", fix: "Copy lockfiles first, install dependencies, then copy frequently changing source in a later layer." },
+  { symptom: "The container ignores stop signals or takes too long to exit.", fix: "Use exec-form ENTRYPOINT or CMD and ensure the application handles the termination signal." },
+]}/>
+
+<WhereToCheck>
+- `docker build --progress=plain` for the first invalidated step.
+- `docker image history --no-trunc IMAGE` for unexpectedly large or revealing layers.
+- `docker image inspect IMAGE` for configured user, entrypoint, command, labels, and exposed ports.
+- `docker run --rm IMAGE` plus logs and exit code for runtime behavior.
+</WhereToCheck>
+
+<WorkedExample title="the image that copied a developer's world">
+1. A team used `COPY . .` before dependency installation and had no `.dockerignore`.
+2. A local dependency directory, `.git`, test reports, and a `.env` file entered the context.
+3. Builds became slow, cache reuse collapsed, and the secret remained recoverable from an earlier layer even after deletion.
+4. The team excluded host-only files, rotated the credential, copied manifests before source, and used a secret mount for authenticated build access.
+5. CI added image-content and vulnerability checks so the mistake could not silently return.
+</WorkedExample>
+
+<Quiz question="Why copy a dependency lockfile before application source in a Dockerfile?" options={["It publishes the container port", "It lets dependency installation remain cached when only source changes", "It forces the container to run as root", "It removes the need for .dockerignore"]} answer={1} explain="Layer cache reuse depends on inputs and prior layers. Stable manifests placed earlier isolate expensive dependency installation from frequent source edits." />
+
+<Flashcards cards={[
+  { front: "Build context", back: "The files made available to the builder by the path or URL passed to the build command." },
+  { front: ".dockerignore", back: "Rules that exclude files from the build context before it is sent to the builder." },
+  { front: "Exec-form CMD", back: "A JSON-array command form that avoids an extra shell and improves signal behavior." },
+]}/>
+
+<Challenge>Build once, change only an application source file, then rebuild with plain progress output. Explain exactly which step first lost cache and why.</Challenge>
+
+<AskCommunity prompt="My Dockerfile first rebuilds at `[step]` after changing `[file]`. The relevant COPY order and .dockerignore rules are `[details]`. How can I preserve correct cache reuse?">Share sanitized instructions and timings; never post secrets or private registry tokens.</AskCommunity>
+
+<Resources links={[
+  { href: "https://docs.docker.com/build/concepts/dockerfile/", title: "Docker Docs — Dockerfile overview", kind: "read" },
+  { href: "https://docs.docker.com/build/building/best-practices/", title: "Docker Docs — Building best practices", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=3c-iBn73dDE" title="Docker Tutorial for Beginners [FULL COURSE in 3 Hours] — TechWorld with Nana" minutes={166} />
+
+<Takeaways points={[
+  "A Dockerfile is an ordered, reproducible image-build specification.",
+  "Build context and .dockerignore control what the builder can see.",
+  "Instruction order determines cache behavior and rebuild cost.",
+  "Runtime defaults, user identity, and signal handling deserve explicit tests.",
+  "Inspect image contents and history; a successful build is not sufficient evidence.",
+]}/>
+
+<Complete xp={10} />

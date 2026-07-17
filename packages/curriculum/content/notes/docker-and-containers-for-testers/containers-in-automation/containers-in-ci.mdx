@@ -1,0 +1,113 @@
+---
+title: "Containers in CI"
+summary: "Use job containers and service containers as explicit, pinned CI dependencies with health gates, bounded resources, durable evidence, and guaranteed cleanup."
+tags: ["docker-and-containers-for-testers", "containers-in-automation", "continuous-integration", "service-containers"]
+updated: "2026-07-17"
+related:
+  - "docker-and-containers-for-testers/containers-in-automation/selenium-grid-in-docker"
+  - "docker-and-containers-for-testers/containers-in-automation/running-your-suite-in-a-container"
+  - "docker-and-containers-for-testers/containers-in-automation/testcontainers-for-database-fixtures"
+---
+
+<Hook>CI containers are disposable, but failures are not self-explanatory. A useful pipeline pins what ran, waits for dependencies honestly, preserves evidence on failure, and removes resources even when the test command exits early.</Hook>
+
+<Callout type="analogy">An assembly line gives every unit the same ordered stations, tools, and quality gates. CI containers standardize those stations, while the workflow still controls sequencing, capacity, evidence, and stop conditions.</Callout>
+
+<Term define="A CI job container supplies the environment in which workflow steps execute. A service container supplies a network dependency such as PostgreSQL or Redis beside that job. Exact network and port behavior depends on whether the job itself runs in a container or directly on the runner.">job and service containers</Term>
+
+## Make infrastructure part of the job contract
+
+Pin image tags or digests, declare only required services, and attach health checks that represent usability. In GitHub Actions, a job running in a container can address service containers by their service labels on the shared Docker network; a job running directly on the runner normally reaches published host ports.
+
+Use caches for immutable dependency material, not mutable database state. Give services bounded resources and unique project names. Always upload reports and diagnostic logs with a condition that runs after failure, then clean containers, networks, and volumes.
+
+<Callout type="tip">Record the workflow revision, image digests, suite command, shard, and service health with the report. “It ran in CI” is not enough to reproduce the environment.</Callout>
+
+<Callout type="mistake">Using `sleep 20` before tests. A fast runner wastes time; a slow database still fails. Poll the protocol or configure a real container health check with a bounded timeout.</Callout>
+
+<HotspotImage src="/notes/docker-and-containers-for-testers/containers-in-automation/containers-in-ci.jpg" alt="Several cars at different assembly stages on a factory production line with overhead tools and work stations" credit="Opel Astra assembly line, General Motors Manufacturing Poland — Marek Ślusarczyk, Wikimedia Commons, CC BY 3.0" creditHref="https://commons.wikimedia.org/wiki/File:002_Production_line_-_car_assembly_line_in_General_Motors_Manufacturing_Poland_-_Gliwice,_Poland.jpg" pins={[
+  { x: 78, y: 38, label: "Pinned inputs", desc: "Each car enters a known station just as a job begins from versioned workflow code and immutable image identity." },
+  { x: 52, y: 52, label: "Ordered gates", desc: "Build, service readiness, migration, test, and report steps run in a visible dependency order." },
+  { x: 26, y: 61, label: "Evidence at exit", desc: "The finished unit leaves with inspection results; CI must publish reports and logs even when the gate fails." },
+]}/>
+
+<FlowAnimation title="A container-backed CI job" intervalMs={1300} nodes={[
+  { label: "Resolve immutable inputs", desc: "Checkout revision, lock files, and pinned image identities define the run." },
+  { label: "Start job and services", desc: "The runner creates isolated containers, network, and any declared volumes." },
+  { label: "Pass health gates", desc: "Protocol-aware checks prove the application and dependencies are usable." },
+  { label: "Run the suite", desc: "The test command returns a trustworthy status and writes durable artifacts." },
+  { label: "Publish then clean", desc: "Reports and diagnostics upload regardless of verdict before infrastructure disappears." },
+]}/>
+
+<CodePlayground language="python" title="Gate a CI job from explicit stages (Python)" code={`stages = {
+    "images_pinned": True,
+    "services_healthy": True,
+    "migrations_applied": True,
+    "tests_passed": False,
+    "artifacts_uploaded": True,
+}
+blocking = [name for name, passed in stages.items() if not passed and name != "artifacts_uploaded"]
+print("verdict=" + ("pass" if not blocking else "fail"))
+print("blocking=" + ",".join(blocking))
+# verdict=fail
+# blocking=tests_passed`}/>
+
+<CodePlayground language="java" title="Assign collision-free service names (Java)" code={`import java.util.*;
+
+class Main {
+  public static void main(String[] args) {
+    List<String> shards = List.of("1", "2", "3");
+    Set<String> projects = new LinkedHashSet<>();
+    for (String shard : shards) projects.add("ci-842-shard-" + shard);
+    if (projects.size() != shards.size()) throw new AssertionError("name collision");
+    System.out.println(String.join(",", projects));
+  }
+}
+// ci-842-shard-1,ci-842-shard-2,ci-842-shard-3`}/>
+
+<FirstTime title="Add one database service to CI"><StepChecklist steps={[
+  { text: "Pin the service image", detail: "Use the production-relevant major version and record the resolved identity." },
+  { text: "Declare networking and health", detail: "Use the provider's documented service label or host-port path and a protocol-aware health check." },
+  { text: "Run migrations and tests", detail: "Gate the suite on successful readiness and schema setup; preserve the test exit status." },
+  { text: "Upload and clean", detail: "Publish reports and service logs after pass or fail, then remove owned resources." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "The service name works locally but not in CI.", fix: "Check whether steps run inside a job container or on the host runner; the documented network address differs." },
+  { symptom: "Parallel jobs attach to the same resources.", fix: "Namespace Compose projects, container names, networks, volumes, databases, and test data with the run and shard identity." },
+  { symptom: "The workflow times out with no useful report.", fix: "Bound health and test timeouts separately, capture container logs, and upload diagnostics under an always-run condition." },
+  { symptom: "A mutable image update changes results without a code change.", fix: "Pin a version or digest, record the resolved image, and update it through reviewed dependency maintenance." },
+]}/>
+
+<WhereToCheck>Inspect workflow revision, runner type and architecture, job-container status, service labels, published ports, health output, image digests, `docker ps`/service logs when available, migration status, test exit code, artifact upload conditions, disk usage, and cleanup steps.</WhereToCheck>
+
+<WorkedExample title="GitHub Actions job with PostgreSQL">Run the job in a pinned test-runner image and declare a pinned PostgreSQL service with `pg_isready` health options. Connect to host `postgres` on internal port `5432`, apply migrations, run tests, and upload JUnit plus service diagnostics under `if: always()`. A host-runner job would instead publish and use a host port, so document which topology the workflow uses.</WorkedExample>
+
+<Quiz question="In GitHub Actions, how does a step inside a job container normally reach a PostgreSQL service labeled `postgres`?" options={["Through `localhost` only", "By the service label `postgres` on the shared job network", "Through a public internet address", "By reading the container ID from logs"]} answer={1} explain="Container jobs and their services share a Docker network where service labels provide host names. Host-runner jobs use published ports instead." />
+
+<Flashcards cards={[
+  { front: "Job container", back: "The container environment in which CI workflow steps execute." },
+  { front: "Service container", back: "An ephemeral network dependency created beside a CI job." },
+  { front: "Always-run artifact step", back: "Report and diagnostic publication that executes after success or failure." },
+]}/>
+
+<Challenge>Build a two-shard CI matrix whose runner and database images are pinned, service names cannot collide, health and test timeouts differ, and each failed shard uploads its own reports and service logs.</Challenge>
+
+<AskCommunity prompt="Provider/runner topology: [value]. Job and service images: [identities]. Address/port: [values]. Health output: [evidence]. Test exit and artifact step: [evidence]. Which contract failed?">Include whether the steps run on the host or inside a job container.</AskCommunity>
+
+<Resources links={[
+  { href: "https://docs.github.com/en/actions/tutorials/use-containerized-services/create-postgresql-service-containers", title: "GitHub Actions — create PostgreSQL service containers", kind: "read" },
+  { href: "https://docs.github.com/en/actions/writing-workflows/choosing-where-your-workflow-runs/running-jobs-in-a-container", title: "GitHub Actions — run jobs in a container", kind: "read" },
+  { href: "https://docs.docker.com/reference/compose-file/services/#healthcheck", title: "Docker Compose — service healthcheck", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=kmBu27D1InU" title="How to use Container Environment in GitHub Actions | Tutorial" minutes={4} />
+
+<Takeaways points={[
+  "CI container topology determines service names and port access.",
+  "Pin and record images, then gate on protocol-aware readiness.",
+  "Namespace resources for parallel jobs and bound their capacity.",
+  "Publish reports and diagnostics before guaranteed cleanup.",
+]}/>
+
+<Complete xp={10} />

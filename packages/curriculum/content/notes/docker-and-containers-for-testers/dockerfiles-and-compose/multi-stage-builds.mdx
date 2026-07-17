@@ -1,0 +1,131 @@
+---
+title: "Multi-stage builds"
+summary: "Separate compilation, testing, and runtime concerns in one Dockerfile. Copy only approved artifacts into a lean final stage and prove that build tools and secrets stayed behind."
+tags: ["docker-and-containers-for-testers", "dockerfiles-and-compose", "track-e"]
+updated: "2026-07-17"
+related:
+  - "docker-and-containers-for-testers/dockerfiles-and-compose/writing-a-dockerfile"
+  - "docker-and-containers-for-testers/dockerfiles-and-compose/compose-app-and-database"
+  - "docker-and-containers-for-testers/dockerfiles-and-compose/disposable-test-environment"
+---
+
+<Hook>A rocket discards the machinery that has finished its job. Shipping a compiler, package cache, test data, and source beside a finished artifact is the container equivalent of carrying spent boosters into orbit.</Hook>
+
+<Callout type="analogy">Each `FROM` starts a stage. A named build stage creates and tests the payload; a later runtime stage copies only that payload and leaves the workshop behind.</Callout>
+
+<Term define="A Dockerfile pattern with multiple FROM instructions, where later stages selectively copy artifacts from earlier stages or external images. Only the selected final stage is exported as the image by default.">multi-stage build</Term>
+
+## Separate build trust from runtime trust
+
+- Name stages with `AS build`, `AS test`, and `AS runtime` instead of relying on numeric positions.
+- Install compilers and development dependencies in a builder stage.
+- Run unit or packaging checks in an explicit test stage that CI can target.
+- Copy a narrow artifact path with `COPY --from=build`, not the builder filesystem wholesale.
+- Use a runtime base that contains only what the process genuinely needs.
+- Compare contents and vulnerability findings between builder and final image.
+
+<Callout type="tip">Use `docker build --target test .` to stop at a named verification stage. A production build can then target the lean runtime stage without duplicating Dockerfiles.</Callout>
+
+<Callout type="mistake">Assuming multi-stage automatically makes an image safe. A broad `COPY --from=build / /` simply transfers the entire workshop into the supposedly clean final stage.</Callout>
+
+<HotspotImage src="/notes/docker-and-containers-for-testers/dockerfiles-and-compose/multi-stage-builds.jpg" alt="Apollo 11 Saturn V lifting off from its launch tower" credit="Apollo 11 Launch2 — NASA, Wikimedia Commons, public domain" creditHref="https://commons.wikimedia.org/wiki/File:Apollo_11_Launch2.jpg" pins={[
+  { x: 50, y: 69, label: "Builder stage", desc: "Heavy tools create, compile, and test the artifact." },
+  { x: 50, y: 47, label: "Transfer boundary", desc: "COPY --from selects the exact payload that crosses into runtime." },
+  { x: 50, y: 24, label: "Runtime stage", desc: "The final stage carries only the process and its necessary runtime support." },
+]}/>
+
+<FlowAnimation title="A testable multi-stage pipeline" intervalMs={1450} nodes={[
+  { label: "Resolve builder base", desc: "A tool-rich image provides compiler and package manager." },
+  { label: "Restore dependencies", desc: "Stable manifests make this expensive step cacheable." },
+  { label: "Compile and package", desc: "Source becomes a versioned artifact." },
+  { label: "Target the test stage", desc: "CI proves behavior before promotion." },
+  { label: "Copy only the artifact", desc: "The runtime stage excludes source, compiler, and caches." },
+]}/>
+
+<CodePlayground language="python" title="Run it — enforce the artifact allowlist (Python)" code={`builder = {"app.jar", "source.zip", "maven-cache", "test-report.xml"}
+allowlist = {"app.jar"}
+runtime = builder & allowlist
+print("builder:", ", ".join(sorted(builder)))
+print("runtime:", ", ".join(sorted(runtime)))
+print("excluded:", ", ".join(sorted(builder - runtime)))
+
+# builder: app.jar, maven-cache, source.zip, test-report.xml
+# runtime: app.jar
+# excluded: maven-cache, source.zip, test-report.xml`}/>
+
+<CodePlayground language="java" title="Run it — enforce the artifact allowlist (Java)" code={`import java.util.*;
+public class Main {
+  public static void main(String[] args) {
+    Set<String> builder = new TreeSet<>(List.of("app.jar", "source.zip", "maven-cache", "test-report.xml"));
+    Set<String> runtime = new TreeSet<>(builder);
+    runtime.retainAll(Set.of("app.jar"));
+    Set<String> excluded = new TreeSet<>(builder);
+    excluded.removeAll(runtime);
+    System.out.println("builder: " + String.join(", ", builder));
+    System.out.println("runtime: " + String.join(", ", runtime));
+    System.out.println("excluded: " + String.join(", ", excluded));
+  }
+}
+/* builder: app.jar, maven-cache, source.zip, test-report.xml
+   runtime: app.jar
+   excluded: maven-cache, source.zip, test-report.xml */`}/>
+
+<FirstTime title="Your mission: prove the boundary">
+<StepChecklist steps={[
+  { text: "Name builder, test, and runtime stages", detail: "Make stage intent stable even when instructions are reordered." },
+  { text: "Build the test target", detail: "Run docker build --target test and require its checks to pass." },
+  { text: "Build the final runtime target", detail: "Copy only the artifact and required runtime files." },
+  { text: "Compare both stages", detail: "Inspect image size, packages, user, source presence, and vulnerability results." },
+]}/>
+The useful result is an evidence-backed boundary, not merely a smaller number.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "COPY --from reports that the source path does not exist.", fix: "Inspect the producer stage's WORKDIR and artifact path; stage filesystems do not inherit host paths implicitly." },
+  { symptom: "The final image still contains source and package caches.", fix: "Narrow COPY --from to explicit artifacts and inspect the runtime filesystem and history." },
+  { symptom: "A debug target builds unexpectedly during production builds.", fix: "Check stage dependencies; BuildKit skips unrelated stages but must build every ancestor of the selected target." },
+]}/>
+
+<WhereToCheck>
+- `docker build --target STAGE --progress=plain .` for stage-specific failures.
+- `docker image history IMAGE` for the final-stage layer chain.
+- `docker run --rm --entrypoint sh IMAGE` when a shell exists, to inspect runtime contents.
+- An SBOM or image scanner to compare package inventory and findings.
+</WhereToCheck>
+
+<WorkedExample title="the lean image that could not start">
+1. A Java service compiled successfully in a JDK builder and copied its JAR into `scratch`.
+2. The image was tiny, but it lacked a Java runtime and failed immediately.
+3. The team changed the final base to a pinned JRE image, copied the JAR, selected a non-root user, and used exec-form entrypoint.
+4. CI built a test target first, then scanned and smoke-tested the runtime target.
+5. Size decreased relative to the original JDK image without deleting a required runtime dependency.
+</WorkedExample>
+
+<Quiz question="What is exported by default from a multi-stage Dockerfile?" options={["Every stage as one merged image", "Only the final selected stage", "Only the first builder stage", "No stage until docker compose runs"]} answer={1} explain="The final stage is exported by default, or another stage can be selected explicitly with --target." />
+
+<Flashcards cards={[
+  { front: "Named stage", back: "A stage introduced with FROM ... AS name and referenced by COPY --from=name or --target name." },
+  { front: "Runtime boundary", back: "The selective copy from tool-rich build stages into the final execution image." },
+  { front: "Target build", back: "A build stopped at a chosen named stage for testing, debugging, or alternate output." },
+]}/>
+
+<Challenge>Create a test stage that fails on one deliberate test defect, then confirm the runtime target is never promoted when that stage fails.</Challenge>
+
+<AskCommunity prompt="My final stage still contains `[unexpected item]`. The producing stage and COPY --from lines are `[details]`. What boundary should I narrow?">Include the relevant stage definitions and sanitized image inventory.</AskCommunity>
+
+<Resources links={[
+  { href: "https://docs.docker.com/build/building/multi-stage/", title: "Docker Docs — Multi-stage builds", kind: "read" },
+  { href: "https://docs.docker.com/reference/dockerfile/#copy", title: "Dockerfile reference — COPY", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=ajetvJmBvFo" title="Day 3: Multi-Stage Docker Build — Mohammad Shaker" minutes={19} />
+
+<Takeaways points={[
+  "Every FROM begins a distinct stage with its own filesystem state.",
+  "Named stages make targets and copy boundaries resilient to reordering.",
+  "A test stage gives CI a first-class verification target.",
+  "Selective copying keeps tools, source, caches, and secrets out of runtime.",
+  "A small image must still contain every required runtime dependency.",
+]}/>
+
+<Complete xp={10} />
