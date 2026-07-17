@@ -1181,10 +1181,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "http-for-testers",
         title: "HTTP for testers",
         topics: [
-          { slug: "request-and-response-anatomy", title: "Request & response anatomy", planned: true },
-          { slug: "http-methods", title: "Methods (GET/POST/PUT/DELETE)", planned: true },
-          { slug: "headers-and-bodies", title: "Headers & bodies", planned: true },
-          { slug: "json-and-xml", title: "JSON & XML", planned: true },
+          { slug: "request-and-response-anatomy", title: "Request & response anatomy" },
+          { slug: "http-methods", title: "Methods (GET/POST/PUT/DELETE)" },
+          { slug: "headers-and-bodies", title: "Headers & bodies" },
+          { slug: "json-and-xml", title: "JSON & XML" },
         ],
       },
       {

@@ -1,0 +1,315 @@
+---
+title: "Methods (GET/POST/PUT/DELETE)"
+summary: "GET reads, POST creates, PUT replaces, DELETE removes - four verbs that cover most of what a tester needs, and four different ways a server is allowed to react when the wrong one shows up."
+tags: ["api-testing-fundamentals", "http-for-testers", "track-c"]
+updated: "2026-07-17"
+related:
+  - "api-testing-fundamentals/http-for-testers/request-and-response-anatomy"
+  - "api-testing-fundamentals/status-codes-and-rest/idempotency-and-safety"
+  - "browser-devtools-mastery/network/anatomy-of-a-request"
+---
+
+<Hook>
+The start line of every request you read in the last note began with a word: GET, POST, PUT,
+DELETE. That word isn't decoration - it's the single strongest signal of INTENT in the whole
+request, read by the server before it looks at anything else. Send the right method to the wrong
+place and you get a clean 404. Send the wrong method to the RIGHT place and you get something far
+more interesting: a server telling you, often precisely, what it thinks you're allowed to do here.
+Four verbs, learned properly, cover the overwhelming majority of what a manual API tester actually
+does all day.
+</Hook>
+
+<Callout type="analogy">
+A library's card catalog, back when that was the whole search engine. Pull a card out and read it -
+you've looked something up, changed nothing, and could do it again a thousand times with the same
+result. Slip a brand-new card into the drawer for a book that just arrived - you've added something,
+and the librarian assigns it wherever it fits. Take an existing card out and replace it, in the exact
+same slot, with a corrected version - the old information is gone, the new information sits exactly
+where the old one did. Pull a card out and throw it away - it's simply gone. Four completely
+different actions, four completely different consequences, even though "you, at the drawer" looks
+the same in every case. That's GET, POST, PUT, and DELETE.
+</Callout>
+
+<Term define="HTTP methods (also called verbs) declare a request's INTENT to the server, independent of the URL it's aimed at. The four covered here: GET retrieves a representation of a resource without changing it. POST creates a new resource (or triggers a non-idempotent action), typically at a server-assigned location. PUT replaces a resource entirely at a client-known location (URL), creating it there if it didn't already exist. DELETE removes a resource. The method is read by the server before the body or most headers are even parsed - it's the first real decision point in handling any request.">HTTP method</Term>
+
+## The four verbs, what each one actually promises
+
+- **GET** — "show me this, don't change anything." No body on the request (bodies on GET are
+  technically legal but widely ignored or rejected - never rely on one). The single most common
+  method a tester will send, and the safest one to retry freely.
+- **POST** — "here's a new thing, you decide where it goes." Classic use: creating a resource
+  whose ID doesn't exist yet - `POST /flights` with a body, server responds `201 Created` with a
+  new `Location` header pointing at `/flights/{new-id}`. Also the catch-all for actions that don't
+  map cleanly onto the other three (triggering a search, submitting a login).
+- **PUT** — "replace whatever is at THIS exact address with this." The client names the location
+  (`PUT /flights/42`), unlike POST. A full replacement, not a patch - fields you omit from the body
+  are the server's call whether to null out or reject, and that's worth confirming per-API rather
+  than assuming.
+- **DELETE** — "remove this." Usually no body. A successful delete commonly returns `204 No
+  Content` (it worked, there's nothing left to show you) rather than `200 OK` with a body.
+
+<Callout type="tip">
+When a request behaves strangely, check the method before anything else in the request itself. A
+`GET` that seems to "not save my changes" isn't buggy - it was never going to save anything; that's
+what GET means. A form that fires a `GET` for what should obviously be a state-changing action
+(like submitting a payment) is worth flagging on its own, method-only grounds, before you even look
+at what data it sends.
+</Callout>
+
+<Callout type="mistake">
+Assuming PUT and POST are interchangeable "ways to save data." They differ in who chooses the
+resource's location (client for PUT, server for POST) and in what a repeat send does (PUT replacing
+the same resource again is harmless; POST-ing the same "create" request twice can create two
+resources). This chapter's idempotency-and-safety note
+([[api-testing-fundamentals/status-codes-and-rest/idempotency-and-safety]]) is the deeper version of
+exactly this distinction - it's the single most-tested property in real API bug hunts.
+</Callout>
+
+{/* IMAGE: a hand pulling one library catalog card out of a drawer, showing the card's typed text (call number, author, title, subject headings) with a metal rod running through the punched holes of the remaining cards, more cards with colored plastic tabs visible blurred in the background */}
+<HotspotImage
+  src="/notes/api-testing-fundamentals/http-for-testers/http-methods.jpg"
+  alt="A hand pulling one library catalog card partway out of a wooden drawer, showing typed call number, author, title and subject headings, with a metal rod visible running through the punched holes of the remaining cards behind it"
+  credit="Card catalog at the Indiana State Library — Wikimedia Commons, CC BY-SA 4.0 (TBurmeister (WMF))"
+  creditHref="https://commons.wikimedia.org/wiki/File:Card_catalog_at_the_Indiana_State_Library_-_interior_view_of_catalog_cards.jpg"
+  pins={[
+    { x: 50, y: 60, label: "This one card, pulled out and read — GET", desc: "Reading it changes nothing about the drawer. Pull the same card again tomorrow, get the same information (assuming nobody else edited it) - the read has no side effects on the collection." },
+    { x: 49, y: 81, label: "The metal rod through the punched holes — PUT's fixed address", desc: "Every card occupies a specific position on that rod. PUT works the same way: it targets one exact, already-known location and replaces whatever's there - the position itself never moves, only the contents at that position change." },
+    { x: 55, y: 25, label: "The stack of other cards, colored tabs and all — the collection POST adds to, DELETE removes from", desc: "POST-ing a new card means handing it to the librarian and letting THEM find or assign its place in this stack - you don't pick the exact slot. DELETE means one specific card leaves the stack entirely, and what's left simply has one fewer card." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Picking the right method for four everyday tester scenarios - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Scenario: check whether a flight is delayed", desc: "No data changes - you're only looking. GET /flights/AI202. Safe to run a hundred times in a row while writing a test." },
+    { label: "Scenario: book a brand-new reservation", desc: "A new resource is being created and the server should assign its booking ID. POST /bookings with the reservation details in the body." },
+    { label: "Scenario: correct a passenger's misspelled name on an existing booking", desc: "You already know the exact resource (booking ID 883) and you're replacing its data wholesale. PUT /bookings/883 with the corrected full record." },
+    { label: "Scenario: cancel a booking", desc: "The resource should cease to exist. DELETE /bookings/883 - commonly answered with 204 No Content, not a body describing something that's now gone." },
+    { label: "Verdict check", desc: "For each, ask: does this change anything (rules out GET)? Do I already know the exact target address (PUT/DELETE), or is the server assigning one (POST)? Is the whole resource being replaced (PUT) or removed (DELETE)? Four questions, four verbs." },
+  ]}
+/>
+
+A tiny in-memory resource store, built just far enough to show what each verb is actually supposed
+to do to it:
+
+<CodePlayground
+  language="python"
+  title="Run it - simulating GET/POST/PUT/DELETE against a resource store (Python)"
+  code={`store = {}
+next_id = [1]
+
+def get(resource_id):
+    return store.get(resource_id, "404 Not Found")
+
+def post(body):
+    new_id = next_id[0]
+    next_id[0] += 1
+    store[new_id] = body
+    return f"201 Created -> id {new_id}"
+
+def put(resource_id, body):
+    existed = resource_id in store
+    store[resource_id] = body
+    return f"{'200 OK (replaced)' if existed else '201 Created (at caller-chosen id)'}"
+
+def delete(resource_id):
+    if resource_id in store:
+        del store[resource_id]
+        return "204 No Content"
+    return "404 Not Found"
+
+print("POST a new flight ->", post({"flight": "AI202", "status": "ON_TIME"}))
+print("POST another one    ->", post({"flight": "6E345", "status": "DELAYED"}))
+print("GET id 1            ->", get(1))
+print("PUT id 1 (replace)  ->", put(1, {"flight": "AI202", "status": "CANCELLED"}))
+print("GET id 1 again      ->", get(1))
+print("DELETE id 2         ->", delete(2))
+print("GET id 2 after del  ->", get(2))
+print("DELETE id 2 again   ->", delete(2))
+print("Store now:", store)
+
+# POST a new flight -> 201 Created -> id 1
+# POST another one    -> 201 Created -> id 2
+# GET id 1            -> {'flight': 'AI202', 'status': 'ON_TIME'}
+# PUT id 1 (replace)  -> 200 OK (replaced)
+# GET id 1 again      -> {'flight': 'AI202', 'status': 'CANCELLED'}
+# DELETE id 2         -> 204 No Content
+# GET id 2 after del  -> 404 Not Found
+# DELETE id 2 again   -> 404 Not Found
+# Store now: {1: {'flight': 'AI202', 'status': 'CANCELLED'}}`}
+/>
+
+The same four verbs against the same kind of store, in Java - notice DELETE id 2 twice in a row
+gives the identical answer both times, which is exactly the property the next note is named after:
+
+<CodePlayground
+  language="java"
+  title="Run it - simulating GET/POST/PUT/DELETE against a resource store (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static Map<Integer, String> store = new LinkedHashMap<>();
+    static int nextId = 1;
+
+    static String get(int id) {
+        return store.getOrDefault(id, "404 Not Found");
+    }
+
+    static String post(String body) {
+        int id = nextId++;
+        store.put(id, body);
+        return "201 Created -> id " + id;
+    }
+
+    static String put(int id, String body) {
+        boolean existed = store.containsKey(id);
+        store.put(id, body);
+        return existed ? "200 OK (replaced)" : "201 Created (at caller-chosen id)";
+    }
+
+    static String delete(int id) {
+        if (store.containsKey(id)) {
+            store.remove(id);
+            return "204 No Content";
+        }
+        return "404 Not Found";
+    }
+
+    public static void main(String[] args) {
+        System.out.println("POST a new flight -> " + post("{flight: AI202, status: ON_TIME}"));
+        System.out.println("POST another one    -> " + post("{flight: 6E345, status: DELAYED}"));
+        System.out.println("GET id 1            -> " + get(1));
+        System.out.println("PUT id 1 (replace)  -> " + put(1, "{flight: AI202, status: CANCELLED}"));
+        System.out.println("GET id 1 again      -> " + get(1));
+        System.out.println("DELETE id 2         -> " + delete(2));
+        System.out.println("GET id 2 after del  -> " + get(2));
+        System.out.println("DELETE id 2 again   -> " + delete(2));
+        System.out.println("Store now: " + store);
+    }
+}
+
+// POST a new flight -> 201 Created -> id 1
+// POST another one    -> 201 Created -> id 2
+// GET id 1            -> {flight: AI202, status: ON_TIME}
+// PUT id 1 (replace)  -> 200 OK (replaced)
+// GET id 1 again      -> {flight: AI202, status: CANCELLED}
+// DELETE id 2         -> 204 No Content
+// GET id 2 after del  -> 404 Not Found
+// DELETE id 2 again   -> 404 Not Found
+// Store now: {1={flight: AI202, status: CANCELLED}}`}
+/>
+
+<FirstTime title="Your mission: send all four verbs at one resource on purpose">
+<StepChecklist
+  steps={[
+    { text: "Pick a safe practice target (BuggyAPI, httpbin.org, or any sandbox API you have access to)", detail: "Never practice PUT/POST/DELETE against a production system you don't own." },
+    { text: "GET the resource first and note its current state", detail: "This is your baseline - you'll compare against it after each later step." },
+    { text: "POST a new resource and note what the server chose as its location/ID", detail: "Check the response's Location header and status code (should be 201)." },
+    { text: "PUT a full replacement at a known ID, then GET it again to confirm the replacement stuck", detail: "Compare field-by-field against what you sent - did anything you omitted get nulled, rejected, or silently kept?" },
+    { text: "DELETE that resource, then GET it again", detail: "Confirm you now get a 404 (or equivalent), and note what status code the DELETE itself returned." },
+  ]}
+/>
+You've exercised all four verbs against a real resource and watched the server's own responses
+confirm (or contradict) what each method is supposed to mean - the fastest way to actually learn
+this instead of memorizing a table.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A PUT to a resource ID that doesn't exist yet returns 201 Created instead of an error.",
+      fix: "This is often correct, not a bug - PUT is allowed to create a resource at a client-specified location if the API supports it (this is exactly why PUT needs the client to know the address, unlike POST). Check the API's documentation before filing this; if creation-via-PUT isn't supposed to be supported, THEN it's a genuine finding.",
+    },
+    {
+      symptom: "Sending the same POST request twice (e.g. a flaky network retry) created two identical resources.",
+      fix: "This is POST behaving exactly as specified, not a defect in the general case - POST is not required to be idempotent. It IS worth flagging as a product/UX risk if the endpoint represents something a user could double-click (like 'place order'), which is precisely the case the idempotency-and-safety note covers with idempotency keys as the real-world fix.",
+    },
+    {
+      symptom: "A DELETE request returns 200 OK with a full response body describing the now-deleted resource, and you're not sure if that's wrong.",
+      fix: "It's not wrong - 204 No Content is common and idiomatic for a successful DELETE, but 200 OK with a body (e.g. echoing back what was deleted, for audit purposes) is also valid HTTP. Don't file this as a bug on status-code grounds alone; check whether the DOCUMENTED contract for this specific API says which one to expect.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The API's own documentation or Swagger/OpenAPI spec** — see [[api-testing-fundamentals/status-codes-and-rest/reading-api-docs-and-swagger]] for which method is defined for which endpoint; guessing from convention alone gets you close but not exact.
+- **`curl -X <METHOD>`** — the most direct way to send a specific verb manually; the flag makes intent unambiguous in your own test scripts.
+- **The response's status code AND headers together** — a 201 with no `Location` header, or a 204 with a body, are both worth a second look even if the status code alone "looks right."
+- **BuggyAPI (TaskFlight)** — practice all four verbs against a real, safe-to-break target on this platform once you've read the docs-reading note.
+</WhereToCheck>
+
+<WorkedExample title="a booking system bug found purely by testing the 'wrong' method">
+1. A booking API documents `PUT /bookings/{id}` for updating a booking and `DELETE /bookings/{id}`
+   for cancelling one. A tester, out of habit, also tries `POST /bookings/{id}` (a method that
+   isn't documented for this specific path at all).
+2. Expected: a `405 Method Not Allowed`, since this exact combination isn't supposed to exist.
+3. Actual: `200 OK`, and the booking's data is silently overwritten - identical behavior to what
+   PUT is supposed to do at that address, but reachable through an undocumented, unintended method.
+4. This matters beyond "it's undocumented": if authorization checks were written specifically for
+   the PUT handler (e.g. "only PUT requests get validated against the ownership rule"), the POST
+   path may have skipped that check entirely - an accidental backdoor for editing someone else's
+   booking.
+5. Finding: "`POST /bookings/{id}` is unintentionally accepted and behaves like PUT, bypassing
+   [specific check]. Documented methods for this path are PUT and DELETE only; POST should return
+   405." A bug found by deliberately sending a method nobody meant to support.
+</WorkedExample>
+
+<Quiz
+  question="An API's docs say `POST /flights` creates a new flight record. A tester sends the exact same POST request body three times in a row, without changing anything. What's the correct expectation for the result?"
+  options={[
+    "All three requests should silently fail after the first one, since the data is identical",
+    "The server should detect the duplicate and merge all three into a single flight record automatically",
+    "Three separate flight resources are the expected, correct outcome - POST is not required to be idempotent, so sending the same creation request multiple times is expected to create multiple resources unless the API specifically documents different behavior (e.g. via an idempotency key)",
+    "This should always return a 409 Conflict on the second and third requests"
+  ]}
+  answer={2}
+  explain="This note is explicit that POST differs from PUT/DELETE specifically in this regard: POST has no built-in guarantee that repeating the same request produces the same end result. Three identical POSTs creating three separate resources is the default, spec-correct behavior, not a bug - which is exactly why POST-based actions that matter (payments, bookings) often need an explicit idempotency mechanism layered on top, covered in [[api-testing-fundamentals/status-codes-and-rest/idempotency-and-safety]]. Option one invents a 'silent fail' behavior HTTP doesn't specify. Option two describes automatic deduplication, which is a design choice some APIs make deliberately but is never the DEFAULT expectation. Option four assumes a 409 Conflict, which would only be correct if the API defines some uniqueness constraint being violated - nothing in this scenario states one exists."
+/>
+
+<Flashcards
+  cards={[
+    { front: "GET", back: "Retrieve, don't change anything. No meaningful request body. Safe to repeat freely." },
+    { front: "POST", back: "Create a new resource (server usually assigns its location/ID) or trigger a non-idempotent action. Repeating it is not guaranteed to be safe - it may create duplicates." },
+    { front: "PUT", back: "Replace a resource entirely at a location the CLIENT already knows/chooses. Can create the resource there if it didn't exist, depending on the API." },
+    { front: "DELETE", back: "Remove a resource. Commonly returns 204 No Content on success rather than a body." },
+    { front: "The core PUT vs POST distinction", back: "Who picks the resource's address: the client (PUT, to a known URL) or the server (POST, which typically returns the new location)." },
+  ]}
+/>
+
+<Challenge>
+Using any practice API (BuggyAPI or a public sandbox), deliberately send a method that ISN'T
+documented for a given endpoint - a POST where only GET/PUT/DELETE are listed, or a PUT where only
+GET/POST are. Record the actual response (status code, body, headers). If it returns something
+sensible like 405 Method Not Allowed, note that as correct, defensive API design. If it does
+SOMETHING unexpected instead - accepts the request, behaves like a different method, errors
+strangely - write that up as a finding, the way the worked example above did.
+</Challenge>
+
+<AskCommunity prompt="I sent a `[method]` to `[endpoint]`, which the docs say only supports `[documented methods]`. The actual response was `[status + brief description]`. Is an undocumented method being silently accepted like this worth filing as a bug on its own, or only if I can show it skips a check the documented method enforces?">
+The most useful replies usually distinguish "worth a ticket regardless" (undocumented behavior is
+its own risk) from "worth an URGENT ticket" (skips auth/validation) - both are valid answers
+depending on what the undocumented method actually does once it's reached.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Methods", title: "MDN — HTTP request methods, the full reference", kind: "read" },
+    { href: "https://www.rfc-editor.org/rfc/rfc9110.html#name-methods", title: "RFC 9110 — HTTP Semantics, Section 9: Methods", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=bmItf_67-Cg", title: "MIGOROTEK — HTTP Methods Explained in 3 Minutes: GET, POST, PUT, DELETE, & PATCH", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=bmItf_67-Cg" title="MIGOROTEK — HTTP Methods Explained in 3 Minutes: GET, POST, PUT, DELETE, & PATCH" minutes={3} />
+
+<Takeaways
+  points={[
+    "GET reads without changing anything; POST creates (server picks the address); PUT replaces at a client-known address; DELETE removes.",
+    "The method is the strongest intent signal in a request, read by the server before most of the rest - testing the WRONG method against a real endpoint often reveals more than testing the right one with bad data.",
+    "PUT and POST are not interchangeable 'save' verbs - they differ in who chooses the resource's location and in what repeating the request does.",
+    "A 405 Method Not Allowed on an undocumented method combination is correct, defensive behavior; a 200 OK on one is worth investigating for skipped checks.",
+    "Whether repeating a request is safe (POST: no; PUT/DELETE/GET: generally yes) is exactly the idempotency property the next note in this chapter names and tests directly.",
+  ]}
+/>
+
+<Complete xp={10} />
