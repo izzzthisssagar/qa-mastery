@@ -1750,10 +1750,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "the-big-picture",
         title: "The big picture",
         topics: [
-          { slug: "frontend-backend-and-the-database", title: "Frontend, backend & the database", planned: true },
-          { slug: "life-of-a-request-end-to-end", title: "Life of a request, end to end", planned: true },
-          { slug: "client-side-vs-server-side-rendering", title: "Client-side vs server-side rendering", planned: true },
-          { slug: "reading-an-architecture-diagram", title: "Reading an architecture diagram", planned: true },
+          { slug: "frontend-backend-and-the-database", title: "Frontend, backend & the database" },
+          { slug: "life-of-a-request-end-to-end", title: "Life of a request, end to end" },
+          { slug: "client-side-vs-server-side-rendering", title: "Client-side vs server-side rendering" },
+          { slug: "reading-an-architecture-diagram", title: "Reading an architecture diagram" },
         ],
       },
       {

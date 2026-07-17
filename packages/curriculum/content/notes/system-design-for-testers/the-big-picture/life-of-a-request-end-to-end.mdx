@@ -1,0 +1,314 @@
+---
+title: "Life of a request, end to end"
+summary: "A single click sets off a relay: DNS finds the server, TLS secures the channel, a load balancer picks a machine, the app does its work, the database answers, and the response retraces the whole path back. Each leg can fail independently — a tester who knows the legs knows where to look."
+tags: ["system-design-for-testers", "the-big-picture", "track-c"]
+updated: "2026-07-17"
+related:
+  - "system-design-for-testers/the-big-picture/frontend-backend-and-the-database"
+  - "system-design-for-testers/scaling-building-blocks/load-balancers"
+  - "the-internet-and-the-web/how-the-internet-works/ip-addresses"
+---
+
+<Hook>
+"The site is down" is almost never one fact - it's a guess about which leg of a much longer relay
+actually dropped the baton. DNS could be failing to resolve. TLS could be failing to negotiate. The
+load balancer could be routing to a dead server. The app server could be up but the database behind
+it could be unreachable. Six genuinely different failures, one identical symptom on screen: a
+spinner that never resolves. Knowing the legs of the relay is what turns "it's down" into "it's down
+AT THIS LEG."
+</Hook>
+
+<Callout type="analogy">
+A relay race. The runner who crosses the finish line didn't run the whole distance - four different
+runners each covered one leg, and the baton passed hand to hand between them. If the team loses, the
+race photo alone won't tell you why: maybe the second runner false-started, maybe the third dropped
+the baton at the handoff, maybe the anchor leg pulled a muscle. You have to know there WERE four
+legs before you can ask which one actually failed. A web request is exactly this: several distinct
+legs, each run by a different piece of infrastructure, with a handoff between each.
+</Callout>
+
+<Term define="The life of a request describes the sequence of distinct hops a single HTTP request travels between a user clicking something and a response appearing on their screen: DNS resolution (translating a domain name to an IP address), TLS handshake (establishing an encrypted channel, for HTTPS), routing through a load balancer or CDN edge (deciding which physical/virtual server handles this request), the application server processing the request (running the actual backend logic), a database round-trip (if the request needs stored data), and then the response retracing the same path back to the browser, which finally renders it. Each leg is a genuinely separate piece of infrastructure that can fail, slow down, or misbehave independently of the others - a tester who can name each leg can localize 'something is wrong' to a specific, checkable hop instead of treating the whole path as one opaque black box.">Life of a request</Term>
+
+## The legs, in order
+
+- **DNS resolution** — the browser asks "what IP address is `example.com`?" before it can even
+  attempt to connect. A DNS failure means the browser never even reaches the right building; the
+  user typically sees a browser-level error, not an app error.
+- **TLS handshake** — for HTTPS, the browser and server negotiate an encrypted channel before any
+  real data moves. An expired certificate or misconfigured TLS breaks here, before your app's own
+  code ever runs.
+- **Load balancer / CDN edge** — traffic arrives at a layer that decides WHICH actual server handles
+  it (spreading load, routing around unhealthy instances) or serves a cached static asset directly
+  without bothering the app servers at all.
+- **Application server** — your actual backend code runs here: auth checks, business logic, and any
+  calls out to a database or other services this request needs.
+- **Database round-trip** — if the app needs stored data, this leg happens INSIDE the application
+  server's own leg (the app is a client TO the database) - its own separate hop with its own
+  separate ways to fail (slow query, connection pool exhausted, lock contention).
+- **The return trip** — the response retraces the same path in reverse, and the browser finally
+  renders it - which is its OWN leg with its own failure modes (a broken script blocking render, for
+  instance).
+
+<Callout type="tip">
+When "it's slow" is reported, ask "slow to start responding, or slow to fully load once it starts?"
+before touching anything. Time-to-first-byte problems point at the DNS/TLS/load-balancer/app legs;
+a fast first byte followed by a slow finish points at the response/rendering leg instead - two
+completely different places to start looking.
+</Callout>
+
+<Callout type="mistake">
+Treating "the request failed" as one undifferentiated fact and starting your investigation at
+whichever leg you personally understand best (usually the application code) rather than the leg
+the EVIDENCE points to. A DNS or TLS failure produces a browser-level error before your application
+logs ever get a chance to record anything - staring at application logs for an hour while the actual
+problem is DNS is a common, avoidable waste of a debugging session.
+</Callout>
+
+{/* IMAGE: an outdoor relay race baton handoff on grass - a runner in a blue shirt extending a baton toward a teammate in dark athletic clothing who is reaching back with an open palm to receive it, both mid-stride, trees in the background */}
+<HotspotImage
+  src="/notes/system-design-for-testers/the-big-picture/life-of-a-request-end-to-end.jpg"
+  alt="A relay race baton handoff on grass - a runner in blue extending a baton toward a teammate reaching back to receive it, both mid-stride"
+  credit="Relay race baton pass — Patrick Bell, Wikimedia Commons, CC BY 2.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Relay_race_baton_pass.jpg"
+  pins={[
+    { x: 30, y: 45, label: "The outgoing runner — the leg that just finished", desc: "This runner's leg is done the instant the baton leaves their hand - if something went wrong on THEIR leg (a stumble, a wrong turn), it happened before this handoff, not after." },
+    { x: 63, y: 40, label: "The incoming runner, reaching back — the next leg, not yet started", desc: "This runner hasn't covered any distance yet - whatever happens on their leg is a completely separate question from whatever just happened on the leg before it." },
+    { x: 48, y: 42, label: "The baton itself, mid-air — the handoff, the riskiest instant", desc: "Neither runner fully controls it right now. In a request's journey, handoffs (DNS to TLS, load balancer to app server, app server to database) are exactly where things drop that neither side alone would show as 'their' failure." },
+    { x: 15, y: 65, label: "The grass track stretching behind — legs already run, already over", desc: "Whatever happened earlier in the race is finished and unrecoverable from here - the same way a DNS lookup that already succeeded is not where a LATER timeout's root cause lives." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One click, six legs, one relay - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Leg 1: DNS resolution", desc: "Browser asks 'what's the IP for this domain?' Fails here = a browser-level error, no app code has run yet." },
+    { label: "Leg 2: TLS handshake", desc: "Browser and server agree on encryption. Fails here = a certificate/security warning, still before any app logic." },
+    { label: "Leg 3: Load balancer / CDN edge", desc: "Traffic is routed to a healthy server, or a cached static file is served directly without reaching the app at all." },
+    { label: "Leg 4: Application server + database", desc: "Your actual backend code runs, possibly making its own round-trip to a database before it can respond." },
+    { label: "Leg 5: The return trip and render", desc: "The response retraces the path back; the browser renders it - itself a separate leg with its own failure modes (blocking scripts, slow assets)." },
+  ]}
+/>
+
+The core idea is just a sequence with a timing measurement per leg - and that a slow OR failing
+overall trip can be localized to exactly one leg once you measure each one separately:
+
+<CodePlayground
+  language="python"
+  title="Run it - timing each leg of one request's journey and finding the slow one (Python)"
+  code={`import time
+
+def dns_resolve():
+    time.sleep(0.01)   # 10ms - normal
+    return "203.0.113.10"
+
+def tls_handshake():
+    time.sleep(0.02)   # 20ms - normal
+    return "secure channel established"
+
+def load_balancer_route():
+    time.sleep(0.005)  # 5ms - normal
+    return "routed to app-server-3"
+
+def app_server_process(slow_db=False):
+    start = time.perf_counter()
+    if slow_db:
+        time.sleep(0.8)  # 800ms - a slow database query, the actual problem today
+    else:
+        time.sleep(0.03)  # 30ms - normal
+    return time.perf_counter() - start
+
+def run_request(slow_db=False):
+    legs = {}
+    t0 = time.perf_counter(); dns_resolve();          legs["dns"] = time.perf_counter() - t0
+    t0 = time.perf_counter(); tls_handshake();         legs["tls"] = time.perf_counter() - t0
+    t0 = time.perf_counter(); load_balancer_route();   legs["load_balancer"] = time.perf_counter() - t0
+    legs["app_server_and_db"] = app_server_process(slow_db=slow_db)
+    return legs
+
+print("A healthy request, leg by leg:")
+for leg, seconds in run_request(slow_db=False).items():
+    print(f"  {leg:18} {seconds*1000:6.1f} ms")
+
+print()
+print("A slow request that 'feels slow overall' - same legs, timed the same way:")
+slow_legs = run_request(slow_db=True)
+for leg, seconds in slow_legs.items():
+    print(f"  {leg:18} {seconds*1000:6.1f} ms")
+
+slowest = max(slow_legs, key=slow_legs.get)
+print()
+print(f"Slowest leg: '{slowest}' at {slow_legs[slowest]*1000:.0f}ms - that's where the investigation starts, not at the whole request.")`}
+/>
+
+Same per-leg timing idea in Java - localizing a slow request to one specific hop instead of treating
+the whole round trip as one number:
+
+<CodePlayground
+  language="java"
+  title="Run it - timing each leg of one request's journey and finding the slow one (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static void sleep(long ms) {
+        try { Thread.sleep(ms); } catch (InterruptedException e) {}
+    }
+
+    static Map<String, Long> runRequest(boolean slowDb) {
+        Map<String, Long> legs = new LinkedHashMap<>();
+        long t0;
+
+        t0 = System.nanoTime();
+        sleep(10); // dns
+        legs.put("dns", (System.nanoTime() - t0) / 1_000_000);
+
+        t0 = System.nanoTime();
+        sleep(20); // tls
+        legs.put("tls", (System.nanoTime() - t0) / 1_000_000);
+
+        t0 = System.nanoTime();
+        sleep(5); // load balancer
+        legs.put("load_balancer", (System.nanoTime() - t0) / 1_000_000);
+
+        t0 = System.nanoTime();
+        sleep(slowDb ? 800 : 30); // app server + db
+        legs.put("app_server_and_db", (System.nanoTime() - t0) / 1_000_000);
+
+        return legs;
+    }
+
+    public static void main(String[] args) {
+        System.out.println("A healthy request, leg by leg:");
+        for (Map.Entry<String, Long> e : runRequest(false).entrySet()) {
+            System.out.printf("  %-18s %4d ms%n", e.getKey(), e.getValue());
+        }
+
+        System.out.println();
+        System.out.println("A slow request that 'feels slow overall' - same legs, timed the same way:");
+        Map<String, Long> slowLegs = runRequest(true);
+        for (Map.Entry<String, Long> e : slowLegs.entrySet()) {
+            System.out.printf("  %-18s %4d ms%n", e.getKey(), e.getValue());
+        }
+
+        String slowest = null;
+        long max = -1;
+        for (Map.Entry<String, Long> e : slowLegs.entrySet()) {
+            if (e.getValue() > max) { max = e.getValue(); slowest = e.getKey(); }
+        }
+        System.out.println();
+        System.out.println("Slowest leg: '" + slowest + "' at " + max + "ms - that's where the investigation starts, not at the whole request.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: trace one real request's legs using only your browser">
+<StepChecklist
+  steps={[
+    { text: "Open DevTools' Network tab and load any page fresh (BuggyShop or BuggyAPI work well)", detail: "Click the very first document request in the list." },
+    { text: "Find the Timing tab for that request", detail: "Most browsers break it into DNS lookup, initial connection/TLS, waiting (server processing), and content download - the legs, made visible." },
+    { text: "Identify which single phase took the most time", detail: "That's your equivalent of the slowest leg in this note's playground - the one worth investigating, not the total." },
+    { text: "Repeat on a second, unrelated request (an API call the page makes) and compare its leg breakdown", detail: "Confirm the SAME leg names apply everywhere, even though the actual times differ request to request." },
+  ]}
+/>
+You've now watched the abstract 'legs of a request' become concrete numbers in a real tool - the
+exact habit that turns 'it's slow' into 'it's slow AT THIS LEG.'
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A site is completely unreachable - the browser shows its own error page, not anything from the app.",
+      fix: "This is almost always a DNS or TLS/connection-level failure - the request never got far enough for the application to run at all. Check DNS resolution and certificate validity before looking at application logs, which won't have anything recorded for a failure this early.",
+    },
+    {
+      symptom: "Some users report the site is down while others report it works fine at the exact same time.",
+      fix: "This pattern points at the load-balancer/routing leg: if only SOME backend instances are unhealthy, a load balancer distributing across several servers will intermittently route to a bad one. Check per-instance health, not just 'is the app down' as one yes/no fact.",
+    },
+    {
+      symptom: "The page starts loading immediately but takes a long time to finish rendering.",
+      fix: "Time-to-first-byte was fine, so DNS/TLS/routing/initial-app-response all worked - the problem lives in the return-trip/render leg: large assets, render-blocking scripts, or a slow client-side data fetch after the initial page load.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Browser DevTools' Network tab, Timing sub-tab** — breaks a real request into exactly the legs this note describes, with real millisecond numbers per phase.
+- **`curl -w` with a timing format string** — a scriptable way to get DNS/connect/TLS/time-to-first-byte numbers without a browser at all, useful for CI or automated checks.
+- **Load balancer / infra health dashboards** — the source of truth for "is one server unhealthy while others are fine," which a single request's timing alone won't reveal.
+- **Application and database logs, timestamped** — the leg-4 evidence: whether the app itself was fast and it's really a database round-trip that's slow.
+</WhereToCheck>
+
+<WorkedExample title="an 'intermittent 502' that was really one unhealthy server out of four">
+1. A support queue fills up with "the site randomly errors, then works if I refresh" reports - no
+   consistent reproduction steps, no pattern in time of day.
+2. A tester checks the Network tab on a reproduction attempt: about 1 in 4 requests returns a `502
+   Bad Gateway`, the rest return `200 OK` - and the failing ones are otherwise identical requests.
+3. The 1-in-4 ratio is the tell: this smells like routing to one specific backend instance out of a
+   pool, not a universal application bug (a real code bug would fail consistently, not a quarter of
+   the time).
+4. Checking the load balancer's dashboard confirms it: one of four app server instances has been
+   failing health checks for two hours (a memory leak had degraded it), and the load balancer keeps
+   routing roughly a quarter of traffic to it anyway because its health-check threshold hadn't
+   tripped yet.
+5. Finding: "Intermittent 502s at ~25% rate trace to one unhealthy backend instance (app-server-2)
+   still receiving routed traffic - load balancer health-check sensitivity needs tightening, and the
+   leaking instance needs a restart." Found by noticing the FAILURE RATIO pointed at the
+   routing leg, not by debugging application code that was never actually broken.
+</WorkedExample>
+
+<Quiz
+  question="A user reports 'the whole site is down.' A tester's browser shows a certificate warning before any page content loads. Which leg does this point to, and what follows from that?"
+  options={[
+    "The application server's business logic - check the backend's error logs first",
+    "The database - a certificate warning usually means the DB connection failed",
+    "The TLS handshake leg - this failure happens before the request ever reaches the application, so application/database logs won't show anything useful; check certificate validity and expiry instead",
+    "The browser's rendering leg - clear the browser cache and retry"
+  ]}
+  answer={2}
+  explain="A certificate warning is the browser telling you the TLS handshake itself failed or is untrusted - this happens BEFORE any request reaches your application code, meaning the application server and database were never even contacted for this attempt. Checking their logs would show nothing relevant, because from their point of view, nothing happened. Option one and two both point at legs that come strictly after TLS in the sequence and couldn't have produced this specific symptom. Option four misdiagnoses a security/certificate issue as a rendering issue, which wastes the exact time this note's tip callout warns about."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The legs of a request, in order", back: "DNS resolution, TLS handshake, load balancer/CDN routing, application server processing (including any database round-trip), then the response retracing the path back and rendering." },
+    { front: "Why 'it's down' isn't a diagnosis", back: "Each leg is separate infrastructure that fails independently and produces a different symptom - naming which leg is where real investigation starts." },
+    { front: "The fast-first-byte-but-slow-finish pattern", back: "Points at the return-trip/render leg (assets, blocking scripts, client-side fetches) - DNS/TLS/routing/initial app response all already worked fine by definition." },
+    { front: "The intermittent-failure ratio tell", back: "A consistent percentage of requests failing (like ~25% out of 4 servers) points at routing/load-balancing to one bad instance, not a universal application bug that would fail every time." },
+    { front: "The relay race analogy for a request's journey", back: "Several distinct legs run by different infrastructure, with a handoff between each - a race photo (the symptom) doesn't tell you which leg or which handoff actually failed." },
+  ]}
+/>
+
+<Challenge>
+Using your browser's DevTools Network tab, load any real page and find one request with a
+noticeably slow leg (DNS, connection, waiting/TTFB, or content download). Write down which leg was
+slowest and by how much. Then load a completely different page/site and compare - is the same leg
+slow there too (suggesting a network-wide issue) or a different leg (suggesting it's specific to
+the first site)?
+</Challenge>
+
+<AskCommunity prompt="A request/page is `[slow / failing]` and I've timed the legs: DNS `[Xms]`, TLS `[Xms]`, routing/TTFB `[Xms]`, content download `[Xms]`. The slowest leg is `[name]`. Does that point where I think it does, or am I missing a leg that could also explain this?">
+Sharing the actual per-leg numbers (not just "it feels slow") gets much sharper answers - experienced
+readers can often name the likely cause from the timing shape alone.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.mozilla.org/en-US/docs/Web/Performance/Guides/Understanding_latency", title: "MDN — Understanding latency (the legs of a request, explained)", kind: "read" },
+    { href: "https://developer.chrome.com/docs/devtools/network/reference", title: "Chrome DevTools — Network panel reference (the Timing tab)", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=AlkDbnbv7dk", title: "ByteByteGo — What Happens When You Type a URL Into Your Browser?", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=AlkDbnbv7dk" title="ByteByteGo — What Happens When You Type a URL Into Your Browser?" minutes={6} />
+
+<Takeaways
+  points={[
+    "A request's journey has distinct legs - DNS, TLS, load balancer/CDN, application server, database, and the return trip/render - each a separate piece of infrastructure that fails independently.",
+    "'It's down' or 'it's slow' is a starting observation, not a diagnosis - naming which leg the evidence points to is the actual investigation.",
+    "A fast first byte followed by a slow finish points at the render/asset leg; a slow or failing first byte points at everything before it.",
+    "An intermittent failure at a consistent RATIO (not every time) often points at routing to one bad instance among several, not a universal application bug.",
+    "Time each leg separately when you can (DevTools Timing tab, curl -w) - a single total-time number hides exactly the information you need to localize the problem.",
+  ]}
+/>
+
+<Complete xp={10} />

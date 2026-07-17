@@ -1,0 +1,274 @@
+---
+title: "Frontend, backend & the database"
+summary: "Every app is three cooperating layers: the frontend (what you see and click), the backend (the logic that decides what happens), and the database (what's remembered after the tab closes). Knowing which layer owns a behavior is the first move in any bug investigation."
+tags: ["system-design-for-testers", "the-big-picture", "track-c"]
+updated: "2026-07-17"
+related:
+  - "system-design-for-testers/the-big-picture/life-of-a-request-end-to-end"
+  - "system-design-for-testers/the-big-picture/reading-an-architecture-diagram"
+  - "the-internet-and-the-web/client-server-and-http/client-vs-server"
+---
+
+<Hook>
+A button turns green and says "Saved." Reload the page and the change is gone. Where did it break?
+Three real possibilities, three completely different fixes: the frontend never actually sent the
+request (a click handler bug), the backend accepted the request but silently didn't process it (a
+server-side bug), or the backend DID process it but never wrote it to the database (a persistence
+bug). "It's broken" is not a diagnosis. "Frontend, backend, or database" is the first three-way fork
+in almost every investigation a tester ever runs.
+</Hook>
+
+<Callout type="analogy">
+An iceberg. What you see above the waterline - the part that catches the light, the part everyone
+photographs - is a small fraction of the whole thing. Below the surface, invisible from a boat, sits
+a mass many times larger, doing the actual work of keeping the visible tip afloat and shaped the way
+it is. A web app is the same proportion: the frontend is the visible tip - polished, photographed,
+what "the product" means to a user. The backend and database are the submerged bulk - unglamorous,
+invisible to the visitor, and the actual reason the tip stays up at all.
+</Callout>
+
+<Term define="A web application is conventionally split into three cooperating layers. The FRONTEND (client) is the code that runs in the user's browser or app - HTML/CSS/JS - responsible for rendering what's on screen and capturing user actions (clicks, typed text). The BACKEND (server) is code that runs on a machine the user never sees - it receives requests from the frontend, applies business logic (validation, permissions, calculations), and decides what should happen. The DATABASE is where data outlives any single request - it persists what the backend decides needs remembering, so it's still there the next time anyone asks. A request typically flows frontend to backend to database and the response flows back the same path in reverse - and a bug can originate in exactly one of these three layers, rarely all at once.">Frontend / backend / database</Term>
+
+## Three layers, three different jobs
+
+- **Frontend — what you see and click.** Renders the UI, captures input, and (usually) does light
+  validation for a responsive feel. It does NOT get the final say on anything that matters - a
+  frontend that "shows success" without backend confirmation is just optimistic decoration.
+- **Backend — what decides.** Receives the frontend's request, checks whether it's ALLOWED (auth,
+  permissions), checks whether it's VALID (business rules a frontend can't be trusted to enforce
+  alone), and orchestrates whatever needs to happen next - including talking to the database.
+- **Database — what's remembered.** Everything the backend decides is worth keeping past this one
+  request lives here: user accounts, orders, settings. Close the tab, restart the server, come back
+  next week - what's in the database is what's still true.
+- **The frontend can lie by accident; the database rarely does.** A UI showing "Saved ✓" reflects
+  what the FRONTEND believes happened, not necessarily what the database actually holds. When those
+  two disagree, the database is the one to trust - it's the one thing built specifically to survive
+  past the moment.
+
+<Callout type="tip">
+When a bug report says "the app shows X but I expected Y," ask which layer you're actually looking
+at before writing anything else down. A screen showing the wrong thing could be a frontend rendering
+bug on CORRECT data, or a frontend rendering CORRECT on wrong data it received from the backend -
+those are different bugs in different code, and the difference is usually one Network-tab check away.
+</Callout>
+
+<Callout type="mistake">
+Assuming "it looks right in the UI" proves the data is correct everywhere. A price shown correctly
+on screen can still be wrong in the database (a save that silently failed) or wrong in a way that
+only shows up later (a report, an invoice, another user's view of the same record). The frontend is
+the layer with the least authority to prove a fact true - see [[system-design-for-testers/the-big-picture/from-architecture-to-test-strategy]]'s note on testing at the layer where a fact actually gets decided.
+</Callout>
+
+{/* IMAGE: a large tabular iceberg floating in calm arctic water, the white ice above the waterline photographed alongside its huge pale turquoise submerged base clearly visible through the clear water below, distant sea ice and a hazy coastline in the background under a pale blue sky */}
+<HotspotImage
+  src="/notes/system-design-for-testers/the-big-picture/frontend-backend-and-the-database.jpg"
+  alt="A large iceberg in calm arctic water, its white tip above the waterline and its much larger turquoise submerged base clearly visible through the clear water below"
+  credit="Iceberg in the Arctic with its underside exposed — AWeith, Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Iceberg_in_the_Arctic_with_its_underside_exposed,_brightened_underwater.jpg"
+  pins={[
+    { x: 62, y: 12, label: "The white tip above the waterline — the frontend", desc: "Small, visible, photographed. Everything a user ever directly experiences of 'the product' lives in this fraction - the rest of the iceberg is invisible to them by design, not by accident." },
+    { x: 55, y: 55, label: "The pale submerged mass — the backend", desc: "Far bigger than the tip, doing the structural work of holding everything up. The backend's logic - validation, permissions, calculations - is invisible to the user but is where most of an app's actual complexity lives." },
+    { x: 60, y: 78, label: "The deepest, darkest part — the database", desc: "The part furthest from the surface, holding the iceberg's actual mass and history. The database is the same: the least visible layer, and the one that determines what's still true tomorrow." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One 'Save' click, three layers, one question each - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "User clicks Save", desc: "The frontend captures the click and shows a loading state. Nothing is confirmed yet - the frontend is only reporting what IT sees happen locally." },
+    { label: "Frontend sends the request to the backend", desc: "The data travels as an HTTP request. The frontend's job for this step is basically done: package the data, send it, wait." },
+    { label: "Backend validates and decides", desc: "Is this user allowed to save this? Is the data valid by the business rules? Only after these checks does the backend decide to proceed." },
+    { label: "Backend writes to the database", desc: "The fact is committed to storage - the moment it becomes durable, surviving a server restart or a closed tab." },
+    { label: "Confirmation flows back up: DB -> backend -> frontend", desc: "Only NOW does the frontend show 'Saved ✓' - and a tester's job is confirming that confirmation is honest, not just optimistic." },
+  ]}
+/>
+
+A tiny simulation of the same three-layer flow - and what happens when the persistence step is
+skipped, which is exactly the "looks saved, isn't saved" bug class:
+
+<CodePlayground
+  language="python"
+  title="Run it - a save that reports success without actually persisting (Python)"
+  code={`# Three layers, modeled as three tiny functions.
+database = {}
+
+def backend_save(user_id, note, persist=True):
+    # "business logic": pretend this always validates fine
+    if persist:
+        database[user_id] = note
+        return {"ok": True, "message": "Saved"}
+    else:
+        # BUG: backend reports success but never touches the database
+        return {"ok": True, "message": "Saved"}
+
+def frontend_save(user_id, note, persist=True):
+    response = backend_save(user_id, note, persist=persist)
+    ui_message = "Saved ✓" if response["ok"] else "Error"
+    return ui_message
+
+print("Healthy path:")
+print(" ", frontend_save("u1", "call the vendor tomorrow", persist=True))
+print("  database now holds:", database)
+
+print()
+print("Buggy path - backend never persists, frontend still says Saved:")
+print(" ", frontend_save("u2", "renew the contract", persist=False))
+print("  database now holds:", database)
+print()
+print("Same UI message both times - only the database tells you which one is real.")`}
+/>
+
+Same three-layer model in Java, showing the identical gap between what the UI reports and what
+storage actually holds:
+
+<CodePlayground
+  language="java"
+  title="Run it - a save that reports success without actually persisting (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static Map<String, String> database = new HashMap<>();
+
+    static Map<String, Object> backendSave(String userId, String note, boolean persist) {
+        if (persist) {
+            database.put(userId, note);
+        }
+        // BUG (when persist=false): reports success without touching the database
+        Map<String, Object> response = new HashMap<>();
+        response.put("ok", true);
+        response.put("message", "Saved");
+        return response;
+    }
+
+    static String frontendSave(String userId, String note, boolean persist) {
+        Map<String, Object> response = backendSave(userId, note, persist);
+        return ((boolean) response.get("ok")) ? "Saved ✓" : "Error";
+    }
+
+    public static void main(String[] args) {
+        System.out.println("Healthy path:");
+        System.out.println("  " + frontendSave("u1", "call the vendor tomorrow", true));
+        System.out.println("  database now holds: " + database);
+
+        System.out.println();
+        System.out.println("Buggy path - backend never persists, frontend still says Saved:");
+        System.out.println("  " + frontendSave("u2", "renew the contract", false));
+        System.out.println("  database now holds: " + database);
+        System.out.println();
+        System.out.println("Same UI message both times - only the database tells you which one is real.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: prove which layer a 'looks broken' bug actually lives in">
+<StepChecklist
+  steps={[
+    { text: "Pick any save/submit action in an app you can test (BuggyShop or BuggyAPI work well)", detail: "Perform the action once and note exactly what the UI reports (a message, a redirect, a new row appearing)." },
+    { text: "Reload the page (a real reload, not just re-rendering) and check whether the change is still there", detail: "This alone separates 'the frontend rendered a false success' from 'it might be a database issue' - a reload forces a fresh read from wherever data actually persists." },
+    { text: "Open the Network tab and find the actual request the save action sent", detail: "Confirm what was SENT (the request body) versus what came back (the response) - a save can send wrong data and still get a 200 OK." },
+    { text: "If a DB client/admin panel is available, check the record directly", detail: "This is the ground truth. If the UI says one thing and the database says another, the database wins - see [[system-design-for-testers/sql-and-databases-for-testers/verifying-the-app-against-the-db]] for the deeper version of this check." },
+  ]}
+/>
+You've now separated a vague "it's broken" into a specific layer - the single most useful reflex
+this whole module teaches.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A save shows a success message, but the data is gone after a page reload.",
+      fix: "Classic frontend-optimism bug: the UI shows success based on the request being SENT, not on confirmed backend persistence. Check whether the frontend is reading the actual backend response before showing 'Saved', or just assuming success once the request goes out.",
+    },
+    {
+      symptom: "The same data looks different in two different parts of the same app (a dashboard summary disagrees with the detail page).",
+      fix: "Both views are frontend renderings of backend data - if they disagree, either they're reading from different backend endpoints that compute the same fact differently, or one is stale (cached) while the other is fresh. Check the actual API responses each view received, not just what's on screen.",
+    },
+    {
+      symptom: "A bug 'fixes itself' after refreshing, then comes back later.",
+      fix: "This pattern often means the frontend is caching or holding stale local state that occasionally re-syncs with the backend. Confirm by comparing a hard reload's data against what was on screen right before - if they differ, the bug lives in frontend state management, not the backend or database.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The browser's Network tab** — the ground truth for what the frontend actually sent and what the backend actually returned; see [[the-internet-and-the-web/client-server-and-http/client-vs-server]].
+- **A hard reload (not a soft re-render)** — the fastest way to tell "the frontend rendered wrong" from "the data itself is wrong," since a reload re-fetches from the backend/database fresh.
+- **A database client or admin panel, when available** — the actual stored fact, the tiebreaker when the UI and your expectation disagree.
+- **Server/application logs** — when the backend received a request but something inside its own logic (not the database) is where the behavior actually diverged from expectation.
+</WhereToCheck>
+
+<WorkedExample title="a 'missing order' bug that was never actually missing">
+1. A user reports: "I placed an order, got a confirmation, and now it's not in my order history."
+2. First instinct is to assume the database lost the row - but that's the least likely layer to
+   fail silently, so it's checked last, not first.
+3. Checking the frontend first: the order confirmation screen and the order history screen call two
+   DIFFERENT backend endpoints. The confirmation screen shows data straight from the just-completed
+   checkout response; the history screen fetches a fresh list.
+4. Checking the backend: the history endpoint filters orders by a status field, and the just-placed
+   order was still in a `pending_payment` status for a few seconds due to an async payment
+   confirmation step - which the history view explicitly excludes.
+5. Checking the database directly confirms the order row exists the whole time, status included -
+   nothing was ever lost. The order simply hadn't reached the status the history view requires yet.
+6. Finding: "Order history excludes `pending_payment` orders, and there's no UI feedback telling the
+   user their order is in that transient state - reads as 'missing' when it's actually 'not visible
+   yet by design.'" Found by checking layers in order, not by assuming the scariest layer first.
+</WorkedExample>
+
+<Quiz
+  question="A tester sees a success toast after clicking 'Save profile', but a teammate viewing the SAME profile from a different browser doesn't see the update. What's the most useful next check?"
+  options={[
+    "Assume the frontend toast is fake and file a bug immediately without further checks",
+    "Check what the actual backend response was for the save request, and separately confirm (via reload or a DB check) whether the database was actually updated - the toast alone only proves the frontend believed the request succeeded",
+    "Tell the teammate to clear their browser cache, since profile data is always a caching issue",
+    "Conclude the bug is in the database, since two different browsers show different data"
+  ]}
+  answer={1}
+  explain="A success toast reflects what the FRONTEND believes happened based on the response it received - it is not, by itself, proof the database was updated. The fastest way to actually localize the bug is to check the real backend response and then independently confirm the database state (via reload or a DB check), which tells you whether this is a frontend-display issue, a backend logic issue, or a genuine persistence failure. Option one skips the actual diagnosis. Option three guesses a specific cause (caching) without evidence. Option four jumps straight to blaming the database, the layer least likely to silently disagree with itself, before checking the more common culprits first."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What the frontend is responsible for", back: "Rendering the UI and capturing user input - and often light, non-authoritative validation for responsiveness. It does not get final say on what's true." },
+    { front: "What the backend is responsible for", back: "Receiving requests, checking permissions and business rules, and deciding what should happen - including what gets sent to the database." },
+    { front: "What the database is responsible for", back: "Making a fact survive past the current request - what's still true after a reload, a restart, or a week later." },
+    { front: "Why 'looks saved' isn't proof of saved", back: "A UI success message reflects what the frontend believes happened based on a response it received - not independent confirmation that the database was actually updated." },
+    { front: "The iceberg analogy for these three layers", back: "The visible tip above water = frontend (what the user experiences); the much larger submerged mass = backend (the invisible logic holding it up) and database (the deepest, most durable part)." },
+  ]}
+/>
+
+<Challenge>
+Pick any create/save action in an app you can test. Perform it once, and write down exactly what
+each of the three layers told you: what the frontend displayed, what the actual backend response
+body contained (via Network tab), and what a hard reload (or DB check, if available) shows afterward.
+If all three agree, note that as a healthy result. If any two disagree, write the specific
+disagreement down - that's a real, filable finding.
+</Challenge>
+
+<AskCommunity prompt="I'm seeing `[describe the mismatch - e.g. UI says saved but data disappears on reload / two views of the same data disagree]`. I've confirmed the frontend shows `[X]` and a reload/DB check shows `[Y]`. Which layer does this point to, and what would you check next?">
+The most useful replies usually ask for the actual Network tab request/response pair before guessing
+a layer - the specific status code and response body narrow "frontend vs backend vs database" far
+faster than describing the symptom in prose alone.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Getting_started/Web_standards/How_the_web_works", title: "MDN — How the web works (client, server, and what's in between)", kind: "read" },
+    { href: "https://www.freecodecamp.org/news/back-end-vs-front-end/", title: "freeCodeCamp — Front End vs Back End vs Full Stack", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=X5KcwY_llb4", title: "Manjunath Shenoy — Frontend & Backend Explained in 5 minutes", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=X5KcwY_llb4" title="Manjunath Shenoy — Frontend & Backend Explained in 5 minutes" minutes={5} />
+
+<Takeaways
+  points={[
+    "Every app splits into three layers with three different jobs: frontend (what you see/click), backend (what decides), database (what's remembered).",
+    "A frontend 'success' message reflects what the frontend believes happened, not independent proof the database was updated.",
+    "When something 'looks wrong,' name which layer you're actually looking at before investigating further - it changes where you look next entirely.",
+    "The database is the least likely layer to silently disagree with itself - check it last for likelihood, but trust it most when it disagrees with the UI.",
+    "The iceberg proportions are the point: the frontend is the small visible fraction; backend and database are the much larger, invisible mass actually doing the work.",
+  ]}
+/>
+
+<Complete xp={10} />
