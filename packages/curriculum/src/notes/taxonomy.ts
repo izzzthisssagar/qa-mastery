@@ -1201,10 +1201,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "postman-and-curl",
         title: "Postman & curl",
         topics: [
-          { slug: "curl-basics", title: "curl basics", planned: true },
-          { slug: "postman-requests", title: "Postman requests", planned: true },
-          { slug: "collections-and-environments", title: "Collections & environments", planned: true },
-          { slug: "postman-tests-and-variables", title: "Postman tests & variables", planned: true },
+          { slug: "curl-basics", title: "curl basics" },
+          { slug: "postman-requests", title: "Postman requests" },
+          { slug: "collections-and-environments", title: "Collections & environments" },
+          { slug: "postman-tests-and-variables", title: "Postman tests & variables" },
         ],
       },
       {

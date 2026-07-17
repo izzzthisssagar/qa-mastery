@@ -1,0 +1,299 @@
+---
+title: "Postman tests & variables"
+summary: "Postman's Tests tab runs JavaScript checks against every response - status, time, and actual field values - and scripts can write what they extract into variables, so one response feeds the next request. Assertions plus chaining: the two skills that turn clicking Send into testing."
+tags: ["api-testing-fundamentals", "postman-and-curl", "track-c"]
+updated: "2026-07-17"
+related:
+  - "api-testing-fundamentals/postman-and-curl/collections-and-environments"
+  - "api-testing-fundamentals/postman-and-curl/postman-requests"
+  - "api-testing-fundamentals/finding-api-bugs/negative-api-tests"
+  - "api-testing-fundamentals/auth-manually/bearer-and-jwt"
+---
+
+<Hook>
+Clicking Send and eyeballing the response is inspection, not testing - it works exactly until the day you have forty requests and a body too long to read. Postman's Tests tab turns "looks fine to me" into named checks that pass or fail on their own: status is 201, response under 500ms, the seat field actually says 15D. And because those same scripts can *write variables*, a response isn't just checked - it's harvested, feeding the token or ID the next request needs. Checks plus chaining: that's the difference between using Postman and testing with it.
+</Hook>
+
+<Callout type="analogy">
+The photo below is a checked bag's routing tag: this bag flies VIA Amsterdam on KL1000, then TO Minneapolis on DL49. Two things make that tag work, and they're exactly this note's two subjects. First, every handler along the way CHECKS it - right flight? right connection? - a named pass/fail decision at each hop, made by reading the tag, not by vibes. Second, the tag CARRIES DATA FORWARD: the AMS leg's handler doesn't re-interview the passenger, they read what the check-in desk wrote earlier. A Postman test script is the handler's check; a variable is the tag - values written at one step, read at the next.
+</Callout>
+
+<Term define="In Postman, the Scripts tab on a request holds JavaScript that runs before the request (pre-request) or after the response arrives (post-response, historically called the Tests tab). pm.test('name', fn) defines a named check; pm.expect(...) and pm.response give it Chai-style assertions over status, headers, timing, and the parsed JSON body. The same scripts can call pm.environment.set / pm.collectionVariables.set to store values extracted from a response, which later requests read back with {{variable}} syntax - the mechanism behind request chaining, where a login response's token becomes the next request's Authorization header.">Postman tests & variables</Term>
+
+## What test scripts actually give you
+
+- **Named, repeatable checks instead of eyeballing** — `pm.test("Status code is 201", ...)` runs on every Send and shows up as a green/red row in the Test Results tab. Forty requests, forty sets of checks, zero re-reading of bodies.
+- **Assertions on VALUES, not just status codes** — a 201 with the wrong seat in the body is a bug a status-code glance can't catch. `pm.expect(json.seat).to.eql("15D")` can.
+- **Response-time and header checks live in the same place** — `pm.response.responseTime` and `pm.response.headers` are right there; a slow-but-correct endpoint fails visibly instead of anecdotally.
+- **Scripts WRITE variables, not just read them** — `pm.environment.set("auth_token", json.token)` after a login request means every later request that says `{{auth_token}}` just works. This is chaining: response out, variable in, next request fed.
+- **The Collection Runner runs all of it in order** — requests, their tests, their variable writes, top to bottom. That's a manual test suite you can rerun after every build, before any automation framework enters the picture.
+
+<Callout type="tip">
+Write the FIRST test on every request as a status-code check, then immediately add one assertion on a body VALUE that matters. The status check catches "it broke"; the value check catches "it lied." Most real API bugs - wrong data, defaulted fields, stale records - return a perfectly healthy status code while lying in the body.
+</Callout>
+
+<Callout type="mistake">
+Extracting a value with a script but never asserting it exists first. `pm.environment.set("auth_token", pm.response.json().token)` happily stores `undefined` when the field is missing or renamed - no error, no warning. The failure then surfaces two requests later as a baffling 401, far from the actual cause. Assert the field exists (`pm.expect(json.token).to.exist`), THEN store it - the failure moves to the request that actually broke.
+</Callout>
+
+{/* IMAGE: close-up of a Delta baggage routing tag showing VIA AMS on KL1000 then TO MSP on DL49, with a bright green routing stripe */}
+<HotspotImage
+  src="/notes/api-testing-fundamentals/postman-and-curl/postman-tests-and-variables.jpg"
+  alt="Close-up of an airline baggage routing tag showing the bag routed to MSP on flight DL49, via AMS on flight KL1000"
+  credit="Delta Airlines luggage tag, Minneapolis MSP / Amsterdam AMS — Tony Webster, Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Delta_Airlines_Luggage_tag_Minneapolis_MSP_Amsterdam_AMS_2014-03-09_1394376270.jpg"
+  pins={[
+    { x: 57, y: 30, label: "TO MSP on DL49 — the final leg's check", desc: "The Minneapolis handler reads this block and makes a pass/fail decision: does this bag belong on DL49? That's pm.test - a named check against what actually arrived, not what someone hoped arrived." },
+    { x: 55, y: 78, label: "VIA AMS on KL1000 — the earlier hop that feeds the later one", desc: "The Amsterdam leg happens first, and the tag carries its outcome forward - the MSP leg trusts what was written at check-in. That's a variable: a value stored at one step, read at the next, no human re-entering it." },
+    { x: 35, y: 45, label: "The green routing stripe — machine-readable state travelling WITH the bag", desc: "The tag, not the passenger, is the source of truth at every hop. In a chained Postman collection, the variable store plays this role: whatever the extraction scripts wrote is what downstream requests actually send - right or wrong." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One chained run: login feeds booking feeds check - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Request 1: POST /auth/login", desc: "Response comes back with a token. Its post-response script asserts the token EXISTS, then pm.environment.set('auth_token', json.token) stores it." },
+    { label: "Request 2: POST /bookings, header Authorization: Bearer {{auth_token}}", desc: "Written once with the variable, never edited by hand. Postman resolves {{auth_token}} at send-time from what request 1 stored." },
+    { label: "Request 2's tests run", desc: "pm.test('Status is 201'), pm.test('bookingId exists') - and its script stores pm.environment.set('booking_id', json.bookingId) for the next hop." },
+    { label: "Request 3: GET /bookings/{{booking_id}}", desc: "Reads the id request 2 wrote. Its tests assert the fetched booking matches what was created - seat, flight, status." },
+    { label: "The Collection Runner replays all three in order", desc: "Every Send, every test, every variable write, unattended. A red row in the results names exactly which check on which request failed - that's a manual regression suite, before any code framework exists." },
+  ]}
+/>
+
+The Tests tab's whole job, boiled down to runnable logic - named checks against a response, including the one that catches a lying 201:
+
+<CodePlayground
+  language="python"
+  title="Run it - what pm.test does with a response (Python)"
+  code={`# A faithful simulation of what Postman's Tests tab does: after a response
+# arrives, run named checks against it and report each one pass/fail.
+passed, failed = [], []
+
+def pm_test(name, condition):
+    (passed if condition else failed).append(name)
+
+# The canned response a booking API returned (what pm.response would hold):
+response = {
+    "status_code": 201,
+    "response_time_ms": 184,
+    "headers": {"content-type": "application/json; charset=utf-8"},
+    "json": {
+        "bookingId": "bk_78421",
+        "flightNumber": "QA123",
+        "seat": "14C",
+        "status": "confirmed",
+    },
+}
+
+# The same four checks you'd write in Postman's Tests tab as pm.test(...):
+pm_test("Status code is 201", response["status_code"] == 201)
+pm_test("Response time is under 500ms", response["response_time_ms"] < 500)
+pm_test("Content-Type is JSON", "application/json" in response["headers"]["content-type"])
+pm_test("Booking is confirmed with an id", response["json"]["status"] == "confirmed" and response["json"]["bookingId"].startswith("bk_"))
+
+# One check that FAILS - the API silently defaulted the seat we never chose:
+pm_test("Seat matches what was requested (15D)", response["json"]["seat"] == "15D")
+
+print("Test Results (what Postman's Test Results tab shows):")
+for name in passed:
+    print(f"  PASS  {name}")
+for name in failed:
+    print(f"  FAIL  {name}")
+print()
+print(f"{len(passed)} passed, {len(failed)} failed")
+print()
+print("The failing test is the whole point: the request 'succeeded' (201,")
+print("fast, valid JSON) but the seat came back 14C, not the 15D that was")
+print("requested. Without a test asserting on the VALUE, every green")
+print("status-code check in the world would have waved this bug through.")
+
+# Test Results (what Postman's Test Results tab shows):
+#   PASS  Status code is 201
+#   PASS  Response time is under 500ms
+#   PASS  Content-Type is JSON
+#   PASS  Booking is confirmed with an id
+#   FAIL  Seat matches what was requested (15D)
+#
+# 4 passed, 1 failed
+#
+# The failing test is the whole point: the request 'succeeded' (201,
+# fast, valid JSON) but the seat came back 14C, not the 15D that was
+# requested. Without a test asserting on the VALUE, every green
+# status-code check in the world would have waved this bug through.`}
+/>
+
+And the variables half - extraction, chaining, and the exact failure mode when an extraction script falls one API rename behind:
+
+<CodePlayground
+  language="java"
+  title="Run it - chaining a login token into the next request, and how it breaks (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    // The variable store - what pm.environment.set/get reads and writes.
+    static Map<String, String> environment = new HashMap<>();
+
+    static String resolve(String template) {
+        String out = template;
+        for (Map.Entry<String, String> e : environment.entrySet()) {
+            out = out.replace("{{" + e.getKey() + "}}", e.getValue());
+        }
+        return out; // unknown {{vars}} stay literal - exactly like Postman
+    }
+
+    public static void main(String[] args) {
+        System.out.println("REQUEST 1: POST /auth/login");
+        // The login response body (as a map - what pm.response.json() returns):
+        Map<String, String> loginJson = Map.of(
+            "token", "tok_FAKE_EXAMPLE_abc123",
+            "expiresIn", "3600"
+        );
+        System.out.println("  response: { token: '" + loginJson.get("token") + "', expiresIn: 3600 }");
+
+        // The post-response script: extract the token, store it as a variable.
+        environment.put("auth_token", loginJson.get("token"));
+        System.out.println("  script:   pm.environment.set('auth_token', ...) -> stored");
+        System.out.println();
+
+        // REQUEST 2 was written ONCE with a {{variable}}, never edited by hand:
+        String headerTemplate = "Authorization: Bearer {{auth_token}}";
+        System.out.println("REQUEST 2: GET /me");
+        System.out.println("  header template: " + headerTemplate);
+        System.out.println("  header sent:     " + resolve(headerTemplate));
+        System.out.println("  server: 200 OK - token recognized");
+        System.out.println();
+
+        // THE FAILURE MODE: the extraction script points at the wrong field
+        // (the API renamed 'token' to 'accessToken' in a new release).
+        environment.clear();
+        String extracted = loginJson.get("accessToken"); // null - field doesn't exist
+        if (extracted != null) {
+            environment.put("auth_token", extracted);
+        }
+        System.out.println("REQUEST 2 again, after the API renamed the field:");
+        System.out.println("  script extracted: " + extracted + " (field 'accessToken' not in response)");
+        System.out.println("  header sent:     " + resolve(headerTemplate));
+        System.out.println("  server: 401 Unauthorized - the LITERAL text {{auth_token}} arrived");
+        System.out.println();
+        System.out.println("Postman sends unresolved {{variables}} as literal text - no error,");
+        System.out.println("no warning at send time. The 401 two requests downstream is the");
+        System.out.println("first symptom, and the cause is an extraction script one rename behind.");
+    }
+}
+
+/* REQUEST 1: POST /auth/login
+     response: { token: 'tok_FAKE_EXAMPLE_abc123', expiresIn: 3600 }
+     script:   pm.environment.set('auth_token', ...) -> stored
+
+   REQUEST 2: GET /me
+     header template: Authorization: Bearer {{auth_token}}
+     header sent:     Authorization: Bearer tok_FAKE_EXAMPLE_abc123
+     server: 200 OK - token recognized
+
+   REQUEST 2 again, after the API renamed the field:
+     script extracted: null (field 'accessToken' not in response)
+     header sent:     Authorization: Bearer {{auth_token}}
+     server: 401 Unauthorized - the LITERAL text {{auth_token}} arrived
+
+   Postman sends unresolved {{variables}} as literal text - no error,
+   no warning at send time. The 401 two requests downstream is the
+   first symptom, and the cause is an extraction script one rename behind. */`}
+/>
+
+<FirstTime title="Your mission: write real tests and chain two requests">
+<StepChecklist
+  steps={[
+    { text: "Open any request against postman-echo.com and add your first pm.test", detail: "In the request's Scripts > Post-response tab, use the snippets sidebar: 'Status code: Code is 200' inserts the pm.test for you - Send and watch the Test Results tab go green." },
+    { text: "Add one assertion on a body VALUE", detail: "const json = pm.response.json(); pm.test('args echoed', () => pm.expect(json.args.flight).to.eql('QA123')); - send with ?flight=QA123 in the URL and confirm it passes, then change the URL param and watch it fail honestly." },
+    { text: "Add a response-time test", detail: "pm.test('under 800ms', () => pm.expect(pm.response.responseTime).to.be.below(800)); - performance checks live in the same panel as correctness checks." },
+    { text: "Extract a value into a variable", detail: "pm.environment.set('echoed_url', json.url); - then check the environment quick-look (eye icon): the variable is there, written by a script instead of typed by you." },
+    { text: "Chain it: make a second request that USES {{echoed_url}}", detail: "Reference the variable anywhere in a new request and confirm it resolves to what the first request stored. You've reproduced the login-token pattern with zero auth complexity." },
+  ]}
+/>
+You've crossed the line that separates sending requests from testing them: checks that fail on their own, and responses that feed the next request without you retyping anything.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A test that should obviously fail keeps passing (or the Test Results tab shows nothing at all).",
+      fix: "Check the assertion is INSIDE the pm.test callback: pm.test('name', function () { pm.expect(...)... }). An expect written outside any pm.test throws instead of reporting, and a pm.test with an empty body passes vacuously - both look like 'my tests run' while checking nothing. The Postman Console (View > Show Postman Console) shows script errors the results tab swallows.",
+    },
+    {
+      symptom: "A chained request gets a 401/404, but the request that actually broke shows all green.",
+      fix: "The extraction script stored undefined - pm.environment.set never complains about storing nothing. Open the environment quick-look (eye icon) and read the variable's CURRENT VALUE right after the first request runs; if it's empty or literal, the bug is in the extraction path (a renamed field, a changed response shape), not in the request that displayed the error. Then add a pm.expect(json.field).to.exist test so next time the failure lands on the right request.",
+    },
+    {
+      symptom: "Tests pass when requests run one-by-one but fail in the Collection Runner.",
+      fix: "Order and state. The Runner executes top-to-bottom, so a request that depends on a variable now runs before the request that sets it if the folder order says so - drag the setter above the reader. Also check what scripts DELETE: a cleanup script that unsets variables mid-run starves everything after it. The Runner's per-request results show each request's resolved values - read the first red row, not the last.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The Test Results tab** (bottom panel, next to Body) — every pm.test's name and pass/fail for the last Send; the count badge shows failures at a glance.
+- **The Postman Console** (View → Show Postman Console) — script errors, console.log output from your test code, and the fully resolved request; the place to look when a test misbehaves rather than merely fails.
+- **The environment quick-look (eye icon, top-right)** — current values of every variable, including ones your scripts just wrote; the fastest way to verify an extraction actually extracted.
+- **[[api-testing-fundamentals/postman-and-curl/collections-and-environments]]** — where variables live and which scope wins; this note's scripts write into exactly that machinery.
+</WhereToCheck>
+
+<WorkedExample title="turning a flaky manual check into a chained, asserted pair">
+1. A tester verifies "cancelling a booking frees the seat" by hand: create a booking, copy the id from the response, paste it into a DELETE request's URL, send, then re-fetch to confirm the status changed. Three requests, two copy-pastes, every single time.
+2. First improvement - assertions: the create request gets pm.test rows for status 201 and `bookingId` existing; the DELETE gets one for status 204; the re-fetch gets `pm.expect(json.status).to.eql("cancelled")`.
+3. Second improvement - chaining: the create request's script stores `pm.environment.set("booking_id", json.bookingId)`; the DELETE and re-fetch URLs become `/bookings/{{booking_id}}`. The copy-pastes are gone.
+4. Now the whole flow runs in the Collection Runner: three requests, five checks, zero manual reading. It reruns identically after every build.
+5. Two sprints later the run goes red - not on the DELETE, but on the re-fetch: status came back `"canceled"` (one L). The API changed its enum spelling; every consumer matching on `"cancelled"` would break. Filed with the exact failing assertion and both spellings in the report.
+6. The bug was CAUGHT BY the assertion and LOCATED BY the chaining - the failure sat on exactly the request whose response changed, because every hop asserted what it depended on.
+</WorkedExample>
+
+<Quiz
+  question="A tester's login request 'passes' (all tests green), but the next request in the collection - which sends Authorization: Bearer {{auth_token}} - gets a 401. The environment quick-look shows auth_token is empty. What most likely happened?"
+  options={[
+    "Postman blocks variables from holding tokens for security reasons, so the set call was rejected",
+    "The extraction script stored an undefined value (the response field it reads was missing or renamed), and pm.environment.set stored it without any error - so the next request sent the literal or empty value",
+    "The Collection Runner always clears all environment variables between requests, so chaining can't work across requests",
+    "The 401 means the {{auth_token}} syntax is wrong - variables can't be used inside header values"
+  ]}
+  answer={1}
+  explain="This note's Callout and Java playground both walk this exact trap: pm.environment.set happily stores undefined when the extraction path no longer matches the response shape (a renamed field is the classic cause), and Postman sends unresolved or empty variables without any send-time warning - so the failure surfaces one request downstream as a 401, while the request that actually broke shows green. The fix is asserting the field exists before storing it, which moves the red row onto the request that changed. Postman has no rule against tokens in variables; the Runner preserves environment state across a run (that's what makes chaining work, per [[api-testing-fundamentals/postman-and-curl/collections-and-environments]]); and {{variables}} resolve fine inside header values - that's the standard pattern for exactly this use case."
+/>
+
+<Flashcards
+  cards={[
+    { front: "pm.test's job", back: "Define a NAMED check that runs after the response arrives and reports pass/fail in the Test Results tab - status, headers, timing, or any value in the parsed body." },
+    { front: "Why assert body values, not just status codes", back: "Most real API bugs return a healthy status while lying in the body (wrong data, silently defaulted fields). A 201-with-wrong-seat needs a value assertion to be caught." },
+    { front: "How chaining works, in one sentence", back: "A post-response script extracts a value and stores it (pm.environment.set); a later request references it as {{variable}} and Postman resolves it at send-time." },
+    { front: "The store-undefined trap", back: "pm.environment.set never errors on a missing field - it stores emptiness silently, and the failure appears requests later as a 401/404. Assert the field exists BEFORE storing it." },
+    { front: "Where to debug a misbehaving test script", back: "The Postman Console (View > Show Postman Console) - script errors and console.log output land there, not in the Test Results tab, which only shows pm.test outcomes." },
+  ]}
+/>
+
+<Challenge>
+Build a three-request chained flow against postman-echo.com: (1) a POST to /post whose body contains an invented bookingId, with tests asserting status 200 and that the id was echoed back, plus a script storing that id in a variable; (2) a GET to /get?id={{your_variable}} with a test asserting the id arrived in args; (3) a deliberately broken version - rename the field your extraction script reads, rerun the collection, and write down where the failure APPEARED versus where it was CAUSED. Then add the exists-assertion that moves the failure to the right request.
+</Challenge>
+
+<AskCommunity prompt="My chained Postman collection fails at request [N] with [status], but the variable it depends on is set by request [M]. Here's request M's post-response script: [paste it], and here's what the environment quick-look shows for the variable after M runs: [value/empty]. Where is the chain actually breaking?">
+The most useful replies will ask for the quick-look value immediately after the setter request runs (not at the end of the whole run) and for the exact response body shape the extraction script reads - nearly every broken chain is either an extraction path one rename behind the API, or run order putting the reader before the writer.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://learning.postman.com/docs/tests-and-scripts/write-scripts/test-scripts/", title: "Postman Docs — Write test scripts", kind: "read" },
+    { href: "https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-api-reference/", title: "Postman Docs — the pm.* script API reference", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=oXW-C2bM0wE" title="Postman — How to Write and Automate API Tests in Postman" minutes={13} />
+
+<Takeaways
+  points={[
+    "The Tests tab turns eyeballing into named pass/fail checks that rerun on every Send - status, response time, headers, and body values all assertable in one place.",
+    "Assert on VALUES, not just status codes - the dangerous bugs return 2xx with wrong data in the body, and only a value assertion catches a response that lies.",
+    "Scripts write variables too: extract a token or id with pm.environment.set and later requests read it as {{variable}} - that's chaining, and it eliminates copy-paste between requests.",
+    "pm.environment.set stores undefined silently - assert a field exists before storing it, or failures surface requests downstream from their actual cause.",
+    "The Collection Runner replays requests, tests, and variable writes in order - a rerunnable manual regression suite, no automation framework required yet.",
+  ]}
+/>
+
+<Complete xp={10} />

@@ -1,0 +1,297 @@
+---
+title: "Collections & environments"
+summary: "A Postman Collection is a saved, ordered set of requests written once with {{variables}} instead of hardcoded values; an Environment supplies the actual values - swap the active environment and the exact same collection runs against dev, staging, or prod."
+tags: ["api-testing-fundamentals", "postman-and-curl", "track-c"]
+updated: "2026-07-17"
+related:
+  - "api-testing-fundamentals/postman-and-curl/postman-requests"
+  - "api-testing-fundamentals/postman-and-curl/postman-tests-and-variables"
+  - "api-testing-fundamentals/auth-manually/api-keys"
+  - "testers-toolbox/edge-case-and-form-data/generating-data-mockaroo-and-faker"
+---
+
+<Hook>
+Retyping the same request by hand every time you test it is fine once. It stops being fine the moment you need to run the same twelve requests against dev this morning, staging this afternoon, and prod right before a release - three times twelve, all hand-edited, all one typo away from testing the wrong server without realizing it. A Collection is the saved, reusable set of requests; an Environment is the swappable set of values they're built from. Together they turn "run this whole suite again, somewhere else" into changing one dropdown.
+</Hook>
+
+<Callout type="analogy">
+The photo below is a library card catalog - rows of small drawers, each labeled with a letter range, each holding cards filed in the exact same format. The drawers themselves (the physical system, the card format, the filing rules) don't change based on which letters you're looking up today; only the CONTENTS of the drawer you pull change. A Postman Collection is the filing system - the requests, written once, with the same structure every time. An Environment is which drawer is currently pulled out: the same lookup procedure, pointed at different underlying values.
+</Callout>
+
+<Term define="A Postman Collection is a saved, ordered folder of requests (and sub-folders) that can be run individually, in sequence via the Collection Runner, or on a schedule/in CI via Newman - written using {{variableName}} placeholders instead of hardcoded values wherever something might change between contexts (a base URL, an API key, a resource id). A Postman Environment is a named set of key/value pairs that fills in those placeholders; only one Environment is 'active' at a time (chosen from a dropdown in the top-right corner), and switching it re-resolves every {{variable}} in the entire collection without editing a single request.">Collections & Environments</Term>
+
+## Why the split exists
+
+- **Collections hold structure** — the requests themselves, their order, their folder grouping, any scripts attached to them. This almost never changes between dev and prod; the shape of "create a booking, then fetch it, then cancel it" is identical everywhere.
+- **Environments hold values** — `base_url`, `api_key`, seed IDs, anything that legitimately differs per stage. This is exactly what SHOULD change between dev and prod, and nothing else.
+- **`{{variable}}` syntax works anywhere a value would go** — URL, headers, body, even inside other variables' values. Postman resolves them at send-time, right before the request goes out.
+- **Variables also exist at Collection and Global scope**, not just Environment — a value used identically across every environment (like a fixed `content_type` header) belongs at Collection scope so it isn't duplicated three times.
+
+<Callout type="tip">
+Name environments so the active one is impossible to misread at a glance - `dev`, `staging`, `prod`, not `env1`, `env2`, `env3`. The active environment shows in a small dropdown in the top-right corner of the Postman window, easy to glance past when you're focused on the request itself; a clear name is the only thing standing between "I meant to test staging" and quietly hitting prod.
+</Callout>
+
+<Callout type="mistake">
+Hardcoding a value directly into a request "just this once" instead of adding it to the active Environment. It works in the moment, then silently breaks the collection's portability - the next person (or you, next week, on a different environment) reruns the same requests and gets a confusing failure tied to a hardcoded dev-only value nobody remembers is sitting inside one specific request instead of the environment where it belongs.
+</Callout>
+
+{/* IMAGE: a wooden library card catalog cabinet, rows of small drawers each with a printed label showing an alphabetical range */}
+<HotspotImage
+  src="/notes/api-testing-fundamentals/postman-and-curl/collections-and-environments.jpg"
+  alt="A wooden library card catalog cabinet with rows of small labeled drawers, each showing a printed alphabetical range like '12 Boa-Boylan'"
+  credit="Card Filing Cabinet — Watty62, Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Card_Filing_Cabinet.jpg"
+  pins={[
+    { x: 27, y: 29, label: "One drawer, one label — the Collection's fixed structure", desc: "The drawer's SHAPE and the filing rule inside it don't change based on which range it holds. A Collection is this: the requests and their order, written once, structurally identical no matter which environment eventually fills in the values." },
+    { x: 47, y: 28, label: "A different drawer, same filing system", desc: "Different label, same drawer design, same card format inside. This is switching the active Environment: same collection, same requests, different {{variable}} values resolved at send-time." },
+    { x: 82, y: 33, label: "Rows and rows of drawers, receding into the distance", desc: "A whole catalog, each drawer independently swappable without touching the others - exactly how dev/staging/prod Environments coexist in one Postman workspace, one active at a time, the rest waiting untouched." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One collection, three environments - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Write the collection once, with {{variables}}", desc: "GET {{base_url}}/flights?key={{api_key}} - no hardcoded host, no hardcoded key. This request is now environment-agnostic by construction." },
+    { label: "Create three environments with the same variable NAMES", desc: "dev, staging, prod each define base_url and api_key - same keys, different values. Postman doesn't care how many environments exist; it only resolves whichever one is active." },
+    { label: "Select 'dev' from the top-right dropdown, hit Send", desc: "{{base_url}} resolves to the dev host, {{api_key}} to the dev key. The request that left your machine has zero literal variables in it - Postman substituted everything before sending." },
+    { label: "Switch the dropdown to 'staging', hit Send again", desc: "Same request, zero edits, resolves against staging's values instead. This is the entire value proposition: one edit (the dropdown) instead of N edits (every hardcoded request)." },
+    { label: "Forget to switch back after testing staging", desc: "The next 'quick prod check' silently runs against staging's data instead - the request looks identical, the active environment name in the corner is the only warning, and it's easy to not read it." },
+  ]}
+/>
+
+Run the same three-environment resolution as real code - the mechanism is just string substitution:
+
+<CodePlayground
+  language="python"
+  title="Run it - one collection resolved against three environments"
+  code={`def resolve(template, env):
+    out = template
+    for key, val in env.items():
+        out = out.replace("{{" + key + "}}", str(val))
+    return out
+
+# One collection (two requests), written ONCE using {{variables}} instead of
+# hardcoded hosts/keys - the whole point of a Postman collection.
+collection = [
+    {"name": "List flights", "method": "GET", "path": "{{base_url}}/flights?key={{api_key}}"},
+    {"name": "Get flight status", "method": "GET", "path": "{{base_url}}/flights/{{flight_id}}?key={{api_key}}"},
+]
+
+# Three environments - same variable NAMES, different values per stage.
+environments = {
+    "dev": {"base_url": "https://dev.api.taskflight.example", "api_key": "dev_FAKE_KEY_001", "flight_id": "QA123"},
+    "staging": {"base_url": "https://staging.api.taskflight.example", "api_key": "stg_FAKE_KEY_002", "flight_id": "QA123"},
+    "prod": {"base_url": "https://api.taskflight.example", "api_key": "prod_FAKE_KEY_003", "flight_id": "QA123"},
+}
+
+for env_name, env_vars in environments.items():
+    print(f"--- Running collection with '{env_name}' environment active ---")
+    for req in collection:
+        resolved = resolve(req["path"], env_vars)
+        print(f"  {req['name']:<20} {req['method']} {resolved}")
+    print()
+
+# The classic mistake this note warns about: switching collections but
+# forgetting to switch environments - same requests, wrong host silently.
+print("--- Mistake: 'prod' collection run left on the 'dev' environment ---")
+wrong_env = environments["dev"]
+for req in collection:
+    resolved = resolve(req["path"], wrong_env)
+    print(f"  {req['name']:<20} {req['method']} {resolved}")
+print()
+print("Every request still returns 200 - dev has its own working flights endpoint.")
+print("Nobody gets an error. The tester just spent an hour 'verifying prod'")
+print("against dev data. Nothing catches this except reading the active")
+print("environment name before hitting Run - the requests can't tell you.")
+
+# --- Running collection with 'dev' environment active ---
+#   List flights         GET https://dev.api.taskflight.example/flights?key=dev_FAKE_KEY_001
+#   Get flight status    GET https://dev.api.taskflight.example/flights/QA123?key=dev_FAKE_KEY_001
+#
+# --- Running collection with 'staging' environment active ---
+#   List flights         GET https://staging.api.taskflight.example/flights?key=stg_FAKE_KEY_002
+#   Get flight status    GET https://staging.api.taskflight.example/flights/QA123?key=stg_FAKE_KEY_002
+#
+# --- Running collection with 'prod' environment active ---
+#   List flights         GET https://api.taskflight.example/flights?key=prod_FAKE_KEY_003
+#   Get flight status    GET https://api.taskflight.example/flights/QA123?key=prod_FAKE_KEY_003
+#
+# --- Mistake: 'prod' collection run left on the 'dev' environment ---
+#   List flights         GET https://dev.api.taskflight.example/flights?key=dev_FAKE_KEY_001
+#   Get flight status    GET https://dev.api.taskflight.example/flights/QA123?key=dev_FAKE_KEY_001
+#
+# Every request still returns 200 - dev has its own working flights endpoint.
+# Nobody gets an error. The tester just spent an hour 'verifying prod'
+# against dev data. Nothing catches this except reading the active
+# environment name before hitting Run - the requests can't tell you.`}
+/>
+
+<CodePlayground
+  language="java"
+  title="Run it - the same resolution logic in Java"
+  code={`import java.util.*;
+
+public class Main {
+    static String resolve(String template, Map<String, String> env) {
+        String out = template;
+        for (Map.Entry<String, String> e : env.entrySet()) {
+            out = out.replace("{{" + e.getKey() + "}}", e.getValue());
+        }
+        return out;
+    }
+
+    record Req(String name, String method, String path) {}
+
+    public static void main(String[] args) {
+        List<Req> collection = List.of(
+            new Req("List flights", "GET", "{{base_url}}/flights?key={{api_key}}"),
+            new Req("Get flight status", "GET", "{{base_url}}/flights/{{flight_id}}?key={{api_key}}")
+        );
+
+        LinkedHashMap<String, Map<String, String>> environments = new LinkedHashMap<>();
+        environments.put("dev", Map.of("base_url", "https://dev.api.taskflight.example", "api_key", "dev_FAKE_KEY_001", "flight_id", "QA123"));
+        environments.put("staging", Map.of("base_url", "https://staging.api.taskflight.example", "api_key", "stg_FAKE_KEY_002", "flight_id", "QA123"));
+        environments.put("prod", Map.of("base_url", "https://api.taskflight.example", "api_key", "prod_FAKE_KEY_003", "flight_id", "QA123"));
+
+        for (var entry : environments.entrySet()) {
+            System.out.println("--- Running collection with '" + entry.getKey() + "' environment active ---");
+            for (Req r : collection) {
+                String resolved = resolve(r.path(), entry.getValue());
+                System.out.printf("  %-20s %s %s%n", r.name(), r.method(), resolved);
+            }
+            System.out.println();
+        }
+
+        System.out.println("--- Mistake: 'prod' collection run left on the 'dev' environment ---");
+        Map<String, String> wrongEnv = environments.get("dev");
+        for (Req r : collection) {
+            String resolved = resolve(r.path(), wrongEnv);
+            System.out.printf("  %-20s %s %s%n", r.name(), r.method(), resolved);
+        }
+        System.out.println();
+        System.out.println("Every request still returns 200 - dev has its own working flights endpoint.");
+        System.out.println("Nobody gets an error. The tester just spent an hour 'verifying prod'");
+        System.out.println("against dev data. Nothing catches this except reading the active");
+        System.out.println("environment name before hitting Run - the requests can't tell you.");
+    }
+}
+
+/* --- Running collection with 'dev' environment active ---
+     List flights         GET https://dev.api.taskflight.example/flights?key=dev_FAKE_KEY_001
+     Get flight status    GET https://dev.api.taskflight.example/flights/QA123?key=dev_FAKE_KEY_001
+
+   --- Running collection with 'staging' environment active ---
+     List flights         GET https://staging.api.taskflight.example/flights?key=stg_FAKE_KEY_002
+     Get flight status    GET https://staging.api.taskflight.example/flights/QA123?key=stg_FAKE_KEY_002
+
+   --- Running collection with 'prod' environment active ---
+     List flights         GET https://api.taskflight.example/flights?key=prod_FAKE_KEY_003
+     Get flight status    GET https://api.taskflight.example/flights/QA123?key=prod_FAKE_KEY_003
+
+   --- Mistake: 'prod' collection run left on the 'dev' environment ---
+     List flights         GET https://dev.api.taskflight.example/flights?key=dev_FAKE_KEY_001
+     Get flight status    GET https://dev.api.taskflight.example/flights/QA123?key=dev_FAKE_KEY_001
+
+   Every request still returns 200 - dev has its own working flights endpoint.
+   Nobody gets an error. The tester just spent an hour 'verifying prod'
+   against dev data. Nothing catches this except reading the active
+   environment name before hitting Run - the requests can't tell you. */`}
+/>
+
+<FirstTime title="Your mission: build one collection, two environments, and prove the swap works">
+<StepChecklist
+  steps={[
+    { text: "Create a new Collection with two requests", detail: "Both using {{base_url}} in the URL - point them at postman-echo.com/get and postman-echo.com/post for this exercise, since you don't need a real multi-stage API to practice the mechanism." },
+    { text: "Create two Environments, 'practice-a' and 'practice-b'", detail: "Give base_url a genuinely different value in each - even something silly like adding a query param distinguishes them clearly for this exercise." },
+    { text: "Switch the active environment and Send the same request twice", detail: "Confirm the resolved URL (visible in the request bar right before you send, with variables shown in orange/red if unresolved) actually changes." },
+    { text: "Add a THIRD environment variable that's identical in both environments", detail: "Then move it to Collection-level variables instead, and delete it from both Environments - confirm the request still resolves correctly. This is the 'doesn't change between environments' case." },
+    { text: "Deliberately leave the wrong environment active and Send", detail: "Notice nothing LOOKS wrong in the request - the only signal is the small environment name in the top-right corner. Write one sentence on why that's a genuine risk in a real testing session." },
+  ]}
+/>
+You've now built the exact separation this note is about: structure that doesn't change (the Collection) versus values that do (the Environment) - and felt firsthand how easy the wrong-environment mistake is to make.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A {{variable}} shows up literally in the sent request (unresolved) instead of its value.",
+      fix: "No environment is active, the wrong one is active and doesn't define that variable, or the variable name has a typo (case-sensitive, and {{ base_url }} with stray spaces is NOT the same as {{base_url}}). Postman highlights unresolved variables in red/orange right in the request bar before you even send - always check the URL bar's color, not just the response.",
+    },
+    {
+      symptom: "A collection that worked yesterday now fails every request with an auth error, and nothing in the collection was edited.",
+      fix: "Check whether an Environment variable (often the one holding an API key or token) expired, was rotated, or was accidentally edited/cleared - collections themselves are usually stable; environment VALUES are what drift over time, especially short-lived tokens.",
+    },
+    {
+      symptom: "Two teammates get different results running the 'same' collection, and both insist their environment is correct.",
+      fix: "Compare the actual Environment JSON (Environment quick-look → the three-dot menu → Export) rather than trusting names - two environments can both be named 'staging' with genuinely different values if they weren't shared from the same source. Standardize on one shared/team environment rather than everyone maintaining their own copy.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The environment dropdown, top-right corner** — the single source of truth for which values are currently active; read it before every test session, not just before the first request.
+- **The request URL bar, right before Send** — unresolved `{{variables}}` show in red/orange; this is the fastest pre-flight check that the active environment actually covers what the request needs.
+- **Collection/Environment quick-look (the eye icon)** — view every variable and its current value without opening the full editor.
+- **[[api-testing-fundamentals/postman-and-curl/postman-tests-and-variables]]** — variables aren't just Environment-authored; test scripts can READ and WRITE them too, which is how one request's response feeds the next request's input.
+</WhereToCheck>
+
+<WorkedExample title="a collection that 'randomly' fails only for one teammate">
+1. Two testers run the same shared Collection. One gets all green; the other gets 401s on every request, consistently, only on their machine.
+2. First check: is the same Environment active for both? Both show "staging" in the top-right dropdown - looks identical at a glance.
+3. Exporting both Environments (three-dot menu → Export) and diffing the JSON reveals it: the failing tester's local "staging" environment has a `bearer_token` value that expired three days ago, while the working tester's was refreshed yesterday - two environments, same name, different actual values, because neither was using a shared team environment.
+4. Root cause isn't the collection at all - it's environment DRIFT, two people maintaining separate copies of something that should have been shared once.
+5. Fix: migrate to a single Team Environment (shared via the workspace, not exported/imported by hand), so there's exactly one `staging` and both testers see live edits to it.
+6. Lesson: when a shared collection behaves differently for different people, suspect the environment's VALUES before suspecting the collection's REQUESTS - the two layers fail independently, and diffing the values first is usually faster than re-reading every request.
+</WorkedExample>
+
+<Quiz
+  question="A tester adds a new variable to the 'dev' Environment and to the 'staging' Environment, using the exact same value in both because the value genuinely never changes between stages. What's the better practice, and why?"
+  options={[
+    "Leave it as-is - duplicating an identical value in every Environment is harmless as long as the values match",
+    "Move it to a Collection-level (or Global) variable instead, since it doesn't vary per environment - Environment variables should hold only what genuinely differs between dev/staging/prod",
+    "Delete it from both Environments and hardcode it directly into each request instead",
+    "Rename it differently in each Environment so it's clear which one is 'active'"
+  ]}
+  answer={1}
+  explain="This note's core distinction is that Environments hold VALUES THAT DIFFER between contexts (base_url, api_key, seed ids); a value that's identical across dev/staging/prod isn't really an environment-specific concern at all and belongs at Collection or Global scope instead, defined once. Leaving it duplicated across every Environment (option 1) works today but creates exactly the kind of drift risk covered in this note's WorkedExample - three copies of 'the same' value that can silently diverge over time with no warning. Hardcoding it into every request (option 3) is the Callout-flagged mistake: it breaks portability and buries a value where nobody expects to find it. Renaming it per-environment (option 4) defeats the entire point of Postman's variable-resolution mechanism, which depends on matching NAMES across environments, not matching values under different names - see [[api-testing-fundamentals/postman-and-curl/postman-requests]] for how {{variables}} get resolved in the first place."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Collection vs Environment, the split", back: "Collection = structure (the requests, their order, written once with {{variables}}). Environment = values (what fills in those variables) - swap the environment, not the collection, to point the same requests somewhere else." },
+    { front: "How Postman resolves a {{variable}}", back: "At send-time, against whichever Environment is currently active (shown top-right), plus Collection-scope and Global-scope variables as fallbacks - unresolved variables show in red/orange right in the request bar." },
+    { front: "Where a value that never changes between environments belongs", back: "Collection-level or Global variables, NOT duplicated identically inside every Environment - duplication invites silent drift when only one copy gets updated." },
+    { front: "The single biggest environment-swap risk", back: "The active environment name is a small dropdown, easy to not read - the requests look completely identical whether it's right or wrong, so nothing in the UI warns you before you Send against the wrong stage." },
+    { front: "The fastest way to debug 'works for them, not for me' on a shared collection", back: "Export and diff the actual Environment JSON for both people rather than trusting matching names - two environments can share a name and diverge completely in value, especially for short-lived tokens." },
+  ]}
+/>
+
+<Challenge>
+Build a three-request Collection using at least two {{variables}}, then build two Environments with genuinely different values for both. Run the full collection against each environment (via the Collection Runner, not one request at a time) and record the resolved URLs for all six runs. Then move one variable that's identical across both environments up to Collection scope, delete it from both Environments, and confirm the collection still resolves correctly - write one sentence on why that variable didn't belong in an Environment in the first place.
+</Challenge>
+
+<AskCommunity prompt="My collection resolves {{variable_name}} correctly when I run requests individually, but [describe what breaks - Collection Runner behaves differently / a teammate gets different values / a CI run via Newman fails]. Environment currently active: [name]. Here's the variable and where I expect it to come from: [describe]. What layer (Environment / Collection / Global scope, or a Runner-specific override) is actually winning?">
+The most useful replies will ask you to check variable SCOPE precedence (Global < Collection < Environment < Data file < Local, roughly lowest to highest priority) before assuming a bug - "the value I expected" losing to a higher-precedence scope defined elsewhere is one of the most common sources of Postman confusion once a workspace has more than one or two environments in play.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://learning.postman.com/docs/collections/collections-overview/", title: "Postman Docs — Collections overview", kind: "read" },
+    { href: "https://learning.postman.com/docs/sending-requests/variables/variables/", title: "Postman Docs — Variables (scope and precedence)", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=sUJjHU9oFzI" title="Automation Step by Step — Postman Beginner Tutorial 9: Environments" minutes={12} />
+
+<Takeaways
+  points={[
+    "A Collection is structure written once (requests, order, {{variables}}); an Environment is the values that fill those variables in - keep them separate on purpose.",
+    "Swapping the active Environment dropdown re-resolves an entire Collection against a different stage with zero request edits - that's the whole value proposition.",
+    "A value that's identical across every environment doesn't belong duplicated in each one - it belongs at Collection or Global scope, defined exactly once.",
+    "The active environment name is a small, easy-to-miss dropdown - the requests look identical whether it's right or wrong, so reading it is a discipline, not a UI guarantee.",
+    "When a shared collection behaves differently for different people, diff the actual Environment JSON before re-auditing the requests - environment VALUES drift; collection STRUCTURE rarely does.",
+  ]}
+/>
+
+<Complete xp={10} />
