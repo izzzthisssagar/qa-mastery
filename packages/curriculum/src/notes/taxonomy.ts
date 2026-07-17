@@ -1461,10 +1461,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "jenkins",
         title: "Jenkins",
         topics: [
-          { slug: "jobs-and-the-classic-ui", title: "Jobs & the classic UI", planned: true },
-          { slug: "jenkinsfile-pipeline-as-code", title: "Jenkinsfile — pipeline as code", planned: true },
-          { slug: "agents-and-plugins", title: "Agents & plugins", planned: true },
-          { slug: "when-teams-still-pick-jenkins", title: "When teams still pick Jenkins", planned: true },
+          { slug: "jobs-and-the-classic-ui", title: "Jobs & the classic UI" },
+          { slug: "jenkinsfile-pipeline-as-code", title: "Jenkinsfile — pipeline as code" },
+          { slug: "agents-and-plugins", title: "Agents & plugins" },
+          { slug: "when-teams-still-pick-jenkins", title: "When teams still pick Jenkins" },
         ],
       },
       {

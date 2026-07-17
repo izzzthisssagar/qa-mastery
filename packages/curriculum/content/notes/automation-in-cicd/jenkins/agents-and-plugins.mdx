@@ -1,0 +1,158 @@
+---
+title: "Agents & plugins"
+summary: "Jenkins controllers schedule work; agents supply isolated executors and tools; plugins add capabilities but also create versioned security, compatibility, availability, and maintenance dependencies."
+tags: ["jenkins", "agents", "plugins", "track-d"]
+updated: "2026-07-17"
+related:
+  - "automation-in-cicd/jenkins/jobs-and-the-classic-ui"
+  - "automation-in-cicd/jenkins/jenkinsfile-pipeline-as-code"
+  - "automation-in-cicd/jenkins/when-teams-still-pick-jenkins"
+---
+
+<Hook>
+When a Jenkins test fails, the application is only one suspect. The controller may have scheduled it
+onto the wrong capability, two executors may be fighting over one machine, or a plugin update may have
+changed the step that interprets the Jenkinsfile. Architecture is part of test evidence.
+</Hook>
+
+<Callout type="analogy">
+A workshop foreman assigns work but should not weld every part at the office desk. Skilled workers,
+stations, and tools execute the plan. Jenkins' controller schedules; agents and executors do the work;
+plugins add specialized tools — each with capacity and maintenance limits.
+</Callout>
+
+<Term define="A Jenkins controller manages configuration, authentication, scheduling, queues, and orchestration. An agent is a process on a node that performs assigned work through one or more executors; an executor is one concurrent work slot. Labels describe capabilities used by Pipeline agent selection. Plugins extend the controller and Pipeline with integrations and steps, but every plugin is executable supply-chain state that must be inventoried, updated, secured, tested, and minimized.">Jenkins agents and plugins</Term>
+
+## Separate orchestration from execution
+
+Avoid running builds on the built-in controller node; Jenkins documentation discourages it for
+security, performance, and scalability. Prefer agents with explicit capability labels such as
+`linux`, `windows`, `browser`, or `jdk21`. Keep labels meaningful and provision the matching tools
+reproducibly.
+
+Plugins are not free features. Each adds code, dependencies, configuration, update work, and possible
+security advisories. Use the smallest maintained set and record versions outside a hand-built controller.
+
+<Callout type="tip">
+Start with one executor per agent for resource-heavy browser suites. Add executors only after CPU,
+memory, I/O, ports, workspaces, accounts, and test data are proven safe under concurrency.
+</Callout>
+
+<Callout type="mistake">
+Installing a plugin during an incident because a blog post uses its step. Check health, maintenance,
+security advisories, dependencies, compatibility, and whether shell or built-in Pipeline features
+already solve the need.
+</Callout>
+
+<HotspotImage src="/notes/automation-in-cicd/jenkins/agents-and-plugins.jpg" alt="Four factory workers in protective clothing holding welding tools in a workshop" credit="Factory workers, circa 1945 — Howard Clifford / University of Washington, no known copyright restrictions" creditHref="https://commons.wikimedia.org/wiki/File:Factory_workers_(4951753946).jpg" pins={[
+  { x: 48, y: 42, label: "Controller coordinates", desc: "Scheduling and governance decide which capable worker receives the task." },
+  { x: 20, y: 58, label: "Agent capability", desc: "Labels describe OS, browser, hardware, or tool capabilities required by the job." },
+  { x: 74, y: 55, label: "Executor slot", desc: "Each active slot consumes real CPU, memory, I/O, ports, and shared state." },
+  { x: 51, y: 68, label: "Plugin tool", desc: "Specialized capabilities help, but each tool needs compatible versions and maintenance." },
+]} />
+
+<FlowAnimation title="How Jenkins places work" intervalMs={1500} nodes={[
+  { label: "Build queued", desc: "A job declares an agent label and resource need." },
+  { label: "Controller matches", desc: "Online nodes and labels are evaluated." },
+  { label: "Executor reserved", desc: "One concurrency slot and workspace are assigned." },
+  { label: "Agent executes", desc: "Installed tools or containers run Pipeline steps." },
+  { label: "Plugin participates", desc: "Plugin-provided steps may transform, publish, or integrate." },
+  { label: "Result returns", desc: "Logs and evidence return while workspace cleanup and capacity release occur." },
+]} />
+
+<CodePlayground language="python" title="Run it — match a job to an agent (Python)" code={```agents = {
+    "a1": {"linux", "browser", "jdk21"},
+    "a2": {"windows", "browser"},
+}
+required = {"linux", "browser"}
+eligible = [name for name, labels in agents.items() if required <= labels]
+print("required:", ", ".join(sorted(required)))
+print("eligible:", ", ".join(eligible) if eligible else "none")```} />
+
+<CodePlayground language="java" title="Run it — match a job to an agent (Java)" code={```import java.util.*;
+
+public class Main {
+    public static void main(String[] args) {
+        var agents = new LinkedHashMap<String, Set<String>>();
+        agents.put("a1", Set.of("linux", "browser", "jdk21"));
+        agents.put("a2", Set.of("windows", "browser"));
+        var required = Set.of("linux", "browser");
+        var eligible = agents.entrySet().stream().filter(e -> e.getValue().containsAll(required)).map(Map.Entry::getKey).toList();
+        System.out.println("required: browser, linux");
+        System.out.println("eligible: " + (eligible.isEmpty() ? "none" : String.join(", ", eligible)));
+    }
+}```} />
+
+<FirstTime title="Your mission: audit one execution path">
+<StepChecklist steps={[
+  { text: "Choose a build and record controller, node, agent, and executor", detail: "Use queue and build pages; do not call all four things 'the Jenkins server'." },
+  { text: "Verify every required label and tool", detail: "Compare Pipeline request with node labels, tool versions, containers, and environment." },
+  { text: "Measure concurrency resources", detail: "Observe CPU, memory, I/O, workspace, ports, and shared test data with current executors." },
+  { text: "Inventory plugin-provided steps", detail: "Record plugin name/version, health, advisories, dependencies, and owner." },
+]} />
+You now know which infrastructure facts belong in a failed test's diagnosis.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "A build waits indefinitely in the queue.", fix: "Read the queue reason; verify label expression, online agents, executor availability, and clouds/provisioning." },
+  { symptom: "Two builds corrupt each other's output.", fix: "Reduce executors and find shared workspaces, ports, files, accounts, or data before increasing parallelism." },
+  { symptom: "A Pipeline step suddenly becomes unknown.", fix: "Map the step to its plugin and inspect installation, version, failed dependencies, and recent updates/restarts." },
+  { symptom: "The controller becomes slow during builds.", fix: "Confirm work is not running on the built-in node; move execution to agents and inspect queue/controller health separately." },
+]} />
+
+<WhereToCheck>
+- **Queue reason and node labels** — placement mismatch versus capacity shortage.
+- **Node monitor data** — disk, temp, swap, clock, response, CPU, memory, and I/O.
+- **Executor count and running builds** — actual resource contention.
+- **Plugin Manager and security advisories** — versions, dependencies, health, disabled/failed plugins.
+- **Build node/workspace metadata** — exact environment behind the result.
+</WhereToCheck>
+
+<WorkedExample title="the browser suite that failed only in pairs">
+1. One agent has two executors; both browser jobs use the same test account and download directory.
+2. Alone each passes. Together one logs out the other and overwrites a screenshot.
+3. Retries hide some collisions but increase runtime.
+4. The team temporarily uses one executor, then gives each job unique accounts and directories.
+5. Two executors return only after parallel isolation tests pass.
+</WorkedExample>
+
+<Quiz question="What does an executor represent in Jenkins?" options={[
+  "A plugin update site",
+  "One concurrent task slot on a node/agent",
+  "The controller database",
+  "A Git branch"
+]} answer={1} explain="Agents perform work; executors determine how many tasks an agent can run concurrently. More executors increase resource and shared-state pressure." />
+
+<Flashcards cards={[
+  { front: "Controller", back: "Orchestrates configuration, authentication, queueing, scheduling, and results." },
+  { front: "Agent", back: "Worker process on a node that executes assigned Pipeline work." },
+  { front: "Executor", back: "One concurrent task slot on a node." },
+  { front: "Label", back: "Capability metadata used to match a job's agent requirement." },
+  { front: "Plugin governance", back: "Minimize, inventory, pin/provision, monitor advisories, test upgrades, and assign ownership." },
+]} />
+
+<Challenge>
+Build a table of agents, labels, executors, tools, resource limits, and suites. Then build a plugin
+inventory with version, purpose, health, advisory status, dependency, and owner. Remove one unjustified risk.
+</Challenge>
+
+<AskCommunity prompt="Build [number] requested labels [expression], queued on [reason], and ran on [node/executor] with resources [values]. Plugin step [name/version] produced [error].">
+Separate placement, capacity, tool, and plugin evidence so the next experiment changes one layer.
+</AskCommunity>
+
+<Resources links={[
+  { href: "https://www.jenkins.io/doc/book/managing/nodes/", title: "Jenkins Handbook — Managing Nodes", kind: "read" },
+  { href: "https://www.jenkins.io/doc/book/managing/plugins/", title: "Jenkins Handbook — Managing Plugins", kind: "read" },
+]} />
+
+<Video href="https://www.youtube.com/watch?v=99DddJiH7lM" title="How to Create an Agent Node in Jenkins — CloudBeesTV" minutes={24} />
+
+<Takeaways points={[
+  "Controllers orchestrate; agents execute; executors set concurrency; labels express capabilities.",
+  "Do not run ordinary builds on the built-in controller node.",
+  "Begin resource-heavy test agents conservatively and prove isolation before adding executors.",
+  "Plugins are executable dependencies with security, compatibility, and ownership costs.",
+  "A test result is incomplete without the node, tools, executor pressure, and plugin versions behind it.",
+]} />
+
+<Complete xp={10} />

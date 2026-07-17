@@ -1,0 +1,172 @@
+---
+title: "Jenkinsfile — pipeline as code"
+summary: "A Jenkinsfile stores the delivery procedure beside the application so stages, agents, steps, post actions, and branch behavior can be reviewed, versioned, reproduced, and audited."
+tags: ["jenkins", "pipeline-as-code", "jenkinsfile", "track-d"]
+updated: "2026-07-17"
+related:
+  - "automation-in-cicd/jenkins/jobs-and-the-classic-ui"
+  - "automation-in-cicd/jenkins/agents-and-plugins"
+  - "automation-in-cicd/github-actions/workflow-basics"
+---
+
+<Hook>
+The most dangerous Jenkins configuration is the one everyone depends on and nobody can review. A
+Jenkinsfile moves the procedure into the repository, where a pipeline change has an author, diff,
+branch, review, and rollback instead of a story about which checkbox somebody clicked.
+</Hook>
+
+<Callout type="analogy">
+A blueprint separates the design of a system from the particular crew and day that build it. A
+Jenkinsfile does the same for delivery: stages and requirements are versioned; agents supply the
+temporary workshop that executes the plan.
+</Callout>
+
+<Term define="A Jenkinsfile is a text file, normally at the repository root, that defines a Jenkins Pipeline using Declarative or Scripted syntax. Declarative Pipeline wraps work in a pipeline block with agent, stages, stage, steps, and optional post directives. Stored in source control and used by Pipeline or Multibranch Pipeline jobs, it makes delivery procedure reviewable and branch-aware. It does not version controller plugins, credentials, global tools, or every external service by itself.">Jenkinsfile</Term>
+
+## A minimal Declarative Pipeline
+
+```groovy
+pipeline {
+  agent { label 'linux && browser' }
+  options { timestamps() }
+  stages {
+    stage('Install') {
+      steps { sh 'npm ci' }
+    }
+    stage('Test') {
+      steps { sh 'npm test' }
+    }
+  }
+  post {
+    always { junit 'reports/*.xml' }
+    unsuccessful { archiveArtifacts artifacts: 'artifacts/**', allowEmptyArchive: true }
+  }
+}
+```
+
+`pipeline` defines the whole Declarative model. `agent` allocates a matching executor/workspace.
+`stages` organize feedback; `steps` do work. `post` preserves evidence based on the final result.
+
+<Callout type="tip">
+Begin with Declarative syntax unless you need Scripted Pipeline's flexibility. Its opinionated
+structure is easier to validate, visualize, review, and hand to the next maintainer.
+</Callout>
+
+<Callout type="mistake">
+Putting secrets directly in Groovy strings or environment blocks. Store credentials in Jenkins and
+bind them only around the step that needs them; avoid interpolation that can expose values in process
+arguments or logs.
+</Callout>
+
+<HotspotImage src="/notes/automation-in-cicd/jenkins/jenkinsfile-pipeline-as-code.png" alt="A detailed blue engineering plan showing pits, pipes, an engine, meters, and structural boundaries" credit="Simple blueprints — j4p4n / Openclipart, CC0" creditHref="https://commons.wikimedia.org/wiki/File:Simple_blueprints.svg" pins={[
+  { x: 16, y: 18, label: "pipeline boundary", desc: "The outer block defines the reviewed delivery system." },
+  { x: 48, y: 38, label: "stages", desc: "Named boundaries organize build, test, and delivery feedback." },
+  { x: 75, y: 24, label: "agent and tools", desc: "The plan states required execution capabilities without becoming the machine." },
+  { x: 78, y: 72, label: "post conditions", desc: "Evidence and cleanup are part of the plan, including when a stage fails." },
+]} />
+
+<FlowAnimation title="Pipeline as code lifecycle" intervalMs={1500} nodes={[
+  { label: "Jenkinsfile changed", desc: "The pipeline modification appears in a branch diff." },
+  { label: "Review performed", desc: "Peers inspect commands, permissions, credentials use, and failure behavior." },
+  { label: "Multibranch discovers", desc: "Jenkins finds the branch and its own Jenkinsfile." },
+  { label: "Agent allocated", desc: "The declared label or container supplies an executor and workspace." },
+  { label: "Stages execute", desc: "Steps run in a visible, ordered pipeline model." },
+  { label: "Evidence and history", desc: "Post actions publish results; source control retains the procedure version." },
+]} />
+
+<CodePlayground language="python" title="Run it — validate a pipeline model (Python)" code={```pipeline = {
+    "agent": "linux && browser",
+    "stages": [("Install", ["npm ci"]), ("Test", ["npm test"])],
+    "post": ["junit", "archive-on-failure"],
+}
+print("agent:", pipeline["agent"])
+for name, steps in pipeline["stages"]:
+    print(f"stage {name}: {', '.join(steps)}")
+print("evidence:", ", ".join(pipeline["post"]))```} />
+
+<CodePlayground language="java" title="Run it — validate a pipeline model (Java)" code={```import java.util.*;
+
+public class Main {
+    record Stage(String name, List<String> steps) {}
+    public static void main(String[] args) {
+        String agent = "linux && browser";
+        var stages = List.of(new Stage("Install", List.of("npm ci")), new Stage("Test", List.of("npm test")));
+        System.out.println("agent: " + agent);
+        stages.forEach(s -> System.out.println("stage " + s.name() + ": " + String.join(", ", s.steps())));
+        System.out.println("evidence: junit, archive-on-failure");
+    }
+}```} />
+
+<FirstTime title="Your mission: move one job procedure into source control">
+<StepChecklist steps={[
+  { text: "Create a Jenkinsfile on a branch", detail: "Use Declarative pipeline, one explicit agent label, and install/test stages." },
+  { text: "Configure a sandbox Pipeline from SCM", detail: "Point it at the repository and script path; do not replace the production job yet." },
+  { text: "Add always-run test publishing", detail: "Make a deliberate failure and confirm reports survive while the build remains red." },
+  { text: "Compare with the original job", detail: "Check parameters, credentials, tools, triggers, retention, and downstream actions before cutover." },
+]} />
+Pipeline-as-code migration is complete only when no invisible behavior was lost.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Jenkins reports no stages or invalid Declarative syntax.", fix: "Use Pipeline Syntax or Declarative Directive Generator; check pipeline, agent, stages, stage, steps, and brace nesting." },
+  { symptom: "A branch builds another revision.", fix: "In Multibranch Pipeline use the branch-provided SCM context and checkout scm rather than a hard-coded branch checkout." },
+  { symptom: "post evidence is missing after failure.", fix: "Place publishing under post always or the appropriate condition and confirm paths are workspace-relative." },
+  { symptom: "The Jenkinsfile works on one controller only.", fix: "Inventory plugin steps, shared libraries, credentials IDs, tools, labels, and global configuration that remain external dependencies." },
+]} />
+
+<WhereToCheck>
+- **Replay/model validation and Blue Ocean/classic stage view** — parsed structure and failing stage.
+- **SCM revision plus Jenkinsfile commit** — which procedure and code were executed.
+- **Pipeline Steps reference/Snippet Generator** — plugin-provided step names and arguments.
+- **Controller plugin and shared-library versions** — dependencies not captured in the Jenkinsfile.
+- **post logs and archived evidence** — whether failure paths behave as designed.
+</WhereToCheck>
+
+<WorkedExample title="a successful migration that forgot reports">
+1. A freestyle job runs Maven tests and publishes JUnit through a post-build checkbox.
+2. Its first Jenkinsfile migration keeps only `sh 'mvn test'`.
+3. Failures turn the stage red, but Jenkins shows no test trend or individual failure pages.
+4. The team adds `post { always { junit 'target/surefire-reports/*.xml' } }`.
+5. Command and evidence contracts now match; the old job can be retired after parallel comparison.
+</WorkedExample>
+
+<Quiz question="What important Jenkins state is not automatically captured by a Jenkinsfile?" options={[
+  "Stage names",
+  "Shell steps",
+  "Controller plugin versions, credentials, global tools, and some shared configuration",
+  "The repository history"
+]} answer={2} explain="A Jenkinsfile versions the pipeline procedure, but it can call capabilities supplied by the controller. Reproducibility also requires governing plugins, credentials IDs, tools, agents, and shared libraries." />
+
+<Flashcards cards={[
+  { front: "Declarative Pipeline outer block", back: "pipeline { ... } containing agent, stages, and other directives." },
+  { front: "stage versus step", back: "A stage is a visible phase; steps are the individual commands/actions inside it." },
+  { front: "post always", back: "Runs publishing or cleanup regardless of final result, preserving failure evidence." },
+  { front: "Multibranch Pipeline", back: "Discovers branches and pull requests containing Jenkinsfiles and creates managed branch jobs." },
+  { front: "What pipeline-as-code buys", back: "Diff, review, branch testing, audit history, rollback, and a shared source of truth." },
+]} />
+
+<Challenge>
+Diff one classic job against its Jenkinsfile replacement. Account for every trigger, parameter,
+credential, tool, label, command, publisher, artifact, retention rule, and downstream dependency.
+</Challenge>
+
+<AskCommunity prompt="Jenkinsfile at [path/commit] fails in [stage] on [agent]. The parser/console says [exact error], and required plugin/shared-library versions are [values].">
+Share the smallest stage that reproduces the issue, with credentials redacted.
+</AskCommunity>
+
+<Resources links={[
+  { href: "https://www.jenkins.io/doc/book/pipeline/jenkinsfile/", title: "Jenkins Handbook — Using a Jenkinsfile", kind: "read" },
+  { href: "https://www.jenkins.io/doc/book/pipeline/pipeline-as-code/", title: "Jenkins Handbook — Pipeline as Code", kind: "read" },
+]} />
+
+<Video href="https://www.youtube.com/watch?v=7KCS70sCoK0" title="Complete Jenkins Pipeline Tutorial — Jenkinsfile explained — TechWorld with Nana" minutes={36} />
+
+<Takeaways points={[
+  "A Jenkinsfile makes delivery procedure versioned, reviewed, branch-aware, and auditable.",
+  "Declarative Pipeline organizes agent requirements, stages, steps, and post behavior.",
+  "Publish evidence in failure-safe post conditions without hiding the failing exit status.",
+  "A Jenkinsfile still depends on governed controller plugins, credentials, tools, agents, and libraries.",
+  "Migrate classic jobs by matching their entire contract, not only the visible shell command.",
+]} />
+
+<Complete xp={10} />
