@@ -1,0 +1,158 @@
+---
+title: "Scheduled runs"
+summary: "Scheduled CI runs find time-dependent and broad regression failures, but a trustworthy schedule needs explicit timezone, branch, ownership, concurrency, environment, and missed-run monitoring."
+tags: ["ci", "scheduling", "cron", "regression", "track-d"]
+updated: "2026-07-17"
+related:
+  - "automation-in-cicd/scheduling-and-reporting/notifications"
+  - "automation-in-cicd/flake-management/detecting-flakes"
+  - "automation-in-cicd/github-actions/triggers"
+---
+
+<Hook>
+The nightly suite is green every morning. Then someone notices it has not run for eleven days.
+A schedule is not evidence until you can prove the expected run was created, used the intended
+revision and environment, completed, and reached an owner when it failed.
+</Hook>
+
+<Callout type="analogy">
+An alarm clock answers when to wake up, not whether you got out of bed or reached work. Cron creates
+an opportunity to test. Run monitoring, reports, and notifications prove the useful work happened.
+</Callout>
+
+<Term define="A scheduled CI run is a pipeline created from a time rule, usually a five-field cron expression. It normally executes the workflow definition from a platform-selected branch and may be delayed by runner demand. Its contract must state timezone, target branch/SHA, cadence, environment, concurrency behavior, owner, and how a missing run is detected.">Scheduled CI run</Term>
+
+## Design the schedule as an operating contract
+
+```yaml
+name: nightly-regression
+on:
+  schedule:
+    - cron: "17 1 * * 1-5"
+  workflow_dispatch:
+concurrency:
+  group: nightly-regression
+  cancel-in-progress: false
+```
+
+Off-peak minute `17` avoids the common top-of-hour rush. Manual dispatch gives responders a safe
+reproduction path. The concurrency rule makes overlap policy explicit rather than accidental.
+
+<Callout type="tip">
+Write the intended local time beside the cron rule, then test the UTC conversion and daylight-saving
+behavior. Also record the expected next run in monitoring; humans are poor missing-event detectors.
+</Callout>
+
+<Callout type="mistake">
+Using nightly CI as a landfill for slow tests. A schedule should answer a named risk that cannot be
+covered cheaply on every change. Keep fast release-blocking checks on pull requests.
+</Callout>
+
+<HotspotImage src="/notes/automation-in-cicd/scheduling-and-reporting/scheduled-runs.jpg" alt="A square analogue alarm clock with black hands and a red second hand" credit="Alarm — Mohylek, public domain" creditHref="https://commons.wikimedia.org/wiki/File:Alarm.jpg" pins={[
+  { x: 50, y: 51, label: "Trigger time", desc: "Cron states when the platform should create a run, usually in an explicit timezone or UTC." },
+  { x: 28, y: 33, label: "Cadence", desc: "Choose frequency from risk and feedback need, not habit." },
+  { x: 76, y: 29, label: "Delay tolerance", desc: "Hosted schedulers and runner queues can start later than the nominal minute." },
+  { x: 69, y: 76, label: "Missed-run alarm", desc: "Monitor the absence of the expected execution, not only failed executions." },
+]} />
+
+<FlowAnimation title="A trustworthy scheduled regression" intervalMs={1500} nodes={[
+  { label: "Time rule becomes due", desc: "Scheduler evaluates cron and timezone." },
+  { label: "Pipeline is created", desc: "Capture source, target branch, and exact SHA." },
+  { label: "Concurrency policy applies", desc: "Queue, cancel, or reject overlap intentionally." },
+  { label: "Suite uses controlled environment", desc: "Seed data, secrets, dependencies, and clocks." },
+  { label: "Evidence is published", desc: "Report, artifacts, duration, environment, and revision survive the runner." },
+  { label: "Owner receives outcome", desc: "Failure and missing-run alerts route to someone who can act." },
+]} />
+
+<CodePlayground language="python" title="Run it — detect a missing nightly run (Python)" code={```from datetime import datetime, timezone
+last_run = datetime(2026, 7, 15, 1, 22, tzinfo=timezone.utc)
+now = datetime(2026, 7, 17, 3, 0, tzinfo=timezone.utc)
+hours = (now - last_run).total_seconds() / 3600
+print(f"hours since last run: {hours:.1f}")
+print("alert: missing schedule" if hours > 30 else "schedule healthy")```} />
+
+<CodePlayground language="java" title="Run it — detect a missing nightly run (Java)" code={```import java.time.*;
+
+public class Main {
+    public static void main(String[] args) {
+        Instant last = Instant.parse("2026-07-15T01:22:00Z");
+        Instant now = Instant.parse("2026-07-17T03:00:00Z");
+        long hours = Duration.between(last, now).toHours();
+        System.out.println("hours since last run: " + hours);
+        System.out.println(hours > 30 ? "alert: missing schedule" : "schedule healthy");
+    }
+}```} />
+
+<FirstTime title="Your mission: make one scheduled suite observable">
+<StepChecklist steps={[
+  { text: "Name the risk and cadence", detail: "Explain why this suite is scheduled instead of required on every change." },
+  { text: "Record timezone, branch, and SHA", detail: "Prove which workflow and product revision executed." },
+  { text: "Define overlap behavior", detail: "Choose queue, cancel, or parallel based on data and environment safety." },
+  { text: "Alert on failure and absence", detail: "Test both a red run and a run that was never created." },
+]} />
+You now operate a schedule rather than trusting a cron string.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "The run starts at the wrong local hour.", fix: "Check platform timezone semantics, daylight-saving transitions, and the documented UTC/local conversion." },
+  { symptom: "Two nightlies corrupt shared test data.", fix: "Add a concurrency group or isolated environment/data namespace and define stale-run cancellation." },
+  { symptom: "The workflow runs old tests.", fix: "Inspect the scheduled run's branch, workflow revision, and SHA; scheduled events commonly use the default branch." },
+  { symptom: "Nobody noticed the schedule stopped.", fix: "Create a dead-man alert when no successful or attempted run appears inside the expected window." },
+]} />
+
+<WhereToCheck>
+- **Workflow event and cron** — source rule, timezone, and manual fallback.
+- **Run branch and SHA** — exact workflow/product revision.
+- **Queue and concurrency history** — delay, overlap, and cancellation.
+- **Environment/data lease** — collisions with another run.
+- **Last expected versus actual run** — missing-event monitoring.
+</WhereToCheck>
+
+<WorkedExample title="a nightly that silently moved by one day">
+1. The team writes `0 1 * * 1-5`, intending weekday mornings in Kathmandu.
+2. The platform evaluates it in UTC, so it starts at 06:45 local—not 01:00.
+3. Data cleanup overlaps office-hour exploratory testing and creates false failures.
+4. The owner documents timezone semantics, chooses the intended UTC expression, and adds a manual trigger.
+5. Monitoring compares expected and actual start windows, catching future schedule drift.
+</WorkedExample>
+
+<Quiz question="What proves a nightly schedule is healthy?" options={[
+  "A valid cron expression",
+  "A green badge from any previous run",
+  "Expected runs are created in the right window and finish on the intended revision/environment with owned outcomes",
+  "The suite contains every automated test"
+]} answer={2} explain="Cron only requests a trigger. Health includes run creation, identity, environment, completion, evidence, ownership, and detection of missed executions." />
+
+<Flashcards cards={[
+  { front: "Cron", back: "A compact time rule; it does not prove execution or completion." },
+  { front: "Dead-man alert", back: "An alert raised because an expected event or heartbeat did not appear." },
+  { front: "Scheduled-run identity", back: "Trigger source, workflow revision, target branch, and exact SHA." },
+  { front: "Overlap policy", back: "Explicit choice to queue, cancel, or parallelize concurrent scheduled runs." },
+  { front: "Manual fallback", back: "A controlled dispatch path used to reproduce or recover a schedule." },
+]} />
+
+<Challenge>
+Audit one scheduled workflow. Predict its next three runs in local time, identify the branch and SHA
+it will use, force an overlap, and demonstrate an alert for a deliberately missed execution.
+</Challenge>
+
+<AskCommunity prompt="Scheduled workflow [name] expected [time/timezone] but [ran late/did not run/used wrong revision]. Expected branch/SHA, actual event, concurrency state, and last successful run are [values].">
+These facts distinguish cron interpretation, scheduler delay, runner capacity, and stale configuration.
+</AskCommunity>
+
+<Resources links={[
+  { href: "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onschedule", title: "GitHub Docs — workflow schedule syntax", kind: "read" },
+  { href: "https://docs.gitlab.com/ci/pipelines/schedules/", title: "GitLab Docs — scheduled pipelines", kind: "read" },
+]} />
+
+<Video href="https://www.youtube.com/watch?v=PG19_K1300A" title="Triggers & Events in GitHub Actions — DevTips Daily" minutes={7} />
+
+<Takeaways points={[
+  "A cron rule requests a run; it does not prove useful work completed.",
+  "Record timezone, cadence, source branch, workflow revision, SHA, environment, and owner.",
+  "Define concurrency and shared-data behavior before schedules overlap.",
+  "Alert on missing runs as well as failed runs.",
+  "Keep fast release feedback on changes; schedule suites for named broader or time-dependent risks.",
+]} />
+
+<Complete xp={10} />

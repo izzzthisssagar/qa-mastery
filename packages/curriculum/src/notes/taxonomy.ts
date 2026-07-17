@@ -1481,10 +1481,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "scheduling-and-reporting",
         title: "Scheduling & reporting",
         topics: [
-          { slug: "scheduled-runs", title: "Scheduled runs", planned: true },
-          { slug: "publishing-reports", title: "Publishing reports", planned: true },
-          { slug: "notifications", title: "Notifications", planned: true },
-          { slug: "dashboards", title: "Dashboards", planned: true },
+          { slug: "scheduled-runs", title: "Scheduled runs" },
+          { slug: "publishing-reports", title: "Publishing reports" },
+          { slug: "notifications", title: "Notifications" },
+          { slug: "dashboards", title: "Dashboards" },
         ],
       },
       {
