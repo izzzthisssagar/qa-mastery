@@ -1,0 +1,273 @@
+---
+title: "Parameters"
+summary: "Run-level values like a base URL, browser name, or timeout get fed into a test from outside its code - via testng.xml, a -D system property, or a pytest --option - so the same test runs against staging today and production tonight with no code edit."
+tags: ["test-frameworks", "groups-and-parameters", "track-d"]
+updated: "2026-07-17"
+related:
+  - "test-frameworks/groups-and-parameters/grouping-tests"
+  - "test-frameworks/groups-and-parameters/ordering"
+  - "test-frameworks/groups-and-parameters/suites"
+---
+
+<Hook>
+The same login test needs to run against a staging URL this morning and a production URL tonight. The
+test's code shouldn't change between those two runs - and it doesn't, if the base URL was never
+hardcoded inside it in the first place. It was fed in from outside, at run time.
+</Hook>
+
+<Callout type="analogy">
+A recording studio's mixing console doesn't get rebuilt for a different song. Every channel has its own
+labeled fader, its own gain knob, its own EQ dial - external controls, set from outside the signal path,
+that shape what comes out without changing the console's wiring underneath. A quiet acoustic take and a
+loud rock track go through the exact same hardware; only the settings on the panel change between them.
+A test's parameters work the same way - the same test logic, fed different external values (a URL, a
+timeout, a browser name) depending on what this particular run needs.
+</Callout>
+
+<Term define="A test parameter is a configuration value supplied to a test from OUTSIDE the test's own source code at run time, rather than hardcoded inside it - typically environment- or run-level settings like a base URL, a target browser, a timeout, or an API key, as distinct from data-driven test-data rows (many input/expected-output pairs feeding the same test logic, covered separately). TestNG supplies parameters via a <parameter> element in testng.xml (or -D system properties), read in a test method via @Parameters. pytest supplies them via custom --option command-line flags registered in conftest.py's pytest_addoption, read through a fixture that calls request.config.getoption(). In both cases the value lives in configuration or the command line, not in the test file, so the same test can run against different environments without being edited between runs.">Parameters</Term>
+
+## Feeding a value in, without hardcoding it
+
+- **A parameter answers "what environment/setting is THIS run using," not "what data is this test
+  checking."** A base URL, a browser name, a timeout - these describe the run, not the scenario under
+  test. (Rows of input/expected-output pairs for the same test logic are a different topic - data-driven
+  testing, covered next.)
+- **TestNG**: declare a `<parameter name="baseUrl" value="..."/>` in `testng.xml`, then accept it with
+  `@Parameters("baseUrl")` on a test method argument - or override it from the command line with
+  `-DbaseUrl=https://staging.example.com` via the Surefire plugin.
+- **pytest**: register a custom flag in `conftest.py` with `pytest_addoption`, then read it through a
+  fixture that calls `request.config.getoption("--base-url")` - any test that depends on that fixture
+  gets the value, supplied on the command line as `pytest --base-url=https://staging.example.com`.
+- **A sensible default matters.** Both approaches should fall back to a reasonable default when nothing
+  is passed, so a plain `mvn test` or `pytest` still runs - just against whatever the default environment
+  is, rather than failing with a missing-parameter error.
+
+```python
+# conftest.py
+def pytest_addoption(parser):
+    parser.addoption("--base-url", action="store", default="http://localhost:3000")
+
+# a fixture any test can depend on
+import pytest
+
+@pytest.fixture
+def base_url(request):
+    return request.config.getoption("--base-url")
+
+# test_login.py
+def test_login_page_loads(base_url):
+    # base_url is "http://localhost:3000" by default, or whatever --base-url passed on the CLI
+    assert base_url  # (a real test would navigate to base_url + "/login")
+```
+
+<Callout type="tip">
+Give every parameter a working default before it's ever used in CI - a test suite that only runs
+correctly when every flag is remembered and passed by hand is fragile in exactly the way parameters were
+meant to prevent.
+</Callout>
+
+<Callout type="mistake">
+Reaching for parameters to feed rows of test DATA - usernames, expected totals, form inputs - into a
+test. That's what data providers / `@ParameterizedTest` / `pytest.mark.parametrize` exist for (next
+chapter). Parameters are for run-level configuration that's the same across every test in a given
+run - a base URL doesn't vary per test case the way a row of expected data does.
+</Callout>
+
+{/* IMAGE: a real photograph of a professional analog audio mixing console in a recording studio control room, showing dense rows of labeled sliding faders, gain knobs, and EQ dials across multiple channel strips */}
+<HotspotImage
+  src="/notes/test-frameworks/groups-and-parameters/parameters.jpg"
+  alt="A professional analog audio mixing console in a recording studio control room, showing dense rows of labeled sliding faders, gain knobs, and EQ dials across many channel strips"
+  credit="Neve 81 Series Mixing Console — Wikimedia Commons, CC BY-SA 4.0 (Cashlee69)"
+  creditHref="https://commons.wikimedia.org/wiki/File:Neve_81_Series_Mixing_Console.jpg"
+  pins={[
+    { x: 30, y: 65, label: "A single labeled fader on one channel strip", desc: "One external, adjustable value - like a baseUrl parameter - that shapes this run's output without changing anything about the console's (the test's) internal wiring." },
+    { x: 68, y: 55, label: "A whole row of identical-looking knobs across many channels", desc: "The same kind of control repeated per channel - the same way a timeout or browser-name parameter can be set once and apply consistently across a whole run." },
+    { x: 50, y: 40, label: "The rack of identical channel modules behind the faders", desc: "The actual signal-processing hardware - the test logic itself - stays identical across every song mixed on this console; only the panel settings in front of it change per session." },
+    { x: 15, y: 20, label: "The monitor screen showing the current session's name", desc: "A visible record of which configuration is currently loaded - the same role a CI log line showing the resolved baseUrl or timeout for this specific run plays for a test suite." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One test, two runs, two external configurations"
+  intervalMs={1800}
+  nodes={[
+    { label: "Test code reads baseUrl as a parameter, never hardcodes it", desc: "The test file itself contains no environment-specific value at all." },
+    { label: "Morning run: -DbaseUrl=https://staging.example.com", desc: "Passed on the command line (or testng.xml) - the test navigates to staging." },
+    { label: "Evening run: -DbaseUrl=https://example.com", desc: "Same test file, same logic, now pointed at production instead." },
+    { label: "No test file changed between the two runs", desc: "Only the external configuration value changed - exactly the point of parameterizing it." },
+  ]}
+/>
+
+Reading a configuration value from outside a function instead of hardcoding it inside is really just:
+check for an external override, fall back to a default if none was given. Here's that shape as a small,
+generic simulation.
+
+<CodePlayground
+  language="python"
+  title="Run it - resolve a run-level parameter from an external override, with a default (Python)"
+  code={`DEFAULTS = {"base_url": "http://localhost:3000", "timeout": 5, "browser": "chromium"}
+
+def resolve(overrides, key):
+    return overrides.get(key, DEFAULTS[key])
+
+def run_test(overrides):
+    base_url = resolve(overrides, "base_url")
+    timeout = resolve(overrides, "timeout")
+    browser = resolve(overrides, "browser")
+    print(f"Running against {base_url} with {browser}, timeout={timeout}s")
+
+print("-- plain run, no overrides --")
+run_test({})
+
+print("-- CI run, overrides passed on the command line --")
+run_test({"base_url": "https://staging.example.com", "browser": "webkit"})`}
+/>
+
+Same override-with-a-default resolution shape in Java.
+
+<CodePlayground
+  language="java"
+  title="Run it - resolve a run-level parameter from an external override, with a default (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static final Map<String, String> DEFAULTS = Map.of(
+        "baseUrl", "http://localhost:3000",
+        "timeout", "5",
+        "browser", "chromium"
+    );
+
+    static String resolve(Map<String, String> overrides, String key) {
+        return overrides.getOrDefault(key, DEFAULTS.get(key));
+    }
+
+    static void runTest(Map<String, String> overrides) {
+        String baseUrl = resolve(overrides, "baseUrl");
+        String timeout = resolve(overrides, "timeout");
+        String browser = resolve(overrides, "browser");
+        System.out.println("Running against " + baseUrl + " with " + browser + ", timeout=" + timeout + "s");
+    }
+
+    public static void main(String[] args) {
+        System.out.println("-- plain run, no overrides --");
+        runTest(Map.of());
+
+        System.out.println("-- CI run, overrides passed on the command line --");
+        runTest(Map.of("baseUrl", "https://staging.example.com", "browser", "webkit"));
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: make one hardcoded value into a run-time parameter">
+<StepChecklist
+  steps={[
+    { text: "Find a test with a hardcoded environment value - a URL, a timeout, a browser name", detail: "Note exactly where it's hardcoded in the test file." },
+    { text: "Move it out: add a <parameter> in testng.xml, or a --option in conftest.py's pytest_addoption", detail: "Give it a sensible default matching the current hardcoded value, so nothing breaks yet." },
+    { text: "Run the suite with no override at all", detail: "Confirm behavior is identical to before - the default is doing the same job the hardcoded value used to." },
+    { text: "Run it again with an explicit override pointed at a different environment", detail: "Confirm the same test now runs against a different target, with zero changes to the test file itself." },
+  ]}
+/>
+You've now proven, concretely, that the value never needed to live inside the test file at all.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A test fails with a missing-parameter or null-value error when run outside CI.",
+      fix: "The parameter has no default - add one that matches a sensible local/dev setting, so the test still runs (against something reasonable) when nobody explicitly passes a value.",
+    },
+    {
+      symptom: "Two different parameters end up with the same name and silently collide.",
+      fix: "Namespace or scope parameter names deliberately (baseUrl vs apiBaseUrl) - a generic name like url reused across unrelated parts of a suite is a common source of one value silently overwriting another.",
+    },
+    {
+      symptom: "A CI job's -D override or --option flag is passed but doesn't seem to take effect.",
+      fix: "Confirm the exact flag name and syntax match what the test method or fixture is actually reading - a mismatched parameter name (baseURL vs baseUrl) resolves quietly to the default instead of erroring.",
+    },
+    {
+      symptom: "Someone hardcodes a new URL directly into a test instead of using the existing parameter.",
+      fix: "Point them at the existing @Parameters/fixture pattern already in use - the value should be added to configuration, not typed into test code, or the whole point of parameterizing it is lost for that one test.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **`testng.xml`'s `<parameters>` block** — the declared name/value pairs available to `@Parameters`-
+  annotated test methods for this suite.
+- **`conftest.py`'s `pytest_addoption`** — every custom `--flag` a pytest suite accepts, and what
+  fixture (if any) actually exposes it to tests.
+- **The CI job's exact invocation command** — `-DbaseUrl=...` or `--base-url=...` flags are easy to typo
+  or silently omit when a pipeline config changes.
+- **The framework's official docs for parameter precedence** — command-line overrides, suite-level, and
+  test-level values can all be in play at once; knowing which one wins avoids surprises.
+</WhereToCheck>
+
+<WorkedExample title="one login test, three environments, zero code changes">
+1. A `LoginTest` originally has `String baseUrl = "https://staging.example.com";` hardcoded at the top
+   of the file.
+2. It's replaced with a TestNG `@Parameters("baseUrl")` argument on the test method, and `testng.xml`
+   gets a matching `<parameter name="baseUrl" value="https://staging.example.com"/>` - behavior is
+   unchanged so far, just relocated.
+3. A QA engineer needs to run the exact same test against a local dev server for debugging - they run
+   `mvn test -DbaseUrl=http://localhost:3000` instead of editing the test file.
+4. A separate CI job needs the same test to run against production as a post-deploy smoke check - it
+   runs with `-DbaseUrl=https://example.com`, no code change, no separate copy of the test.
+5. One test file now correctly serves three different situations (staging default, local debugging,
+   production smoke check) because the environment was never something the test file itself knew about.
+</WorkedExample>
+
+<Quiz
+  question="A pytest suite has a fixture reading request.config.getoption('--timeout') with no default set in pytest_addoption. What happens when someone runs plain pytest with no --timeout flag?"
+  options={[
+    "pytest automatically infers a reasonable timeout based on the test's historical run time",
+    "The run fails or errors when that fixture is used, because no default value exists to fall back on and no override was supplied",
+    "The fixture silently returns the value True instead of a number",
+    "pytest ignores the fixture entirely and skips any test that depends on it"
+  ]}
+  answer={1}
+  explain="The note's tip stresses giving every parameter a working default specifically because an omitted default causes exactly this kind of failure. Option one invents an inference capability pytest doesn't have. Option three fabricates specific fallback behavior with no basis - the actual behavior depends on how getoption is called, but without a default configured, a missing flag is an error case, not a silent True. Option four is incorrect - pytest doesn't skip tests just because a fixture depends on an unset command-line option; it errors when the option has no registered default and getoption is called without one."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What is a run-level parameter, precisely?", back: "A configuration value (URL, timeout, browser, etc.) supplied to a test from OUTSIDE its own code at run time - not hardcoded, and not a row of test data." },
+    { front: "How does TestNG supply a parameter?", back: "A <parameter> element in testng.xml, read via @Parameters(\"name\") on a test method argument - can be overridden with a -D system property." },
+    { front: "How does pytest supply a custom parameter?", back: "A --option registered in conftest.py's pytest_addoption, read through a fixture calling request.config.getoption()." },
+    { front: "Parameters vs data-driven test data - the difference", back: "Parameters configure the RUN itself (same value across every test in that run, like a base URL). Data-driven rows feed many different input/expected pairs into the SAME test logic - a separate topic." },
+    { front: "The mixing-console analogy for parameters", back: "Labeled faders and knobs are external controls that shape the console's output per session, without rewiring the hardware underneath - the same way a parameter shapes a test run without changing its code." },
+  ]}
+/>
+
+<Challenge>
+Take one test in a real or scratch project that has an environment-specific value hardcoded inside it
+(a URL, a timeout, a file path). Move it to a proper run-level parameter with a sensible default, then
+run the suite three times: with no override, with an override pointing somewhere else, and with a
+deliberately wrong/mistyped parameter name. Note what actually happens in each of the three cases.
+</Challenge>
+
+<AskCommunity prompt="I've added a run-level parameter called `[name]` in `[framework]`, but overriding it with `[the exact flag/config I'm using]` doesn't seem to change what the test actually uses. Here's the parameter declaration and the fixture/method reading it: `[paste both]`.">
+Pasting both the declaration and the read side together usually reveals a name mismatch or a
+precedence issue immediately - these bugs are almost always in how the two sides are wired together,
+not in the framework's parameter mechanism itself.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://testng.org/#_parameters", title: "TestNG — official Parameters documentation", kind: "read" },
+    { href: "https://docs.pytest.org/en/stable/example/simple.html", title: "pytest — official custom command-line options example", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=PVvIIxukxrc" title="TestNG Tutorial #14 - How to Pass Parameter from TestNG.xml File — Software Testing Mentor" minutes={10} />
+
+<Takeaways
+  points={[
+    "A parameter is a run-level configuration value (URL, browser, timeout) supplied from OUTSIDE a test's code, not hardcoded inside it.",
+    "TestNG uses <parameter> in testng.xml plus @Parameters (or -D system properties); pytest uses a custom --option registered in conftest.py plus a fixture reading it.",
+    "Parameters configure the RUN, not the test data - rows of input/expected-output pairs for the same test logic are a separate, later topic (data-driven testing).",
+    "Every parameter should have a sensible default so a plain, un-flagged invocation still runs correctly against some reasonable environment.",
+    "The same test file can correctly serve multiple environments (local, staging, production) with zero code changes, because the environment was never something the test file itself knew about.",
+  ]}
+/>
+
+<Complete xp={10} />

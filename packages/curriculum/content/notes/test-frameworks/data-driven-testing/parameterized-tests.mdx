@@ -1,0 +1,300 @@
+---
+title: "Parameterized tests"
+summary: "JUnit 5's @ParameterizedTest (with @ValueSource, @CsvSource, or @MethodSource) and pytest's @pytest.mark.parametrize are the same idea as a TestNG data provider - one test body, many data-driven runs - with each framework naming the resulting instances differently in its report."
+tags: ["test-frameworks", "data-driven-testing", "track-d"]
+updated: "2026-07-17"
+related:
+  - "test-frameworks/data-driven-testing/data-providers"
+  - "test-frameworks/data-driven-testing/external-data-csv-excel"
+  - "test-frameworks/data-driven-testing/reuse"
+---
+
+<Hook>
+The same problem - one test body, many rows of data - shows up in every framework, and every framework
+solved it with its own syntax. Move from TestNG to JUnit 5 or pytest and the idea doesn't change, but
+the annotation does, the source of the data does, and - critically - how a failure gets named in the
+report does too. Knowing the concept without knowing the framework's specific naming leaves you staring
+at a red "test_login[2]" with no idea which of the five rows that actually was.
+</Hook>
+
+<Callout type="analogy">
+A key-cutting machine has one fixed mechanism: a tracer follows the original key's grooves while a
+spinning wheel cuts the same pattern into a blank. The machine doesn't change between keys - only the
+key you feed it does, and the notches it cuts out the other side are different every time because the
+input was different. Swap which brand of machine sits on the counter and the lever positions change,
+but the underlying job - one mechanism, many keys in, many distinctly-cut keys out - is identical.
+</Callout>
+
+<Term define="A parameterized test is a single test method executed once per entry in a declared data source, with each execution treated as its own reportable test instance - the same underlying concept as a TestNG data provider, expressed differently per framework. JUnit 5 marks the method @ParameterizedTest and pairs it with a source annotation: @ValueSource for a flat list of one primitive type, @CsvSource for inline comma-separated rows, or @MethodSource pointing at a factory method that returns a Stream or List of Arguments for anything more complex. pytest instead decorates the function with @pytest.mark.parametrize('names', [rows]), naming the parameter(s) as a string and supplying rows as tuples. Both, like a data provider, run identical logic against different data and report each run separately - but they differ in how that per-run report label is generated: JUnit 5 defaults to an index like '[1] input, expected' (customizable via a name pattern), while pytest builds a readable ID string from the argument values themselves, like test_total[10-0].">Parameterized test</Term>
+
+## The same idea, three syntaxes
+
+```java
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+
+@ParameterizedTest(name = "{index} => total={0}, expectedFee={1}")
+@CsvSource({
+    "10.00, 5.00",
+    "49.99, 5.00",
+    "50.00, 0.00",
+    "80.00, 0.00",
+})
+void shippingFee(double orderTotal, double expectedFee) {
+    assertEquals(expectedFee, ShippingCalculator.feeFor(orderTotal));
+}
+```
+
+```python
+import pytest
+
+@pytest.mark.parametrize("order_total, expected_fee", [
+    (10.00, 5.00),
+    (49.99, 5.00),
+    (50.00, 0.00),
+    (80.00, 0.00),
+])
+def test_shipping_fee(order_total, expected_fee):
+    assert shipping_fee(order_total) == expected_fee
+```
+
+- **JUnit 5's source annotations pick the shape of the data**: `@ValueSource` for a single flat list of
+  one type (`int[]`, `String[]`); `@CsvSource` for small inline multi-column rows written as
+  comma-separated strings, as above; `@MethodSource` pointing at a static factory method returning a
+  `Stream` of `Arguments` when the data is complex, computed, or reused elsewhere.
+- **pytest's `@pytest.mark.parametrize` takes the parameter names as one string and the rows as a
+  list of tuples** - the names must match the test function's parameters, and one row supplies one
+  full set of arguments, same as a data provider's `Object[]` row.
+- **Both run the test body once per row, reported separately** - a five-row parametrization is five
+  distinct pass/fail results, not five checks folded into one.
+- **Naming the failure - the part that actually differs**: JUnit 5's default report label is an index
+  (`[1]`, `[2]`, ...); the `name` attribute above rewrites it into something readable using
+  `{index}` and positional placeholders like `{0}`, `{1}` for each argument. pytest instead
+  auto-generates an id from the argument values themselves - the run above would report as
+  `test_shipping_fee[10.0-5.0]`, `test_shipping_fee[49.99-5.0]`, and so on, no template required.
+- **`ids=` in pytest overrides the auto-generated label**, the same way JUnit 5's `name` attribute
+  does - useful when raw values make an unreadable ID (long objects, booleans without context).
+
+<Callout type="tip">
+Read a failing report line as the specific question it should answer before you open the test file:
+JUnit 5's `shippingFee(){index} => total=49.99, expectedFee=5.00` or pytest's
+`test_shipping_fee[49.99-5.0]` should both tell you exactly which row broke without scrolling to the
+source. If your report instead shows a bare `[3]` or `[49.99-5.0]` next to a name you can't map back
+to real values, that's the signal to add a `name` pattern or an `ids=` list - not to go debugging
+blind.
+</Callout>
+
+<Callout type="mistake">
+Relying on JUnit 5's or pytest's default index-only naming for a large parameter set and only
+discovering in CI that "test 7 failed" means opening the source file and counting rows by hand. It
+technically works, but it turns every failure into a small investigation. Name the data-carrying case
+in the source (an `ids=` list in pytest, a `name` template referencing the actual arguments in JUnit 5)
+before the parameter list grows past a handful of rows, not after the first confusing CI failure.
+</Callout>
+
+{/* IMAGE: a real close-up photograph of a key-cutting machine in operation at a market stall in Nizhny Novgorod, Russia, showing the cutting wheel, the original key clamped in the tracer jaw, and a blank key held in place beside it */}
+<HotspotImage
+  src="/notes/test-frameworks/data-driven-testing/parameterized-tests.jpg"
+  alt="A close-up of a key-cutting machine in operation, showing the spinning cutting wheel, an original key clamped in the tracer jaw, and a blank key held in the cutting position beside it, with a hand adjusting the mechanism"
+  credit="Key cutting (Nizhny Novgorod, 2007) — Wikimedia Commons, CC BY-SA 4.0 (Andrew Shiva / Godot13)"
+  creditHref="https://commons.wikimedia.org/wiki/File:Key_cutting_(Nizhny_Novgorod,_2007).jpg"
+  pins={[
+    { x: 55, y: 40, label: "The cutting wheel — the fixed test logic", desc: "One mechanism, unchanged between keys - the same @ParameterizedTest or parametrize()-decorated function body run against every row." },
+    { x: 25, y: 55, label: "The blank key clamped in place — one row's arguments", desc: "This blank is this run's input, distinct from the last one, the way one @CsvSource line or one parametrize tuple supplies one execution's values." },
+    { x: 78, y: 25, label: "The tracer following the original — the data source annotation", desc: "It dictates exactly what pattern gets cut, the way @CsvSource, @ValueSource, @MethodSource, or a parametrize list dictates exactly what values reach the test body." },
+    { x: 15, y: 20, label: "The operator's hand steadying the mechanism", desc: "A human choosing which key gets made next - the same judgment call as choosing readable report names so a cut (a failure) is identifiable without re-tracing everything by hand." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One parameterized test expanding into four named runs"
+  intervalMs={1800}
+  nodes={[
+    { label: "The runner reads the source annotation", desc: "@CsvSource's four lines, or parametrize's four tuples - the data is enumerated before any test runs." },
+    { label: "Run 1: order_total=10.00, expected_fee=5.00", desc: "The identical test body executes with these arguments and reports a labeled result." },
+    { label: "Run 2: order_total=49.99, expected_fee=5.00", desc: "Same body, next row - the boundary just below the free-shipping threshold." },
+    { label: "Run 3: order_total=50.00, expected_fee=0.00", desc: "The threshold itself - a distinct, separately reported execution." },
+    { label: "The report lists four labeled results, not one", desc: "A failing run's label - index-based or value-based depending on the framework - points straight at its row." },
+  ]}
+/>
+
+Underneath every framework's syntax, a parameterized test is a loop: take a list of argument tuples,
+call the same function once per tuple, and label each result readably. Here's that shape as a small,
+generic simulation.
+
+<CodePlayground
+  language="python"
+  title="Run it - one function driven by a labeled list of argument rows (Python)"
+  code={`def shipping_fee(order_total):
+    return 0.00 if order_total >= 50.00 else 5.00
+
+rows = [
+    (10.00, 5.00),
+    (49.99, 5.00),
+    (50.00, 0.00),
+    (80.00, 0.00),
+]
+
+def run_case(order_total, expected_fee):
+    actual = shipping_fee(order_total)
+    return "PASS" if actual == expected_fee else f"FAIL (got {actual})"
+
+for order_total, expected_fee in rows:
+    label = f"test_shipping_fee[{order_total}-{expected_fee}]"  # pytest-style generated id
+    print(f"{label}: {run_case(order_total, expected_fee)}")`}
+/>
+
+Same labeled-loop shape in Java - the pattern every `@ParameterizedTest` source annotation ultimately
+compiles down to.
+
+<CodePlayground
+  language="java"
+  title="Run it - one method driven by a labeled list of argument rows (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    record Row(double orderTotal, double expectedFee) {}
+
+    static double shippingFee(double orderTotal) {
+        return orderTotal >= 50.00 ? 0.00 : 5.00;
+    }
+
+    static String runCase(Row row) {
+        double actual = shippingFee(row.orderTotal());
+        return actual == row.expectedFee() ? "PASS" : "FAIL (got " + actual + ")";
+    }
+
+    public static void main(String[] args) {
+        List<Row> rows = List.of(
+            new Row(10.00, 5.00),
+            new Row(49.99, 5.00),
+            new Row(50.00, 0.00),
+            new Row(80.00, 0.00)
+        );
+
+        int index = 1;
+        for (Row row : rows) {
+            // JUnit 5-style generated label: {index} => total, expectedFee
+            String label = "[" + index + "] => total=" + row.orderTotal() + ", expectedFee=" + row.expectedFee();
+            System.out.println(label + ": " + runCase(row));
+            index++;
+        }
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: write the same parameterized test twice, in two frameworks">
+<StepChecklist
+  steps={[
+    { text: "Write a JUnit 5 @ParameterizedTest with @CsvSource covering four rows of a small calculation (a shipping fee, a discount, a boundary check)", detail: "Use the default index naming first - run it and read the report labels before customizing anything." },
+    { text: "Add a name pattern using {index} and positional placeholders, re-run, and compare the report", detail: "Notice exactly what changed in the failure line, not just that it looks different." },
+    { text: "Write the same four rows as a pytest @pytest.mark.parametrize test", detail: "Run it and read pytest's auto-generated ids - compare them to JUnit 5's default index labels." },
+    { text: "Break one row's expected value in both versions and re-run both", detail: "Confirm each framework's report names the SAME broken row clearly, just using a different naming convention." },
+  ]}
+/>
+You've now seen the identical concept wearing two different syntaxes, and felt exactly where the
+frameworks diverge: not in what they do, but in how they tell you which row broke.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A JUnit 5 @CsvSource row throws a NumberFormatException before the test body runs.",
+      fix: "A column's text can't convert to the target parameter type - check for stray whitespace, wrong decimal format, or a column count that doesn't match the method's parameter count.",
+    },
+    {
+      symptom: "pytest reports 'fixture ... not found' on a parametrized test.",
+      fix: "The string passed to @pytest.mark.parametrize's first argument must exactly match the test function's parameter names, comma-separated - a typo there looks like a missing fixture, not a naming mismatch.",
+    },
+    {
+      symptom: "Every parameterized run reports with the same generic label and a failure gives no clue which row broke.",
+      fix: "Add a name template (JUnit 5's name attribute using {index}/{0}/{1}...) or an ids= list (pytest) that reflects the actual argument values, not just a positional index.",
+    },
+    {
+      symptom: "@MethodSource (JUnit 5) can't find the factory method, or complains about its signature.",
+      fix: "The factory method must be static (unless the test class itself is configured non-statically), return a Stream/List of Arguments (or a matching type), and its name must exactly match the string passed to @MethodSource.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The source annotation's declared shape versus the test method's parameter list** — column count,
+  order, and type must line up; this is where most wiring failures happen.
+- **The generated report label for a failing run** — confirm it actually identifies the row (real
+  values, not just an index) before trusting a "some test failed" CI notification.
+- **`@MethodSource`'s target method signature** — static, correctly named, and returning a stream or
+  collection of `Arguments` are the three most common trip points.
+- **pytest's `-k` / `--collect-only` output** — lists every generated test id before running anything,
+  the fastest way to confirm parametrize IDs look the way you expect.
+</WhereToCheck>
+
+<WorkedExample title="a nine-row parameterized test whose reports meant nothing until it got named">
+1. A JUnit 5 `@ParameterizedTest` with `@CsvSource` covers nine pricing tiers, left with the default
+   report naming: `calculatesTier(){[1]}` through `{[9]}`.
+2. CI goes red on `{[7]}`. Nobody on the team can say which pricing tier that is without opening the
+   source file and counting rows from the top - a two-minute detour on every single failure.
+3. The team adds `name = "{index} => price={0}, expectedTier={1}"` to the annotation. The exact same
+   nine rows now report as `{[7] => price=249.99, expectedTier=PREMIUM}` when they fail.
+4. Separately, the equivalent pytest suite for the same pricing logic was already parametrized with
+   `ids=[f"tier-{p}" for p in prices]`, so its failures had been readable as `test_tier[tier-249.99]`
+   from day one - the team copies that habit back into the Java suite going forward.
+5. The next regression's CI notification names the exact tier and price on the first line, and the fix
+   is confirmed in one re-run instead of a source-file scavenger hunt.
+</WorkedExample>
+
+<Quiz
+  question="A pytest test is written as `@pytest.mark.parametrize('total, fee', [(10, 5), (50, 0)])` but the function signature is `def test_fee(order_total, fee):`. What happens?"
+  options={[
+    "pytest silently renames order_total to total and runs normally",
+    "pytest raises an error because the parametrize string's names ('total, fee') don't match the function's actual parameter names ('order_total, fee') - the mapping is by exact name, not position",
+    "It runs fine because parametrize maps arguments by position, not by name",
+    "pytest treats 'total' as a new fixture and injects None for it"
+  ]}
+  answer={1}
+  explain="The note states plainly that pytest's parametrize names must exactly match the test function's parameter names - the mapping is name-based, and a typo or rename on either side produces an error (often surfacing confusingly as a 'fixture not found' message, per the WhenItBreaks entry). Option one invents silent auto-correction that doesn't happen. Option three is simply wrong about how parametrize resolves names. Option four misunderstands the error - pytest doesn't inject None for unmatched names, it fails to collect the test."
+/>
+
+<Flashcards
+  cards={[
+    { front: "JUnit 5's three common source annotations", back: "@ValueSource (one flat list, one primitive type), @CsvSource (inline comma-separated rows), @MethodSource (a factory method returning Arguments for complex/reused data)." },
+    { front: "pytest's parameterization syntax", back: "@pytest.mark.parametrize(\"name1, name2\", [(v1, v2), ...]) - names must exactly match the test function's parameters; rows are tuples." },
+    { front: "How does JUnit 5 name a failing parameterized run by default?", back: "A numeric index like [1], [2] - customizable via the name attribute with {index} and positional placeholders {0}, {1}..." },
+    { front: "How does pytest name a failing parametrized run by default?", back: "An auto-generated id built from the argument values themselves, e.g. test_fee[49.99-5.0] - overridable with ids=." },
+    { front: "The key-cutting analogy for parameterized tests", back: "The cutting wheel = the fixed test body; the blank key = one row's arguments; the tracer/source annotation = what dictates exactly what gets fed in and cut out." },
+  ]}
+/>
+
+<Challenge>
+Take the shipping-fee example (or a calculation from your own codebase) and implement it as a
+parameterized test in BOTH JUnit 5 (@CsvSource or @MethodSource) and pytest
+(@pytest.mark.parametrize). Break the same row in both. Take a screenshot or paste both frameworks'
+failure report lines side by side, and write one sentence on which naming convention told you more,
+faster.
+</Challenge>
+
+<AskCommunity prompt="My parameterized test's failure report shows `[paste the exact report line]` and I can't tell which data row that corresponds to. Here's my source annotation / parametrize decorator: `[paste it]`.">
+Pasting the raw report line next to the exact source/parametrize declaration usually resolves this in
+one reply - the mismatch between what a value-based ID needs and what the annotation currently
+provides is almost always visible at a glance.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://docs.junit.org/current/user-guide/#writing-tests-parameterized-tests", title: "JUnit 5 — official User Guide: Parameterized Tests", kind: "read" },
+    { href: "https://docs.pytest.org/en/stable/how-to/parametrize.html", title: "pytest — official docs: How to parametrize fixtures and test functions", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=_b9LYhzzdHg" title="Parameterized Tests in JUnit 5: CsvSource, MethodSource, ArgumentsSource — Alexander Sergeenko" minutes={10} />
+
+<Takeaways
+  points={[
+    "JUnit 5's @ParameterizedTest (with @ValueSource, @CsvSource, or @MethodSource) and pytest's @pytest.mark.parametrize are the same underlying idea as a TestNG data provider - one test body, many independently reported runs.",
+    "@ValueSource is for a flat single-type list, @CsvSource for small inline rows, @MethodSource for complex or reused data from a static factory method.",
+    "pytest maps parametrize's argument names to the test function's parameters by exact name match, not position - a mismatch fails collection, sometimes as a confusing 'fixture not found' error.",
+    "The frameworks diverge most visibly in report naming: JUnit 5 defaults to an index (customizable via a name template), pytest auto-generates a value-based id (overridable via ids=).",
+    "Name your parameterized runs deliberately once the row count grows past a handful - a bare index or an unreadable value-based id turns every CI failure into a source-file scavenger hunt.",
+  ]}
+/>
+
+<Complete xp={10} />

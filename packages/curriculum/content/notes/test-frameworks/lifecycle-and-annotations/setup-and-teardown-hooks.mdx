@@ -1,0 +1,337 @@
+---
+title: "Setup / teardown hooks"
+summary: "Setup runs before a test (open a browser, seed data, log in) and teardown runs after (close it, clean up) - at either the per-test or per-suite granularity, and teardown fires even when the test itself throws."
+tags: ["test-frameworks", "lifecycle-and-annotations", "track-d"]
+updated: "2026-07-17"
+related:
+  - "test-frameworks/lifecycle-and-annotations/test-annotation"
+  - "test-frameworks/lifecycle-and-annotations/testng-vs-junit"
+  - "test-frameworks/lifecycle-and-annotations/pytest-fixtures"
+---
+
+<Hook>
+A test opens a browser, logs a user in, and asserts something about the page it lands on - then
+throws, because the assertion failed. If nothing else runs after that throw, the browser stays open,
+the logged-in session stays alive, and the next test inherits a mess it didn't create. Setup and
+teardown exist so that never happens: code that runs before a test no matter what, and code that runs
+after it no matter what - including, especially, when the test itself just blew up.
+</Hook>
+
+<Callout type="analogy">
+A theater curtain closes at the end of every single performance. A triumphant, sold-out show and a
+disastrous one where an actor forgot every line both end exactly the same way: the same curtain comes
+down. Nobody backstage decides "that performance went badly, let's just leave the curtain open" -
+closing happens unconditionally, every time, regardless of how the performance actually went. That's
+teardown's defining property: it isn't contingent on success. It's a guaranteed bookend around every
+single run, pass or fail.
+</Callout>
+
+<Term define="Setup and teardown are the code a test framework runs immediately before and immediately after a test, regardless of the outcome. Setup establishes the starting conditions a test needs (a launched browser, a seeded database row, an authenticated session) so the test itself can focus purely on the behavior being verified. Teardown reverses or cleans up whatever setup created (closing the browser, deleting the seeded row, invalidating the session) so the next test starts from a clean slate rather than inheriting leftovers. Both exist at two common granularities: per-test (runs before/after EVERY individual test method - JUnit's @BeforeEach/@AfterEach, TestNG's @BeforeMethod/@AfterMethod, Python's setUp/tearDown) and per-suite or per-class (runs ONCE before the first test and once after the last - @BeforeAll/@AfterAll, @BeforeClass/@AfterClass, setUpClass/tearDownClass). Critically, teardown is implemented so it runs even when the test throws an exception or fails an assertion - the same guarantee try/finally gives ordinary code, which is exactly the mechanism most frameworks build it on internally.">Setup / teardown</Term>
+
+## Two granularities, and the guarantee underneath both
+
+- **Per-test (method-level)** — setup runs immediately before *each* test method, teardown
+  immediately after *that same* method finishes. This is the default choice whenever a test needs a
+  guaranteed-fresh starting state: a new browser tab, a rolled-back database transaction, a freshly
+  logged-in session. It costs more (the expensive part re-runs every time) but buys full isolation -
+  no test can see anything a sibling test's setup created.
+- **Per-suite / per-class (all-level)** — setup runs exactly ONCE before the first test in the class
+  or suite, teardown exactly once after the last. This is the choice for anything genuinely expensive
+  and safely shareable: launching a browser process, spinning up a test database container, starting
+  an application server. The tradeoff is real: if one test in the suite mutates that shared resource,
+  every test after it can see the mutation - which is why per-suite setup is usually paired with
+  read-only or self-cleaning tests.
+- **Why teardown survives a failing test** — under the hood, most frameworks wrap each test roughly
+  like `try { setup(); test(); } finally { teardown(); }`. A `finally` block runs whether the `try`
+  completed normally or threw - so a failed assertion, an unexpected exception, even a timeout, all
+  still trigger teardown. That's not a nicety; it's the entire reason teardown is trustworthy enough
+  to hold cleanup logic (`driver.quit()`, closing a database connection) that would otherwise leak a
+  resource on every red test.
+
+```java
+import org.junit.jupiter.api.*;
+
+class LoginPageTest {
+
+    static WebDriver sharedDriver;          // created ONCE for the whole class
+
+    @BeforeAll
+    static void launchBrowser() {
+        sharedDriver = new ChromeDriver();  // expensive - pay this cost once
+    }
+
+    @BeforeEach
+    void goToLoginPage() {
+        sharedDriver.get("https://example.com/login");   // fresh state before EACH test
+    }
+
+    @Test
+    void rejectsWrongPassword() {
+        // ... fill the form, assert an error message appears ...
+    }
+
+    @AfterEach
+    void clearCookies() {
+        sharedDriver.manage().deleteAllCookies();         // cleanup after EACH test
+    }
+
+    @AfterAll
+    static void closeBrowser() {
+        sharedDriver.quit();                // runs even if a test above threw
+    }
+}
+```
+
+<Callout type="tip">
+Match the granularity to the cost and the risk. Launching a browser is expensive and safe to share
+across tests in one class - that's a `@BeforeAll` candidate. Logging in as a specific user, or
+navigating to a specific starting page, is cheap and unsafe to share (one test's login shouldn't leak
+into the next) - that belongs in `@BeforeEach`. Defaulting everything to per-test "just to be safe" is
+fine until the suite gets slow; defaulting everything to per-suite "for speed" is fine until two tests
+start silently interfering with each other.
+</Callout>
+
+<Callout type="mistake">
+Putting cleanup code as the LAST line of the test itself instead of in a teardown hook - for example,
+`driver.quit()` written as the final statement of the test method, after the assertions. A failing
+assertion throws immediately and skips every line after it, including that "cleanup" line, which means
+the resource leaks on exactly the runs where cleanup mattered most: the failing ones. Cleanup that only
+runs on success isn't cleanup - move it into an `@AfterEach`/`@AfterAll` hook (or a `finally` block),
+which the framework guarantees runs regardless of outcome.
+</Callout>
+
+{/* IMAGE: a real photograph of the Radio City Music Hall stage, taken from the audience, showing a large closed golden pleated stage curtain filling most of the frame beneath a wide art-deco arch, with rows of audience seats visible in the foreground */}
+<HotspotImage
+  src="/notes/test-frameworks/lifecycle-and-annotations/setup-and-teardown-hooks.jpg"
+  alt="The Radio City Music Hall stage seen from the audience, showing a large closed golden pleated stage curtain beneath a wide art-deco arch, with rows of audience seats in the foreground"
+  credit="Radio City Music Hall Stage Curtain — Wikimedia Commons, CC BY 2.0 (Eric Fischer)"
+  creditHref="https://commons.wikimedia.org/wiki/File:Radio_City_Music_Hall_Stage_Curtain_1.jpg"
+  pins={[
+    { x: 50, y: 48, label: "The closed curtain itself — teardown, guaranteed", desc: "Down before the performance begins and down again the instant it ends - whether the show inside was flawless or fell apart, the same curtain closes every time. That's teardown: unconditional, never contingent on how the run went." },
+    { x: 50, y: 74, label: "The narrow gap at the curtain's hem", desc: "A hint that something happens behind this curtain on every single run - the actual performance is the one part this fixed structure ISN'T. The curtain's job is only to open and close cleanly around whatever runs in between." },
+    { x: 50, y: 18, label: "The proscenium arch — permanent, doesn't move night to night", desc: "The fixed structure wrapping every single performance, unlike the curtain that cycles open and shut - the equivalent of the test runner itself: the same lifecycle machinery wraps every test, regardless of which specific test runs behind it." },
+    { x: 50, y: 90, label: "Row after row of seats, reset for every show", desc: "Each performance starts with the room in a known, clean state - the observable result of a setup phase that runs before every single show, not just the first one of the season." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One test's life inside its hooks"
+  intervalMs={1800}
+  nodes={[
+    { label: "@BeforeAll runs once: the shared browser launches", desc: "Expensive, safe-to-share setup - paid exactly once for the whole class." },
+    { label: "@BeforeEach runs: navigate to a known starting page", desc: "Cheap, per-test setup - fresh starting state before THIS specific test." },
+    { label: "The test body runs — and throws a failed assertion", desc: "Something genuinely broke. Execution stops here immediately." },
+    { label: "@AfterEach still runs: cookies cleared anyway", desc: "The finally-block guarantee - teardown fires whether the test above passed or threw." },
+    { label: "@AfterAll runs once, after the last test: the browser quits", desc: "No leaked browser process, even though one test in the class failed along the way." },
+  ]}
+/>
+
+Strip away the annotations and a lifecycle system is really just a wrapper: run setup, run the test
+body inside a guarded block, run teardown no matter what that block did. Here's that shape as a small,
+generic simulation - including the version that skips the guarantee, to show exactly what breaks.
+
+<CodePlayground
+  language="python"
+  title="Run it - setup/teardown as a guaranteed wrapper around a test body (Python)"
+  code={`def run_test(name, test_fn, safe=True):
+    print(f"  [setup] preparing for '{name}'")
+    resource = {"open": True}
+    try:
+        if safe:
+            try:
+                test_fn(resource)
+                print(f"  {name}: PASS")
+            except AssertionError as e:
+                print(f"  {name}: FAIL ({e})")
+            finally:
+                resource["open"] = False
+                print(f"  [teardown] cleaned up after '{name}' (resource open={resource['open']})")
+        else:
+            test_fn(resource)          # no try/finally at all - unsafe
+            print(f"  {name}: PASS")
+            resource["open"] = False
+            print(f"  [teardown] cleaned up after '{name}' (resource open={resource['open']})")
+    except AssertionError as e:
+        print(f"  {name}: FAIL ({e}) - teardown line was never reached, resource open={resource['open']}")
+
+def passing_test(resource):
+    assert resource["open"]
+
+def failing_test(resource):
+    assert False, "the thing we expected didn't happen"
+
+print("--- with the try/finally guarantee ---")
+run_test("passing test", passing_test, safe=True)
+run_test("failing test", failing_test, safe=True)
+
+print("--- without it (cleanup written as the last line) ---")
+run_test("passing test", passing_test, safe=False)
+run_test("failing test", failing_test, safe=False)`}
+/>
+
+Same guaranteed-wrapper shape in Java.
+
+<CodePlayground
+  language="java"
+  title="Run it - setup/teardown as a guaranteed wrapper around a test body (Java)"
+  code={`import java.util.*;
+import java.util.function.Consumer;
+
+public class Main {
+    static void runTest(String name, Consumer<Map<String, Boolean>> testFn, boolean safe) {
+        System.out.println("  [setup] preparing for '" + name + "'");
+        Map<String, Boolean> resource = new HashMap<>();
+        resource.put("open", true);
+
+        if (safe) {
+            try {
+                testFn.accept(resource);
+                System.out.println("  " + name + ": PASS");
+            } catch (AssertionError e) {
+                System.out.println("  " + name + ": FAIL (" + e.getMessage() + ")");
+            } finally {
+                resource.put("open", false);
+                System.out.println("  [teardown] cleaned up after '" + name + "' (resource open=" + resource.get("open") + ")");
+            }
+        } else {
+            try {
+                testFn.accept(resource);       // no finally at all - unsafe
+                System.out.println("  " + name + ": PASS");
+                resource.put("open", false);
+                System.out.println("  [teardown] cleaned up after '" + name + "' (resource open=" + resource.get("open") + ")");
+            } catch (AssertionError e) {
+                System.out.println("  " + name + ": FAIL (" + e.getMessage() + ") - teardown line was never reached, resource open=" + resource.get("open"));
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        Consumer<Map<String, Boolean>> passingTest = r -> { if (!r.get("open")) throw new AssertionError("resource not open"); };
+        Consumer<Map<String, Boolean>> failingTest = r -> { throw new AssertionError("the thing we expected didn't happen"); };
+
+        System.out.println("--- with the try/finally guarantee ---");
+        runTest("passing test", passingTest, true);
+        runTest("failing test", failingTest, true);
+
+        System.out.println("--- without it (cleanup written as the last line) ---");
+        runTest("passing test", passingTest, false);
+        runTest("failing test", failingTest, false);
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: break the guarantee, then watch a real framework refuse to let you">
+<StepChecklist
+  steps={[
+    { text: "Pick any test framework you have installed (JUnit, TestNG, pytest, unittest)", detail: "Write one test class with two tests, one that passes and one that deliberately fails an assertion." },
+    { text: "Add a per-test setup/teardown pair that prints a line on entry and exit", detail: "Run the suite and confirm teardown's print line appears for BOTH tests - including the failing one." },
+    { text: "Now delete the teardown hook and move its cleanup line to the very end of each test method instead", detail: "Run again - watch the cleanup line print for the passing test but NOT for the failing one." },
+    { text: "Restore the teardown hook and explain in one sentence why the framework's guarantee matters more as the failing test count grows." },
+  ]}
+/>
+You've now watched the try/finally guarantee do real work, not just read a description of it.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "Browsers, database connections, or file handles pile up after a run with several failing tests.",
+      fix: "Cleanup is very likely written as the last line of the test method rather than in a teardown hook - a failing assertion skips everything after it. Move the cleanup into @AfterEach/@AfterAll (or the framework's equivalent) so it runs regardless of outcome.",
+    },
+    {
+      symptom: "A test passes when run alone but fails when run after a specific other test.",
+      fix: "Setup or teardown is scoped too broadly - likely per-suite state (a @BeforeAll resource) that one test is mutating and leaving dirty for the next. Either make the shared resource read-only, or move the piece that needs to be fresh down to per-test setup.",
+    },
+    {
+      symptom: "The suite got noticeably slower after 'just to be safe,' every test was moved to per-test setup.",
+      fix: "Identify what's actually expensive (usually process/browser/server startup) versus what's actually risky to share (usually mutable state). Move the expensive-and-safe part back to per-suite; keep only the risky-to-share part at per-test.",
+    },
+    {
+      symptom: "A @BeforeAll (or setUpClass) method throws, and every test in the class is reported as failed with a confusing error.",
+      fix: "That's expected, not a bug in the suite - if the one-time setup a whole class depends on never completes, no test in that class has a valid starting state to run from. Fix the setup failure itself; the individual test failures are just downstream noise from it.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The hook's scope keyword itself** — `@BeforeEach`/`@BeforeAll` (JUnit), `@BeforeMethod`/`@BeforeClass`
+  (TestNG), `setUp`/`setUpClass` (Python) - the name tells you exactly which granularity you're
+  looking at before reading a single line of the body.
+- **Whether cleanup code sits inside a hook or inside the test body** — cleanup written as ordinary
+  lines in the test method itself is the single most common way this guarantee gets accidentally
+  thrown away.
+- **A deliberately-failing test run** — the fastest way to confirm teardown actually fires on failure
+  is to make a test fail on purpose and watch whether the cleanup log line still appears.
+- **The framework's own lifecycle documentation** — exact execution order (especially when a class has
+  both per-test and per-suite hooks, or a superclass adds its own) varies enough between frameworks
+  that it's worth confirming rather than assuming.
+</WhereToCheck>
+
+<WorkedExample title="the CI runner that ran out of browser processes by lunchtime">
+1. A suite of 200 Selenium tests starts failing intermittently in CI with "unable to create new
+   session" - a classic sign of too many open browser processes.
+2. Investigation finds each test method calls `new ChromeDriver()` at its own top and `driver.quit()`
+   as its own last line - no hooks at all, cleanup living inside the test body itself.
+3. Roughly 1 in 20 tests fails an assertion partway through, which means its `driver.quit()` line
+   never executes - that browser process is orphaned and stays running.
+4. Twenty leaked browsers into a run, the CI machine's process/memory limits are hit, and every
+   subsequent test - including ones that would otherwise pass - starts failing too.
+5. The fix: `new ChromeDriver()` moves into `@BeforeEach`, `driver.quit()` moves into `@AfterEach`.
+   The next run has exactly as many browser processes open as tests currently executing, regardless
+   of how many of them fail.
+</WorkedExample>
+
+<Quiz
+  question="A team writes a test class where driver.quit() is the final line of every test method, after all assertions. Tests that pass clean up correctly; tests that fail leave a browser process running. What's the correct fix, and why does it work?"
+  options={[
+    "Add a second driver.quit() call earlier in the method, before the assertions, as a backup",
+    "Move driver.quit() into an @AfterEach (or equivalent) hook - the framework runs that hook whether the test threw or not, the same guarantee a try/finally block gives ordinary code",
+    "Wrap only the failing tests' assertions in a try/catch that swallows the exception so execution continues to the quit() line",
+    "Switch to a slower browser driver that doesn't leak processes as easily"
+  ]}
+  answer={1}
+  explain="Teardown hooks exist specifically because they run regardless of the test's outcome - moving driver.quit() there gives it the same guarantee a try/finally block gives ordinary code, which a line placed after an assertion inside the test body never has. Option one just adds a second line that's equally skipped by a thrown assertion - calling quit() before the assertions defeats the purpose of testing state after setup. Option three actively hides real failures by swallowing the exception, trading a leaked-resource bug for a silently-passing-when-it-shouldn't bug. Option four addresses nothing about the actual defect - the browser choice is irrelevant to whether cleanup code is reachable after a thrown exception."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What's the difference between per-test and per-suite setup/teardown?", back: "Per-test (@BeforeEach/@AfterEach) runs before/after EVERY test method - full isolation, higher cost. Per-suite (@BeforeAll/@AfterAll) runs ONCE for the whole class/suite - cheaper, but state can leak between tests if they mutate it." },
+    { front: "Why does teardown still run when a test fails?", back: "Frameworks implement it as roughly try { setup(); test(); } finally { teardown(); } - a finally block runs whether the try completed normally or threw, which is exactly the guarantee teardown needs to be trustworthy for cleanup." },
+    { front: "The classic mistake this note warns against", back: "Writing cleanup as the LAST LINE of the test method instead of in a teardown hook - a failing assertion throws immediately and skips every line after it, so that 'cleanup' never runs on exactly the failing runs where it mattered most." },
+    { front: "How to decide per-test vs per-suite for a given piece of setup", back: "Ask two questions: is it expensive, and is it safe to share across tests? Expensive + safe to share (launching a browser process) → per-suite. Cheap + risky to share (logging in as a specific user) → per-test." },
+    { front: "The theater-curtain analogy for teardown", back: "A curtain closes at the end of every performance - a great show and a disastrous one both end with the same curtain coming down. Teardown is unconditional the same way: it isn't contingent on whether the test passed." },
+  ]}
+/>
+
+<Challenge>
+Take a test suite you have access to (yours, a tutorial project, or an open-source repo) and find one
+place where cleanup logic lives inside a test body rather than a teardown hook. Move it into the
+correct hook, then prove the fix: make a nearby test fail on purpose and confirm the cleanup still
+runs (via a print/log line) exactly as reliably as it does for a passing test.
+</Challenge>
+
+<AskCommunity prompt="My test suite in [framework] leaks [browser processes / database connections / files] specifically on failing runs. My current setup/teardown looks like: [paste your hook or lack thereof].">
+Pasting the actual hook code (or showing that cleanup lives inside the test body instead) is usually
+enough for someone to spot immediately whether the guarantee is actually wired up.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://junit.org/junit5/docs/current/user-guide/#writing-tests-annotations", title: "JUnit 5 — official user guide: annotations and lifecycle", kind: "read" },
+    { href: "https://docs.python.org/3/library/unittest.html#unittest.TestCase.setUp", title: "Python — official unittest docs: setUp/tearDown", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=AKuoKufvYrs" title="5. JUnit5 Basics - Before and After Annotations | @BeforeAll | @AfterAll | @BeforeEach | @AfterEach — Krishna Sakinala (Automation Testing)" minutes={16} />
+
+<Takeaways
+  points={[
+    "Setup runs before a test to establish its starting state; teardown runs after to clean it up - both exist so a test's outcome never depends on leftovers from a previous test.",
+    "Per-test hooks (@BeforeEach/@AfterEach) run around every individual test for full isolation; per-suite hooks (@BeforeAll/@AfterAll) run once for cost savings, at the price of possible shared-state leaks.",
+    "Teardown runs even when a test fails or throws - frameworks build this on a try/finally-style guarantee, which is exactly why cleanup logic belongs there and not as the test's own last line.",
+    "Cleanup written inside the test body itself only runs on success - the single most common way teams accidentally lose the teardown guarantee.",
+    "Choosing the right granularity is a tradeoff between cost (how expensive is the setup) and risk (how unsafe is it to share across tests) - not a default to apply uniformly everywhere.",
+  ]}
+/>
+
+<Complete xp={10} />

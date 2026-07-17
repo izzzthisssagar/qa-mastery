@@ -1,0 +1,280 @@
+---
+title: "Grouping tests"
+summary: "Tagging tests into named categories like smoke or regression lets a runner select or exclude a subset at invocation time - run only smoke before a deploy, the full regression suite overnight - without touching a single line of test code."
+tags: ["test-frameworks", "groups-and-parameters", "track-d"]
+updated: "2026-07-17"
+related:
+  - "test-frameworks/groups-and-parameters/parameters"
+  - "test-frameworks/groups-and-parameters/ordering"
+  - "test-frameworks/groups-and-parameters/suites"
+---
+
+<Hook>
+A 900-test suite takes 40 minutes. A deploy needs a go/no-go answer in five. The tests didn't get
+faster - a handful of them got tagged "smoke," and the runner was told to run only those. Same test
+code, same suite, a completely different subset selected from outside it.
+</Hook>
+
+<Callout type="analogy">
+A wall of pigeonhole mailboxes doesn't sort itself, and it doesn't need to. Each slot carries its own
+label - a name, a department, a room number - fixed in place once. Mail gets dropped into whichever
+labeled slot matches it. Someone collecting just "Room 207's" mail doesn't touch any other slot, doesn't
+reorganize the wall, doesn't even need to know how many other slots exist - they read the labels and
+take what matches. A test's group tag works the same way: fixed on the test once, read by whoever's
+collecting a specific subset, ignored by everyone collecting something else.
+</Callout>
+
+<Term define="Grouping tests means attaching one or more named-category tags directly to a test, independent of the test's actual code or behavior, so that a test runner invocation or CI job can later select ('run only these tags') or exclude ('run everything except these tags') a subset of the suite without editing any test. TestNG calls this groups (@Test(groups = {'smoke','regression'})), JUnit 5 calls it tags (@Tag('smoke')), and pytest calls it markers (@pytest.mark.smoke). In every case the tag is metadata sitting beside the test, not a change to what the test does - the same test can carry multiple tags, and which subset actually runs is a decision made at run time by the runner's configuration or command line, not by the test author editing test files before each run.">Grouping tests</Term>
+
+## One tag, many possible runs
+
+- **The tag lives on the test, the decision lives at invocation time.** Nothing about a test tagged
+  `smoke` changes based on how it's run - the same test file works whether the full suite runs
+  overnight or only its `smoke`-tagged siblings run before a deploy.
+- **A test commonly carries more than one tag.** A single login test might be tagged both `smoke` and
+  `regression` - it belongs to the fast pre-deploy check AND the full nightly run, without being copied
+  or duplicated.
+- **Selection happens two ways: include or exclude.** A CI job can say "run only `smoke`" (a fast,
+  narrow subset) or "run everything except `slow`" (almost everything, minus a known-expensive handful)
+  - both are valid, and which one fits depends on what the run is actually for.
+- **TestNG** groups are declared on the annotation and selected in `testng.xml` or on the command line;
+  **JUnit 5** tags use `@Tag` and are selected with `-Dgroups`/tag expressions passed to the runner;
+  **pytest** markers use `@pytest.mark.<name>` and are selected with `pytest -m "<expression>"`.
+
+```java
+import org.testng.annotations.Test;
+
+public class LoginTests {
+
+    @Test(groups = { "smoke", "regression" })
+    public void loginWithValidCredentialsSucceeds() {
+        // fast, critical-path check - runs in BOTH the smoke run and the full regression run
+    }
+
+    @Test(groups = { "regression" })
+    public void loginWithExpiredPasswordShowsResetPrompt() {
+        // an edge case worth covering, but not urgent enough to gate every deploy
+    }
+}
+```
+
+Running `testng.xml` with `<groups><run><include name="smoke"/></run></groups>` executes only the
+first method above - the second stays in the suite, untouched, simply not selected this time.
+
+<Callout type="tip">
+Keep tag names small and shared across the whole team - a handful of well-known tags (`smoke`,
+`regression`, `slow`, `flaky-known`) that everyone actually uses beats a sprawling set of one-off tags
+nobody remembers the meaning of six months later.
+</Callout>
+
+<Callout type="mistake">
+Treating a group tag as if it changes test behavior - for example, assuming a `smoke`-tagged test
+somehow runs "faster" or "safer" because of the tag. The tag is pure selection metadata; if a test is
+genuinely slow or flaky, tagging it `smoke` doesn't fix that, it just means it'll now run in the fast
+pre-deploy check too, possibly slowing that check down or making it flaky.
+</Callout>
+
+{/* IMAGE: a real photograph of a wall-mounted wooden pigeonhole mail sorting cabinet with dozens of individually labeled small slots, several loose papers and envelopes visible sticking out of some slots, and three larger labeled drawer compartments to the left, in an office or university building */}
+<HotspotImage
+  src="/notes/test-frameworks/groups-and-parameters/grouping-tests.jpg"
+  alt="A wall-mounted wooden pigeonhole mail sorting cabinet with dozens of individually labeled small slots and three larger labeled drawer compartments to the left, with loose papers visible in several slots"
+  credit="Pigeon-hole messagebox 2 — Wikimedia Commons, CC0 (Stacalusa)"
+  creditHref="https://commons.wikimedia.org/wiki/File:Pigeon-hole_messagebox_2.jpg"
+  pins={[
+    { x: 18, y: 30, label: "A larger labeled compartment on the left", desc: "One fixed, named destination - like a group name a test is tagged with. It's labeled once, and stays labeled whether or not anyone is currently collecting mail from it." },
+    { x: 58, y: 32, label: "A whole grid of individually labeled small slots", desc: "Dozens of separate named categories on one wall - the same way a suite can have many different group tags in play at once, each test belonging to whichever ones actually apply to it." },
+    { x: 62, y: 55, label: "Papers visible in only some slots, not all", desc: "Most slots sit empty at any moment - selecting 'smoke' only picks up what's actually tagged smoke, leaving everything else exactly where it is, untouched." },
+    { x: 5, y: 55, label: "The printed list taped to the wall at the far left", desc: "A directory of what's assigned where - the same role a runner's tag index plays when deciding, at invocation time, which slots (tags) to actually collect from this run." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One suite, two different runs, same test code"
+  intervalMs={1800}
+  nodes={[
+    { label: "Tests are written and tagged once", desc: "Some carry @Test(groups={\"smoke\"}), some don't - this never changes per run." },
+    { label: "Pre-deploy: runner is told to include only \"smoke\"", desc: "A small, fast subset executes - everything else is skipped, not deleted or disabled." },
+    { label: "Nightly: runner is told to run everything (no filter)", desc: "The full suite executes, smoke-tagged tests included again alongside the rest." },
+    { label: "No test file was edited between the two runs", desc: "The only thing that changed was the runner's invocation - include/exclude configuration, not code." },
+  ]}
+/>
+
+Selecting a subset of a larger labeled collection by matching an include/exclude filter against each
+item's tags is really just: check each item's tags against the filter, keep the ones that match. Here's
+that shape as a small, generic simulation.
+
+<CodePlayground
+  language="python"
+  title="Run it - select a subset of tagged items by an include/exclude filter (Python)"
+  code={`tests = [
+    {"name": "login_valid_credentials", "tags": {"smoke", "regression"}},
+    {"name": "login_expired_password", "tags": {"regression"}},
+    {"name": "checkout_full_flow", "tags": {"regression", "slow"}},
+    {"name": "health_check", "tags": {"smoke"}},
+]
+
+def select(tests, include=None, exclude=None):
+    selected = []
+    for t in tests:
+        if include and not (t["tags"] & include):
+            continue
+        if exclude and (t["tags"] & exclude):
+            continue
+        selected.append(t["name"])
+    return selected
+
+print("Pre-deploy run (include=smoke):", select(tests, include={"smoke"}))
+print("Nightly run (no filter):       ", select(tests))
+print("Skip-slow run (exclude=slow):  ", select(tests, exclude={"slow"}))`}
+/>
+
+Same include/exclude filtering shape in Java.
+
+<CodePlayground
+  language="java"
+  title="Run it - select a subset of tagged items by an include/exclude filter (Java)"
+  code={`import java.util.*;
+import java.util.stream.*;
+
+public class Main {
+    record TestCase(String name, Set<String> tags) {}
+
+    static List<String> select(List<TestCase> tests, Set<String> include, Set<String> exclude) {
+        List<String> selected = new ArrayList<>();
+        for (TestCase t : tests) {
+            if (include != null && !include.isEmpty() && Collections.disjoint(t.tags(), include)) continue;
+            if (exclude != null && !Collections.disjoint(t.tags(), exclude)) continue;
+            selected.add(t.name());
+        }
+        return selected;
+    }
+
+    public static void main(String[] args) {
+        List<TestCase> tests = List.of(
+            new TestCase("loginValidCredentials", Set.of("smoke", "regression")),
+            new TestCase("loginExpiredPassword", Set.of("regression")),
+            new TestCase("checkoutFullFlow", Set.of("regression", "slow")),
+            new TestCase("healthCheck", Set.of("smoke"))
+        );
+
+        System.out.println("Pre-deploy run (include=smoke): " + select(tests, Set.of("smoke"), Set.of()));
+        System.out.println("Nightly run (no filter):        " + select(tests, Set.of(), Set.of()));
+        System.out.println("Skip-slow run (exclude=slow):   " + select(tests, Set.of(), Set.of("slow")));
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: tag a handful of tests and run two different subsets of them">
+<StepChecklist
+  steps={[
+    { text: "Pick 4-5 existing tests (or write small placeholder ones) in whatever framework you use", detail: "Tag two or three of them smoke, and give one or two of them a second tag too, like regression." },
+    { text: "Run the suite with an include filter for just smoke", detail: "TestNG: <include name=\"smoke\"/> in testng.xml. JUnit 5: -Dgroups=smoke. pytest: pytest -m smoke." },
+    { text: "Now run the suite with no filter at all", detail: "Confirm every test runs, including the ones tagged smoke - tagging doesn't remove a test from the full run." },
+    { text: "Try an exclude filter instead of an include filter", detail: "Confirm the tagged tests are skipped while everything untagged (or differently tagged) still runs." },
+  ]}
+/>
+You've now selected two genuinely different subsets of the same suite, using only runner configuration
+- no test code changed between either run.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A test everyone expects to run in the smoke check never actually runs there.",
+      fix: "Check the tag spelling and case on the test itself against exactly what the include filter is matching - a typo'd tag name (\"Smoke\" vs \"smoke\") silently fails to match in most runners.",
+    },
+    {
+      symptom: "The \"smoke\" run keeps getting slower even though the same tests are tagged smoke.",
+      fix: "Someone likely added a new, slower test and tagged it smoke without checking the fast-check budget - group tags don't enforce speed, they only enforce selection; the speed discipline has to be a team habit.",
+    },
+    {
+      symptom: "Excluding a tag doesn't seem to skip anything.",
+      fix: "Confirm the exclude filter syntax actually matches the framework's expected format (a tag expression, a CLI flag, an XML element) - a filter that's silently ignored due to a syntax mismatch behaves exactly like no filter at all.",
+    },
+    {
+      symptom: "Two teams use the same tag name to mean different things.",
+      fix: "Treat tag names as a small, shared vocabulary worth agreeing on explicitly - document what each tag means and who owns adding new ones, the same way a shared library's public API would be documented.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The `@Test`/`@Tag`/`@pytest.mark` line on the test itself** — the tag names actually assigned,
+  exactly as spelled.
+- **The runner invocation or CI job config** — `testng.xml`'s `<groups>` block, a `-Dgroups=` flag, or a
+  `pytest -m "..."` expression - where the include/exclude decision for THIS run actually lives.
+- **A team-level list of agreed tag names and their meanings** — prevents tag sprawl and cross-team
+  confusion about what a given tag is supposed to select.
+- **The official docs for the framework in use** — exact tag-expression syntax (`AND`/`OR`/`NOT`
+  combinations) varies by framework and is easy to get subtly wrong from memory.
+</WhereToCheck>
+
+<WorkedExample title="a 40-minute suite that never got faster, but a deploy check that did">
+1. A team's full regression suite has 900 tests and takes about 40 minutes - far too slow to run before
+   every deploy, but valuable enough to keep running nightly.
+2. They identify roughly 60 tests covering the most critical paths - login, checkout, core navigation -
+   and tag each one `@Test(groups = {"smoke", "regression"})`, keeping their existing `regression` tag
+   too.
+3. CI gets a new pre-deploy job: `testng.xml` with `<include name="smoke"/>` - it runs only those 60
+   tests, finishing in about 4 minutes.
+4. The existing nightly job is left completely unchanged - no filter, all 900 tests, including the 60
+   that are now also tagged `smoke`.
+5. No test was rewritten, moved, or duplicated - the exact same 900 test files now serve two different
+   purposes, selected by two different runner invocations pointed at the same suite.
+</WorkedExample>
+
+<Quiz
+  question="A test is currently tagged @Test(groups = {'regression'}) only. A teammate wants it to also run in the fast pre-deploy smoke check, without duplicating the test. What's the correct fix?"
+  options={[
+    "Copy the test into a new method dedicated to the smoke check",
+    "Add \"smoke\" as a second tag on the existing test - @Test(groups = {\"smoke\", \"regression\"}) - so it's selected by both an include=smoke run and an unfiltered regression run",
+    "Rewrite the test's assertions to run faster, since smoke tests must be rewritten to qualify",
+    "Delete the regression tag and replace it with smoke, since a test can only carry one group"
+  ]}
+  answer={1}
+  explain="The note states a test commonly carries more than one tag - adding smoke alongside the existing regression tag is exactly the mechanism for making one test selectable by two different runs. Option one duplicates test code unnecessarily, which the whole point of tagging avoids. Option three confuses tagging with a performance requirement - tags are selection metadata, not a speed guarantee. Option four is factually wrong: TestNG, JUnit 5, and pytest all allow a test to carry multiple simultaneous tags."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What is a group/tag/marker, precisely?", back: "Metadata attached to a test - independent of its code - that a runner invocation can later use to include or exclude it from a specific run." },
+    { front: "TestNG / JUnit 5 / pytest syntax for tagging a single test", back: "TestNG: @Test(groups={\"smoke\"}). JUnit 5: @Tag(\"smoke\"). pytest: @pytest.mark.smoke." },
+    { front: "Can one test carry more than one tag?", back: "Yes - a test can belong to multiple groups at once (e.g. both smoke and regression), and will be selected by any run that filters for either." },
+    { front: "Include vs exclude selection", back: "Include runs only tests matching the given tag(s); exclude runs everything EXCEPT tests matching the given tag(s) - both are valid depending on what the run is for." },
+    { front: "The pigeonhole-mailbox analogy for grouping", back: "Each labeled slot is a fixed tag; mail (a test) goes wherever its label matches; collecting one slot's mail doesn't touch or require knowledge of any other slot." },
+  ]}
+/>
+
+<Challenge>
+In a real or scratch project, add at least two different group tags across 5-6 tests so that some tests
+carry more than one tag. Configure two separate runner invocations - one that includes only one tag,
+one that excludes a different tag - and run both. Write down, for each run, exactly which tests executed
+and confirm it matches what the tags alone predict, with zero test code changed between runs.
+</Challenge>
+
+<AskCommunity prompt="I've tagged tests with `[tag name]` in `[framework]`, but running with an include filter for that tag isn't selecting the tests I expect. Here's the tag declaration and the runner invocation I'm using: `[paste both]`.">
+Pasting the exact tag declaration alongside the exact runner invocation usually surfaces a spelling,
+case, or syntax mismatch immediately - selection bugs here are almost always in how the filter is
+written, not in the framework itself.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://testng.org/#_test_groups", title: "TestNG — official Groups documentation", kind: "read" },
+    { href: "https://docs.junit.org/current/user-guide/#writing-tests-tagging-and-filtering", title: "JUnit 5 — official Tagging and Filtering user guide", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=ofm3b7BVyP0" title="TestNG | Groups and Running Tests with testng.xml | Tutorial #4 — QA-Automan" minutes={11} />
+
+<Takeaways
+  points={[
+    "Grouping tags a test with a named category, independent of its code - selection of which tags run happens later, at runner invocation time.",
+    "TestNG uses groups, JUnit 5 uses @Tag, pytest uses markers - the mechanism differs, the purpose (run a subset without editing tests) is identical.",
+    "A test can carry multiple tags at once, letting the same test serve more than one kind of run (e.g. both a fast smoke check and a full nightly regression run).",
+    "Selection is either include (run only matching tags) or exclude (run everything except matching tags) - both are legitimate depending on the run's purpose.",
+    "A tag is pure selection metadata - it doesn't make a test faster, safer, or different in any way; it only changes whether that run picks it up.",
+  ]}
+/>
+
+<Complete xp={10} />

@@ -1,0 +1,319 @@
+---
+title: "External data (CSV/Excel)"
+summary: "Sourcing parameterized test data from a real external file - a CSV, an Excel workbook via Apache POI, or a CSV/JSON file read directly in Python - instead of hardcoding rows, at the cost of an extra layer of file-parsing that can break silently."
+tags: ["test-frameworks", "data-driven-testing", "track-d"]
+updated: "2026-07-17"
+related:
+  - "test-frameworks/data-driven-testing/data-providers"
+  - "test-frameworks/data-driven-testing/parameterized-tests"
+  - "test-frameworks/data-driven-testing/reuse"
+---
+
+<Hook>
+A data provider's rows live inside the test file, which is exactly right until the person who actually
+knows the 200 valid postal-code formats isn't a programmer and shouldn't need to open a Java file to
+add row 201. Pulling the data out into a CSV or an Excel sheet hands that job to whoever owns the data
+- and hands the test suite a brand-new way to fail that has nothing to do with the code under test.
+</Hook>
+
+<Callout type="analogy">
+A library's card catalog holds the actual reference data - author, title, call number - completely
+separate from the librarian who uses it to find a book. Anyone can walk up and add, correct, or
+re-file a card without touching how the librarian works the desk; the system and the data it consults
+are two different things maintained by different people. But the whole arrangement depends on every
+card following the same format - a card filed under the wrong heading, or with a smudged call number,
+sends the next person searching down the wrong drawer.
+</Callout>
+
+<Term define="External test data means the rows a parameterized test or data provider runs against live in a file OUTSIDE the test code - a .csv read with a plain text parser (Java's OpenCSV/Apache Commons CSV, or Python's built-in csv module), an .xlsx workbook read in Java via Apache POI (Workbook, Sheet, Row, Cell objects), or a CSV/JSON file read directly with Python's csv or json modules. A @DataProvider or parameterized-test source method opens the file, reads its rows, and converts them into the same Object[][] / Arguments / tuple shape it would have returned if the rows were hardcoded - the test method itself never knows the difference. The benefit is separation of concerns: a larger or evolving dataset, maintained by someone who isn't touching code, without a rebuild or code review for every data change. The cost is a new failure surface entirely - encoding issues, a renamed or reordered column silently shifting values into the wrong field, a missing file, or a malformed row - none of which exist when data lives as a literal array in the source.">External data</Term>
+
+## Reading rows from outside the test
+
+```java
+@DataProvider(name = "shippingRates")
+public Object[][] shippingRates() throws IOException {
+    try (Workbook wb = WorkbookFactory.create(new File("testdata/shipping-rates.xlsx"))) {
+        Sheet sheet = wb.getSheetAt(0);
+        List<Object[]> rows = new ArrayList<>();
+        for (Row row : sheet) {
+            if (row.getRowNum() == 0) continue; // skip header
+            rows.add(new Object[] {
+                row.getCell(0).getStringCellValue(),   // region
+                row.getCell(1).getNumericCellValue(),  // orderTotal
+                row.getCell(2).getNumericCellValue(),  // expectedFee
+            });
+        }
+        return rows.toArray(new Object[0][]);
+    }
+}
+```
+
+```python
+import csv
+import pytest
+
+def load_shipping_rates():
+    with open("testdata/shipping_rates.csv", newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        return [(r["region"], float(r["order_total"]), float(r["expected_fee"])) for r in reader]
+
+@pytest.mark.parametrize("region, order_total, expected_fee", load_shipping_rates())
+def test_shipping_fee(region, order_total, expected_fee):
+    assert shipping_fee(region, order_total) == expected_fee
+```
+
+- **The provider's job grows by one step: open, parse, convert** - everything downstream (the test
+  method, the assertions) stays identical to a hardcoded-rows version. Only where the rows come from
+  changed.
+- **Apache POI is the standard for Excel in Java** - `WorkbookFactory.create(...)` opens `.xls` or
+  `.xlsx`; `Sheet`, `Row`, and `Cell` give structured access, but every cell's type must be read
+  explicitly (`getStringCellValue()`, `getNumericCellValue()`) - a cell formatted unexpectedly (a
+  number stored as text) throws at read time, not at test time.
+- **CSV needs almost no library in Python** - the built-in `csv` module's `DictReader` turns the
+  header row into keys automatically, the same header-to-keys pattern a Gherkin data table's
+  `asMaps()` uses. Java projects typically reach for OpenCSV or Apache Commons CSV for the same job.
+- **Reading by column NAME, not position, is what makes external data survive edits** - `row["region"]`
+  or `getCell(0)` matched against a documented header keeps working if a non-engineer reorders columns,
+  as long as the header names themselves don't change.
+- **The file becomes part of the test suite's real dependencies** - it needs to exist at a known path,
+  be checked into version control alongside the code (or fetched reliably in CI), and use a stable,
+  agreed-upon encoding.
+
+<Callout type="tip">
+Fail loudly and immediately if the external file's shape doesn't match what the test expects - check
+the header row against an expected column list right where the file is opened, and raise a clear error
+naming the missing or misspelled column, rather than letting a shifted `getCell(1)` quietly feed a fee
+value into the `region` field three tests later. A parser that validates its own input once, at load
+time, turns a silent data-corruption bug into a loud, immediate, one-line failure.
+</Callout>
+
+<Callout type="mistake">
+Treating a spreadsheet-maintained-by-a-non-engineer as trustworthy input with no validation, then
+discovering months later that someone "cleaned up" a column by renaming `expected_fee` to `Expected Fee`
+in Excel's header row - and every row since has been silently reading `null` or throwing deep inside a
+test helper method instead of failing clearly at the one place that actually broke: the header check
+that was never written.
+</Callout>
+
+{/* IMAGE: a real photograph of an open wooden library card catalog drawer, a hand holding one printed bibliographic card up in front of the drawer showing typed call numbers and subject headings, with the drawer's remaining cards visible behind it, each marked with colorful plastic tab clips */}
+<HotspotImage
+  src="/notes/test-frameworks/data-driven-testing/external-data-csv-excel.jpg"
+  alt="An open wooden library card catalog drawer with a hand holding one printed bibliographic card in front of it, showing a typed call number, subject heading, and title, with the drawer's remaining cards visible behind it marked with colorful plastic tab clips"
+  credit="Card catalog at the Indiana State Library — Wikimedia Commons, CC BY-SA 4.0 (TBurmeister (WMF))"
+  creditHref="https://commons.wikimedia.org/wiki/File:Card_catalog_at_the_Indiana_State_Library_-_interior_view_of_catalog_cards.jpg"
+  pins={[
+    { x: 45, y: 65, label: "The card being read — one row of external data", desc: "Its fields (call number, title, subject) are read by their printed position on the card - the same reliance on a stable, known layout as reading a CSV row by column name." },
+    { x: 50, y: 25, label: "The drawer of cards — the external file itself", desc: "The whole dataset lives here, outside the librarian's own head, maintained independently - exactly the separation an .xlsx or .csv file gives a test suite." },
+    { x: 15, y: 55, label: "The colorful plastic tab clips — structure someone else maintains", desc: "Added and moved by library staff, not by whoever built the catalog system - the same way a domain expert edits data-provider rows without touching test code." },
+    { x: 78, y: 45, label: "Cards packed edge to edge, easy to misfile", desc: "One card filed under the wrong heading sends the next search to the wrong place - the physical version of a renamed column silently shifting every downstream value." },
+  ]}
+/>
+
+<FlowAnimation
+  title="A test provider reading rows from an external file"
+  intervalMs={1800}
+  nodes={[
+    { label: "The @DataProvider (or parametrize source) opens the file", desc: "A known path: testdata/shipping-rates.xlsx or shipping_rates.csv - missing means immediate, loud failure." },
+    { label: "The header row is read and checked against expected columns", desc: "region, order_total, expected_fee - a renamed or missing column should fail HERE, not three rows deep." },
+    { label: "Each data row is parsed and converted into typed values", desc: "Strings become numbers where needed; a malformed cell throws at parse time, not mid-test." },
+    { label: "The parsed rows become Object[][] / Arguments / tuples", desc: "From this point on, the test method runs exactly as it would against hardcoded data - it can't tell the difference." },
+    { label: "The test suite runs; the data file's owner never opened the code", desc: "The next data update is a spreadsheet edit and a pull request to a .csv, not a Java change." },
+  ]}
+/>
+
+Underneath the library names, external-data reading is: open a file, split it into rows by a known
+structure, hand those rows to the same test logic that would run against hardcoded data. Here's that
+pipeline as a small, generic simulation using an in-memory string standing in for a real file.
+
+<CodePlayground
+  language="python"
+  title="Run it - parse an external-style CSV and feed it to the same test logic (Python)"
+  code={`import io
+import csv
+
+# stands in for reading testdata/shipping_rates.csv from disk
+fake_file = io.StringIO(
+    "region,order_total,expected_fee\\n"
+    "US,10.00,5.00\\n"
+    "US,50.00,0.00\\n"
+    "EU,80.00,0.00\\n"
+)
+
+def load_rows(file_obj):
+    reader = csv.DictReader(file_obj)
+    expected_columns = {"region", "order_total", "expected_fee"}
+    if not expected_columns.issubset(reader.fieldnames):
+        raise ValueError(f"missing columns: {expected_columns - set(reader.fieldnames)}")
+    return [(r["region"], float(r["order_total"]), float(r["expected_fee"])) for r in reader]
+
+def shipping_fee(order_total):
+    return 0.00 if order_total >= 50.00 else 5.00
+
+for region, order_total, expected_fee in load_rows(fake_file):
+    actual = shipping_fee(order_total)
+    status = "PASS" if actual == expected_fee else f"FAIL (got {actual})"
+    print(f"{region} {order_total}: {status}")`}
+/>
+
+Same file-to-rows-to-test pipeline in Java - the shape Apache POI or a CSV library ultimately produces.
+
+<CodePlayground
+  language="java"
+  title="Run it - parse an external-style CSV and feed it to the same test logic (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    record Row(String region, double orderTotal, double expectedFee) {}
+
+    // stands in for reading testdata/shipping_rates.csv from disk
+    static final String[] FAKE_FILE = {
+        "region,order_total,expected_fee",
+        "US,10.00,5.00",
+        "US,50.00,0.00",
+        "EU,80.00,0.00",
+    };
+
+    static List<Row> loadRows(String[] lines) {
+        List<String> header = Arrays.asList(lines[0].split(","));
+        List<String> expected = List.of("region", "order_total", "expected_fee");
+        if (!header.equals(expected)) {
+            throw new IllegalStateException("unexpected header: " + header);
+        }
+        List<Row> rows = new ArrayList<>();
+        for (int i = 1; i < lines.length; i++) {
+            String[] cells = lines[i].split(",");
+            rows.add(new Row(cells[0], Double.parseDouble(cells[1]), Double.parseDouble(cells[2])));
+        }
+        return rows;
+    }
+
+    static double shippingFee(double orderTotal) {
+        return orderTotal >= 50.00 ? 0.00 : 5.00;
+    }
+
+    public static void main(String[] args) {
+        for (Row row : loadRows(FAKE_FILE)) {
+            double actual = shippingFee(row.orderTotal());
+            String status = actual == row.expectedFee() ? "PASS" : "FAIL (got " + actual + ")";
+            System.out.println(row.region() + " " + row.orderTotal() + ": " + status);
+        }
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: move hardcoded rows into a real file, then break the file on purpose">
+<StepChecklist
+  steps={[
+    { text: "Take a hardcoded @DataProvider or parametrize list you've already written and save its rows as a real .csv file", detail: "Header row first, matching the field names your test already uses." },
+    { text: "Rewrite the provider to open and parse that file instead of returning a literal array", detail: "Keep the test method completely unchanged - only the provider's source should differ." },
+    { text: "Run it and confirm it behaves identically to the hardcoded version", detail: "Same rows, same results - the point is that the test method can't tell the difference." },
+    { text: "Now rename one column in the CSV's header row and re-run without changing the parser", detail: "Watch exactly how it fails - loudly with a clear error, or silently with wrong values - and fix the parser to fail loudly if it doesn't already." },
+  ]}
+/>
+You've now felt both halves of the tradeoff firsthand: the real convenience of externalized data, and
+the real new failure mode that comes with it.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A parameterized test throws FileNotFoundException / IOException the moment the suite starts.",
+      fix: "Check the file path is relative to the correct working directory (often the project root, not the test class's location) and that the file is actually included in version control or the CI checkout.",
+    },
+    {
+      symptom: "Numbers or special characters read from the file appear garbled (question marks, boxes, wrong digits).",
+      fix: "An encoding mismatch - explicitly open the file with UTF-8 (Java's Files.newBufferedReader(path, StandardCharsets.UTF_8), Python's open(..., encoding=\"utf-8\")) rather than relying on a platform default that may differ between your machine and CI.",
+    },
+    {
+      symptom: "Test results are silently wrong - a fee shows up where a region should be - with no exception at all.",
+      fix: "A column was reordered or renamed and the parser is reading by position instead of by header name, or isn't validating the header at all - switch to name-based access and add an explicit header check that fails loudly on mismatch.",
+    },
+    {
+      symptom: "An Apache POI read throws on a cell that 'looks like' a number in Excel.",
+      fix: "The cell's underlying type doesn't match the read method - a number formatted as text needs getStringCellValue() then parsing, not getNumericCellValue(); check cell.getCellType() before assuming.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The file's actual path and the working directory tests run from** — the single most common
+  external-data failure, especially the first time a suite runs in CI rather than locally.
+- **The header row versus the column names the parser expects** — the fastest way to catch a
+  silent-shift bug before it reaches a real assertion.
+- **File encoding, explicitly set** — never rely on a platform default when the file may be edited on
+  a different OS than the one running the tests.
+- **Apache POI's `Cell.getCellType()` (Java) or a quick `print(type(value))` (Python)** — confirms
+  what type each field actually parsed as before blaming the test logic for a data problem.
+</WhereToCheck>
+
+<WorkedExample title="a renamed Excel column that broke tests for a week before anyone noticed">
+1. A QA lead maintains `testdata/shipping-rates.xlsx` directly - no code review, just spreadsheet
+   edits - while engineers write the `@DataProvider` that reads it by cell position:
+   `row.getCell(2).getNumericCellValue()` for the expected fee.
+2. Cleaning up the sheet for readability, the QA lead inserts a new "notes" column at position 2,
+   pushing the actual fee data to position 3. Nothing in Excel objects to this; it looks tidier.
+3. The suite keeps running - `getCell(2)` now silently reads the notes column's blank numeric default
+   (0.0) as the expected fee for every single row. Tests that should fail loudly instead all report
+   "expected 0.0" and mostly pass by coincidence, masking a real regression that shipped that week.
+4. A engineer investigating an unrelated bug notices the sheet has five columns instead of four and
+   traces the silent-zero pattern back to position-based reads.
+5. The provider is rewritten to read by header name (`getCell(getColumnIndex(sheet, "expected_fee"))`)
+   with an explicit header-validation step at load time - the next accidental column insertion fails
+   the suite immediately, with a message naming exactly which column went missing.
+</WorkedExample>
+
+<Quiz
+  question="A team's Java @DataProvider reads an Excel file with row.getCell(1).getNumericCellValue() for every row, with no header validation. A non-engineer teammate reorders the spreadsheet's columns for readability. According to this note, what is the most likely outcome?"
+  options={[
+    "Apache POI automatically detects the reorder and remaps cells by header name",
+    "The suite fails immediately with a clear 'column not found' error",
+    "The tests keep running but silently read the wrong column's values into the wrong field, since getCell(1) reads by fixed position regardless of what that column now contains",
+    "Excel prevents non-engineers from reordering columns in files used by automated tests"
+  ]}
+  answer={2}
+  explain="The note's core tradeoff and the worked example both hinge on this: position-based reads (getCell(1)) have no idea what a column MEANS, only where it sits - reordering silently shifts every value into the wrong field with no exception thrown, which is exactly why the tip callout pushes for header validation and name-based access. Option one is false - POI does nothing automatically; you get exactly the access pattern you coded. Option two describes the FIX (header validation), not the default, unvalidated behavior the question describes. Option four invents a restriction spreadsheet software doesn't have."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What changes when test data moves to an external file?", back: "Only the data provider's source - it now opens and parses a file instead of returning a literal array - the test method's logic and signature stay identical." },
+    { front: "How is Excel data typically read in Java?", back: "Apache POI: WorkbookFactory.create() opens the file, Sheet/Row/Cell give structured access, and each cell's type must be read explicitly (getStringCellValue, getNumericCellValue)." },
+    { front: "How is CSV data typically read in Python?", back: "The built-in csv module - csv.DictReader turns the header row into dict keys automatically, so rows can be read by column name." },
+    { front: "The real tradeoff of external data files", back: "Flexibility and separation of concerns (non-engineers can maintain data, no code review per data change) versus a new failure surface: encoding issues, missing files, and silent breakage from renamed/reordered columns." },
+    { front: "The single most important defense against silent external-data breakage", back: "Read cells/fields by column NAME, not position, and validate the header row explicitly at load time so a mismatch fails loudly and immediately." },
+  ]}
+/>
+
+<Challenge>
+Take a data provider that currently reads an external CSV or Excel file by column position
+(getCell(0), row[0], or similar). Rewrite it to read by column name instead, with an explicit check
+that the file's header matches what the parser expects. Then simulate the exact failure from the
+worked example - reorder or rename one column - and confirm your rewritten version fails loudly with a
+clear message instead of silently producing wrong results.
+</Challenge>
+
+<AskCommunity prompt="My data-driven test reads from an external file and `[describe the symptom: wrong values / an exception / garbled characters]`. Here's how the provider opens and parses the file: `[paste the loading code]`.">
+Pasting the exact file-loading code (not just the test method) is what lets someone spot whether the
+problem is encoding, column position versus name, or a path issue - the three most common culprits.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://poi.apache.org/components/spreadsheet/quick-guide.html", title: "Apache POI — official Quick Guide: HSSF and XSSF spreadsheet features", kind: "read" },
+    { href: "https://docs.python.org/3/library/csv.html", title: "Python — official docs: csv module (reading and writing CSV files)", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=NstIrQ2Ny-w" title="Reading Data from Excel files into DataProvider method using POI API (TestNG - Part 39) — QAFox" minutes={53} />
+
+<Takeaways
+  points={[
+    "External data means a data provider or parameterized-test source reads rows from a real file (CSV, Excel via Apache POI, or CSV/JSON in Python) instead of returning them as a literal array - the test method itself never knows the difference.",
+    "The benefit is real separation of concerns: a larger or evolving dataset maintained by someone who never touches test code, with no rebuild or code review per data change.",
+    "The cost is a new failure surface with nothing to do with the code under test: missing files, encoding mismatches, and columns that get silently reordered or renamed.",
+    "Reading by column NAME instead of position is the single biggest defense - it survives reordering and turns a rename into a loud, immediate, clearly-named failure.",
+    "Validate the file's header against the expected columns right where it's opened - catching a shape mismatch at load time beats discovering it as mysteriously wrong assertion values three tests later.",
+  ]}
+/>
+
+<Complete xp={10} />

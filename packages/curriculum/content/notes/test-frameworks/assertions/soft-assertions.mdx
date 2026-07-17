@@ -1,0 +1,312 @@
+---
+title: "Soft assertions"
+summary: "A hard assertion stops the test at the first failure; a soft assertion records the failure and keeps going, reporting every accumulated failure at the end via assertAll() - the right tool depends on whether later checks actually depend on the earlier one."
+tags: ["test-frameworks", "assertions", "track-d"]
+updated: "2026-07-17"
+related:
+  - "test-frameworks/assertions/assertions-basics"
+  - "test-frameworks/assertions/custom-messages"
+  - "test-frameworks/assertions/matchers"
+---
+
+<Hook>
+A test checks five fields on a user profile page. The first one is wrong. A hard assertion stops
+right there - you fix it, rerun, and discover the second field is also wrong. Fix, rerun, discover
+the third. Five failures, five separate runs, each one hiding the next. A soft assertion would have
+told you about all five the first time.
+</Hook>
+
+<Callout type="analogy">
+A vehicle inspector doing a multi-point check doesn't stop and hand the car back the moment the
+first bald tire is found. They work through the entire checklist - brakes, lights, wipers, fluid
+levels - marking every single defect on the sheet, because the driver needs the complete picture
+before a single trip to the shop. Only once every clipboard item has been checked does the
+inspector total it up and decide: pass, or a list of every specific thing that has to be fixed.
+</Callout>
+
+<Term define="A soft assertion is an assertion that, when it fails, records the failure but does not stop the test - execution continues to the next line, and any further assertions in that test are also checked. All recorded failures are only reported (and the test only actually fails) when an explicit closing call is made: assertAll() in JUnit 5's grouped assertions, or softAssert.assertAll() after using TestNG's SoftAssert class. This is the opposite of a hard assertion (JUnit/TestNG's ordinary assertEquals, assertTrue, or pytest's plain assert), which throws immediately on failure and halts the rest of the test method right there. Soft assertions trade early-exit efficiency for complete information: one test run surfaces every failure instead of just the first.">Soft assertion</Term>
+
+## Hard vs soft, and how each is actually written
+
+```java
+// HARD assertions (TestNG / JUnit): stops at the first failure
+@Test
+void profileFieldsAreCorrect_hard() {
+    UserProfile profile = loadProfile("alice");
+    Assert.assertEquals(profile.getName(), "Alice Smith");   // if this fails, test stops here
+    Assert.assertEquals(profile.getEmail(), "alice@example.com");
+    Assert.assertEquals(profile.getRole(), "Admin");
+}
+
+// SOFT assertions (TestNG): records every failure, reports them all at the end
+@Test
+void profileFieldsAreCorrect_soft() {
+    UserProfile profile = loadProfile("alice");
+    SoftAssert softAssert = new SoftAssert();
+    softAssert.assertEquals(profile.getName(), "Alice Smith");
+    softAssert.assertEquals(profile.getEmail(), "alice@example.com");
+    softAssert.assertEquals(profile.getRole(), "Admin");
+    softAssert.assertAll();   // NOW it reports every accumulated failure, or passes silently
+}
+```
+
+```java
+// JUnit 5's built-in equivalent: grouped assertions via assertAll()
+@Test
+void profileFieldsAreCorrect_junit5() {
+    UserProfile profile = loadProfile("alice");
+    assertAll("profile fields",
+        () -> assertEquals("Alice Smith", profile.getName()),
+        () -> assertEquals("alice@example.com", profile.getEmail()),
+        () -> assertEquals("Admin", profile.getRole())
+    );
+}
+```
+
+- **Hard assertion** — the default. Fails and throws immediately; anything after it in that test
+  method never runs. This is what plain `Assert.assertEquals`, `assertTrue`, and pytest's `assert`
+  do out of the box.
+- **Soft assertion** — an opt-in tool. TestNG's `SoftAssert` class collects failures instead of
+  throwing; nothing is reported as a test failure until `assertAll()` is called explicitly at the
+  end. Forgetting that final `assertAll()` call is a real trap - the test silently passes even with
+  recorded failures, because they were never surfaced.
+- **JUnit 5's `Assertions.assertAll(...)`** — a different mechanism reaching the same goal: pass it
+  several lambda-wrapped assertions and every one runs regardless of earlier failures, with all
+  failures reported together at the end.
+
+<Callout type="tip">
+Reach for soft assertions when checking several genuinely independent facts about the same object or
+page in one test - form fields, API response properties, multiple elements on a rendered page. Seeing
+all five broken fields in one report saves four extra fix-rerun cycles compared to hard assertions.
+</Callout>
+
+<Callout type="mistake">
+Using soft assertions when a later check actually depends on an earlier one being true - for example,
+soft-asserting that a login succeeded, then soft-asserting the contents of a dashboard that only
+exists after a real login. If the login assertion fails, the dashboard checks don't just fail, they
+throw confusing secondary errors (null pointer, element not found) that have nothing to do with the
+real problem. That's exactly when a hard assertion - stop immediately, don't pretend the rest of the
+test still makes sense - is the correct tool.
+</Callout>
+
+{/* IMAGE: a real photograph of several clipboards holding multi-item paper inspection checklists with red marker pens, laid out on pavement, used for a uniform inspection where every listed item gets checked and marked */}
+<HotspotImage
+  src="/notes/test-frameworks/assertions/soft-assertions.jpg"
+  alt="Several clipboards holding printed multi-item inspection checklists with red marker pens resting on top, laid out on pavement, prepared for a uniform inspection where every listed item on the sheet gets checked and marked"
+  credit="Checklists and clipboards prepared for a uniform inspection — Wikimedia Commons, Public domain (United States Marine Corps)"
+  creditHref="https://commons.wikimedia.org/wiki/File:USMC-100914-M-0646Q-45.jpg"
+  pins={[
+    { x: 45, y: 25, label: "One checklist, many numbered line items", desc: "Every item on the sheet gets its own check - the inspector doesn't stop at line 1, the same way a soft assertion doesn't stop at the first failed field." },
+    { x: 60, y: 30, label: "The red pen — marking each specific defect", desc: "Each failure gets recorded individually, in place, without halting the inspection - this is what softAssert.assertEquals(...) does before assertAll() is ever called." },
+    { x: 20, y: 55, label: "Multiple clipboards, multiple independent checks", desc: "Separate, genuinely independent checks running in parallel - exactly the case where soft assertions pay off: many unrelated facts checked in one pass." },
+    { x: 75, y: 70, label: "The completed sheet, totaled at the end", desc: "Only once every item is checked does the sheet get totaled into a final pass/fail - the same role assertAll() plays after every soft assertion has run." },
+  ]}
+/>
+
+<FlowAnimation
+  title="A soft-assertion test, start to report"
+  intervalMs={1800}
+  nodes={[
+    { label: "softAssert.assertEquals(name, ...)", desc: "Fails. Recorded internally - execution continues, nothing thrown yet." },
+    { label: "softAssert.assertEquals(email, ...)", desc: "Passes. No failure recorded for this one." },
+    { label: "softAssert.assertEquals(role, ...)", desc: "Fails. Also recorded - the test still hasn't stopped." },
+    { label: "softAssert.assertAll()", desc: "NOW: checks the accumulated list. Two failures recorded means the test fails here." },
+    { label: "Report: both failures, together", desc: "One test run, one report naming both the name and role mismatches - no second rerun needed." },
+  ]}
+/>
+
+A soft assertion is really just: defer the decision to fail until the very end, but keep a running
+list of every check that didn't hold along the way. Here's that shape as a small, generic
+simulation - not real TestNG or JUnit 5 internals, just the pattern underneath them.
+
+<CodePlayground
+  language="python"
+  title="Run it - accumulate failures, decide at the end (Python)"
+  code={`class SoftAssert:
+    def __init__(self):
+        self.failures = []
+
+    def assert_equals(self, actual, expected, label):
+        if actual != expected:
+            self.failures.append(f"{label}: expected {expected!r} but was {actual!r}")
+
+    def assert_all(self):
+        if self.failures:
+            report = "\\n  ".join(self.failures)
+            raise AssertionError(f"{len(self.failures)} failure(s):\\n  {report}")
+        print("  All soft assertions passed")
+
+profile = {"name": "Alice Smyth", "email": "alice@example.com", "role": "Editor"}
+
+soft = SoftAssert()
+soft.assert_equals(profile["name"], "Alice Smith", "name")
+soft.assert_equals(profile["email"], "alice@example.com", "email")
+soft.assert_equals(profile["role"], "Admin", "role")
+
+try:
+    soft.assert_all()
+    print("PASSED")
+except AssertionError as e:
+    print(f"FAILED - {e}")`}
+/>
+
+Same accumulate-then-decide shape in Java.
+
+<CodePlayground
+  language="java"
+  title="Run it - accumulate failures, decide at the end (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static class SoftAssert {
+        List<String> failures = new ArrayList<>();
+
+        void assertEquals(Object actual, Object expected, String label) {
+            if (!Objects.equals(actual, expected)) {
+                failures.add(label + ": expected " + expected + " but was " + actual);
+            }
+        }
+
+        void assertAll() {
+            if (!failures.isEmpty()) {
+                throw new AssertionError(failures.size() + " failure(s):\\n  " + String.join("\\n  ", failures));
+            }
+            System.out.println("  All soft assertions passed");
+        }
+    }
+
+    public static void main(String[] args) {
+        Map<String, String> profile = Map.of(
+            "name", "Alice Smyth",
+            "email", "alice@example.com",
+            "role", "Editor"
+        );
+
+        SoftAssert soft = new SoftAssert();
+        soft.assertEquals(profile.get("name"), "Alice Smith", "name");
+        soft.assertEquals(profile.get("email"), "alice@example.com", "email");
+        soft.assertEquals(profile.get("role"), "Admin", "role");
+
+        try {
+            soft.assertAll();
+            System.out.println("PASSED");
+        } catch (AssertionError e) {
+            System.out.println("FAILED - " + e.getMessage());
+        }
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: feel the difference between four reruns and one report">
+<StepChecklist
+  steps={[
+    { text: "Write a test with three hard assertions checking three different fields, where the first and third are deliberately wrong", detail: "Run it and note that it stops after reporting only the first failure." },
+    { text: "Fix the first assertion's expected value and rerun - confirm it now stops at (or reveals) the third", detail: "This is the extra rerun cycle hard assertions force when checks are independent." },
+    { text: "Rewrite the same three checks using TestNG's SoftAssert (or JUnit 5's assertAll)", detail: "Leave both wrong values in place and run it once." },
+    { text: "Read the single failure report and confirm it names both wrong fields at once", detail: "Compare how many runs each approach took to see the complete picture." },
+  ]}
+/>
+You've now felt directly why soft assertions exist: not as a better assertion, but as a different
+tradeoff for a specific situation - independent checks you want to see all at once.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A TestNG test uses SoftAssert, has an obviously wrong value, but still reports as passed.",
+      fix: "Check whether softAssert.assertAll() was actually called at the end of the test method - forgetting it is the single most common soft-assertion mistake, and without it no recorded failure is ever surfaced.",
+    },
+    {
+      symptom: "A soft-assertion test throws a confusing NullPointerException or element-not-found error instead of a clean list of failed checks.",
+      fix: "This usually means a later soft assertion depended on an earlier one being true (e.g. asserting page content that only exists after a successful login) - that's a sign hard assertions, not soft ones, were the right tool for that dependency.",
+    },
+    {
+      symptom: "JUnit 5's assertAll() reports a failure, but it's unclear which of the several lambdas inside it actually failed.",
+      fix: "Read the full assertAll() failure report, not just the first line - it lists every failed assertion inside the group by index or description, not just one summary.",
+    },
+    {
+      symptom: "A soft-assertion test passes locally but a teammate says the same code fails in CI.",
+      fix: "Confirm the SoftAssert instance isn't accidentally shared or reused across test methods (e.g. as a class field without proper reset) - accumulated failures from one test leaking into another's assertAll() call is a real, hard-to-spot bug.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The very last line of a SoftAssert-based test method** — confirm `assertAll()` is actually
+  called; its absence is silent and easy to miss in review.
+- **The failure report's full list, not just the top entry** — both TestNG's `assertAll()` and
+  JUnit 5's `assertAll()` report every accumulated failure, not just one.
+- **TestNG's official `SoftAssert` class Javadoc** — the definitive reference for exactly which
+  assertion methods are available on the soft-assert instance.
+- **Whether any assertion in the group reads state that an earlier assertion in the same group was
+  actually checking** — that dependency is the tell that soft assertions are the wrong tool there.
+</WhereToCheck>
+
+<WorkedExample title="a five-field profile page test that used to take five runs to fully fix">
+1. A test checks a user profile page's name, email, role, department, and status fields using five
+   separate hard `Assert.assertEquals` calls in TestNG.
+2. It fails on the name field. The tester fixes the seed data, reruns, and it now fails on the email
+   field - a completely separate, unrelated bug that hard assertions hid behind the first one.
+3. This repeats for role, department, and status - five total runs, one new failure discovered each
+   time, because each hard assertion stopped the test the moment it hit a mismatch.
+4. The test is rewritten using TestNG's `SoftAssert`, checking all five fields and calling
+   `softAssert.assertAll()` once at the end.
+5. The next time the profile page has multiple broken fields, one single run's failure report lists
+   every one of them together - no more guess-fix-rerun cycles to find the next hidden failure.
+</WorkedExample>
+
+<Quiz
+  question="A test uses TestNG's SoftAssert to check three unrelated fields on a settings page, but the developer forgets to call softAssert.assertAll() at the end of the method. Two of the three field checks are actually wrong. What does the test report show?"
+  options={[
+    "The test fails, listing both wrong fields, because SoftAssert reports automatically at the end of the method",
+    "The test passes, because none of the recorded soft-assertion failures are ever surfaced without an explicit assertAll() call",
+    "The test fails on only the first wrong field, behaving like a hard assertion",
+    "TestNG throws a compile error because assertAll() is required syntactically"
+  ]}
+  answer={1}
+  explain="The note is explicit that soft-assertion failures are only recorded, not reported, until assertAll() is called - forgetting that call means the test passes regardless of how many failures were silently recorded. Option one is wrong because there is no automatic reporting; that's exactly the trap. Option three describes hard-assertion behavior, not what SoftAssert without assertAll() does - it wouldn't even stop at the first failure. Option four is false: omitting assertAll() is a logic mistake, not a compile-time error, which is precisely why it's dangerous."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Hard assertion vs soft assertion", back: "Hard: fails and stops the test immediately at the first failure. Soft: records the failure and keeps executing, reporting every accumulated failure only when assertAll() is explicitly called." },
+    { front: "How do you actually trigger a soft-assertion test to report its failures?", back: "An explicit call: softAssert.assertAll() in TestNG, or wrapping checks in Assertions.assertAll(...) in JUnit 5. Without it, recorded failures are never surfaced." },
+    { front: "When are soft assertions the right tool?", back: "When checking several genuinely independent facts about one object/page in a single test run - you want to see every problem at once, not one at a time across reruns." },
+    { front: "When are hard assertions still the correct choice?", back: "When a later check actually depends on an earlier one being true - continuing after that failure would be meaningless or throw a confusing, unrelated secondary error." },
+    { front: "The vehicle-inspection analogy for soft assertions", back: "An inspector doesn't stop at the first bald tire - every checklist item gets checked and marked, and only once the whole sheet is done does it get totaled into a final pass/fail, the same way assertAll() totals every recorded soft-assertion failure." },
+  ]}
+/>
+
+<Challenge>
+Take a test you've written (or find one) with three or more hard assertions checking independent
+facts about the same object. Rewrite it using TestNG's SoftAssert (or JUnit 5's assertAll()), verify
+it still catches the same failures, and confirm - by introducing two deliberate failures at once -
+that the single soft-assertion run reports both, where the original hard-assertion version would
+have needed two separate runs to find them both.
+</Challenge>
+
+<AskCommunity prompt="I'm not sure whether these checks in my test should be hard or soft assertions: `[list the checks and whether any depends on an earlier one]`.">
+Describing whether any later check actually reads state set up by an earlier one (not just runs
+after it) is the fastest way for someone else to tell you which assertion style actually fits.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://javadoc.io/doc/org.testng/testng/latest/org/testng/asserts/SoftAssert.html", title: "TestNG — SoftAssert class Javadoc", kind: "read" },
+    { href: "https://assertj.github.io/doc/#assertj-core-soft-assertions", title: "AssertJ — Soft assertions documentation", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=0x0vPNc6DYQ" title="TestNG Soft Assertions with Example | TestNG Soft Assert | SoftAssert Class and assertAll() Method — Comrevo" minutes={6} />
+
+<Takeaways
+  points={[
+    "A hard assertion fails and stops the test immediately; a soft assertion records the failure and keeps executing the rest of the test.",
+    "Soft-assertion failures are only reported when an explicit assertAll() call runs - forgetting it means the test silently passes despite recorded failures.",
+    "Soft assertions are the right tool for checking several genuinely independent facts about one object or page in a single run.",
+    "Hard assertions are still correct whenever a later check actually depends on an earlier one being true - continuing would be meaningless or throw a confusing secondary error.",
+    "One soft-assertion test run can surface every accumulated failure at once, instead of hard assertions' one-failure-per-rerun cycle.",
+  ]}
+/>
+
+<Complete xp={10} />

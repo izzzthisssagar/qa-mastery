@@ -1,0 +1,321 @@
+---
+title: "pytest fixtures"
+summary: "A pytest fixture is a function decorated @pytest.fixture and requested by name as a test's own parameter - dependency injection instead of inheritance, with yield splitting the function into setup before and teardown after, and scope controlling how often it's recreated."
+tags: ["test-frameworks", "lifecycle-and-annotations", "track-d"]
+updated: "2026-07-17"
+related:
+  - "test-frameworks/lifecycle-and-annotations/setup-and-teardown-hooks"
+  - "test-frameworks/lifecycle-and-annotations/test-annotation"
+  - "test-frameworks/lifecycle-and-annotations/testng-vs-junit"
+---
+
+<Hook>
+A JUnit or TestNG test gets its setup from a hook that fires automatically around it - the test
+doesn't ask for anything, the class structure just wraps it. A pytest test does something noticeably
+different: it lists exactly what it needs as its own function parameters, by name -
+`def test_checkout(logged_in_page, api_client):` - and pytest hands over exactly those two things,
+built fresh, and nothing it didn't ask for.
+</Hook>
+
+<Callout type="analogy">
+A hotel minibar isn't stocked identically for every guest and left untouched for the whole stay. A
+guest who wants coffee finds a small tray assembled specifically for that: a kettle, cups, sachets of
+grounds, ready to use for their room, for their stay - not a single shared kettle wheeled room to
+room. The mini-fridge shelf above holds spirits and water bottled and tagged individually, billed to
+whoever actually opens one. Nothing sits there because "every guest might want it" - it's there,
+specifically assembled, because a specific guest's specific stay calls for it.
+</Callout>
+
+<Term define="A pytest fixture is a function decorated @pytest.fixture that provides a piece of test setup - a database connection, a logged-in browser page, a temp directory - which test functions request by declaring it as a parameter, by name. This is dependency injection rather than the inheritance pytest's xUnit-style Java/JUnit cousins use: nothing is wrapped around a test automatically by virtue of the test's class; a test only receives a fixture it explicitly names in its own signature, and pytest resolves and builds the full dependency graph (fixtures can themselves request other fixtures) before the test body runs. A fixture that return()s a value provides ONLY setup, with pytest handling teardown itself if needed elsewhere; far more commonly, a fixture uses yield instead of return, which splits the function into two halves - everything before yield is setup, executed before the requesting test runs, and everything after yield is teardown, executed after that test finishes, regardless of whether it passed or failed. The scope parameter (scope='function' by default, or 'class', 'module', 'session') controls how often the fixture is actually recreated: a function-scoped fixture reruns its setup/teardown for every single test that requests it, while a session-scoped fixture runs its setup exactly once for an entire test run and its teardown once at the very end, shared across every test that asked for it in between.">pytest fixture</Term>
+
+## Requested by name, split by yield, controlled by scope
+
+```python
+import pytest
+
+@pytest.fixture(scope="function")
+def logged_in_page(browser):                 # depends on another fixture, "browser"
+    browser.goto("https://example.com/login")
+    browser.fill("#email", "tester@example.com")
+    browser.fill("#password", "secret")
+    browser.click("text=Sign in")
+    yield browser                             # --- setup ends here, test runs now ---
+    browser.goto("https://example.com/logout") # --- teardown: runs after the test, pass or fail ---
+
+
+def test_cart_shows_added_item(logged_in_page):
+    logged_in_page.click("text=Add to cart")
+    assert logged_in_page.locator(".cart-count").text_content() == "1"
+
+
+def test_page_title_unrelated_to_login(browser):   # never requests logged_in_page
+    browser.goto("https://example.com/about")
+    assert browser.title() == "About Us"
+```
+
+- **Requested, not inherited** — `test_cart_shows_added_item` gets `logged_in_page` because it names
+  it as a parameter, full stop. `test_page_title_unrelated_to_login` never mentions it, so the login
+  flow never runs for that test - no shared base class silently running setup neither test explicitly
+  asked for.
+- **`yield` is the setup/teardown boundary** — code before `yield` runs as setup, the yielded value
+  becomes the fixture's actual value inside the test, and code after `yield` runs as teardown once
+  that specific test is done. pytest guarantees the teardown half runs even if the test raises an
+  exception, the same guaranteed-cleanup property covered in setup/teardown hooks generally.
+- **Fixtures compose** — `logged_in_page` itself requests `browser` as a dependency; pytest resolves
+  the whole chain (build `browser` first, then use it inside `logged_in_page`'s setup) automatically,
+  and a fixture requested by more than one other fixture within the same test is built only once and
+  shared for that test, not duplicated.
+- **`scope` controls the recreation frequency** — `function` (default): fresh for every test that asks
+  for it. `class`: shared across all tests in one class. `module`: shared across all tests in one
+  file. `session`: built exactly once for the entire pytest run, torn down once at the very end.
+  Session scope is for genuinely expensive, safely-shareable things (a database container, a browser
+  process); function scope is for anything a test might mutate in a way that shouldn't leak sideways.
+
+<Callout type="tip">
+Default every new fixture to `scope="function"` and only widen it deliberately, with a specific,
+named reason (an expensive browser launch, a slow container startup) - not the other way around.
+Starting narrow and widening on evidence keeps tests isolated by default; starting wide "for speed"
+and narrowing later means finding every place a shared fixture's state quietly leaked between tests
+first.
+</Callout>
+
+<Callout type="mistake">
+Doing expensive, unconditional work at module import time instead of inside a `session`-scoped
+fixture - for example, connecting to a database as a bare module-level statement rather than inside
+`@pytest.fixture(scope="session")`. That connection now opens the moment the test file is imported,
+whether or not any test in the run actually needs it, and pytest's own dependency graph and teardown
+guarantees never apply to it - it doesn't close cleanly, and it isn't lazy, defeating the entire point
+of using a fixture in the first place.
+</Callout>
+
+{/* IMAGE: a real photograph of a hotel room minibar and beverage station, showing a glass shelf with bottled spirits and price-tagged water bottles above, and a wooden tray below holding a kettle, cups, and small tea/coffee sachet tins, set into a dark wood cabinet */}
+<HotspotImage
+  src="/notes/test-frameworks/lifecycle-and-annotations/pytest-fixtures.jpg"
+  alt="A hotel room minibar and beverage station, showing a glass shelf with bottled spirits and price-tagged water bottles above, and a wooden tray below holding a kettle, cups, and small tea/coffee sachet tins, set into a dark wood cabinet"
+  credit="Minibar at Shangri-La Barr Al Jissah Resort — Wikimedia Commons, CC BY-SA 4.0 (Aumars)"
+  creditHref="https://commons.wikimedia.org/wiki/File:Minibar_at_Shangri-La_Barr_Al_Jissah_Ressort.jpg"
+  pins={[
+    { x: 25, y: 25, label: "The row of miniature spirits, lined up and labeled", desc: "Pre-stocked and waiting on the shelf, but nothing here is a fixture's actual cost yet - the fixture equivalent is the ONE bottle a specific guest actually opens, the same way a fixture's setup code only runs for a test that names it as a parameter." },
+    { x: 68, y: 30, label: "The bottled water, individually price-tagged", desc: "Priced and billed per item to whichever room actually uses it, not billed hotel-wide - the same way a fixture's setup cost is paid only by the specific test(s) that request it, not by every test in the file." },
+    { x: 30, y: 68, label: "The tea and coffee tray, assembled for this stay", desc: "A small kit put together specifically for this guest's room, not one shared kettle passed room to room - the function-scoped default: fresh setup for each new requester, torn down before the next one." },
+    { x: 88, y: 78, label: "The cabinet doors, closed beneath the shelf", desc: "Everything stored below stays behind closed doors until a guest specifically opens them - a fixture nobody's test signature mentions never runs its setup at all, exactly like an unopened cabinet." },
+  ]}
+/>
+
+<FlowAnimation
+  title="A logged_in_page fixture, start to finish"
+  intervalMs={1800}
+  nodes={[
+    { label: "A test declares def test_x(logged_in_page):", desc: "Just a parameter name - no explicit call to any setup function anywhere." },
+    { label: "pytest resolves the dependency graph", desc: "logged_in_page itself requests browser first - pytest builds that dependency before running logged_in_page's own setup." },
+    { label: "Code before yield runs: login happens", desc: "Navigate, fill credentials, submit - all before the test body ever executes." },
+    { label: "yield hands the value to the test — the test body runs", desc: "The actual test code executes here, using an already-logged-in page." },
+    { label: "Code after yield runs as teardown, pass or fail", desc: "Logout happens once the test finishes - guaranteed, the same way any teardown hook is guaranteed." },
+  ]}
+/>
+
+Strip away the decorator and a fixture system is really just: build something lazily when it's first
+requested, hand the same built value to anyone who asks for it within the right scope, then tear it
+down afterward. Here's that shape as a small, generic simulation - showing scope as a cache key.
+
+<CodePlayground
+  language="python"
+  title="Run it - lazy, scope-aware creation and teardown (Python)"
+  code={`created = {}   # keyed by (fixture_name, scope_key) - simulates pytest's cache
+
+def get_fixture(name, scope_key, factory):
+    cache_key = (name, scope_key)
+    if cache_key not in created:
+        print(f"  [{name}] creating (first request in this scope)")
+        created[cache_key] = factory()
+    else:
+        print(f"  [{name}] reusing existing instance for this scope")
+    return created[cache_key]
+
+def teardown_scope(scope_key):
+    to_remove = [k for k in created if k[1] == scope_key]
+    for k in to_remove:
+        print(f"  [{k[0]}] torn down (scope '{scope_key}' ending)")
+        del created[k]
+
+# function scope: a NEW scope_key per test, so it's recreated every time
+print("--- two tests, function-scoped fixture ---")
+for test_name in ["test_a", "test_b"]:
+    conn = get_fixture("db_connection", scope_key=test_name, factory=lambda: "conn-object")
+    print(f"  {test_name} runs using: {conn}")
+    teardown_scope(test_name)
+
+# session scope: ONE scope_key shared across every test in the run
+print("--- two tests, session-scoped fixture ---")
+for test_name in ["test_a", "test_b"]:
+    browser = get_fixture("browser", scope_key="session", factory=lambda: "browser-process")
+    print(f"  {test_name} runs using: {browser}")
+teardown_scope("session")   # torn down once, after both tests`}
+/>
+
+Same lazy, scope-aware cache in Java.
+
+<CodePlayground
+  language="java"
+  title="Run it - lazy, scope-aware creation and teardown (Java)"
+  code={`import java.util.*;
+import java.util.function.Supplier;
+
+public class Main {
+    record CacheKey(String name, String scope) {}
+    static Map<CacheKey, String> created = new HashMap<>();
+
+    static String getFixture(String name, String scopeKey, Supplier<String> factory) {
+        CacheKey key = new CacheKey(name, scopeKey);
+        if (!created.containsKey(key)) {
+            System.out.println("  [" + name + "] creating (first request in this scope)");
+            created.put(key, factory.get());
+        } else {
+            System.out.println("  [" + name + "] reusing existing instance for this scope");
+        }
+        return created.get(key);
+    }
+
+    static void teardownScope(String scopeKey) {
+        List<CacheKey> toRemove = new ArrayList<>();
+        for (CacheKey k : created.keySet()) if (k.scope().equals(scopeKey)) toRemove.add(k);
+        for (CacheKey k : toRemove) {
+            System.out.println("  [" + k.name() + "] torn down (scope '" + scopeKey + "' ending)");
+            created.remove(k);
+        }
+    }
+
+    public static void main(String[] args) {
+        System.out.println("--- two tests, function-scoped fixture ---");
+        for (String testName : new String[]{"testA", "testB"}) {
+            String conn = getFixture("dbConnection", testName, () -> "conn-object");
+            System.out.println("  " + testName + " runs using: " + conn);
+            teardownScope(testName);
+        }
+
+        System.out.println("--- two tests, session-scoped fixture ---");
+        for (String testName : new String[]{"testA", "testB"}) {
+            String browser = getFixture("browser", "session", () -> "browser-process");
+            System.out.println("  " + testName + " runs using: " + browser);
+        }
+        teardownScope("session");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: watch scope change how often setup actually runs">
+<StepChecklist
+  steps={[
+    { text: "In a scratch pytest project, write a fixture with scope='function' that prints a line before and after yield", detail: "Write two test functions that both request it, and run the suite - count how many times the setup line prints." },
+    { text: "Change only the scope to 'session' and rerun, unchanged otherwise", detail: "Count again - confirm setup now prints exactly once, not once per test." },
+    { text: "Add a third test that does NOT request the fixture at all", detail: "Confirm the setup/teardown lines never print for that specific test's run, regardless of the scope you chose." },
+    { text: "Make one of the two tests raise an exception deliberately and confirm the fixture's post-yield teardown line still prints." },
+  ]}
+/>
+You've now watched scope and laziness change fixture behavior directly, not just read the definition.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A session-scoped fixture's setup runs correctly once, but teardown never seems to run, or runs at an unexpected time.",
+      fix: "Confirm the fixture actually uses yield (not return) and that there's real code after the yield statement - a fixture that only returns a value has nothing pytest can execute as teardown, regardless of scope.",
+    },
+    {
+      symptom: "Two tests that pass individually fail when run together, specifically when a fixture's scope was recently widened.",
+      fix: "A wider scope (class/module/session) means the SAME instance is now shared across tests that used to each get their own - check whether one test is mutating that shared instance in a way the next test's assumptions don't expect.",
+    },
+    {
+      symptom: "A fixture's expensive setup code appears to run even for test files that never reference it.",
+      fix: "Check whether the actual expensive work sits inside the fixture function (correct) or unconditionally at module import time (the mistake this note calls out) - only the former respects pytest's laziness.",
+    },
+    {
+      symptom: "A fixture that depends on another fixture seems to get a stale or unexpected value.",
+      fix: "Check the scope relationship between the two - a wider-scoped fixture generally cannot depend on a narrower-scoped one (pytest raises an error for this), and a narrower fixture requesting a wider one gets whatever instance is currently live for that broader scope, which may be shared with other tests.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The fixture's own scope argument** — `@pytest.fixture(scope=...)`, defaulting to `function` when
+  omitted - the single fact that determines how often setup/teardown actually run.
+- **Whether the fixture uses yield or return** — only `yield` gives a fixture a teardown half at all;
+  a `return`-based fixture is setup-only.
+- **`pytest --setup-show`** — pytest's own built-in flag that prints exactly when each fixture's
+  setup and teardown fire relative to each test, the fastest way to confirm actual behavior instead of
+  guessing from the code alone.
+- **`conftest.py`** — where fixtures shared across multiple test files typically live; a fixture that
+  "doesn't seem to exist" for a given test file is often just not visible from that file's
+  `conftest.py` scope in the directory tree.
+</WhereToCheck>
+
+<WorkedExample title="turning a slow, brittle test file into a fast, isolated one by fixing scope">
+1. A test file with fifteen tests each starts with `driver = webdriver.Chrome()` as an ordinary local
+   variable at the top of the test function, and quits it manually at the end.
+2. The suite takes several minutes because a browser process launches and closes fifteen separate
+   times, and roughly one test in ten fails to reach its own `driver.quit()` line, leaking a process.
+3. The team extracts a `browser` fixture with `scope="session"` - one browser launches for the whole
+   file, `yield`ed to every test, quit once at the very end regardless of how any individual test went.
+4. Total suite time drops sharply, but two tests that used to pass now fail intermittently - they were
+   silently relying on a fresh, unmodified browser tab state that a shared session-scoped browser no
+   longer guarantees between them.
+5. The fix is a second, `function`-scoped fixture that navigates the shared browser to a fresh known
+   URL before each test - genuinely expensive setup (launching Chrome) stays session-scoped, while the
+   part that actually needs to be fresh per test (starting URL) moves back to function scope.
+</WorkedExample>
+
+<Quiz
+  question="A fixture is defined as `@pytest.fixture(scope='session') def db(): conn = connect(); yield conn; conn.close()`. Two test files in the same pytest run both have a test function that declares db as a parameter. What happens?"
+  options={[
+    "connect() runs twice - once per test file - and conn.close() runs twice too",
+    "connect() runs exactly once for the entire session, the same connection object is handed to both tests, and conn.close() runs exactly once after the whole run finishes",
+    "Each test gets its own separate connection, but all connections share one close() call at the end",
+    "pytest raises an error because two different files cannot both use the same session-scoped fixture"
+  ]}
+  answer={1}
+  explain="Session scope means the fixture is built exactly once for the entire test run and torn down exactly once at the very end - that's the whole point of choosing session scope over the function-scoped default, and it applies across file boundaries, not just within one file. Option one describes function-scoped behavior (recreated per requester), the opposite of what scope='session' specifies. Option three invents a hybrid that doesn't match how pytest's fixture cache actually works - the object itself, not just the close call, is shared. Option four is simply false - sharing a session-scoped fixture across multiple files is exactly the intended, common use case (a shared database connection or browser process for a whole test run)."
+/>
+
+<Flashcards
+  cards={[
+    { front: "How does a test get a fixture in pytest?", back: "By declaring it as a parameter in the test function's own signature, by name - dependency injection, not inheritance from a shared base class." },
+    { front: "What does yield do inside a fixture function?", back: "Splits the function into setup (code before yield) and teardown (code after yield) - the yielded value becomes what the requesting test receives, and teardown is guaranteed to run after that test finishes, pass or fail." },
+    { front: "What are the four fixture scopes, and the default?", back: "function (default - fresh per test), class, module, and session (built once for the entire run). Wider scope means less recreation cost but more shared, potentially mutable state." },
+    { front: "What's the classic mistake with expensive fixture-like setup?", back: "Doing the expensive work unconditionally at module import time instead of inside a properly scoped fixture function - it then runs whether or not any test needs it, and never gets pytest's teardown guarantee." },
+    { front: "The hotel-minibar analogy for fixtures", back: "A coffee tray assembled specifically for one guest's stay, not a single shared kettle wheeled room to room - nothing is prepared until a specific guest (test) actually asks for it, and its scope (per-stay vs hotel-wide) determines how often it's freshly assembled." },
+  ]}
+/>
+
+<Challenge>
+Find (or write) three pytest test functions that currently repeat the same two or three lines of setup
+code independently. Extract that into a single fixture with an appropriate scope, using yield to add
+teardown if the setup created anything that needs cleaning up. Then run pytest --setup-show and read
+its output to confirm your fixture's setup and teardown fire exactly as often as your chosen scope
+predicts.
+</Challenge>
+
+<AskCommunity prompt="My pytest fixture [fixture name] with scope=[scope] isn't behaving as expected - [describe: teardown not firing, unexpected sharing between tests, setup running when it shouldn't]. Here's the fixture: [paste it].">
+Pasting the fixture's exact scope argument alongside its yield placement is usually enough for someone
+to immediately spot whether the issue is a scope mismatch or a missing teardown half.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://docs.pytest.org/en/stable/how-to/fixtures.html", title: "pytest — official documentation: how to use fixtures", kind: "read" },
+    { href: "https://www.geeksforgeeks.org/python/pytest-fixtures/", title: "GeeksforGeeks — pytest fixtures with examples", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=mlqlrH2p114" title="Mastering PyTest Fixtures: The Complete Guide — Super SQA | QA Automation" minutes={18} />
+
+<Takeaways
+  points={[
+    "A pytest fixture is a function decorated @pytest.fixture, requested by a test as a named parameter - dependency injection instead of the inheritance xUnit-style Java frameworks use.",
+    "yield splits a fixture into setup (before) and teardown (after), with teardown guaranteed to run once the requesting test finishes, pass or fail.",
+    "scope (function, class, module, session) controls how often the fixture is recreated - function is the safe default; wider scopes trade isolation for speed on genuinely expensive, shareable resources.",
+    "Fixtures compose: one fixture can request another, and pytest resolves and builds the whole dependency graph automatically before the test runs.",
+    "Expensive setup placed unconditionally at module import time - instead of inside a properly scoped fixture - loses both laziness and pytest's teardown guarantee.",
+  ]}
+/>
+
+<Complete xp={10} />

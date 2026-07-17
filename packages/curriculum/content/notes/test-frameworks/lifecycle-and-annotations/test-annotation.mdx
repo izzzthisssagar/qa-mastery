@@ -1,0 +1,338 @@
+---
+title: "@Test"
+summary: "@Test is the annotation that turns a plain method into a test the runner actually discovers and executes on its own - a method without it, however test-shaped it looks, is just an unused helper."
+tags: ["test-frameworks", "lifecycle-and-annotations", "track-d"]
+updated: "2026-07-17"
+related:
+  - "test-frameworks/lifecycle-and-annotations/setup-and-teardown-hooks"
+  - "test-frameworks/lifecycle-and-annotations/testng-vs-junit"
+  - "test-frameworks/lifecycle-and-annotations/pytest-fixtures"
+---
+
+<Hook>
+Two methods sit side by side in the same Java class, same signature, same body shape - `checksLogin()`
+and `helperFindsButton()`. Run the suite, and exactly one of them executes on its own, gets reported
+as a pass or fail, and shows up in the results. The other one does nothing at all unless something
+else calls it directly. The only difference between them is one line above the method: `@Test`.
+</Hook>
+
+<Callout type="analogy">
+Among a whole herd of otherwise-identical cattle grazing in a field, one animal wears a small yellow
+ear tag: a barcode, an issuing authority's mark, and a unique printed number. Every other animal in
+the field is just as real, just as present - but only the tagged one is individually registered,
+trackable, and addressable by that specific number in whatever system issued the tag. The tag doesn't
+change the animal. It changes whether the animal is officially, individually accounted for.
+</Callout>
+
+<Term define="@Test is the annotation - metadata attached directly to a method declaration - that tells a test framework's runner 'this specific method is a test; discover it automatically and execute it as part of a run.' In Java's JUnit (org.junit.jupiter.api.Test in JUnit 5, org.junit.Test in JUnit 4) and TestNG (org.testng.annotations.Test), a plain method with no annotation is invisible to the runner - it might compile fine and even be a perfectly reasonable helper, but nothing calls it unless another method calls it explicitly. Eligibility rules are framework-specific but converge on a few common shapes: the method must typically be public, JUnit 5 test methods take no parameters by default (unless a ParameterResolver is registered), and the method must not be static in the common per-test-instance case. Beyond marking a method as a test at all, @Test commonly accepts attributes that adjust how that specific test runs: an expected-exception check (expected in JUnit 4, expectedExceptions in TestNG, assertThrows as the JUnit 5 idiom instead), a timeout, and an enabled/disabled switch (enabled=false in TestNG, the separate @Disabled annotation in JUnit 5).">@Test</Term>
+
+## What actually makes a method eligible
+
+```java
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Disabled;
+import static org.junit.jupiter.api.Assertions.*;
+
+class PriceCalculatorTest {
+
+    @Test
+    void appliesTenPercentDiscountAboveFiftyDollars() {
+        double result = PriceCalculator.applyDiscount(60.00);
+        assertEquals(54.00, result, 0.001);
+    }
+
+    @Test
+    @Disabled("waiting on a fix for the rounding bug - see TICKET-482")
+    void roundsToNearestCentOnRepeatingDecimals() {
+        double result = PriceCalculator.applyDiscount(19.99);
+        assertEquals(17.99, result, 0.001);
+    }
+
+    // No @Test here - this is an ordinary helper, invisible to the runner
+    private PriceCalculator buildCalculatorWithTaxRate(double rate) {
+        return new PriceCalculator(rate);
+    }
+}
+```
+
+- **The annotation is the entire trigger** — the runner doesn't guess based on method naming
+  conventions (`testSomething`, in older frameworks, was a convention JUnit 3 relied on via
+  reflection; modern JUnit and TestNG both use the annotation itself, not the name). A method named
+  `checksDiscountLogic` with `@Test` runs; a method named `testDiscountLogic` without it does not.
+  Name it whatever reads clearly - the annotation is what matters.
+- **Signature rules are strict but simple** — public, typically no explicit parameters (JUnit 5 test
+  methods can request injected parameters like `TestInfo` via its own resolver mechanism, but that's
+  opt-in, not the default shape), and not static for a normal instance test. Get the signature wrong
+  - private, wrong parameter list - and most frameworks either fail to discover the method at all or
+  throw a clear configuration error at startup rather than silently skipping it.
+- **`expectedExceptions` / `expected`** — declares that the test is only correct if a specific
+  exception type is thrown; if none is thrown, or a different type is, the test fails. JUnit 5 dropped
+  this attribute in favor of the explicit `assertThrows(SomeException.class, () -> { ... })` call
+  inside the test body, which is more flexible (it can assert on the exception's message too) at the
+  cost of one extra line.
+- **`timeout`** — fails the test automatically if it runs longer than the given duration, catching
+  hangs (an infinite loop, a network call with no timeout of its own) that would otherwise stall an
+  entire suite.
+- **`enabled` / `@Disabled`** — turns a test off without deleting it. TestNG uses `@Test(enabled =
+  false)`; JUnit 5 uses a separate `@Disabled("reason")` annotation stacked on top of `@Test`. Both
+  keep the method compiling and readable in source control while excluding it from actual runs -
+  useful for a test blocked on a known bug, distinct from just commenting the method out.
+
+<Callout type="tip">
+Always give `@Disabled`/`enabled=false` a reason - `@Disabled("flaky pending TICKET-482")`, not a bare
+`@Disabled`. A disabled test with no explanation is indistinguishable, six months later, from a test
+nobody remembers why they turned off - and it either quietly rots or gets deleted by someone who
+assumed it was dead weight.
+</Callout>
+
+<Callout type="mistake">
+Importing the wrong `Test` class. A project with both JUnit 4 and JUnit 5 on the classpath (common
+mid-migration) can end up with `import org.junit.Test;` (JUnit 4) on a method that a JUnit 5 runner
+never discovers, because JUnit 5 is specifically looking for `org.junit.jupiter.api.Test`. The method
+compiles fine, looks completely correct, and silently never runs - no error, no failure, just a test
+that was never actually part of any run. The same trap exists between TestNG's `org.testng.annotations.Test`
+and either JUnit import if a project somehow has both on the classpath.
+</Callout>
+
+{/* IMAGE: a real close-up photograph of a single yellow plastic livestock ear tag on a plain grey background, showing a black rivet/fastener at the top, an issuing authority's printed text, a barcode, an alphanumeric code, and a large printed identification number */}
+<HotspotImage
+  src="/notes/test-frameworks/lifecycle-and-annotations/test-annotation.jpg"
+  alt="A close-up photograph of a single yellow plastic livestock ear tag on a plain grey background, showing a black rivet fastener at the top, an issuing authority's printed text, a barcode, an alphanumeric code, and a large printed identification number"
+  credit="Cattle ear tag — Wikimedia Commons, CC BY-SA 4.0 (Eliran t)"
+  creditHref="https://commons.wikimedia.org/wiki/File:Cattle_ear_tag_(1).jpg"
+  pins={[
+    { x: 45, y: 10, label: "The rivet — fixes the tag directly to this one ear", desc: "An annotation sits directly on the method it marks, not in some separate config file describing it from a distance - the marking and the marked method are inseparable, the same way this tag doesn't come loose." },
+    { x: 50, y: 33, label: "The issuing authority's printed mark", desc: "The tag is only official because a specific authority issued it under a specific standard - the same way @Test only means something because it's the exact class a given runner is looking for (JUnit's org.junit.jupiter.api.Test, TestNG's org.testng.annotations.Test); the wrong import means nothing to that runner." },
+    { x: 50, y: 48, label: "The barcode — machine-scannable, not just human-readable", desc: "@Test isn't a comment for a person reading the code - it's metadata the runner's own reflection machinery scans at startup, the mechanical step that actually turns a method into a discovered, executable test." },
+    { x: 45, y: 78, label: "The large printed number — this tag's unique ID", desc: "One number, one specific, individually addressable animal - the same way each @Test method becomes one specific, individually reportable entry in a run's results, not lumped anonymously in with the rest of the class." },
+  ]}
+/>
+
+<FlowAnimation
+  title="From plain method to reported test result"
+  intervalMs={1800}
+  nodes={[
+    { label: "The runner scans the class for methods carrying @Test", desc: "Reflection, not naming convention - a method without the annotation is invisible here, whatever it's named." },
+    { label: "Signature check: public, correct parameter shape, not static", desc: "A discovered @Test method that fails this check throws a clear configuration error, not a silent skip." },
+    { label: "Attributes are read: timeout, expectedExceptions, enabled", desc: "These adjust HOW the test runs, or whether it runs at all, before a single line of the body executes." },
+    { label: "The method body actually executes", desc: "This is the only step a plain, un-annotated helper method never reaches on its own." },
+    { label: "Pass, fail, or skipped is reported against this specific method's name", desc: "The individually addressable result - the entire reason the tag/annotation existed in the first place." },
+  ]}
+/>
+
+Strip away the framework and `@Test` is really just a marker in a registry: something scans a
+collection of candidates, checks each one for the marker, and only runs the marked ones. Here's that
+shape as a small, generic simulation.
+
+<CodePlayground
+  language="python"
+  title="Run it - only marked functions get discovered and executed (Python)"
+  code={`registry = {}
+
+def test(fn=None, *, enabled=True):
+    def wrap(f):
+        registry[f.__name__] = {"fn": f, "enabled": enabled}
+        return f
+    return wrap(fn) if fn else wrap
+
+@test
+def checks_login_succeeds():
+    assert 1 + 1 == 2
+    print(f"    {checks_login_succeeds.__name__}: PASS")
+
+@test(enabled=False)
+def checks_password_reset():
+    print(f"    {checks_password_reset.__name__}: PASS")
+
+def helper_builds_test_user():        # no @test - never discovered
+    return {"name": "test-user"}
+
+def run_discovered_tests():
+    print(f"registry contains {len(registry)} marked test(s)")
+    for name, meta in registry.items():
+        if not meta["enabled"]:
+            print(f"  {name}: SKIPPED (disabled)")
+            continue
+        meta["fn"]()
+
+run_discovered_tests()
+print(f"helper_builds_test_user ever discovered? {'helper_builds_test_user' in registry}")`}
+/>
+
+Same marker-and-scan shape in Java, using a simple custom annotation instead of a decorator.
+
+<CodePlayground
+  language="java"
+  title="Run it - only annotated methods get discovered and executed (Java)"
+  code={`import java.lang.annotation.*;
+import java.lang.reflect.*;
+import java.util.*;
+
+public class Main {
+
+    @Retention(RetentionPolicy.RUNTIME)
+    @interface Test { boolean enabled() default true; }
+
+    static class PriceTests {
+        @Test
+        public void appliesDiscount() {
+            System.out.println("    appliesDiscount: PASS");
+        }
+
+        @Test(enabled = false)
+        public void roundsRepeatingDecimals() {
+            System.out.println("    roundsRepeatingDecimals: PASS");
+        }
+
+        // no @Test - an ordinary helper, invisible to the scanner below
+        public void helperBuildsFixtureData() { }
+    }
+
+    public static void main(String[] args) throws Exception {
+        Method[] methods = PriceTests.class.getDeclaredMethods();
+        List<Method> discovered = new ArrayList<>();
+        for (Method m : methods) {
+            if (m.isAnnotationPresent(Test.class)) discovered.add(m);
+        }
+        System.out.println("registry contains " + discovered.size() + " marked test(s)");
+
+        PriceTests instance = new PriceTests();
+        for (Method m : discovered) {
+            Test meta = m.getAnnotation(Test.class);
+            if (!meta.enabled()) {
+                System.out.println("  " + m.getName() + ": SKIPPED (disabled)");
+                continue;
+            }
+            m.invoke(instance);
+        }
+
+        boolean helperDiscovered = false;
+        for (Method m : methods) {
+            if (m.getName().equals("helperBuildsFixtureData") && m.isAnnotationPresent(Test.class)) {
+                helperDiscovered = true;
+            }
+        }
+        System.out.println("helperBuildsFixtureData ever discovered? " + helperDiscovered);
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: watch a method go from invisible to discovered">
+<StepChecklist
+  steps={[
+    { text: "In a scratch JUnit 5 (or TestNG) project, write a class with one plain helper method and zero test annotations", detail: "Run the suite - confirm the test report shows zero tests found for that class." },
+    { text: "Add @Test above the helper method, unchanged otherwise", detail: "Run again - the exact same method is now discovered, executed, and individually reported." },
+    { text: "Add @Disabled (JUnit) or enabled=false (TestNG) to it", detail: "Run once more - confirm it's now reported as skipped, not simply absent from the results." },
+    { text: "Deliberately import the wrong Test annotation class (JUnit 4's org.junit.Test on a JUnit 5 runner, if you can set that up) and confirm the method silently stops being discovered again - no error, just absence." },
+  ]}
+/>
+You've now watched the exact mechanism this note describes happen for real, in three visible states:
+absent, discovered, and explicitly skipped.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A method that looks exactly like a test - same shape, same assertions - never shows up in the test report at all, with no error.",
+      fix: "Check for a missing @Test annotation first, then check the import if it IS annotated - org.junit.Test (JUnit 4) on a JUnit 5 runner is the classic silent-miss, since JUnit 5 looks specifically for org.junit.jupiter.api.Test.",
+    },
+    {
+      symptom: "A test method throws a configuration/discovery error at startup instead of running.",
+      fix: "Check the method's signature against the framework's eligibility rules - not public, unexpectedly static, or an unsupported parameter list are the usual causes, and most frameworks report this loudly rather than silently skipping.",
+    },
+    {
+      symptom: "A test using expectedExceptions (TestNG) or expected (JUnit 4) passes even though the exception's message or details are clearly wrong.",
+      fix: "Those attributes only check the exception's TYPE, not its message or any other detail - if the message matters, assert on it explicitly (JUnit 5's assertThrows returns the caught exception for exactly this reason) rather than relying on the annotation attribute alone.",
+    },
+    {
+      symptom: "A disabled test nobody remembers the reason for is either quietly ignored forever or accidentally deleted during cleanup.",
+      fix: "Always pass a reason string to @Disabled/enabled=false referencing a ticket or a specific cause - an unexplained disabled test is indistinguishable from dead code to anyone who finds it later.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The import statement above the class** — `org.junit.Test` vs `org.junit.jupiter.api.Test` vs
+  `org.testng.annotations.Test` is the single most common source of a test that silently never runs.
+- **The test report's total discovered count** — comparing "tests found" to the number of methods you
+  expect to be tests catches a missing or misimported annotation immediately, before debugging
+  anything about the test's actual logic.
+- **The method's modifiers** — public, non-static (for the common case), and the parameter list -
+  checked against the specific framework's documented eligibility rules when a method throws a
+  discovery-time error rather than simply running.
+- **Framework release notes around exception-handling attributes** — `expected`/`expectedExceptions`
+  behavior and availability has shifted across JUnit 4 to 5 specifically; worth confirming against the
+  exact version in use rather than assuming.
+</WhereToCheck>
+
+<WorkedExample title="the test suite that quietly lost twelve tests during a JUnit 5 migration">
+1. A team migrates a 200-test JUnit 4 suite to JUnit 5, updating most classes but running the
+   migration gradually, file by file, over a few weeks.
+2. CI keeps passing throughout - suspiciously smoothly, given the size of the change - and nobody
+   notices the total reported test count quietly drops from 200 to 188 partway through.
+3. A new bug ships that one of those twelve missing tests would have caught. Investigation finds
+   twelve files still had `import org.junit.Test;` (the JUnit 4 annotation) left in place after the
+   rest of each file was updated to JUnit 5 syntax - the import was simply never touched.
+4. Those twelve methods compiled without any error and looked completely normal in code review -
+   nothing about them was syntactically wrong, they just weren't the annotation the JUnit 5 runner
+   was scanning for.
+5. The fix is mechanical (correct the imports), but the process fix is the lasting one: the team adds
+   a CI check that fails the build if the discovered test count drops between runs, catching exactly
+   this class of silent loss going forward.
+</WorkedExample>
+
+<Quiz
+  question="A JUnit 5 project has a test class with `import org.junit.Test;` at the top (the JUnit 4 annotation) instead of `import org.junit.jupiter.api.Test;`. The method annotated with it compiles cleanly and looks correct. What actually happens when the suite runs?"
+  options={[
+    "JUnit 5 automatically detects the JUnit 4 annotation and runs the method anyway, with a warning",
+    "The build fails immediately with a clear 'wrong annotation' compile error",
+    "The method compiles fine but is never discovered or executed by the JUnit 5 runner, and no error is reported anywhere",
+    "The method runs, but any assertions inside it are silently ignored"
+  ]}
+  answer={2}
+  explain="This is exactly the mistake callout's scenario: the JUnit 5 runner scans specifically for org.junit.jupiter.api.Test, not org.junit.Test - a method carrying the wrong import compiles without any error (both are valid, importable classes) and simply never appears in the discovered test list. Option one describes an auto-compatibility feature JUnit 5 does not have. Option two is wrong because nothing about the code is actually invalid Java - it compiles fine, which is precisely what makes this mistake so easy to miss. Option four misdescribes the failure mode: the method's body, including its assertions, never executes at all - it isn't that assertions are ignored, it's that the whole method is never called by the runner."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What makes a method a test that the runner discovers automatically?", back: "The @Test annotation (or its framework-specific equivalent) - a method without it is invisible to the runner regardless of its name, shape, or what it contains." },
+    { front: "How is method discovery different from JUnit 3's old testXxx naming convention?", back: "Modern JUnit and TestNG discover tests by scanning for the @Test annotation via reflection, not by matching method names against a naming pattern - name the method however reads clearly." },
+    { front: "What's the difference between expectedExceptions/expected and JUnit 5's assertThrows?", back: "The annotation attribute only checks the exception's TYPE and fails the test if none (or the wrong type) is thrown. assertThrows does the same but also returns the caught exception, so the test can assert on its message or other details too." },
+    { front: "The classic silent-failure mistake with @Test", back: "Importing the wrong Test class (org.junit.Test on a JUnit 5 runner, for example) - the method compiles and looks correct but is never discovered or run, with zero error reported anywhere." },
+    { front: "The ear-tag analogy for @Test", back: "One animal in an otherwise identical herd wears an official tag with a unique number - every animal is equally real, but only the tagged one is individually registered and addressable. The tag doesn't change the method; it changes whether the runner accounts for it." },
+  ]}
+/>
+
+<Challenge>
+In a scratch project (JUnit 5 or TestNG, your choice), write three methods in one test class: one
+normal @Test, one @Test with a deliberately wrong parameter list (so it should throw a discovery-time
+error), and one plain helper method with no annotation at all. Run the suite, and write down exactly
+what the runner reports for each of the three - confirming for yourself which are discovered, which
+errors, and which is simply never mentioned.
+</Challenge>
+
+<AskCommunity prompt="A test method in my [JUnit 5 / TestNG] project isn't showing up in the test results at all, no error. Here's the method and its imports: [paste the full method signature and import lines].">
+Pasting the exact import lines is usually the fastest way for someone to spot a mismatched annotation
+class - it's a two-second visual check once someone else's eyes are on it.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://docs.junit.org/5.0.3/api/org/junit/jupiter/api/Test.html", title: "JUnit 5 — official API reference: @Test annotation", kind: "read" },
+    { href: "https://testng.org/annotations.html", title: "TestNG — official documentation: annotations", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=Q9f6y-HoE7g" title="JUnit Tutorial - #5 - JUnit @Test Annotation | Unit Test Factorial Logic — Java Guides" minutes={10} />
+
+<Takeaways
+  points={[
+    "@Test is the annotation that makes a method a discoverable, automatically executed test - without it, a method runs only if something else calls it directly, however test-shaped it looks.",
+    "Eligibility is checked mechanically (public, correct parameter shape, not static in the common case) - modern frameworks discover tests by annotation via reflection, not by method-name convention.",
+    "Common attributes adjust how a specific test runs: expected exception type, a timeout, and an enabled/disabled switch that turns a test off without deleting it.",
+    "Importing the wrong Test class (JUnit 4's org.junit.Test on a JUnit 5 runner, or vice versa) compiles cleanly but makes a method silently invisible to the runner - the single most common trap in this area.",
+    "A disabled test should always carry a reason - an unexplained @Disabled is indistinguishable from dead code to anyone who finds it later.",
+  ]}
+/>
+
+<Complete xp={10} />

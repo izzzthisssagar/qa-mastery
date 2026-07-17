@@ -1,0 +1,301 @@
+---
+title: "Ordering"
+summary: "Independent, order-agnostic tests are the strong default - a test's outcome shouldn't depend on which test ran before it. Explicit ordering (TestNG dependsOnMethods/priority, JUnit 5 @Order) is a deliberate, justified exception, not a starting point."
+tags: ["test-frameworks", "groups-and-parameters", "track-d"]
+updated: "2026-07-17"
+related:
+  - "test-frameworks/groups-and-parameters/grouping-tests"
+  - "test-frameworks/groups-and-parameters/parameters"
+  - "test-frameworks/groups-and-parameters/suites"
+---
+
+<Hook>
+Reorder a well-written suite's test methods at random and nothing should break. The moment doing that
+DOES break something, one of two things is true: a hidden shared-state bug just got exposed, or this is
+one of the rare, legitimate cases where order genuinely matters - and the dependency needs to be made
+explicit, not left to luck.
+</Hook>
+
+<Callout type="analogy">
+A relay race is one of the few athletic events where finishing order genuinely depends on running
+order - the second runner cannot start until the baton is physically placed in their hand by the first.
+That handoff isn't incidental, it's the entire structure of the event: a deliberate, declared dependency
+between two specific legs of the race. But a relay is the exception, not how races normally work - a
+100m final has eight runners in eight lanes, each one's result completely independent of what happens in
+any other lane. Most tests should look like the 100m final: independent, order-agnostic, no handoff
+required. A dependency chain like a relay's baton pass is the rare, deliberate exception.
+</Callout>
+
+<Term define="Test ordering means deliberately controlling the sequence in which tests execute, because one test's outcome or setup genuinely depends on another's having run first - as opposed to the strong default where tests are independent and order-agnostic (see test isolation). TestNG supports this via dependsOnMethods (a test won't run, and is reported as skipped rather than failed, if the method it depends on failed) and priority (a simple numeric hint for coarse ordering without a true dependency). JUnit 5 supports it via @TestMethodOrder combined with @Order(n) annotations on each method, or other built-in orderers like MethodName or Random. In both frameworks, ordering is treated as an opt-in, explicit declaration - the unordered, independent default is what happens unless a test author deliberately asks for something else, and doing so should be a justified, rare exception rather than a habit.">Ordering</Term>
+
+## Independent by default, ordered only on purpose
+
+- **The default, and the strong preference, is independence.** Every test should be runnable alone, in
+  any order, in parallel, and reach the same result. This is the same principle behind test isolation
+  generally - ordering is a special, narrow exception to it, not a competing default.
+- **TestNG's `dependsOnMethods`** declares a real dependency: if the depended-on method fails, TestNG
+  reports the dependent test as **skipped**, not failed - correctly signaling "this couldn't be verified"
+  rather than "this specific behavior is broken."
+- **TestNG's `priority`** is a much weaker tool - just a numeric hint for coarse sequencing (lower runs
+  first) with no skip-on-failure behavior. It's ordering, not a dependency.
+- **JUnit 5's `@TestMethodOrder(OrderAnnotation.class)` plus `@Order(n)`** on each method gives explicit,
+  numeric sequencing within one class - JUnit 5 has no direct equivalent to `dependsOnMethods`' skip-on-
+  failure semantics; ordering there is sequence only, not a true pass/fail dependency chain.
+- **The legitimate cases are narrow**: a genuine multi-step workflow test (create record, then verify
+  it, then delete it) or true setup-chain dependencies. "Test B happens to work when it runs after Test
+  A" because of leftover shared state is not a legitimate case - that's a bug to fix, not a dependency to
+  declare.
+
+```java
+import org.testng.annotations.Test;
+
+public class RecordLifecycleTest {
+
+    @Test
+    public void createRecord() {
+        // creates a record and stores its id for later steps
+    }
+
+    @Test(dependsOnMethods = "createRecord")
+    public void deleteRecord() {
+        // only runs if createRecord passed; if createRecord fails, this is SKIPPED, not failed
+    }
+}
+```
+
+<Callout type="tip">
+If a workflow genuinely has ordered steps (create, then delete), consider whether it's actually one test
+telling one story rather than several dependent tests - a single test method that does create-then-
+verify-then-delete is often clearer than three separately-ordered ones, and sidesteps ordering machinery
+entirely.
+</Callout>
+
+<Callout type="mistake">
+Reaching for `dependsOnMethods` or `@Order` to fix a test that only passes when it happens to run after
+another one - because they share a database row, a global variable, or leftover browser state. That's
+not a legitimate ordering need; it's a test-isolation bug wearing an ordering annotation as a patch. The
+annotation hides the symptom (the test now "reliably" passes in CI) without fixing the actual shared-
+state problem, which resurfaces the moment someone runs that one test alone.
+</Callout>
+
+{/* IMAGE: a real black-and-white historical photograph of two female relay runners at the exact moment of a baton handoff during a track race, one runner's arm extended back holding the baton, the other reaching forward to receive it, both mid-stride */}
+<HotspotImage
+  src="/notes/test-frameworks/groups-and-parameters/ordering.jpg"
+  alt="Two female relay runners at the exact moment of a baton handoff during a 1930s track race, one runner's arm extended back holding the baton, the other reaching forward to receive it, both mid-stride"
+  credit="Runners in a relay race, Brisbane, 1939 — Wikimedia Commons, public domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:Runners_in_a_relay_race,_Brisbane,_1939.JPG"
+  pins={[
+    { x: 25, y: 45, label: "The baton itself, mid-transfer between both hands", desc: "The one genuine dependency in this whole event - the second runner physically cannot start their leg until this exact handoff happens, the same way a dependsOnMethods test cannot meaningfully run until its declared dependency has completed." },
+    { x: 60, y: 35, label: "The receiving runner's outstretched, empty hand", desc: "Waiting on a specific prior step to complete - exactly the shape of a real ordering dependency, not an arbitrary sequencing preference." },
+    { x: 15, y: 55, label: "The first runner's number, clearly visible", desc: "A specific, identified prior step - a real dependency names exactly which method or step it depends on, not a vague 'runs after something else'." },
+    { x: 85, y: 20, label: "The empty lanes and open track ahead", desc: "Once the baton is handed off, the rest of this runner's leg is independent again - a reminder that even a legitimate dependency chain should be as short as possible, not a habit that spreads through an entire suite." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Default independence, with one narrow, declared exception"
+  intervalMs={1800}
+  nodes={[
+    { label: "Most tests: no ordering declared at all", desc: "Runnable alone, in parallel, in any sequence - the strong default." },
+    { label: "One legitimate workflow needs a real dependency", desc: "createRecord must run and pass before deleteRecord makes sense." },
+    { label: "dependsOnMethods = \"createRecord\" is declared explicitly", desc: "The dependency is visible in the code, not left to accidental run order." },
+    { label: "createRecord fails on some run", desc: "deleteRecord is correctly reported as SKIPPED, not a separate, confusing failure." },
+    { label: "Every other test in the suite is untouched", desc: "Ordering stayed scoped to the one place it was actually needed." },
+  ]}
+/>
+
+Running a set of steps only after their declared prerequisites have actually succeeded - and skipping
+whatever depended on a prerequisite that failed - is really just: check each step's dependencies before
+running it. Here's that shape as a small, generic simulation.
+
+<CodePlayground
+  language="python"
+  title="Run it - run steps only after their declared dependencies pass, skip what depended on a failure (Python)"
+  code={`steps = [
+    {"name": "createRecord", "depends_on": None, "will_pass": True},
+    {"name": "verifyRecord", "depends_on": "createRecord", "will_pass": True},
+    {"name": "deleteRecord", "depends_on": "verifyRecord", "will_pass": True},
+]
+
+results = {}
+
+def run(steps):
+    for step in steps:
+        dep = step["depends_on"]
+        if dep is not None and results.get(dep) != "passed":
+            results[step["name"]] = "skipped"
+            print(f"{step['name']}: SKIPPED (dependency '{dep}' did not pass)")
+            continue
+        outcome = "passed" if step["will_pass"] else "failed"
+        results[step["name"]] = outcome
+        print(f"{step['name']}: {outcome.upper()}")
+
+print("-- normal run --")
+run(steps)
+
+print("\\n-- createRecord fails this time --")
+results.clear()
+steps[0]["will_pass"] = False
+run(steps)`}
+/>
+
+Same dependency-check-before-running shape in Java.
+
+<CodePlayground
+  language="java"
+  title="Run it - run steps only after their declared dependencies pass, skip what depended on a failure (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static class Step {
+        String name, dependsOn;
+        boolean willPass;
+        Step(String name, String dependsOn, boolean willPass) {
+            this.name = name; this.dependsOn = dependsOn; this.willPass = willPass;
+        }
+    }
+
+    static void run(List<Step> steps, Map<String, String> results) {
+        for (Step step : steps) {
+            if (step.dependsOn != null && !"passed".equals(results.get(step.dependsOn))) {
+                results.put(step.name, "skipped");
+                System.out.println(step.name + ": SKIPPED (dependency '" + step.dependsOn + "' did not pass)");
+                continue;
+            }
+            String outcome = step.willPass ? "passed" : "failed";
+            results.put(step.name, outcome);
+            System.out.println(step.name + ": " + outcome.toUpperCase());
+        }
+    }
+
+    public static void main(String[] args) {
+        List<Step> steps = new ArrayList<>(List.of(
+            new Step("createRecord", null, true),
+            new Step("verifyRecord", "createRecord", true),
+            new Step("deleteRecord", "verifyRecord", true)
+        ));
+
+        System.out.println("-- normal run --");
+        run(steps, new HashMap<>());
+
+        System.out.println("\\n-- createRecord fails this time --");
+        steps.set(0, new Step("createRecord", null, false));
+        run(steps, new HashMap<>());
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: prove a suite is independent, then deliberately add one justified dependency">
+<StepChecklist
+  steps={[
+    { text: "Take an existing small suite and run it, then run it again with test order randomized/shuffled", detail: "TestNG: preserve-order=\"false\". JUnit 5: @TestMethodOrder(MethodOrderer.Random.class). Confirm results are identical either way." },
+    { text: "Write two small tests that genuinely need order: create a resource, then delete it", detail: "Run them with no ordering declared - confirm they can fail unpredictably depending on execution order." },
+    { text: "Add an explicit dependency (dependsOnMethods, or @Order) between just those two tests", detail: "Confirm the delete step now reliably runs after create, and is SKIPPED (not failed) if create fails." },
+    { text: "Check the rest of the suite is untouched", detail: "Confirm every other test still runs independently - the dependency stayed scoped to the one place it was actually needed." },
+  ]}
+/>
+You've now directly felt the difference between an accidental ordering bug and a deliberate, declared
+dependency.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A test passes in the full suite run but fails when run alone.",
+      fix: "This is the single clearest sign of an undeclared, accidental order dependency - some earlier test is leaving state behind that this one silently relies on; find and remove the shared state rather than reordering tests to hide it.",
+    },
+    {
+      symptom: "A dependsOnMethods test is reported as FAILED instead of SKIPPED when its dependency fails.",
+      fix: "Double-check the dependency is actually declared correctly (exact method name, same class or properly qualified) - a broken or misspelled dependsOnMethods reference can cause TestNG to run the test anyway rather than skip it.",
+    },
+    {
+      symptom: "A long dependency chain (test D depends on C depends on B depends on A) makes one early failure cascade into many skipped tests.",
+      fix: "A chain this long is usually a sign the workflow should be one test telling one story, not several artificially separated ones - collapsing it removes the ordering machinery entirely.",
+    },
+    {
+      symptom: "Tests run fine sequentially but fail intermittently once the suite runs in parallel.",
+      fix: "Parallel execution exposes exactly the kind of hidden order/state dependency serial execution was masking - this is a test-isolation bug to fix, not a reason to force the suite back to serial-only.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **`dependsOnMethods` / `@Order` / `priority` annotations on individual test methods** — the explicit,
+  visible declarations of any ordering actually in effect for a given test.
+- **Whether the suite's runner config forces a fixed run order** (`preserve-order` in TestNG, a
+  non-default `@TestMethodOrder` in JUnit 5) — versus relying on the framework's own default.
+- **A test's result when run completely alone** — the single fastest way to catch an accidental,
+  undeclared dependency on some other test having run first.
+- **The general test-isolation principle covered earlier in this module** — ordering exceptions should
+  be justified against that default, not treated as a separate, unrelated topic.
+</WhereToCheck>
+
+<WorkedExample title="a flaky delete test that was really an undeclared dependency">
+1. A `deleteUserAccount` test fails intermittently in CI, but always passes when a developer re-runs it
+   locally by itself.
+2. Investigation shows it depends on a user account that a DIFFERENT test, `createUserAccount`, happens
+   to create - and CI sometimes runs tests in a different order than a developer's local machine does.
+3. The fix isn't to force a fixed test order globally - it's to make the one real dependency explicit:
+   `@Test(dependsOnMethods = "createUserAccount")` on `deleteUserAccount`.
+4. Now, if `createUserAccount` ever fails, `deleteUserAccount` is correctly reported as SKIPPED - an
+   honest signal, instead of a confusing, unrelated-looking failure.
+5. Every other test in the suite remains fully independent - only this one genuine create-then-delete
+   relationship was made explicit, and the suite's overall parallel-safety elsewhere is unaffected.
+</WorkedExample>
+
+<Quiz
+  question="A test passes reliably when the full suite runs in its usual order, but fails when run alone or when the suite is shuffled. What does this most likely indicate, based on this note?"
+  options={[
+    "The test is correctly using dependsOnMethods and this is expected behavior",
+    "An undeclared, accidental dependency on shared state or run order exists - the fix is to find and remove that hidden coupling, not to force a fixed run order to keep hiding it",
+    "The test framework has a bug and needs to be upgraded",
+    "This test should be deleted, since order-dependent tests are never acceptable under any circumstances"
+  ]}
+  answer={1}
+  explain="The note's WhenItBreaks section names this exact symptom as the clearest sign of an accidental order dependency - the fix is removing the hidden shared state, not preserving whatever order happens to work. Option one is wrong because no dependsOnMethods was mentioned - this is an UNDECLARED dependency, the opposite of the note's guidance to make real dependencies explicit. Option three assumes a framework bug with no evidence, when a test-isolation issue is the far more common and directly-covered explanation. Option four overstates the note's position - legitimate, declared ordering exceptions (like a genuine create-then-delete workflow) are explicitly allowed when justified, just not as a default."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What's the strong default for test order?", back: "Independent and order-agnostic - a test should pass whether it runs alone, first, last, or in parallel with any other test." },
+    { front: "TestNG dependsOnMethods vs priority", back: "dependsOnMethods is a real dependency - a failed prerequisite causes the dependent test to be SKIPPED. priority is just a numeric sequencing hint with no skip-on-failure behavior." },
+    { front: "JUnit 5's ordering mechanism", back: "@TestMethodOrder(OrderAnnotation.class) at the class level plus @Order(n) on each method - explicit numeric sequencing, no built-in skip-on-failure dependency chain like TestNG's." },
+    { front: "The clearest symptom of an accidental (bad) order dependency", back: "A test passes in the full suite but fails when run alone, or fails when the suite's order is shuffled - a sign of hidden shared state, not a legitimate ordering need." },
+    { front: "The relay-race analogy for ordering", back: "A relay's baton handoff is a genuine, declared dependency between two specific runners - but a relay is the athletic exception; most races (and most tests) are independent, like runners in separate lanes." },
+  ]}
+/>
+
+<Challenge>
+Find a test suite (yours, or an open-source one) with more than a handful of tests. Run it once normally,
+then run it again with test order randomized or shuffled if the framework supports it. If anything
+fails only in the shuffled run, investigate whether it's an accidental shared-state dependency (fix the
+isolation bug) or a genuinely legitimate ordering need (make the dependency explicit with
+dependsOnMethods or @Order). Write down which one it turned out to be and why.
+</Challenge>
+
+<AskCommunity prompt="Test `[B]` only passes when it runs after test `[A]`, and I'm trying to figure out if this is a legitimate dependency or a hidden shared-state bug. Here's what both tests actually do: `[describe or paste both]`.">
+Describing what each test actually sets up, touches, and tears down usually makes it obvious pretty
+quickly whether there's a real workflow dependency or just leftover shared state - the distinction is
+easier to spot from someone else reading the actual test bodies than from the symptom alone.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://testng.org/#_dependencies", title: "TestNG — official Dependent Methods documentation", kind: "read" },
+    { href: "https://docs.junit.org/current/user-guide/#writing-tests-test-execution-order-methods", title: "JUnit 5 — official Test Execution Order user guide", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=_JGUXided10" title="JUnit 5 - How to Run Test Methods in Order — Code Java" minutes={8} />
+
+<Takeaways
+  points={[
+    "Independent, order-agnostic tests are the strong default - the same principle behind test isolation generally, not a separate rule.",
+    "TestNG's dependsOnMethods is a real dependency (skips on prerequisite failure); priority is a weaker numeric sequencing hint with no such behavior.",
+    "JUnit 5 uses @TestMethodOrder plus @Order(n) for explicit sequencing within a class.",
+    "A test that passes in the full suite but fails alone or when shuffled is the clearest sign of an accidental, undeclared order dependency - a bug to fix, not a reason to reach for ordering annotations.",
+    "Legitimate ordering is narrow: genuine multi-step workflows or true setup chains - and even then, keep the dependency chain as short and explicit as possible.",
+  ]}
+/>
+
+<Complete xp={10} />

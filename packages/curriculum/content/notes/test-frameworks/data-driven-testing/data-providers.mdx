@@ -1,0 +1,291 @@
+---
+title: "Data providers"
+summary: "TestNG's @DataProvider annotates a method that returns a 2D array (or Iterator) of rows; a @Test(dataProvider=...) method receives one row per invocation, running the same test logic once per row automatically."
+tags: ["test-frameworks", "data-driven-testing", "track-d"]
+updated: "2026-07-17"
+related:
+  - "test-frameworks/data-driven-testing/parameterized-tests"
+  - "test-frameworks/data-driven-testing/external-data-csv-excel"
+  - "test-frameworks/data-driven-testing/reuse"
+---
+
+<Hook>
+A login test checks one email and one password. Then someone asks: what about a wrong password, an
+unknown email, an empty field, a locked account? Copy-pasting the test four more times means four
+places to fix the next time the login flow changes. TestNG's answer is to separate the rows from the
+logic entirely: write the test once, hand it a method that manufactures rows, and let the runner do
+the repeating.
+</Hook>
+
+<Callout type="analogy">
+A bottling line has exactly one capping station. It doesn't get rebuilt for every bottle - the same
+clamp, the same twist, the same pressure check runs on bottle after bottle while a conveyor feeds them
+through one at a time. The bottles differ (different fill levels, different labels waiting downstream),
+but the station's job never changes, and each bottle gets its own pass through the exact same
+mechanism. A `@DataProvider` is the conveyor; the `@Test` method is the capping station.
+</Callout>
+
+<Term define="A DataProvider is a TestNG method annotated @DataProvider that returns test input as an Object[][] (or an Iterator<Object[]> for lazy generation) - each inner array is one ROW of arguments. A @Test method declares which provider feeds it via @Test(dataProvider = 'name'), and its parameter list must match a row's values in count, order, and type. TestNG then invokes that ONE test method once per row, running the identical test body against different data and reporting each invocation as its own separate result - so one test method with a five-row provider produces five independently pass/fail-able runs, not one run that silently checks five things.">Data provider</Term>
+
+## How a data provider feeds a test
+
+```java
+public class LoginTests {
+
+    @DataProvider(name = "loginAttempts")
+    public Object[][] loginAttempts() {
+        return new Object[][] {
+            { "amina@example.com", "correct-pw", true },
+            { "amina@example.com", "wrong-pw", false },
+            { "unknown@example.com", "any-pw", false },
+        };
+    }
+
+    @Test(dataProvider = "loginAttempts")
+    public void login(String email, String password, boolean expectSuccess) {
+        boolean actual = authService.login(email, password);
+        Assert.assertEquals(actual, expectSuccess,
+            "login(" + email + ", " + password + ")");
+    }
+}
+```
+
+- **The provider method's only job is to manufacture rows** - `loginAttempts()` returns three arrays,
+  each holding exactly the arguments `login(...)` expects, in the same order. No assertions live here.
+- **The name links the two** - `@Test(dataProvider = "loginAttempts")` and
+  `@DataProvider(name = "loginAttempts")` must match exactly; TestNG resolves the link by that string.
+- **One method, three real executions** - TestNG calls `login(...)` three separate times, once per
+  row, and reports three results. Row two failing doesn't hide or block row one or row three.
+- **`Iterator<Object[]>` is the lazy alternative** - instead of building the whole `Object[][]` up
+  front, a provider can return an iterator that produces rows one at a time, useful when the data set
+  is large or expensive to construct.
+- **A provider can live in another class** - via `@Test(dataProviderClass = Providers.class,
+  dataProvider = "loginAttempts")`, but then the provider method must be `static`. This is the seed of
+  sharing one provider across many test classes, covered in this chapter's closing note.
+- **Context-aware providers** - declaring the provider's first parameter as `java.lang.reflect.Method`
+  makes TestNG pass in the current test method, letting one provider branch its rows by which test is
+  asking.
+
+<Callout type="tip">
+Give provider rows a readable identity in the report before you need one. TestNG's default per-row
+label is a numeric index, which tells you almost nothing when row four of nine fails. Either build a
+short descriptive value into the row itself (a case-name String as the first element, asserted-on but
+also printed) or override `toString()` on any custom row objects - the five extra minutes pays for
+itself the first time a data-driven test goes red in CI.
+</Callout>
+
+<Callout type="mistake">
+Writing an assertion inside the `@DataProvider` method itself - for example, having the provider
+method check that a row "looks right" and throw before returning it. A data provider's contract is
+purely to manufacture rows; TestNG doesn't run it as a test, so a failure inside it surfaces as a
+broken data provider (every row for that test fails to even start) rather than a normal test failure
+with a real actual-vs-expected message. Validation belongs in the `@Test` method, against real results.
+</Callout>
+
+{/* IMAGE: a real photograph of a bottling line at a winery - a conveyor belt feeding a long line of glass bottles single-file toward an enclosed automated capping/filling station, with workers and stacked boxes visible in the background */}
+<HotspotImage
+  src="/notes/test-frameworks/data-driven-testing/data-providers.jpg"
+  alt="A bottling line conveyor belt feeding a long single-file line of glass bottles toward an enclosed automated capping and filling station, with two workers and stacked cardboard boxes in the background of the warehouse"
+  credit="Bottling line operation at Columbia Crest — Wikimedia Commons, CC BY-SA 3.0 (Agne27)"
+  creditHref="https://commons.wikimedia.org/wiki/File:Bottling_line_operation_at_Columbia_Crest.jpg"
+  pins={[
+    { x: 52, y: 62, label: "The enclosed capping station — the @Test method's body", desc: "One fixed mechanism: clamp, twist, check. It never changes bottle to bottle - the same way login(email, password, expectSuccess) never changes row to row." },
+    { x: 20, y: 88, label: "One bottle in the queue — one Object[] row", desc: "This bottle's fill and position are its own, but it goes through the identical station as every neighbor - exactly one row's worth of arguments feeding one invocation." },
+    { x: 75, y: 78, label: "The conveyor belt itself — the @DataProvider method", desc: "Its only job is delivering items one at a time in sequence; it doesn't cap anything itself, the way loginAttempts() only manufactures rows and never asserts." },
+    { x: 27, y: 32, label: "Stacked boxes waiting off to the side — rows not yet in play", desc: "More data exists than is currently being processed - the provider can hold far more rows than any one glance at the line shows running at once." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One data provider driving three invocations"
+  intervalMs={1800}
+  nodes={[
+    { label: "TestNG sees @Test(dataProvider = \"loginAttempts\")", desc: "It looks up the matching @DataProvider by name before running anything." },
+    { label: "loginAttempts() executes once and returns Object[][]", desc: "Three rows, each an array of (email, password, expectSuccess)." },
+    { label: "Row 1 invokes login(\"amina@...\", \"correct-pw\", true)", desc: "A full, independent test execution - reported on its own." },
+    { label: "Row 2 invokes login(\"amina@...\", \"wrong-pw\", false)", desc: "Same method body, different arguments - a second independent execution." },
+    { label: "Row 3 invokes login(\"unknown@...\", \"any-pw\", false)", desc: "The report shows three results; any one failing points straight at its row's data." },
+  ]}
+/>
+
+Stripped of TestNG's annotations, a data provider is just a function that builds a list of argument
+tuples, handed to a loop that calls the same test function once per tuple. Here's that shape as a
+small, generic simulation.
+
+<CodePlayground
+  language="python"
+  title="Run it - one test function driven by a provider function (Python)"
+  code={`def login_attempts():
+    # the provider's only job: manufacture rows, no assertions here
+    return [
+        ("amina@example.com", "correct-pw", True),
+        ("amina@example.com", "wrong-pw", False),
+        ("unknown@example.com", "any-pw", False),
+    ]
+
+def real_login(email, password):
+    return email == "amina@example.com" and password == "correct-pw"
+
+def login_test(email, password, expect_success):
+    actual = real_login(email, password)
+    return "PASS" if actual == expect_success else f"FAIL (got {actual}, expected {expect_success})"
+
+print("| email                 | password    | result")
+for row in login_attempts():
+    result = login_test(*row)
+    print(f"| {row[0]:21} | {row[1]:11} | {result}")`}
+/>
+
+Same provider-feeds-test shape in Java - no TestNG on the classpath, just the underlying pattern.
+
+<CodePlayground
+  language="java"
+  title="Run it - one test method driven by a provider method (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    record Row(String email, String password, boolean expectSuccess) {}
+
+    static List<Row> loginAttempts() {
+        // the provider's only job: manufacture rows, no assertions here
+        return List.of(
+            new Row("amina@example.com", "correct-pw", true),
+            new Row("amina@example.com", "wrong-pw", false),
+            new Row("unknown@example.com", "any-pw", false)
+        );
+    }
+
+    static boolean realLogin(String email, String password) {
+        return email.equals("amina@example.com") && password.equals("correct-pw");
+    }
+
+    static String loginTest(Row row) {
+        boolean actual = realLogin(row.email(), row.password());
+        return actual == row.expectSuccess() ? "PASS"
+            : "FAIL (got " + actual + ", expected " + row.expectSuccess() + ")";
+    }
+
+    public static void main(String[] args) {
+        System.out.println("| email                 | password    | result");
+        for (Row row : loginAttempts()) {
+            System.out.println("| " + row.email() + " | " + row.password() + " | " + loginTest(row));
+        }
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: turn three copy-pasted tests into one method and one provider">
+<StepChecklist
+  steps={[
+    { text: "Write three ordinary, hand-duplicated @Test methods that check login with different email/password/expected-outcome combinations", detail: "Copy-paste deliberately - this is the exact duplication a data provider removes." },
+    { text: "Extract one @Test(login) method and one @DataProvider(loginAttempts) supplying the three rows as Object[][]", detail: "The method body should be lifted from any one of the three duplicates, unchanged." },
+    { text: "Run it and read the report for three separate invocation results", detail: "Confirm each row is reported on its own, not merged into one pass/fail." },
+    { text: "Break one row's expected value on purpose and re-run", detail: "Confirm exactly one invocation goes red and the other two stay green - the independence is the whole point." },
+  ]}
+/>
+You've now felt the actual mechanism: one test body, many real executions, one provider deciding how
+many and with what data.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "TestNG throws that it can't find a data provider with the given name.",
+      fix: "Check the exact string match between @Test(dataProvider = \"x\") and @DataProvider(name = \"x\") - and if the provider lives in another class, confirm dataProviderClass is set and the provider method is static.",
+    },
+    {
+      symptom: "A row throws a ClassCastException or wrong-argument-count error before the test body even runs.",
+      fix: "The row's array doesn't match the test method's parameter list in count, order, or type - line the Object[] elements up against the method signature one by one.",
+    },
+    {
+      symptom: "All rows for a data-driven test fail with the same unhelpful stack trace pointing at the provider, not the test body.",
+      fix: "The provider method itself is throwing (often from validation logic that doesn't belong there) - a provider's only job is to return rows; move any checks into the @Test method.",
+    },
+    {
+      symptom: "The report lists nine results as 'login(1)' through 'login(9)' and a failure gives no clue which case broke.",
+      fix: "Add a descriptive case-name value into each row, or override toString() on custom row objects, so the report's per-invocation label is meaningful.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The `name` string on `@DataProvider` versus the `dataProvider` string on `@Test`** — an exact
+  match is required, and this is the most common wiring failure.
+- **The provider's row shape against the test method's parameter list** — count, order, and type all
+  have to agree; a mismatch fails fast with a clear-if-you-know-to-look error.
+- **Whether the provider or the test method is throwing** — a stack trace pointing at the provider
+  method means every row for that test failed to even start, not a normal per-row assertion failure.
+- **The TestNG report's per-invocation labels** — confirm each row is reported as its own numbered or
+  named result before trusting that a data-driven test's "all green" actually covered every case.
+</WhereToCheck>
+
+<WorkedExample title="four copy-pasted login tests collapsed into one method and one provider">
+1. A test class has four `@Test` methods - `testLoginSuccess`, `testLoginWrongPassword`,
+   `testLoginUnknownEmail`, `testLoginEmptyPassword` - each identical except the two input strings and
+   one boolean assertion.
+2. A teammate changes how `authService.login()` reports failures, and three of the four copies get
+   updated - the fourth is missed and starts asserting against a shape the method no longer returns.
+3. The team extracts one `login(email, password, expectSuccess)` method and a
+   `@DataProvider(name = "loginAttempts")` returning the four cases as rows - the method body now
+   exists exactly once.
+4. A fifth case - a locked account - is added as a fifth row in the provider, no new test method
+   required.
+5. A later regression breaks exactly the locked-account case; the report names that invocation
+   directly, and the fix is verified by re-running just that one row, with the other four still green.
+</WorkedExample>
+
+<Quiz
+  question="A @DataProvider method named 'accounts' internally calls Assert.assertNotNull() on each row before returning it, to 'make sure the data is valid.' According to this note, what's the actual consequence of putting that assertion inside the provider?"
+  options={[
+    "Nothing changes - TestNG treats provider assertions exactly like test method assertions",
+    "If the assertion fails, every test that consumes that provider fails to even start, reported as a broken provider rather than a normal per-row test failure with a clear actual-vs-expected message",
+    "TestNG silently skips the offending row and runs the rest normally",
+    "The assertion is simply ignored because providers cannot contain TestNG assertions"
+  ]}
+  answer={1}
+  explain="The mistake callout is explicit: a provider's contract is to manufacture rows, not verify them - TestNG doesn't execute it as a test, so a thrown assertion there surfaces as the data provider itself failing, taking down every row it would have supplied rather than producing one normal, readable test failure. Option one is wrong because providers and test methods are NOT treated the same by the runner. Option three invents silent-skip behavior that doesn't exist. Option four is false - nothing stops you from writing an assertion in a provider, which is precisely why the mistake is possible."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What does @DataProvider return?", back: "An Object[][] (each inner array is one row of arguments) or an Iterator<Object[]> for lazy row generation." },
+    { front: "How does a @Test method connect to a data provider?", back: "@Test(dataProvider = \"name\") matches a @DataProvider(name = \"name\") method by exact string; the test's parameters must match a row's values in count, order, and type." },
+    { front: "What happens per row?", back: "TestNG invokes the SAME test method once per row, running identical logic against different data, and reports each invocation as its own independent pass/fail result." },
+    { front: "How can a provider live outside the test class?", back: "Via @Test(dataProviderClass = X.class, dataProvider = \"name\") - the provider method in that other class must be declared static." },
+    { front: "The bottling-line analogy for a data provider", back: "The capping station = the @Test method's fixed logic; the conveyor = the @DataProvider feeding items through it one at a time; each bottle = one Object[] row." },
+  ]}
+/>
+
+<Challenge>
+Take three near-duplicate test methods you've written (or write three now) that differ only in input
+values and an expected outcome. Collapse them into one @Test method and one @DataProvider. Then
+deliberately mismatch one row's argument count against the method signature, run it, and read the
+exact error TestNG produces - write one sentence on what that error told you and how fast you could
+have diagnosed it without this note.
+</Challenge>
+
+<AskCommunity prompt="My @DataProvider-driven test fails with `[paste the exact error]`. Here's my @DataProvider method and my @Test method's signature: `[paste both]`.">
+Posting the provider's row shape right next to the test method's parameter list is usually all it
+takes for someone to spot a count, order, or type mismatch at a glance.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://testng.org/parameters.html", title: "TestNG — official docs: Parameters & DataProviders", kind: "read" },
+    { href: "https://www.baeldung.com/testng", title: "Baeldung — Introduction to TestNG (DataProvider section)", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=kmLYFPRFXBQ" title="TestNG Tutorial #12 - How to Use DataProvider in TestNG Selenium — Software Testing Mentor" minutes={11} />
+
+<Takeaways
+  points={[
+    "A @DataProvider method returns rows (Object[][] or Iterator<Object[]>); a @Test(dataProvider = \"name\") method matches by exact name and receives one row's values as its parameters per invocation.",
+    "TestNG runs the SAME test method once per row and reports each invocation independently - one row failing doesn't hide or block the others.",
+    "A provider's only job is manufacturing rows - assertions or validation inside it turn a normal per-row failure into a broken-provider failure that takes out every row at once.",
+    "A provider can live in another class via dataProviderClass, as long as the provider method is static there - the foundation for sharing one provider across multiple test classes.",
+    "Give rows a readable identity (a case name, a meaningful toString()) before the default numeric-index report labels leave you guessing which data combination actually broke.",
+  ]}
+/>
+
+<Complete xp={10} />

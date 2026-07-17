@@ -1,0 +1,292 @@
+---
+title: "Assertions"
+summary: "An assertion is a statement of an expected fact that fails the test immediately if it isn't true - assertEquals, assertTrue, and pytest's assert are the actual verification, not the setup around them."
+tags: ["test-frameworks", "assertions", "track-d"]
+updated: "2026-07-17"
+related:
+  - "test-frameworks/assertions/soft-assertions"
+  - "test-frameworks/assertions/custom-messages"
+  - "test-frameworks/assertions/matchers"
+---
+
+<Hook>
+A test can navigate a whole application, click every button, fill every field, and log pages of
+output - and still verify absolutely nothing. The one line that turns activity into a test is the
+assertion: a specific, checkable claim that either holds or doesn't. Everything else is just setup.
+</Hook>
+
+<Callout type="analogy">
+A go/no-go headspace gauge used in ammunition reloading is a small steel tool with two ends: one
+marked GO, one marked NO-GO. You drop a cartridge case into the GO end - if it seats correctly, that
+dimension passes. You try the NO-GO end - if it seats there too, the case is out of tolerance and
+gets rejected on the spot. There's no ambiguous middle result and no step where the gauge just sits
+there without checking anything. It states one fact - does this dimension fall within the allowed
+range - and reports pass or fail immediately.
+</Callout>
+
+<Term define="An assertion is a single, specific, checkable claim placed inside a test that states what should be true at that point. If the claim holds, execution continues (or the test ends, having verified something real); if it doesn't, the assertion fails immediately and the test reports as failed, naming the exact expected and actual values. In JUnit and TestNG, assertions are static method calls such as assertEquals(expected, actual), assertTrue(condition), and assertNull(value), living in org.junit.jupiter.api.Assertions or org.testng.Assert. In Python's pytest, the plain built-in assert statement itself is the assertion - pytest rewrites it at import time to produce a detailed introspection report on failure, no special assertion library required.">Assertion</Term>
+
+## What actually makes something an assertion
+
+```java
+import static org.junit.jupiter.api.Assertions.*;
+
+@Test
+void discountedTotalIsCorrect() {
+    Cart cart = new Cart();
+    cart.addItem("widget", 10.00);
+    cart.applyPromoCode("SAVE20");
+
+    assertEquals(8.00, cart.getTotal());
+}
+```
+
+```python
+def test_discounted_total_is_correct():
+    cart = Cart()
+    cart.add_item("widget", 10.00)
+    cart.apply_promo_code("SAVE20")
+
+    assert cart.get_total() == 8.00
+```
+
+- **It's a specific, checkable claim** — not "the cart works," but a stated expected value compared
+  against a stated actual value. Vague intentions aren't assertions; comparisons are.
+- **It fails the test immediately** — in JUnit/TestNG, a failed `assertEquals` throws an
+  `AssertionError` (or `AssertionFailedError`) right there, and by default nothing after it in that
+  test method runs. In pytest, a failed `assert` raises the same way.
+- **It reports the exact expected and actual values** — that's what makes a failure report useful
+  instead of just "something broke somewhere in this test."
+- **Everything before it is just setup** — creating objects, calling methods, navigating a page. None
+  of that verifies anything on its own; it only produces the state the assertion then checks.
+
+The exact same principle that governs a first Playwright test - `page.goto()` and a click are just
+activity until an `expect(...)` call actually checks something - applies here in its general,
+non-browser form: a JUnit test with method calls but no `assertEquals` or `assertTrue` anywhere
+always reports as passed, because nothing in it can fail.
+
+<Callout type="tip">
+Read a failing assertion's message fully before assuming the code under test is wrong. `assertEquals`
+and pytest's rewritten `assert` both print the expected value, the actual value, and (in pytest) a
+full expression breakdown - often the fix is realizing the assertion itself expected the wrong thing.
+</Callout>
+
+<Callout type="mistake">
+Writing a test method that calls production code and logs the result, but never actually asserts
+anything - for example, printing `cart.getTotal()` to the console "to check it manually" instead of
+calling `assertEquals(8.00, cart.getTotal())`. That test will pass forever, regardless of what the
+code actually does, because there's no checkable claim in it at all.
+</Callout>
+
+{/* IMAGE: a real photograph of two metal go/no-go gauges lying side by side, one labeled GO with a red band and one labeled NO-GO with a green band, used for checking ammunition cartridge case headspace dimensions */}
+<HotspotImage
+  src="/notes/test-frameworks/assertions/assertions-basics.jpg"
+  alt="Two metal go/no-go gauges lying side by side on a green cloth surface, one labeled GO with a red band near its base and one labeled NO-GO with a green band, used for checking ammunition cartridge case dimensions"
+  credit="Go & No-Go gauge — Wikimedia Commons, CC BY-SA 3.0 (Krakuspm)"
+  creditHref="https://commons.wikimedia.org/wiki/File:Go_%26_No-Go_gauge.jpg"
+  pins={[
+    { x: 30, y: 30, label: "The GO gauge — the passing case", desc: "One specific, checkable dimension either fits here or it doesn't - the same binary, no-middle-ground nature of assertEquals(expected, actual)." },
+    { x: 30, y: 70, label: "The NO-GO gauge — the failing case", desc: "If the cartridge seats here too, the dimension is out of tolerance and the gauge reports it immediately - exactly like a failed assertion stopping the test right there." },
+    { x: 70, y: 45, label: "No third gauge for \"probably fine\"", desc: "There's no vague middle result - a real assertion is the same: it holds or it doesn't, and the report says which, with the actual measured values." },
+    { x: 15, y: 50, label: "The gauge itself does nothing without being used", desc: "Owning the tool isn't the check - dropping the case in and reading the result is. The same way writing test code isn't verifying anything until an assertion actually runs and evaluates." },
+  ]}
+/>
+
+<FlowAnimation
+  title="From activity to a verified fact"
+  intervalMs={1800}
+  nodes={[
+    { label: "Arrange: build the cart, add an item", desc: "Pure setup - creates state, verifies nothing yet." },
+    { label: "Act: apply the promo code", desc: "Still setup - performs the behavior under test, but hasn't checked anything." },
+    { label: "assertEquals(8.00, cart.getTotal())", desc: "The one line that states a specific, checkable expected fact." },
+    { label: "Comparison: expected vs actual", desc: "8.00 vs whatever getTotal() actually returned - evaluated right now." },
+    { label: "Pass or fail, reported exactly", desc: "If they differ, the test fails immediately and the report names both values." },
+  ]}
+/>
+
+An assertion is really just: compare an expected value to an actual one, and stop with a clear
+report the moment they disagree. Here's that shape as a small, generic simulation - not real
+JUnit or pytest internals, just the pattern underneath them.
+
+<CodePlayground
+  language="python"
+  title="Run it - a minimal assertion mechanism (Python)"
+  code={`class AssertionFailed(Exception):
+    pass
+
+def assert_equals(expected, actual):
+    if expected != actual:
+        raise AssertionFailed(f"expected: {expected} but was: {actual}")
+
+def run_test(name, test_fn):
+    print(f"Running: {name}")
+    try:
+        test_fn()
+        print("  PASSED")
+    except AssertionFailed as e:
+        print(f"  FAILED - {e}")
+
+def test_discounted_total():
+    total = 10.00 * 0.8  # 20% off applied
+    assert_equals(8.00, total)
+
+def test_activity_with_no_assertion():
+    total = 10.00 * 0.8
+    print(f"  (computed {total}, but nothing checked it)")
+
+run_test("discounted total is correct", test_discounted_total)
+run_test("activity with no assertion", test_activity_with_no_assertion)`}
+/>
+
+Same mechanism in Java - the shape (compare, then throw immediately on mismatch) is identical.
+
+<CodePlayground
+  language="java"
+  title="Run it - a minimal assertion mechanism (Java)"
+  code={`public class Main {
+    static class AssertionFailed extends RuntimeException {
+        AssertionFailed(String message) { super(message); }
+    }
+
+    static void assertEqualsSim(double expected, double actual) {
+        if (expected != actual) {
+            throw new AssertionFailed("expected: " + expected + " but was: " + actual);
+        }
+    }
+
+    static void runTest(String name, Runnable testFn) {
+        System.out.println("Running: " + name);
+        try {
+            testFn.run();
+            System.out.println("  PASSED");
+        } catch (AssertionFailed e) {
+            System.out.println("  FAILED - " + e.getMessage());
+        }
+    }
+
+    public static void main(String[] args) {
+        runTest("discounted total is correct", () -> {
+            double total = 10.00 * 0.8;
+            assertEqualsSim(8.00, total);
+        });
+
+        runTest("activity with no assertion", () -> {
+            double total = 10.00 * 0.8;
+            System.out.println("  (computed " + total + ", but nothing checked it)");
+        });
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: find a test with no assertion, then break a real one on purpose">
+<StepChecklist
+  steps={[
+    { text: "Write a small JUnit or pytest test that calls a method and asserts one specific, correct expected value", detail: "Use assertEquals(expected, actual) or plain assert actual == expected." },
+    { text: "Run it and confirm it passes, then read the exact wording of the pass output", detail: "Note what the runner actually reports for a passing assertion." },
+    { text: "Now write a second test that calls the same method but never asserts anything - just prints the result", detail: "Run it and confirm it also reports as passed, regardless of whether the printed value is right." },
+    { text: "Change the first test's expected value to something wrong on purpose and run it again", detail: "Read the failure output closely: does it name both the expected and actual values clearly?" },
+  ]}
+/>
+You've now seen the exact difference an assertion makes: without one, a test can never fail no
+matter what the code does.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A test passes even though the feature it's supposedly testing is visibly broken.",
+      fix: "Check whether the test body actually contains an assertEquals/assertTrue/assert call at all, and whether it's checking the specific value you think it is - a missing or misdirected assertion passes no matter what the code does.",
+    },
+    {
+      symptom: "A test fails, but the failure message just says something like \"AssertionError\" with no values.",
+      fix: "In pytest this usually means assertion rewriting isn't active (check the test file is discovered as a pytest test, not run as a plain script) - in JUnit/TestNG, confirm you're calling assertEquals(expected, actual) in the correct argument order, not a bare assertTrue on a manually-built boolean.",
+    },
+    {
+      symptom: "assertEquals passes when comparing two objects that look different when printed.",
+      fix: "Check whether the class overrides equals() (Java) or __eq__ (Python) - assertions compare using that method, and its default (reference equality) rarely matches what a test author actually intended.",
+    },
+    {
+      symptom: "A floating-point assertEquals fails even though the values look identical when printed.",
+      fix: "Floating-point arithmetic accumulates tiny rounding errors - use the delta/tolerance overload (assertEquals(expected, actual, delta) in Java, pytest.approx(expected) in Python) instead of exact equality.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The test method body itself** — scan for an actual `assertEquals`/`assertTrue`/`assert` call,
+  not just method calls and print statements.
+- **The test runner's failure report** — JUnit, TestNG, and pytest all print the expected and actual
+  values on a failed assertion; read both before assuming which side is wrong.
+- **JUnit 5's official Assertions API docs** — the definitive list of every assertion method and its
+  overloads beyond `assertEquals`/`assertTrue`.
+- **pytest's assertion introspection output** — pytest rewrites plain `assert` statements to show a
+  full expression breakdown on failure, worth reading in full rather than just the top line.
+</WhereToCheck>
+
+<WorkedExample title="a passing test that was actually testing nothing">
+1. A tester inherits a test suite and finds `testUserRegistration()` has been green for months. It
+   calls `registerUser("test@example.com", "pw123")` and then `System.out.println(response.getStatus())`.
+2. Reading the method body closely, there's no `assertEquals` or `assertTrue` anywhere in it - just
+   the print statement, which nobody reads in CI logs.
+3. The tester adds `assertEquals(201, response.getStatus());` right after the print line and reruns
+   the suite. It fails: the actual status was `500`.
+4. The registration endpoint had been silently broken for weeks; the "passing" test had never once
+   checked anything, so nothing ever caught it.
+5. The team adds a lint rule flagging any `@Test` method with zero assertion calls, so a future test
+   like this fails a code review before it ever reaches the suite.
+</WorkedExample>
+
+<Quiz
+  question="A JUnit test method calls three service methods, logs each result with System.out.println, and contains no assertEquals, assertTrue, or any other assertion call. What happens when this test runs?"
+  options={[
+    "It fails automatically, because JUnit requires at least one assertion per test method",
+    "It reports as passed, because nothing in the test method can throw a failure - the printed values are never actually compared or checked",
+    "JUnit refuses to compile the test class",
+    "It reports as skipped, since there's nothing to verify"
+  ]}
+  answer={1}
+  explain="The note is explicit that everything before an assertion is just setup - without an assertEquals/assertTrue call, nothing in the method can raise an AssertionError, so it always reports as passed. Option one is false: JUnit does not require an assertion to run a test, which is exactly why this mistake is possible. Option three is false - printing values compiles and runs fine. Option four is also wrong - 'skipped' is a distinct, deliberate status from @Disabled or test.skip(), not something that happens automatically from a missing assertion."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What makes something an assertion, not just a statement?", back: "It's a specific, checkable claim compared against an actual value, that fails the test immediately if it doesn't hold - not a vague intention or a printed value nobody checks." },
+    { front: "Why does a test with method calls but no assertEquals/assertTrue always pass?", back: "Nothing in it can raise a failure - there's no comparison being checked, so success and a silently broken feature look identical in the report." },
+    { front: "The go/no-go gauge analogy for an assertion", back: "GO gauge = the passing case, NO-GO gauge = the failing case, no ambiguous middle result - the gauge states one specific fact and reports pass or fail immediately, the same way an assertion does." },
+    { front: "Where does pytest get its detailed assertion failure output from?", back: "pytest rewrites plain assert statements at import time to add introspection - no special assertion library needed, unlike JUnit/TestNG's dedicated assertEquals/assertTrue methods." },
+    { front: "Why might assertEquals pass on two objects that look different when printed?", back: "assertEquals compares using equals() (Java) or __eq__ (Python) - if the class doesn't override it, the default is reference equality, which rarely matches the test author's actual intent." },
+  ]}
+/>
+
+<Challenge>
+Find three real test methods in a project you have access to (yours, a teammate's, or an open-source
+repo). For each, confirm whether it actually contains an assertion call, and if it does, whether the
+assertion checks the specific behavior the test's name claims to verify. Rewrite any that fail either
+check, and note in one sentence per fix what bug could have slipped through silently before the fix.
+</Challenge>
+
+<AskCommunity prompt="My test named `[test name]` passes, but I'm not sure it's actually verifying `[the specific behavior]`. Here's the test body: `[paste the method]`.">
+Pasting the full test method (not a summary) usually gets a fast answer - it takes someone else
+only a few seconds to spot whether a real assertion is checking the thing the test's name claims.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://docs.junit.org/current/user-guide/#writing-tests-assertions", title: "JUnit 5 — User Guide: Assertions", kind: "read" },
+    { href: "https://docs.pytest.org/en/stable/how-to/assert.html", title: "pytest — How to write and report assertions in tests", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=VVYlzqxE19w" title="JUnit 5 Tutorial: Writing Assertions With JUnit 5 — ProgrammingKnowledge" minutes={21} />
+
+<Takeaways
+  points={[
+    "An assertion is a specific, checkable claim - not vague activity - that fails the test immediately when it doesn't hold.",
+    "A test with method calls but no assertEquals/assertTrue/assert always reports as passed, because nothing in it can actually fail.",
+    "JUnit and TestNG use dedicated static assertion methods; pytest's plain assert statement is rewritten at import time to produce the same kind of detailed failure report.",
+    "assertEquals compares using equals()/__eq__ - an unoverridden default (reference equality) rarely matches what the test author actually meant.",
+    "A good failure report names both the expected and actual values - read it in full before assuming the production code, rather than the assertion itself, is wrong.",
+  ]}
+/>
+
+<Complete xp={10} />
