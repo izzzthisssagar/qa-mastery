@@ -1298,9 +1298,9 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         title: "Reusable components",
         topics: [
           { slug: "base-classes", title: "Base classes" },
-          { slug: "utilities", title: "Utilities", planned: true },
-          { slug: "waits-wrapper", title: "Waits wrapper", planned: true },
-          { slug: "driver-factory", title: "Driver factory", planned: true },
+          { slug: "utilities", title: "Utilities" },
+          { slug: "waits-wrapper", title: "Waits wrapper" },
+          { slug: "driver-factory", title: "Driver factory" },
         ],
       },
       {
