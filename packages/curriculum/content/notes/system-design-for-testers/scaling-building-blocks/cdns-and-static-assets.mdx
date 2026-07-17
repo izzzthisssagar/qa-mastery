@@ -1,0 +1,333 @@
+---
+title: "CDNs & static assets"
+summary: "A CDN keeps copies of your images, CSS, and JS on servers near your users, so pages load fast worldwide - and so a deploy can leave half the planet seeing the old version. 'Works for me, broken for them' and the post-release stale-logo mystery both live here."
+tags: ["system-design-for-testers", "scaling-building-blocks", "track-c"]
+updated: "2026-07-17"
+related:
+  - "system-design-for-testers/scaling-building-blocks/caching-redis-and-its-bugs"
+  - "system-design-for-testers/scaling-building-blocks/load-balancers"
+  - "system-design-for-testers/the-big-picture/client-side-vs-server-side-rendering"
+---
+
+<Hook>
+The team ships a rebrand at 10:00. By 10:05, the designer in Berlin confirms the new logo is live.
+By 10:20, support has four tickets from Australia: "still the old logo." By 11:00, a VP forwards a
+screenshot from Brazil showing the old CSS with the NEW header - the page looks broken, like two
+websites collided. Nobody's environment is wrong, nothing failed, and every person involved is
+reporting exactly what they see. The company just met its CDN - the worldwide network of servers
+that made the site fast, and made "what version is live?" a question with more than one answer.
+</Hook>
+
+<Callout type="analogy">
+A magazine and the city's newsstands. The magazine is written and printed in ONE place - but nobody
+flies to the printing press to buy a copy. Thousands of kiosks around the world stock copies
+locally, so any reader grabs one in seconds from the nearest corner. The trade-off appears on
+publication day: when a new edition prints, it does NOT teleport onto every rack at once. Until each
+kiosk restocks, some corners of the city sell the new edition while others still sell last week's -
+and every kiosk honestly believes it's selling 'the magazine'. A CDN is the newsstand network for
+your app's files: printed once at the origin, stocked locally at hundreds of edges, fast everywhere,
+and momentarily inconsistent every time you publish.
+</Callout>
+
+<Term define="A CDN (Content Delivery Network) is a network of servers - called edge nodes or PoPs (points of presence) - spread across cities worldwide, that keeps cached copies of a site's static assets: images, CSS, JavaScript, fonts, videos. A user's browser downloads these files from the geographically NEAREST edge instead of the app's distant origin server, cutting load times dramatically. Each edge caches a file the first time someone nearby requests it and serves the copy until it expires (per its Cache-Control policy) or is explicitly PURGED. Because each edge caches independently, different regions can serve different versions of the same URL for a while after a deploy - the root of most 'stale asset' bugs. Major CDNs: Cloudflare, Akamai, Fastly, CloudFront.">CDN (Content Delivery Network)</Term>
+
+## How assets travel, and where deploys go wrong
+
+- **Static assets are the same bytes for everyone - that's why they're cacheable.** Your product
+  data is personal; the logo, the stylesheet, and the JS bundle are identical for every user on
+  Earth. Anything identical-for-all can be copied to the edges and served locally at high speed.
+- **First request per region warms the edge.** A user in Sydney requests `logo.png`; the Sydney
+  edge doesn't have it, fetches it from the origin (slow, once), keeps a copy, and serves every
+  later Sydney user in ~30ms. Each region pays the origin trip once, not per user.
+- **Each edge caches independently.** Frankfurt's copy and Sydney's copy have separate ages and
+  separate expiry timers. After a deploy, whichever edges' copies expire first update first - the
+  rollout of a 'simple' asset change is actually a slow, region-by-region wave.
+- **The classic post-deploy bug: new HTML, old assets (or the reverse).** The HTML comes from the
+  origin and updates instantly; the CSS/JS it references may still be the OLD cached copy at some
+  edges. Result: layouts broken in one country and fine in another, buttons that error because old
+  JS is calling an API that changed.
+- **The professional fix is versioned filenames (cache busting).** Build tools ship assets as
+  `app.a3f19c.js` - the hash changes with the content, so new HTML references a brand-new filename
+  no edge has ever cached. Stale becomes impossible. When you DO see stale-asset bugs, it usually
+  means something (often images or manually managed files) bypasses this scheme.
+- **Purging is the manual override.** CDNs offer 'purge' - forcibly deleting cached copies at all
+  edges - as a deploy step or emergency button. If a team's deploy checklist includes 'purge the
+  CDN' for unversioned assets and someone forgets, you get the 10:20 Australia tickets.
+
+<Callout type="tip">
+Response headers tell you exactly which world you're in. Look for `X-Cache: HIT` / `MISS`,
+`CF-Cache-Status`, or an `Age` header (seconds since the edge cached this copy) on any static asset.
+An `Age` of 84000 on a file that was 'deployed an hour ago' IS the diagnosis: this edge is serving a
+day-old copy and nobody purged it. Screenshot those headers - that's the whole bug report.
+</Callout>
+
+<Callout type="mistake">
+Retesting a stale-asset bug from your own machine, seeing the fix, and closing the ticket. Your
+requests hit YOUR nearest edge - which may be freshly warmed - while the user who reported the bug
+sits behind a different edge still serving the old copy. For anything CDN-flavored, verify from the
+reporter's region (a VPN, a cloud VM in that region, or an online 'check from multiple locations'
+tool) or from headers they capture - never from the view out your own window.
+</Callout>
+
+{/* IMAGE: densely stocked Brooklyn news kiosk at night - magazine racks covering every wall, dated news weeklies clipped in a row, the vendor leaning over a counter crowded with candy and bottled water, a customer browsing at the left */}
+<HotspotImage
+  src="/notes/system-design-for-testers/scaling-building-blocks/cdns-and-static-assets.jpg"
+  alt="News kiosk densely stocked with magazines, a vendor at the counter and a customer browsing nearby"
+  credit="News kiosk, Brooklyn NY — Jeffrey Bary, Wikimedia Commons, CC BY 2.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:2007_news_kiosk_Brooklyn_NY_2949062853.jpg"
+  pins={[
+    { x: 50, y: 22, label: "The racks — locally stocked copies of centrally made content", desc: "Every magazine here was printed in one distant place, then distributed so readers grab it around the corner. A CDN edge is this rack: local copies of files that all originate from one origin server." },
+    { x: 18, y: 60, label: "The customer — served from the nearest edge", desc: "She gets her copy in seconds precisely because she is NOT talking to the printing press. Users load your images and CSS from an edge in their own city for the same reason - that's the entire performance win of a CDN." },
+    { x: 75, y: 33, label: "The dated weeklies — versions, and the staleness problem", desc: "TIME and Newsweek carry edition dates: the moment a new one prints, every rack still holding last week's is 'stale' until restocked. An edge serving an old logo.png after your deploy is this exact rack, and the purge is the restock." },
+    { x: 47, y: 42, label: "The vendor — the edge doing its own restocking", desc: "Each kiosk restocks on its own schedule, independent of every other kiosk - which is why the new edition reaches different corners of the city at different times. Edges expire and refresh independently too: post-deploy, the new version rolls across regions as a wave, not a switch-flip." },
+    { x: 60, y: 72, label: "The counter goods — small, identical, grabbed constantly", desc: "Candy bars and water: cheap, identical-for-everyone items positioned for instant pickup. Fonts, icons, CSS - the small static files every page needs - are these; serving them from far away would be as absurd as flying to a warehouse for a chocolate bar." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One deploy, three regions, three different websites - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "10:00 - deploy: new HTML + new styles.css reach the ORIGIN", desc: "The origin now serves the rebrand. Every edge worldwide still holds the copies it cached earlier - nothing on the edges changed yet." },
+    { label: "10:05 - Berlin: designer confirms 'rebrand is live!'", desc: "Berlin's edge expired its old copy minutes ago, refetched, and got v2. From this desk, the deploy looks complete. It isn't." },
+    { label: "10:20 - Sydney: users still see the ENTIRE old site", desc: "Sydney's edge cached everything 2 hours ago with a 4-hour TTL. It will confidently serve v1 until 14:00 unless someone purges. No error will ever fire." },
+    { label: "10:40 - Brazil: new HTML + OLD cached styles.css = visually broken page", desc: "The HTML (from origin) references markup the old CSS doesn't style. This mixed state - the ugliest CDN bug - only exists in regions whose edges hold a partial old set. Versioned filenames (styles.a3f19c.css) make this state impossible, which is why build tools hash asset names." },
+  ]}
+/>
+
+The whole story in one runnable simulation - regional edges warming, a deploy nobody purged,
+and the fix:
+
+<CodePlayground
+  language="python"
+  title="Run it - regional edge caches serving a stale logo after a deploy (Python)"
+  code={`origin = {"logo.png": "logo-v1"}             # the one true copy, in one data center
+edges = {"Sydney": {}, "Frankfurt": {}, "Sao Paulo": {}}  # CDN edge caches, per region
+
+ORIGIN_MS = 900                               # a round trip to the origin, far away
+EDGE_MS = 30                                  # a round trip to the nearby edge
+
+
+def fetch(region, path):
+    """A user's browser asks its NEAREST edge for the file."""
+    edge = edges[region]
+    if path in edge:
+        return edge[path], EDGE_MS, "edge HIT"
+    edge[path] = origin[path]                 # edge fetches from origin, keeps a copy
+    return edge[path], ORIGIN_MS, "edge MISS -> fetched from origin, now cached here"
+
+
+print("--- first visitor per region pays the origin trip, everyone after is fast ---")
+for region in ["Sydney", "Sydney", "Frankfurt", "Sao Paulo", "Frankfurt"]:
+    content, ms, how = fetch(region, "logo.png")
+    print(f"{region:10s} gets {content} in {ms:3d}ms ({how})")
+
+print()
+print("--- marketing ships a rebrand: logo-v2 deployed to the origin. no purge. ---")
+origin["logo.png"] = "logo-v2"
+
+for region in ["Sydney", "Frankfurt", "Sao Paulo"]:
+    content, ms, how = fetch(region, "logo.png")
+    print(f"{region:10s} gets {content} in {ms:3d}ms ({how})")
+
+print()
+print("Every warmed edge still serves logo-v1. The rebrand is live at the origin,")
+print("QA in a fresh region sees v2, half the world still sees v1 - and everyone")
+print("is telling the truth. This is why 'works for me, old for them' happens.")
+
+print()
+print("--- the fix: purge the CDN as part of the deploy (or version the filename) ---")
+for edge in edges.values():
+    edge.clear()                              # cache purge / invalidation
+for region in ["Sydney", "Frankfurt", "Sao Paulo"]:
+    content, ms, how = fetch(region, "logo.png")
+    print(f"{region:10s} gets {content} in {ms:3d}ms ({how})")
+print()
+print("Better still: ship assets as logo.abc123.png - a NEW filename per version")
+print("can never be stale, because no edge has ever seen it before.")`}
+/>
+
+The same simulation in Java - same regions, same stale window, same purge:
+
+<CodePlayground
+  language="java"
+  title="Run it - regional edge caches serving a stale logo after a deploy (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static Map<String, String> origin = new HashMap<>(Map.of("logo.png", "logo-v1"));
+    static Map<String, Map<String, String>> edges = new LinkedHashMap<>();
+    static final int ORIGIN_MS = 900; // a round trip to the origin, far away
+    static final int EDGE_MS = 30;    // a round trip to the nearby edge
+
+    static String fetch(String region, String path) {
+        // A user's browser asks its NEAREST edge for the file
+        Map<String, String> edge = edges.get(region);
+        if (edge.containsKey(path)) {
+            return String.format("%-10s gets %s in %3dms (edge HIT)", region, edge.get(path), EDGE_MS);
+        }
+        edge.put(path, origin.get(path)); // edge fetches from origin, keeps a copy
+        return String.format("%-10s gets %s in %3dms (edge MISS -> fetched from origin, now cached here)",
+                region, edge.get(path), ORIGIN_MS);
+    }
+
+    public static void main(String[] args) {
+        for (String r : List.of("Sydney", "Frankfurt", "Sao Paulo")) edges.put(r, new HashMap<>());
+
+        System.out.println("--- first visitor per region pays the origin trip, everyone after is fast ---");
+        for (String region : List.of("Sydney", "Sydney", "Frankfurt", "Sao Paulo", "Frankfurt")) {
+            System.out.println(fetch(region, "logo.png"));
+        }
+
+        System.out.println();
+        System.out.println("--- marketing ships a rebrand: logo-v2 deployed to the origin. no purge. ---");
+        origin.put("logo.png", "logo-v2");
+        for (String region : List.of("Sydney", "Frankfurt", "Sao Paulo")) {
+            System.out.println(fetch(region, "logo.png"));
+        }
+
+        System.out.println();
+        System.out.println("Every warmed edge still serves logo-v1. The rebrand is live at the origin,");
+        System.out.println("QA in a fresh region sees v2, half the world still sees v1 - and everyone");
+        System.out.println("is telling the truth. This is why 'works for me, old for them' happens.");
+
+        System.out.println();
+        System.out.println("--- the fix: purge the CDN as part of the deploy (or version the filename) ---");
+        for (Map<String, String> edge : edges.values()) edge.clear(); // cache purge
+        for (String region : List.of("Sydney", "Frankfurt", "Sao Paulo")) {
+            System.out.println(fetch(region, "logo.png"));
+        }
+        System.out.println();
+        System.out.println("Better still: ship assets as logo.abc123.png - a NEW filename per version");
+        System.out.println("can never be stale, because no edge has ever seen it before.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: read the CDN's fingerprints on any site">
+<StepChecklist
+  steps={[
+    { text: "Open your app (or any major site) with devtools Network tab and reload", detail: "Click a static asset - the main CSS file, the logo, a JS bundle - and open its response headers." },
+    { text: "Identify the CDN evidence", detail: "Look for X-Cache / CF-Cache-Status (HIT or MISS), Age (seconds this copy has been cached at the edge), Cache-Control (the caching policy), and Server/Via headers naming Cloudflare, Fastly, Akamai, or CloudFront." },
+    { text: "Check whether asset filenames carry version hashes", detail: "app.8f3a2c.js and styles.d91b7e.css mean the team uses cache busting - stale JS/CSS is structurally unlikely. Plain app.js and logo.png mean staleness depends on TTLs and purge discipline - note which pattern your app uses." },
+    { text: "Reload twice and compare Age on the same asset", detail: "Age growing between reloads = you're reading the same edge copy aging in place. Age reset to 0 = the edge refetched. You're now watching the CDN work in real time." },
+  ]}
+/>
+Ten minutes of header reading tells you your app's staleness risk profile: hashed filenames and
+HITs everywhere (low risk), or bare filenames with long TTLs (a purge-forgotten incident waiting
+for a deploy day).
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "After a release, some users see the old version - grouped suspiciously by geography.",
+      fix: "Stale edges. Confirm with headers from an affected region (user screenshot of devtools, a VPN, or a multi-location checker): an Age header older than the deploy is proof. Short-term fix is a CDN purge; the real finding is that some asset class bypasses filename versioning, so recommend the deploy pipeline either hash those files or purge automatically.",
+    },
+    {
+      symptom: "Post-deploy, the layout is broken for some users - and their screenshots show a weird MIX of old and new design.",
+      fix: "New HTML referencing old cached CSS (or vice versa) at partially updated edges. This mixed state is the signature of unversioned assets with independent TTLs. Verify by checking whether the CSS filename in the broken screenshot matches the newly deployed filename; if identical names carry different content, filename versioning is the missing fix, not a purge.",
+    },
+    {
+      symptom: "JavaScript errors spike for a fraction of users right after an API change, then fade over hours.",
+      fix: "Old cached JS bundles at some edges are calling the NEW API - the requests are wrong because the code is old. Correlate the error spike's decay curve with the JS bundle's TTL: they'll match. Lesson for test planning: after breaking API changes, old-client-vs-new-API is a real, temporarily-live combination that deserves a compatibility check, because the CDN guarantees it exists in production for a while.",
+    },
+    {
+      symptom: "A fix you verified as done gets reopened by users - repeatedly - while it 'works on your machine' every time.",
+      fix: "You and the reporters sit behind different edges. Stop retesting locally: get evidence from THEIR path (headers, region-specific checks). If their edge serves an Age older than your fix's deploy time, the fix is deployed but not delivered - a purge or TTL problem, and your report should say exactly that instead of ping-ponging the ticket.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Response headers of the exact affected asset** — `X-Cache`, `CF-Cache-Status`, `Age`, `Cache-Control`, `ETag`; they answer 'which copy am I getting, how old is it, who served it' in one glance.
+- **The same URL from multiple regions** — a VPN, a cloud VM, or an online multi-location checker; CDN bugs are geographic, so single-location testing is structurally blind to them.
+- **The build output's filename pattern** — hashed (`app.8f3a2c.js`) vs bare (`app.js`) tells you whether staleness is even possible for JS/CSS, and which files (usually images) sit outside the versioning scheme.
+- **The deploy pipeline's CDN step** — is there an automatic purge, which paths does it cover, and did it run for the release in question? A purge step that silently failed is a classic root cause.
+- **[[system-design-for-testers/scaling-building-blocks/caching-redis-and-its-bugs]]** — the same hit/miss/TTL/invalidation logic one layer deeper in the stack; a user complaint of 'old data' may be either layer, and headers are how you tell which.
+</WhereToCheck>
+
+<WorkedExample title="the checkout button that errored only in Asia, only for three hours">
+1. Monday 09:00 UTC: a release renames the payment API endpoint (old one removed) and ships new
+   frontend JS calling the new endpoint. By 09:30, error monitoring shows a spike of failed
+   checkouts - almost entirely from Asian traffic. European and American checkouts are fine.
+2. The on-call dev suspects a regional payment-provider outage; the provider's status page is
+   green. A tester picks up the geographic pattern instead and asks: what do failing users' browsers
+   actually RUN? The error stack traces reference a function name that only existed in the OLD
+   bundle.
+3. Cross-check: the JS bundle URL is unversioned (`checkout.js`) with a 6-hour edge TTL. European
+   edges happened to expire and refetch shortly after the deploy; several Asian edges had warmed
+   copies from ~08:00 and kept serving OLD JS - which calls the now-REMOVED old endpoint. Old code,
+   new backend: guaranteed failure, geographically distributed by edge expiry times.
+4. Repro without leaving the desk: fetch `checkout.js` through a Singapore-region checker - the
+   response `Age` header shows ~5600 seconds, predating the deploy. The same fetch from Frankfurt
+   shows Age 300. Both regions, one URL, two different programs.
+5. Finding: "Checkout failures are stale cached `checkout.js` calling a removed endpoint - proof:
+   Age headers per region. Immediate fix: purge. Permanent fix: hash the bundle filename so HTML
+   and JS can never desynchronize; and treat removed-endpoint deploys as breaking changes that
+   must keep the old endpoint alive for at least one TTL window." The three-hour mystery outage
+   became a two-line deploy-pipeline change - found by a tester who read an Age header instead of
+   blaming the payment provider.
+</WorkedExample>
+
+<Quiz
+  question="After this morning's deploy, users in one country report the site looks broken, and their screenshots show the new page structure styled by what is clearly the old design. Users elsewhere see everything correctly. What's the most likely cause?"
+  options={[
+    "The deploy failed partway through and must be rolled back immediately",
+    "Those users' browsers are outdated and don't support the new CSS features",
+    "Edges near that country still serve the old cached CSS while the HTML (from the origin) is already new - unversioned stylesheet filenames let the two desynchronize",
+    "The origin server for that country was skipped during the release"
+  ]}
+  answer={2}
+  explain="New HTML with old styling, clustered by geography, is the textbook stale-edge signature: HTML typically comes from (or revalidates against) the origin and updates quickly, while a stylesheet under an unversioned filename stays cached at each edge until its own TTL expires - so regions update at different times, and the unlucky ones render new markup with old CSS. A partial deploy failure would break things everywhere, not along edge boundaries; browser-support issues wouldn't start the very morning of a deploy and end when caches expire; and there is only one origin - regions don't have their own to be 'skipped'. The permanent fix is hashed filenames, which make HTML and CSS versions inseparable."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What a CDN does", back: "Caches copies of static assets (images, CSS, JS, fonts) on edge servers in cities worldwide; browsers fetch from the NEAREST edge instead of the distant origin - fast everywhere, at the cost of temporary regional inconsistency after changes." },
+    { front: "Edge / origin / warming", back: "Origin: the one true server. Edge: a regional cache node. Warming: the first request per region pays the slow origin trip and leaves a local copy for everyone after - which is also why synthetic first-load tests differ from warmed-real-user experience." },
+    { front: "Why post-deploy stale bugs cluster by geography", back: "Each edge caches and expires independently, so after a deploy the new version spreads as a region-by-region wave (as TTLs expire or purges land) - users behind not-yet-updated edges see the old version with zero errors." },
+    { front: "The mixed old/new broken page", back: "New HTML referencing old cached CSS/JS (or vice versa) at partially updated edges. Only possible with unversioned asset filenames - hashed filenames (app.8f3a2c.js) make the state unrepresentable." },
+    { front: "Cache busting via hashed filenames", back: "Build tools name assets by content hash; any change produces a NEW filename no edge has ever cached, so stale delivery is impossible and purges become unnecessary for those files. Files outside the scheme (often images) remain the risk." },
+    { front: "The headers that diagnose CDN bugs", back: "X-Cache / CF-Cache-Status (HIT or MISS), Age (how old this edge's copy is), Cache-Control (the policy). An Age predating the deploy is proof of staleness - screenshot it and the bug report writes itself." },
+    { front: "Why 'verified fixed on my machine' fails for CDN bugs", back: "You and the reporter are served by DIFFERENT edges; yours may be fresh while theirs is stale. Verify from the affected region (VPN, cloud VM, multi-location checker) or from the reporter's captured headers." },
+  ]}
+/>
+
+<Challenge>
+Run a staleness audit on the app you test: pick its five most important static assets (main JS
+bundle, main CSS, logo, one product/content image, favicon). For each, record: (1) hashed or bare
+filename? (2) Cache-Control TTL? (3) current Age at your edge? Then answer: if a critical fix
+shipped in each file RIGHT NOW, how long could some user somewhere keep receiving the old copy -
+and does the deploy pipeline do anything (purge, versioning) to shorten that? Any asset where the
+honest answer is 'hours, and nothing shortens it' is a finding worth writing up before it becomes
+an incident.
+</Challenge>
+
+<AskCommunity prompt="After deploys, our users in `[region]` see `[stale symptom]` for about `[duration]` while others see the new version. Asset filenames are `[hashed/bare]`, Cache-Control is `[value]`, and the deploy pipeline `[does/doesn't]` purge. Is filename hashing the right permanent fix here, and how do teams usually handle images and other files outside the bundler's hashing?">
+Include one affected asset's response headers from an affected region (especially Age) - with that
+single artifact, someone can usually confirm the diagnosis and point at the exact config to change.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.cloudflare.com/learning/cdn/what-is-a-cdn/", title: "Cloudflare — What is a CDN?", kind: "read" },
+    { href: "https://web.dev/articles/http-cache", title: "web.dev — Prevent unnecessary network requests with the HTTP Cache", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=RI9np1LWzqw", title: "ByteByteGo — What Is A CDN? How Does It Work?", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=RI9np1LWzqw" title="ByteByteGo — What Is A CDN? How Does It Work?" minutes={4} />
+
+<Takeaways
+  points={[
+    "A CDN serves your static assets from edge servers near each user - the single biggest reason big sites feel fast worldwide, and a new layer where versions can disagree.",
+    "Edges cache independently and expire on their own schedules, so a deploy rolls out as a geographic wave: stale-version bugs cluster by region, never uniformly.",
+    "The ugliest CDN bug is the mixed state - new HTML with old CSS/JS - and it is only possible for unversioned filenames; content-hashed names (app.8f3a2c.js) make it unrepresentable.",
+    "Diagnose with headers, not vibes: X-Cache/CF-Cache-Status, Cache-Control, and especially Age - a copy older than the deploy is proof of staleness in one screenshot.",
+    "Never verify a CDN-flavored fix only from your own location; your edge is not their edge - test from the affected region or from the reporter's headers.",
+    "Old cached JS calling a changed API is a real production combination after every breaking deploy - plan for one TTL window where yesterday's frontend runs against today's backend.",
+  ]}
+/>
+
+<Complete xp={10} />

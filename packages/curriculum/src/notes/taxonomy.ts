@@ -1936,8 +1936,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         topics: [
           { slug: "load-balancers", title: "Load balancers" },
           { slug: "caching-redis-and-its-bugs", title: "Caching (Redis) & its bugs" },
-          { slug: "message-queues-and-async-work", title: "Message queues & async work", planned: true },
-          { slug: "cdns-and-static-assets", title: "CDNs & static assets", planned: true },
+          { slug: "message-queues-and-async-work", title: "Message queues & async work" },
+          { slug: "cdns-and-static-assets", title: "CDNs & static assets" },
         ],
       },
       {

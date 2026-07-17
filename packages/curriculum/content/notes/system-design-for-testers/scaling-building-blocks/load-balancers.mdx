@@ -1,0 +1,322 @@
+---
+title: "Load balancers"
+summary: "A load balancer is the traffic director standing in front of identical servers: it spreads requests across them and pulls sick ones out of rotation. It also creates a whole bug family of its own - the classic being users randomly logged out because their session lived on only one server."
+tags: ["system-design-for-testers", "scaling-building-blocks", "track-c"]
+updated: "2026-07-17"
+related:
+  - "system-design-for-testers/the-big-picture/life-of-a-request-end-to-end"
+  - "system-design-for-testers/the-big-picture/frontend-backend-and-the-database"
+  - "system-design-for-testers/architecture-styles/monolith-vs-microservices"
+---
+
+<Hook>
+Refresh a page five times. Four loads are instant, one takes three seconds. Same URL, same
+account, same Wi-Fi. Nothing is "broken" - you just talked to five different computers and one of
+them was having a bad day. The moment an app runs on more than one server, something has to decide
+which server gets YOUR request - and that something quietly shapes half the "random" weirdness a
+tester ever sees: the intermittent slow load, the vanishing login, the bug that only reproduces on
+every third try.
+</Hook>
+
+<Callout type="analogy">
+A highway toll plaza. One road arrives, six booths collect the toll, and the plaza's job is to
+spread arriving cars across the open booths so no single line backs up onto the highway. When a
+booth has a problem, staff switch its sign to CLOSED and cars simply stop being sent there - the
+road keeps flowing on the remaining booths. Drivers never chose a booth by name, and they genuinely
+do not care which one stamps their ticket - exactly like users who neither know nor care which of
+your app's servers rendered their page. The load balancer is the plaza: one public entrance, many
+interchangeable workers behind it, and a CLOSED sign for any worker that fails its health check.
+</Callout>
+
+<Term define="A load balancer is a component that sits between clients and a group of identical servers, receives every incoming request at one public address, and forwards each request to one of the servers behind it. It distributes work using an algorithm (round-robin takes turns; least-connections picks the least busy server) and continuously runs health checks - tiny automatic test requests - against each server, removing from rotation any server that stops answering and returning it when it recovers. To users there appears to be one big reliable server; in reality there are many ordinary ones, any of which can be added, removed, or replaced without anyone noticing.">Load balancer</Term>
+
+## What it does, and why testers should care
+
+- **One address, many servers.** Users hit `www.yourapp.com`; the balancer owns that address and
+  forwards each request to one of N identical app servers behind it. Adding capacity means adding
+  servers to the pool - users never see it happen.
+- **An algorithm picks the server.** Round-robin simply takes turns (server A, B, C, A, B, C...).
+  Least-connections sends each request to whichever server is currently least busy. Either way,
+  YOUR next request may land on a different machine than your last one.
+- **Health checks pull sick servers out.** The balancer pings each server every few seconds with a
+  tiny test request. No answer (or an error) a few times in a row? That server gets the CLOSED sign
+  and receives no traffic until it passes checks again. Users mostly never notice a server died.
+- **This is why "it works on retry" is a real symptom, not user error.** If one server in the pool
+  has a bad deploy, stale code, or a full disk, only the fraction of requests routed to IT fail.
+  The bug report reads "sometimes it errors, then I refresh and it's fine" - which is exactly what
+  round-robin across one bad server and two good ones produces.
+- **Session affinity ("sticky sessions") is the exception to the shuffle.** The balancer can be
+  configured to keep sending the same user to the same server (usually via a cookie). Teams turn
+  this on when servers keep user state in local memory - which is itself the design smell behind
+  this chapter's signature bug.
+
+<Callout type="tip">
+When a bug is intermittent with no pattern you can tie to data or timing, ask a dev or check response
+headers for which server handled the failing request - many teams expose a header like
+`X-Served-By` or include a server ID in logs. If every failing repro traces to the same server ID
+while passing ones spread across the pool, the mystery bug just became "one bad server in rotation" -
+a five-minute diagnosis instead of a week of chasing ghosts.
+</Callout>
+
+<Callout type="mistake">
+Testing everything against a single-server environment (local dev, or a one-box staging) and calling
+the release safe. A whole bug family ONLY exists when two or more servers sit behind a balancer:
+sessions stored in one server's memory, uploaded files written to one server's local disk then
+requested from another, in-memory caches that disagree between servers, background jobs that assume
+they run on the same machine that took the upload. On one box, all of these pass every test you can
+write - the balancer is the thing that makes them fail, and staging without one tests a different
+architecture than production runs.
+</Callout>
+
+{/* IMAGE: head-on view of a highway toll plaza - one booth's overhead sign is red CLOSED while two lanes to its right show yellow TAP/CASH E-PASS with cars queued, older side canopy on the left, open approach road in the foreground */}
+<HotspotImage
+  src="/notes/system-design-for-testers/scaling-building-blocks/load-balancers.jpg"
+  alt="Highway toll plaza with one lane marked CLOSED in red and two open TAP/CASH E-PASS lanes with cars passing through"
+  credit="Cobequid Pass Toll Plaza (Westbound) — A Disappearing Act, Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Cobequid_Pass_Toll_Plaza_(Westbound).jpg"
+  pins={[
+    { x: 55, y: 45, label: "The CLOSED lane — a server pulled from rotation", desc: "This booth failed its 'health check', so the plaza stopped sending cars to it. A load balancer does exactly this automatically: a server that stops answering tiny test requests gets zero traffic until it recovers. Users never see the failure - just slightly longer lines elsewhere." },
+    { x: 72, y: 45, label: "Open lanes — the healthy server pool", desc: "Every open booth does the identical job, and no driver cares which one they get. App servers behind a balancer are the same: interchangeable copies, any of which can serve any user's next request." },
+    { x: 76, y: 63, label: "Cars being distributed — requests routed one by one", desc: "Each arriving car gets steered into one open lane - the plaza's version of round-robin. Note what this means for testing: your next request may be handled by a DIFFERENT machine than your last one, which is how 'works on refresh' bugs are born." },
+    { x: 12, y: 55, label: "The side canopy — capacity waiting off-rotation", desc: "Extra booths exist for peak traffic. Scaling out is adding servers to the pool at the balancer, invisibly to drivers/users - which is the whole point of putting a balancer in front in the first place." },
+    { x: 45, y: 85, label: "The single approach road — one public address", desc: "All traffic funnels through one entrance no matter how many booths are open behind it. Users only ever know www.yourapp.com; the balancer owns that address and hides everything behind it." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One bad server in the pool = an 'intermittent' bug - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Three identical servers sit behind the balancer; a deploy goes out but silently fails on server-B", desc: "A and C run the new code, B still runs the old build. Nobody notices - B still answers health checks, because the health endpoint itself works fine." },
+    { label: "Request 1 -> server-A: works. Request 2 -> server-B: the new feature is missing!", desc: "Round-robin took turns. The user who landed on B files: 'the new button disappeared'." },
+    { label: "Request 3 -> server-C: works. The user refreshes, lands on A: 'never mind, it's back'", desc: "The bug report now says 'sometimes the feature vanishes, refresh fixes it' - the classic signature of one stale server in rotation." },
+    { label: "The tester checks WHICH server served each failing repro (response header / logs)", desc: "Every failure maps to server-B; every pass maps to A or C. Diagnosis: not a flaky feature - a failed deploy on one pool member. One header turned a ghost into a one-line bug report." },
+  ]}
+/>
+
+A load balancer in miniature: round-robin, a health check pulling a server out, and the signature
+sticky-session bug - all in a few lines you can run:
+
+<CodePlayground
+  language="python"
+  title="Run it - round-robin, a failed health check, and the vanishing login (Python)"
+  code={`servers = ["server-A", "server-B", "server-C"]
+healthy = {"server-A": True, "server-B": True, "server-C": True}
+turn = 0  # round-robin pointer
+
+
+def route_next_request():
+    """Round-robin across HEALTHY servers only - like a toll plaza closing a lane."""
+    global turn
+    pool = [s for s in servers if healthy[s]]
+    server = pool[turn % len(pool)]
+    turn += 1
+    return server
+
+
+print("--- 6 requests, all three servers healthy (round-robin) ---")
+for i in range(1, 7):
+    print(f"request {i} -> {route_next_request()}")
+
+print()
+print("--- server-B fails its health check and is pulled from rotation ---")
+healthy["server-B"] = False
+for i in range(7, 11):
+    print(f"request {i} -> {route_next_request()}")
+
+print()
+print("--- the sticky-session bug: login state kept in ONE server's memory ---")
+local_memory = {"server-A": {}, "server-B": {}, "server-C": {}}
+
+login_server = route_next_request()
+local_memory[login_server]["maya"] = "logged-in"
+print(f"maya logs in -> handled by {login_server}, session stored ONLY in its memory")
+
+next_server = route_next_request()
+session = local_memory[next_server].get("maya")
+print(f"maya clicks 'My Orders' -> handled by {next_server}, sees session: {session}")
+print()
+print("Nothing crashed and every server is 'working', yet maya was silently logged out -")
+print("her session lives in one server's memory and the balancer sent her to another.")
+print("Fix: shared session storage (e.g. Redis) or sticky sessions - and a tester who")
+print("repeats a flow several times in a row can catch this class of bug from the UI alone.")`}
+/>
+
+The same balancer in Java - identical routing decisions, identical vanishing login (Java prints the
+missing session as `null` where Python says `None`, but it's the same absent value):
+
+<CodePlayground
+  language="java"
+  title="Run it - round-robin, a failed health check, and the vanishing login (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static List<String> servers = List.of("server-A", "server-B", "server-C");
+    static Map<String, Boolean> healthy = new HashMap<>(Map.of(
+            "server-A", true, "server-B", true, "server-C", true));
+    static int turn = 0; // round-robin pointer
+
+    static String routeNextRequest() {
+        // Round-robin across HEALTHY servers only - like a toll plaza closing a lane
+        List<String> pool = new ArrayList<>();
+        for (String s : servers) if (healthy.get(s)) pool.add(s);
+        String server = pool.get(turn % pool.size());
+        turn++;
+        return server;
+    }
+
+    public static void main(String[] args) {
+        System.out.println("--- 6 requests, all three servers healthy (round-robin) ---");
+        for (int i = 1; i <= 6; i++) {
+            System.out.println("request " + i + " -> " + routeNextRequest());
+        }
+
+        System.out.println();
+        System.out.println("--- server-B fails its health check and is pulled from rotation ---");
+        healthy.put("server-B", false);
+        for (int i = 7; i <= 10; i++) {
+            System.out.println("request " + i + " -> " + routeNextRequest());
+        }
+
+        System.out.println();
+        System.out.println("--- the sticky-session bug: login state kept in ONE server's memory ---");
+        Map<String, Map<String, String>> localMemory = new HashMap<>();
+        for (String s : servers) localMemory.put(s, new HashMap<>());
+
+        String loginServer = routeNextRequest();
+        localMemory.get(loginServer).put("maya", "logged-in");
+        System.out.println("maya logs in -> handled by " + loginServer
+                + ", session stored ONLY in its memory");
+
+        String nextServer = routeNextRequest();
+        String session = localMemory.get(nextServer).get("maya");
+        System.out.println("maya clicks 'My Orders' -> handled by " + nextServer
+                + ", sees session: " + session);
+        System.out.println();
+        System.out.println("Nothing crashed and every server is 'working', yet maya was silently logged out -");
+        System.out.println("her session lives in one server's memory and the balancer sent her to another.");
+        System.out.println("Fix: shared session storage (e.g. Redis) or sticky sessions - and a tester who");
+        System.out.println("repeats a flow several times in a row can catch this class of bug from the UI alone.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: find out how many servers you're actually talking to">
+<StepChecklist
+  steps={[
+    { text: "Open your app (or any big site) and load the same page 6-8 times with devtools open", detail: "Watch the Network tab's response headers each time - you're hunting for evidence of multiple machines." },
+    { text: "Look for a server-identity header", detail: "Common ones: X-Served-By, X-Backend, X-Instance, Via, or a Set-Cookie whose name hints at affinity (anything like SERVERID, AWSALB, ARRAffinity, JSESSIONID + route suffix)." },
+    { text: "If you find one, note whether the value CHANGES between refreshes", detail: "A changing value = you're being shuffled across a pool (no stickiness). A constant value = sticky sessions, or genuinely one server." },
+    { text: "Ask a developer: 'How many app servers run behind the balancer in production, and does staging have the same setup?'", detail: "If production has 4 and staging has 1, write that down - it means a whole bug family is untestable in staging, which is worth raising as a test-environment gap." },
+  ]}
+/>
+You now know whether your app is one machine or many, and whether your test environment even has the
+architecture the bugs need in order to appear - most testers never check either.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "Users report being randomly logged out mid-session, but it never reproduces on the developer's machine.",
+      fix: "Classic sticky-session/state-locality bug: sessions kept in server memory while the balancer shuffles the user between servers. Repro needs 2+ servers, so a single-box dev machine CANNOT show it. Repeat the flow (login, then several actions) 6-10 times in an environment with a real pool, and capture which server served each request; report the pattern, and suggest the team verify shared session storage or affinity config.",
+    },
+    {
+      symptom: "A feature 'sometimes' errors or shows old behavior; refreshing fixes it; nobody can pin it down.",
+      fix: "Suspect one bad pool member: a partially failed deploy, one server with stale code or a full disk. Find the server-identity header or ask for per-server logs, and map failing repros to server IDs. If failures cluster on one ID, the report becomes 'server-B is running the previous build' - precise, actionable, and fixed in minutes.",
+    },
+    {
+      symptom: "A file uploads successfully but returns 404 when downloaded seconds later - intermittently.",
+      fix: "The upload was written to ONE server's local disk, and the download request landed on a DIFFERENT server that doesn't have the file. Same disease as the session bug: local state behind a balancer. Repro by upload-then-download in a loop; the fix on the dev side is shared storage (S3-style object storage), and the test-side lesson is that any 'write then read' flow must be exercised across multiple requests.",
+    },
+    {
+      symptom: "Everything worked in staging; production has weird intermittent failures under load.",
+      fix: "Compare architectures, not just configs: staging with one server behind no balancer tests a different system than production's pool of six. Ask for a staging pool of at least 2 servers - two is enough to expose the entire state-locality bug family; six is not required.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Response headers on repeated requests** — devtools Network tab; look for `X-Served-By`-style headers or affinity cookies to learn which machine answered and whether you're being shuffled.
+- **Per-server logs (or a log field naming the instance)** — the only way to map an intermittent failure to one pool member; ask devs how server identity shows up in your logging tool.
+- **The balancer's health-check config and dashboard** — what URL it probes, how often, and each server's current in/out-of-rotation status; a server flapping in and out of rotation is itself a finding.
+- **The staging environment's real topology** — how many servers behind what balancer, versus production; a mismatch here is a test-coverage gap worth reporting on its own.
+- **[[system-design-for-testers/the-big-picture/life-of-a-request-end-to-end]]** — where the balancer sits in the full journey of a single request, before it ever reaches app code.
+</WhereToCheck>
+
+<WorkedExample title="the login that only broke for real users, never in staging">
+1. Support tickets trickle in: "the site logged me out while I was filling my cart." QA cannot
+   reproduce it in staging no matter what they try - login is rock solid.
+2. A tester notices all tickets mention normal browsing, no timeouts, no password changes. They ask
+   ops how many app servers production runs: six, behind a load balancer. Staging: one, no balancer.
+3. Hypothesis: state locality. In production, with six servers, they repeat a login-then-browse loop
+   while recording the `X-Served-By` header for every request.
+4. Repro on the 4th attempt: login handled by `web-3`, next click handled by `web-5`, session gone.
+   Every logout ticket's timing matches a request that switched servers. The team checks config: a
+   recent "performance cleanup" had switched sessions from Redis back to in-process memory - it
+   passed every staging test, because staging has one server and the bug needs two.
+5. Finding: "Sessions are stored in per-server memory since deploy X; any request routed to a
+   different pool member loses the session. Staging (single server) structurally cannot catch this
+   class - recommend a 2-server staging pool as a permanent environment requirement." Two fixes
+   shipped: sessions back in shared storage, and a smaller second staging server added - the second
+   fix prevents the whole family, not just this bug.
+</WorkedExample>
+
+<Quiz
+  question="A bug report says: 'Sometimes the new checkout button is missing. If I refresh once or twice it comes back.' Production runs four servers behind a load balancer. What's the strongest FIRST move?"
+  options={[
+    "Close it as 'cannot reproduce' since the button works on every refresh you try",
+    "File it as a frontend rendering flake and assign it to the UI team",
+    "Identify which server handled the failing requests (server-identity header or logs) and check whether failures cluster on one pool member - one server may be running a stale build",
+    "Ask the user to clear their browser cache and cookies, then close the ticket if it stops"
+  ]}
+  answer={2}
+  explain="'Intermittent, refresh fixes it' behind a load balancer is the signature of ONE bad pool member - a partially failed deploy leaves one server on old code, and round-robin means only the fraction of requests hitting that server show the problem. Mapping failing requests to server identity converts a ghost into 'server-3 runs the previous build', which is diagnosable and fixable immediately. Closing as cannot-reproduce ignores that your refreshes may simply have landed on healthy servers; calling it a UI flake or blaming the user's cache both skip the architecture-aware question a tester who knows about balancers asks first."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What a load balancer does", back: "Owns one public address, forwards each incoming request to one of N identical servers behind it (round-robin takes turns; least-connections picks the least busy), so capacity can grow invisibly to users." },
+    { front: "What a health check is", back: "A tiny automatic test request the balancer sends each server every few seconds; servers that stop answering are pulled from rotation (the CLOSED toll lane) and return when they pass again." },
+    { front: "The signature sticky-session bug", back: "Session state kept in ONE server's memory while the balancer routes the user's next request to a DIFFERENT server - the user is silently logged out with no error anywhere. Needs 2+ servers to reproduce at all." },
+    { front: "Why 'works after refresh' is an architecture clue", back: "With one bad server in the pool, only requests routed to it fail; a refresh re-rolls the dice. Failures that cluster on one server identity = one stale/broken pool member, not a flaky feature." },
+    { front: "The staging trap with balancers", back: "A single-server staging environment structurally CANNOT reproduce state-locality bugs (sessions, local file writes, per-server caches). Two servers behind a balancer is the minimum architecture-faithful test setup." },
+    { front: "Session affinity (sticky sessions)", back: "A balancer feature that keeps sending the same user to the same server, usually via a cookie - a workaround that hides state-locality problems rather than fixing them with shared storage." },
+  ]}
+/>
+
+<Challenge>
+In your app (or any site you test), spend ten minutes hunting for evidence of the pool: load the
+same page repeatedly and inspect response headers and cookies for anything that identifies a server
+or looks like an affinity cookie. Then answer three questions in writing: (1) How many servers do
+you believe serve this app, and what's your evidence? (2) Does anything in the app keep per-user
+state that would break if your next request hit a different server? (3) Could your current test
+environment catch that breakage - and if not, what's the smallest change that would make it able to?
+</Challenge>
+
+<AskCommunity prompt="Our app runs `[N]` servers behind `[balancer type, if known]`. I'm seeing `[intermittent symptom]` that I can't reproduce in our single-server staging. I suspect a state-locality/routing issue - what's the best way to confirm which server handled a failing request in `[your logging/monitoring stack]`, and is a 2-server staging pool the right ask?">
+Naming your actual balancer and logging stack gets you concrete header names and log fields instead
+of generic advice - and mentioning the single-server staging usually surfaces others who hit the
+exact same reproduction wall.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.nginx.com/resources/glossary/load-balancing/", title: "NGINX — What Is Load Balancing?", kind: "read" },
+    { href: "https://aws.amazon.com/what-is/load-balancing/", title: "AWS — What is Load Balancing?", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=1fN2UDbtGDQ", title: "PowerCert Animated Videos — Load Balancer Explained", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=1fN2UDbtGDQ" title="PowerCert Animated Videos — Load Balancer Explained" minutes={9} />
+
+<Takeaways
+  points={[
+    "A load balancer gives many identical servers one public face, choosing a server per request (round-robin or least-connections) and pulling failing servers out via health checks.",
+    "Your next request can land on a different machine than your last one - this single fact explains a whole family of 'random' bugs: vanishing logins, missing uploads, features that come and go.",
+    "'Intermittent, fixed by refresh' behind a balancer usually means ONE bad pool member - map failing requests to server identity before calling anything flaky.",
+    "State kept locally on one server (sessions in memory, files on local disk) is the root disease; sticky sessions mask it, shared storage cures it.",
+    "A single-server staging environment tests a different architecture than a load-balanced production - two servers behind a balancer is the minimum honest test setup, and asking for it is a legitimate QA finding.",
+  ]}
+/>
+
+<Complete xp={10} />
