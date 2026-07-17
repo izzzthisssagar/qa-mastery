@@ -1287,17 +1287,17 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "page-object-model",
         title: "Page Object Model",
         topics: [
-          { slug: "the-pom-pattern", title: "The POM pattern", planned: true },
-          { slug: "page-classes", title: "Page classes", planned: true },
-          { slug: "returning-pages", title: "Returning pages", planned: true },
-          { slug: "component-objects", title: "Component objects", planned: true },
+          { slug: "the-pom-pattern", title: "The POM pattern" },
+          { slug: "page-classes", title: "Page classes" },
+          { slug: "returning-pages", title: "Returning pages" },
+          { slug: "component-objects", title: "Component objects" },
         ],
       },
       {
         slug: "reusable-components",
         title: "Reusable components",
         topics: [
-          { slug: "base-classes", title: "Base classes", planned: true },
+          { slug: "base-classes", title: "Base classes" },
           { slug: "utilities", title: "Utilities", planned: true },
           { slug: "waits-wrapper", title: "Waits wrapper", planned: true },
           { slug: "driver-factory", title: "Driver factory", planned: true },
@@ -1307,8 +1307,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "config-and-data",
         title: "Config & data",
         topics: [
-          { slug: "config-files", title: "Config files", planned: true },
-          { slug: "environments", title: "Environments", planned: true },
+          { slug: "config-files", title: "Config files" },
+          { slug: "environments", title: "Environments" },
           { slug: "test-data", title: "Test data", planned: true },
           { slug: "secrets", title: "Secrets", planned: true },
         ],
@@ -1317,7 +1317,7 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "logging-and-reporting",
         title: "Logging & reporting",
         topics: [
-          { slug: "logging-log4j", title: "Logging (Log4j)", planned: true },
+          { slug: "logging-log4j", title: "Logging (Log4j)" },
           { slug: "extentreports", title: "ExtentReports", planned: true },
           { slug: "allure", title: "Allure", planned: true },
           { slug: "screenshots-on-failure", title: "Screenshots on failure", planned: true },

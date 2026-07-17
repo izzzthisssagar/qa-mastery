@@ -1,0 +1,306 @@
+---
+title: "Environments"
+summary: "Running the SAME test suite against dev, staging, or UAT by swapping which config profile loads (config-dev.properties vs config-staging.properties, chosen via a system property or environment variable at runtime) - one codebase, many targets, zero per-environment test copies."
+tags: ["framework-design", "config-and-data", "track-d"]
+updated: "2026-07-17"
+related:
+  - "framework-design/config-and-data/config-files"
+  - "framework-design/config-and-data/test-data"
+  - "framework-design/config-and-data/secrets"
+---
+
+<Hook>
+"It passed on dev" is not the same claim as "it works on staging" - and a suite that can only run
+against one environment can only ever make one of those claims. The wrong fix is a copied
+`staging-tests` folder that drifts out of date within a sprint. The right fix is one suite, several
+config profiles, and a single runtime switch deciding which profile loads.
+</Hook>
+
+<Callout type="analogy">
+An opera house does not build a new theatre for every production. The stage, the fly rigging, the
+lighting rails, and the crew are permanent; what changes between Carmen and The Magic Flute is the
+dressing - backdrops flown in, set pieces rolled on, the same machinery reconfigured overnight for
+a different show. Walk in during a changeover and you see it plainly: a bare stage, stagehands, and
+scenery being swapped while the auditorium sits unchanged. A test suite should work the same way -
+the tests are the permanent rigging, and each environment is just a different set dressed onto them.
+</Callout>
+
+<Term define="Environment support in a test framework means running the SAME test suite against DIFFERENT deployed environments - dev, staging, a prod-like UAT - by swapping which config profile is loaded at runtime, never by maintaining per-environment copies of the test code. Each environment gets its own profile file (config-dev.properties, config-staging.properties, config-uat.properties) holding that environment's values for the same keys: base URL, database host, timeout tuned to that environment's speed. A single selector - a JVM system property (-Denv=staging), an environment variable (ENV=staging), or a Maven profile - tells the framework which file to load at startup. The tests themselves contain no environment names and no environment branching; they ask the config for values and remain identical, byte for byte, no matter where they run.">Environment profiles</Term>
+
+## One suite, many targets: the profile switch
+
+```properties
+# config-dev.properties
+base.url=https://dev.example.com
+timeout.seconds=20
+
+# config-staging.properties
+base.url=https://staging.example.com
+timeout.seconds=10
+```
+
+```java
+public class Config {
+    private static final Properties props = new Properties();
+
+    static {
+        // -Denv=staging on the command line; defaults to dev locally
+        String env = System.getProperty("env", "dev");
+        String file = "/config-" + env + ".properties";
+        try (InputStream in = Config.class.getResourceAsStream(file)) {
+            if (in == null) throw new IllegalStateException("No profile found: " + file);
+            props.load(in);
+        } catch (IOException e) {
+            throw new RuntimeException("Could not load " + file, e);
+        }
+    }
+}
+```
+
+```
+mvn test -Denv=staging     # same tests, staging profile
+mvn test -Denv=uat         # same tests, UAT profile
+```
+
+- **The selector is runtime input, not code** — a system property, an environment variable, or a
+  CI job parameter. Choosing an environment never involves editing or rebuilding anything.
+- **Every profile answers the same questions** — identical keys in every file, only the values
+  differ. A key present in dev but missing from staging is a landmine that detonates mid-run,
+  which is why the reader should fail fast at startup if a profile is missing or incomplete.
+- **Tests stay environment-blind** — no test contains `staging` in a string, and no test wraps an
+  assertion in an environment check. If a test genuinely cannot run somewhere (payments against
+  prod-like UAT, say), exclude it via suite grouping - don't teach the test code about geography.
+- **A sensible default keeps local life easy** — `System.getProperty("env", "dev")` means teammates
+  run against dev with zero ceremony, while CI passes an explicit `-Denv` per pipeline stage.
+
+<Callout type="tip">
+Make the resolved environment loudly visible: log the profile name and base URL as the first line
+of every run, and stamp it into the test report header. Half of all "why did the run fail?"
+confusion across environments dissolves the moment every report says up front which environment it
+actually ran against - rather than leaving people to infer it from failure messages.
+</Callout>
+
+<Callout type="mistake">
+Cloning the test code per environment - a `tests-dev` folder and a `tests-staging` folder, or
+worse, a long-lived `staging` git branch of the suite. The copies diverge within weeks: a bug fixed
+in one, a new test added to only the other, and soon "the suite" is two different suites making
+incomparable claims. The entire point of profiles is that ONE set of tests runs everywhere;
+duplicating tests to change three values is trading a config problem for a maintenance disaster.
+</Callout>
+
+{/* IMAGE: a real photograph taken from the stage of the Berlin Opera during set construction, showing the dark blue stage floor with a coiled rope and track pieces in the foreground, stagehands working around a huge white backdrop panel mid-stage, scaffolding and fly-system machinery on the left, and the ornate gilded auditorium with rows of red seats visible through the proscenium opening on the right */}
+<HotspotImage
+  src="/notes/framework-design/config-and-data/environments.jpg"
+  alt="View from the stage of the Berlin Opera during set construction, with a coiled rope on the dark stage floor in the foreground, stagehands working around a large white backdrop panel, scaffolding and rigging machinery to the left, and the ornate auditorium with red seats visible through the proscenium opening"
+  credit="Berlin - Scenography and set construction work — Wikimedia Commons, CC BY-SA 3.0 (Jorge Royan)"
+  creditHref="https://commons.wikimedia.org/wiki/File:Berlin-_Scenography_and_set_construction_work_-_4092.jpg"
+  pins={[
+    { x: 45, y: 75, label: "The bare stage floor — the one permanent suite", desc: "Every production plays on this same floor with this same machinery - the way one set of tests, unchanged, hosts every environment. Nothing here is rebuilt per show." },
+    { x: 62, y: 30, label: "The backdrop being changed — the config profile", desc: "What actually differs between productions is the dressing flown in for tonight - the profile file holding this environment's URL and timeouts, swapped without touching the rigging." },
+    { x: 48, y: 52, label: "The stagehands mid-changeover — the runtime selector", desc: "The crew executes the switch between shows - the role of -Denv=staging or an ENV variable: an instruction at run time deciding which dressing goes onto the permanent stage." },
+    { x: 88, y: 25, label: "The auditorium through the proscenium — the same house for every show", desc: "The theatre doesn't move; the audience seats stay put whichever opera plays. Reports, runners, and CI stay identical across environments - only the loaded profile differs." },
+  ]}
+/>
+
+<FlowAnimation
+  title="What -Denv=staging actually changes (and what it doesn't)"
+  intervalMs={1800}
+  nodes={[
+    { label: "mvn test -Denv=staging is run", desc: "The environment name arrives as runtime input - no file was edited, nothing was rebuilt." },
+    { label: "The framework resolves config-staging.properties", desc: "Profile filename assembled from the selector; fail fast here if the file doesn't exist." },
+    { label: "Staging's values load into the one Config object", desc: "Same keys as every other profile - base.url, timeout.seconds - just staging's values." },
+    { label: "The identical, environment-blind tests execute", desc: "Not one test knows or cares which environment it's in; they ask Config by key as always." },
+    { label: "Tomorrow: -Denv=uat, same suite, third target", desc: "One codebase making comparable claims about every environment it runs against." },
+  ]}
+/>
+
+Underneath the flags and file naming, the pattern is simply: several named bundles of values, one
+runtime choice of bundle, and tests that consume values without knowing which bundle they came
+from. Here's that shape as a small, generic simulation.
+
+<CodePlayground
+  language="python"
+  title="Run it - one suite, three environments, selected at runtime (Python)"
+  code={`PROFILES = {
+    "dev":     {"base.url": "https://dev.example.com",     "timeout": 20},
+    "staging": {"base.url": "https://staging.example.com", "timeout": 10},
+    "uat":     {"base.url": "https://uat.example.com",     "timeout": 15},
+}
+
+def load_profile(env):
+    if env not in PROFILES:
+        raise SystemExit(f"No profile found for env={env}")
+    print(f"[run header] environment={env} target={PROFILES[env]['base.url']}")
+    return PROFILES[env]
+
+def run_suite(config):
+    # the SAME tests every time - no environment names anywhere in here
+    for path in ["/login", "/search", "/checkout"]:
+        print(f"  test hits {config['base.url']}{path} (waits {config['timeout']}s) -> PASS")
+
+# the selector is runtime input - in real life: -Denv=staging or ENV=staging
+for env in ["dev", "staging", "uat"]:
+    run_suite(load_profile(env))
+    print()
+
+print("Three environments covered by ONE suite - zero copied test code.")`}
+/>
+
+Same profile-switch shape in Java.
+
+<CodePlayground
+  language="java"
+  title="Run it - one suite, three environments, selected at runtime (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static final Map<String, Map<String, String>> PROFILES = Map.of(
+        "dev",     Map.of("base.url", "https://dev.example.com",     "timeout", "20"),
+        "staging", Map.of("base.url", "https://staging.example.com", "timeout", "10"),
+        "uat",     Map.of("base.url", "https://uat.example.com",     "timeout", "15")
+    );
+
+    static Map<String, String> loadProfile(String env) {
+        Map<String, String> profile = PROFILES.get(env);
+        if (profile == null) throw new IllegalStateException("No profile found for env=" + env);
+        System.out.println("[run header] environment=" + env + " target=" + profile.get("base.url"));
+        return profile;
+    }
+
+    static void runSuite(Map<String, String> config) {
+        // the SAME tests every time - no environment names anywhere in here
+        for (String path : List.of("/login", "/search", "/checkout")) {
+            System.out.println("  test hits " + config.get("base.url") + path
+                + " (waits " + config.get("timeout") + "s) -> PASS");
+        }
+    }
+
+    public static void main(String[] args) {
+        // the selector is runtime input - in real life: -Denv=staging or an ENV variable
+        for (String env : List.of("dev", "staging", "uat")) {
+            runSuite(loadProfile(env));
+            System.out.println();
+        }
+        System.out.println("Three environments covered by ONE suite - zero copied test code.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: make one suite run against two environments with a single flag">
+<StepChecklist
+  steps={[
+    { text: "Split your config file into config-dev.properties and config-staging.properties with identical keys", detail: "Point them at two different practice sites (or the same site with different timeouts) so the difference is observable." },
+    { text: "Change your Config reader to pick the file from System.getProperty('env', 'dev')", detail: "Fail fast with the resolved filename in the message if the profile doesn't exist." },
+    { text: "Log the environment name and base URL as the first line of every run", detail: "This is the tip callout - future you debugging a CI failure will thank present you." },
+    { text: "Run the suite twice: once plain, once with -Denv=staging, without editing any file in between", detail: "Confirm both runs execute the same tests against different targets - that's the whole pattern working." },
+  ]}
+/>
+You've now turned "the suite" from a single-environment artifact into a claim you can make about
+any environment you point it at.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "The suite silently runs against dev even though CI passed an environment flag.",
+      fix: "Check how the flag travels: a -Denv passed to Maven doesn't automatically reach forked test JVMs - it may need forwarding via the surefire plugin's systemPropertyVariables, or read an environment variable (System.getenv) instead, which forks inherit.",
+    },
+    {
+      symptom: "Tests pass on dev but fail on staging with timeouts, and the team starts calling them flaky.",
+      fix: "Compare the two profiles first - environments genuinely differ in speed, and a timeout tuned for dev may simply be too tight for staging. Tuning the staging profile's timeout value is a config change, not a test change.",
+    },
+    {
+      symptom: "A run against a new UAT environment crashes mid-suite with a missing config key.",
+      fix: "The new profile was created by partially copying an old one. Enforce identical keys across profiles - validate at startup that the loaded profile contains every required key, so an incomplete profile fails in second one, not test forty.",
+    },
+    {
+      symptom: "Some tests are wrapped in if-environment-equals checks and behave differently per target.",
+      fix: "That's environment logic leaking into test code - the mistake this note warns against in miniature. Move genuinely environment-inapplicable tests into excluded groups per environment (suite-level), and keep every remaining test's body environment-blind.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The run's first log line / report header** — if you followed the tip, the resolved environment
+  and base URL are stated up front; if they're absent, that's the first improvement to make.
+- **The profile files side by side** — a quick diff of `config-dev` vs `config-staging` confirms
+  identical keys and shows exactly which values differ between the targets.
+- **How the selector travels through the build** — the Maven surefire configuration (or CI job
+  definition) shows whether `-Denv` actually reaches the test JVM or dies at the build tool.
+- **CI pipeline stage definitions** — each stage's explicit environment flag documents which
+  environments actually get tested on every commit, and which are only tested "sometimes."
+</WhereToCheck>
+
+<WorkedExample title="the copied staging suite that drifted, and the flag that replaced it">
+1. A team needs their checkout tests running against staging before each release, so someone copies
+   the whole test package into a `staging-tests` folder and edits the URLs inside.
+2. Within six weeks the copies diverge: a locator fix lands only in the original, two new tests
+   exist only in the copy, and a bug that staging tests "caught" turns out to be the stale copy
+   failing on an outdated locator - not a product bug at all. Trust in the staging run evaporates.
+3. The rebuild: the copied folder is deleted, the suite gets `config-dev.properties` and
+   `config-staging.properties` with identical keys, and the reader resolves the file from
+   `System.getProperty("env", "dev")`, failing fast if the profile is missing.
+4. CI gets two stages running the SAME suite: `mvn test -Denv=dev` on every commit, and
+   `mvn test -Denv=staging` before release, each report stamped with its environment name.
+5. The next locator fix lands once and is immediately live for both environments - there is no
+   second copy to forget - and a staging failure now reliably means staging misbehaved, because
+   the tests are byte-for-byte the ones that just passed on dev.
+</WorkedExample>
+
+<Quiz
+  question="A team wants their suite to run against a new UAT environment. One engineer proposes creating config-uat.properties and passing -Denv=uat in the CI stage; another proposes branching the repo, creating a uat branch where the URLs are edited directly in the test code. Based on this note, why is the first approach right?"
+  options={[
+    "Because .properties files load faster than git branches",
+    "Because the branch approach forbids ever running tests on dev again",
+    "Because a profile keeps one identical suite running everywhere with the environment chosen at runtime, while a branch is a per-environment copy of the test code that will drift - fixes and new tests landing on one branch but not the other until the two suites make incomparable claims",
+    "Because -Denv flags are encrypted and therefore more secure than branches"
+  ]}
+  answer={2}
+  explain="The mistake callout is precisely about per-environment copies of test code - folders or long-lived branches - which diverge within weeks and destroy the comparability of results across environments; the profile approach keeps tests environment-blind and swaps only data. Option one invents a performance difference that doesn't exist and isn't the issue. Option two is false - a branch doesn't prevent dev runs; it 'merely' guarantees drift. Option four confuses the environment selector with secrets handling - a -Denv flag isn't encrypted and has nothing to do with security."
+/>
+
+<Flashcards
+  cards={[
+    { front: "How does one suite run against dev, staging, and UAT?", back: "Per-environment profile files with identical keys (config-dev.properties, config-staging.properties...), one of which is loaded at startup based on a runtime selector - a system property, environment variable, or CI parameter." },
+    { front: "What must NEVER appear inside test code in this pattern?", back: "Environment names or environment branching. Tests stay environment-blind, asking Config by key; environment-inapplicable tests are excluded at suite level, not via if-checks in test bodies." },
+    { front: "Why identical keys across all profile files?", back: "A key present in dev but missing in staging detonates mid-run. Validate at startup that the loaded profile has every required key, so an incomplete profile fails in second one." },
+    { front: "Why do per-environment test-code copies (folders/branches) fail?", back: "They diverge within weeks - fixes and new tests land in one copy only - until the 'suite' is two different suites making incomparable claims about their environments." },
+    { front: "The opera-house analogy for environments", back: "The stage, rigging, and crew are permanent (the test suite); each production redresses them with different scenery (the config profile), swapped per show (the runtime selector) - no one builds a new theatre per opera." },
+  ]}
+/>
+
+<Challenge>
+Take a suite you've built (or a practice framework) and give it genuine two-environment support:
+two profile files with identical keys, a reader driven by a system property with a dev default and
+fail-fast on missing profiles, and the environment name logged in the report header. Then prove the
+claim: run it against both targets in a row with no edits between runs, and write down the exact
+single command that switches environments - if that command needs more than one flag, simplify
+until it doesn't.
+</Challenge>
+
+<AskCommunity prompt="My suite is supposed to switch environments via `[your selector: -Denv / ENV variable / CI parameter]`, but `[it always runs against the default / the flag seems ignored in CI / one profile fails with missing keys]`. Here's my reader and how the flag is passed: `[paste both]`.">
+The most common answer will be about how the flag travels - build tools don't always forward system
+properties to forked test JVMs - so showing the exact command line plus the reader code usually
+gets the mystery solved in one reply.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://blog.vinsguru.com/selenium-webdriver-how-to-execute-tests-in-multiple-environments/", title: "Vinsguru — Selenium WebDriver: How To Execute Tests In Multiple Environments", kind: "read" },
+    { href: "https://maven.apache.org/guides/introduction/introduction-to-profiles.html", title: "Apache Maven — Introduction to Build Profiles", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=ATGQZj3s5lw" title="Part 3 || Configuration Environment details || Selenium automation framework — RoadToAutomation -- Sadik" minutes={14} />
+
+<Takeaways
+  points={[
+    "Environment support means the SAME suite runs against dev, staging, and UAT by swapping which config profile loads - never by copying test code per environment.",
+    "Each profile file answers the same keys with that environment's values; the selector (-Denv, an environment variable, a CI parameter) is runtime input, not a code edit.",
+    "Tests stay environment-blind: no environment names, no environment branching in test bodies - exclusions happen at suite level.",
+    "Fail fast on a missing or incomplete profile at startup, and log the resolved environment in every report header.",
+    "Per-environment test-code copies (folders or long-lived branches) drift within weeks and make results incomparable - the exact disaster profiles exist to prevent.",
+  ]}
+/>
+
+<Complete xp={10} />

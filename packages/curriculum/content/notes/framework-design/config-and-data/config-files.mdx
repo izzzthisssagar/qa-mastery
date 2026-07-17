@@ -1,0 +1,307 @@
+---
+title: "Config files"
+summary: "Base URL, timeouts, browser choice, retry counts - externalized into one config file read at startup instead of hardcoded across test and page code, so retargeting the whole suite is a one-file edit with no code changes and no recompile."
+tags: ["framework-design", "config-and-data", "track-d"]
+updated: "2026-07-17"
+related:
+  - "framework-design/config-and-data/environments"
+  - "framework-design/config-and-data/test-data"
+  - "framework-design/config-and-data/secrets"
+---
+
+<Hook>
+The staging URL changes, and suddenly forty test files need editing - because each one hardcoded
+`https://staging.example.com` when it was written. A framework with a config file has a different
+Tuesday: one line changes in one file, no code is touched, nothing recompiles, and the entire suite
+is pointed somewhere new before the coffee is cold.
+</Hook>
+
+<Callout type="analogy">
+A CNC machine in a workshop is adjusted from its control panel - spindle speed on a dial, feed hold
+on a labeled button, emergency stop within reach. Nobody opens the machine's housing and rewires it
+to cut at a different speed. The internals stay sealed; every value an operator legitimately needs
+to change is deliberately exposed on the outside, labeled, and adjustable without a screwdriver.
+That panel is what a config file is to a test framework: the settings that vary, moved to the
+surface, so changing them never means opening up the code.
+</Callout>
+
+<Term define="A config file externalizes a test framework's changeable settings - base URL, default timeouts, browser choice, retry counts, report paths - into a plain data file (.properties, .yaml, or .json) that the framework reads ONCE at startup, typically through a small reader class, instead of scattering those values as hardcoded literals through test and page code. Code then asks the config for a value by key (config.get('base.url')) rather than knowing the value itself. The payoff is that retargeting the whole suite - a new URL, a longer timeout, a different browser - becomes a one-line edit in one file, with no code changes, no recompile, and no risk of missing one of the forty places a hardcoded copy was hiding.">Config file</Term>
+
+## What gets externalized, and how code reads it
+
+```properties
+# config.properties - the single place changeable settings live
+base.url=https://staging.example.com
+browser=chrome
+timeout.seconds=10
+retry.count=2
+```
+
+```java
+public class Config {
+    private static final Properties props = new Properties();
+
+    static {
+        try (InputStream in = Config.class.getResourceAsStream("/config.properties")) {
+            props.load(in);   // read ONCE, at startup
+        } catch (IOException e) {
+            throw new RuntimeException("Could not load config.properties", e);
+        }
+    }
+
+    public static String get(String key) {
+        String value = props.getProperty(key);
+        if (value == null) throw new IllegalStateException("Missing config key: " + key);
+        return value;
+    }
+}
+
+// anywhere in the framework:
+driver.get(Config.get("base.url") + "/login");
+```
+
+- **What belongs in it** — anything that legitimately varies between runs, machines, or targets:
+  base URL, browser name, default explicit-wait timeout, retry count, report output directory.
+  If two teammates or two environments could reasonably want different values, it's config.
+- **What stays in code** — logic. Locators, assertions, and flow belong in page objects and tests;
+  a config file holds data about HOW to run, never WHAT to verify.
+- **Read once, at startup** — the reader loads the file a single time (a static block or singleton),
+  and everything else asks the loaded object. Re-reading the file per test is wasted I/O and invites
+  half-the-suite-saw-the-old-value weirdness if the file changes mid-run.
+- **Fail loudly on a missing key** — a `null` quietly returned for a typo'd key surfaces later as a
+  baffling `NullPointerException` deep in a test; throwing immediately with the key's name turns a
+  ten-minute hunt into a ten-second fix.
+
+<Callout type="tip">
+Give every config key exactly one consumer path: code asks `Config.get("timeout.seconds")`, and
+nothing anywhere hardcodes `10` as a "temporary" fallback. The moment a hardcoded twin of a config
+value exists, the file stops being the single source of truth - someone will edit the file, see no
+change in behavior, and lose an hour discovering the shadow copy.
+</Callout>
+
+<Callout type="mistake">
+Externalizing the base URL but leaving timeouts, browser choice, and retry counts hardcoded -
+a half-configured framework. The suite LOOKS config-driven until the day someone needs headless
+Chrome in CI or a longer timeout against a slow environment, and discovers those values are
+literals sprinkled through thirty files. Externalize the whole set of run-varying values at once;
+a config file that holds only one setting has most of the cost and a fraction of the payoff.
+</Callout>
+
+{/* IMAGE: a real close-up photograph of a CNC machine control panel in a workshop, showing a prominent red emergency stop button on a yellow labeled ring, a large rotary dial with a graduated scale above it, rows of small labeled keypad buttons, and small digital display windows at the top, with the machine housing blurred around the panel */}
+<HotspotImage
+  src="/notes/framework-design/config-and-data/config-files.jpg"
+  alt="A close-up of a CNC machine control panel in a workshop, showing a red emergency stop button on a yellow labeled ring, a large rotary dial with a graduated scale, rows of small labeled keypad buttons, and digital display windows, with the machine housing blurred around the panel"
+  credit="Control panel shows buttons and knobs in a machine workshop — Wikimedia Commons, CC BY 2.0 (Shixart1985)"
+  creditHref="https://commons.wikimedia.org/wiki/File:Control_panel_shows_buttons_and_knobs_in_a_machine_workshop.jpg"
+  pins={[
+    { x: 46, y: 26, label: "The graduated rotary dial — one named, adjustable setting", desc: "Spindle speed changes by turning a dial on the surface, not by rewiring the motor - the way timeout.seconds changes by editing one line, not by hunting hardcoded literals through test code." },
+    { x: 62, y: 75, label: "The labeled keypad grid — many settings, each with a name", desc: "Every button is labeled and does one thing - the shape of a good config file: named key-value pairs, each independently adjustable, none requiring knowledge of the machine's internals." },
+    { x: 30, y: 42, label: "The emergency stop — even critical behavior lives on the panel", desc: "The most consequential control is deliberately surfaced, not buried inside the housing - the same reasoning that puts retry counts and browser choice in the file, where they can be changed safely and visibly." },
+    { x: 85, y: 50, label: "The sealed housing behind the panel — code that never needs opening", desc: "All the machinery stays closed; adjustment happens only at the surface. Retargeting a config-driven suite touches the file and nothing else - no code edits, no recompile." },
+  ]}
+/>
+
+<FlowAnimation
+  title="How one file steers the whole suite"
+  intervalMs={1800}
+  nodes={[
+    { label: "The test run starts", desc: "Before any test executes, the framework's config reader runs." },
+    { label: "config.properties is read ONCE", desc: "A static block or singleton loads the file into memory - one read, at startup." },
+    { label: "Tests and page objects ask by key", desc: "Config.get('base.url'), Config.get('timeout.seconds') - code knows the key's name, never the value." },
+    { label: "The suite runs against those values", desc: "Every navigation, wait, and retry consistently uses what the file said." },
+    { label: "Retargeting = editing the file", desc: "New URL, longer timeout, different browser: one line changes, zero code changes, no recompile." },
+  ]}
+/>
+
+Strip away the file format and the reader class, and the pattern is just: values live in one
+external place, code asks for them by name, and changing a value never means changing code. Here's
+that shape as a small, generic simulation.
+
+<CodePlayground
+  language="python"
+  title="Run it - externalized settings steering hardcoded-free tests (Python)"
+  code={`# the "config file" - in real life this is config.properties on disk
+CONFIG_FILE = """
+base.url=https://staging.example.com
+browser=chrome
+timeout.seconds=10
+"""
+
+def load_config(text):
+    config = {}
+    for line in text.strip().splitlines():
+        key, value = line.split("=", 1)
+        config[key] = value
+    return config
+
+def run_suite(config):
+    print(f"opening {config['browser']} with {config['timeout.seconds']}s waits")
+    for path in ["/login", "/cart", "/checkout"]:
+        print(f"  test navigates to {config['base.url']}{path} -> PASS")
+
+config = load_config(CONFIG_FILE)   # read ONCE at startup
+run_suite(config)
+
+print("\\n--- retarget: ONE line changed in the file, zero code changes ---")
+config = load_config(CONFIG_FILE.replace("staging.example.com", "uat.example.com"))
+run_suite(config)`}
+/>
+
+Same externalized-settings shape in Java.
+
+<CodePlayground
+  language="java"
+  title="Run it - externalized settings steering hardcoded-free tests (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    // the "config file" - in real life this is config.properties on disk
+    static final String CONFIG_FILE =
+        "base.url=https://staging.example.com\\n" +
+        "browser=chrome\\n" +
+        "timeout.seconds=10";
+
+    static Map<String, String> loadConfig(String text) {
+        Map<String, String> config = new LinkedHashMap<>();
+        for (String line : text.split("\\n")) {
+            String[] parts = line.split("=", 2);
+            config.put(parts[0], parts[1]);
+        }
+        return config;
+    }
+
+    static void runSuite(Map<String, String> config) {
+        System.out.println("opening " + config.get("browser")
+            + " with " + config.get("timeout.seconds") + "s waits");
+        for (String path : List.of("/login", "/cart", "/checkout")) {
+            System.out.println("  test navigates to " + config.get("base.url") + path + " -> PASS");
+        }
+    }
+
+    public static void main(String[] args) {
+        Map<String, String> config = loadConfig(CONFIG_FILE);   // read ONCE at startup
+        runSuite(config);
+
+        System.out.println("\\n--- retarget: ONE line changed in the file, zero code changes ---");
+        config = loadConfig(CONFIG_FILE.replace("staging.example.com", "uat.example.com"));
+        runSuite(config);
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: pull one hardcoded value out into a config file and feel the payoff">
+<StepChecklist
+  steps={[
+    { text: "Create config.properties in your scratch framework with base.url, browser, and timeout.seconds", detail: "Put it under src/test/resources so it's on the classpath." },
+    { text: "Write a tiny Config reader class that loads it once in a static block", detail: "One get(key) method that throws with the key's name if the key is missing." },
+    { text: "Find every hardcoded URL and timeout in your tests and replace each with Config.get(...)", detail: "A project-wide search for 'http' and for your timeout literal usually finds them all." },
+    { text: "Change base.url in the file to a different practice site and re-run WITHOUT touching any code", detail: "Watching the whole suite retarget from a one-line file edit is the entire point of this note." },
+  ]}
+/>
+You've now separated what the framework DOES from where and how it runs - the foundation the rest
+of this chapter builds on.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "Config.get(...) returns null (or throws) for a key you can see plainly in the file.",
+      fix: "Check for a typo'd key name or stray whitespace around the = in the properties file - and confirm the file the code actually loaded is the one you edited, not a stale copy under target/classes from a previous build.",
+    },
+    {
+      symptom: "The framework throws FileNotFoundException or NullPointerException while loading the config file itself.",
+      fix: "The path is resolving relative to the wrong place - load from the classpath (getResourceAsStream) rather than a relative filesystem path, which breaks the moment the suite runs from a different working directory (IDE vs Maven vs CI).",
+    },
+    {
+      symptom: "You changed a value in the config file but the suite still behaves like the old value.",
+      fix: "Hunt for a hardcoded shadow copy of that value in code - the tip callout's warning in practice. If code anywhere holds its own literal fallback, the file was never actually being consulted for that setting.",
+    },
+    {
+      symptom: "A numeric setting like timeout.seconds causes a NumberFormatException or acts as text.",
+      fix: "Properties values are always strings - convert once, in the reader (an int-typed getter), not at every call site, and fail with a clear message naming the key when the value isn't parseable.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The config file itself** — the first stop for any question about what URL, browser, timeout, or
+  retry count a run actually used.
+- **The reader class's load path** — whether it loads from the classpath or a relative filesystem
+  path decides whether it survives being run from an IDE, Maven, and CI alike.
+- **A project-wide search for `http`, your timeout literal, and browser names** — the fastest audit
+  for hardcoded values that escaped externalization.
+- **The build output directory (e.g. `target/classes`)** — where a stale copy of an edited-but-not-
+  rebuilt properties file hides when the suite mysteriously uses old values.
+</WhereToCheck>
+
+<WorkedExample title="the forty-file URL change that became a one-line edit">
+1. A team's Selenium suite hardcodes the staging URL inside every test class's setup method - forty
+   files, written over a year by five people, each copying the previous test's pattern.
+2. The company migrates staging to a new domain. A find-and-replace catches thirty-eight of the
+   forty copies; two files with a slightly different URL format are missed and fail all week,
+   burning hours before anyone realizes the "flaky" tests are just pointed at a dead domain.
+3. The fix: a `config.properties` with `base.url`, `browser`, `timeout.seconds`, and `retry.count`,
+   plus a small `Config` reader loaded once in a static block that throws on missing keys.
+4. Every setup method's hardcoded URL becomes `Config.get("base.url")`; a project-wide search for
+   `http` confirms zero literals remain in test code.
+5. The next infrastructure change - a new domain again, six months later - is a one-line edit that
+   takes under a minute, reviewed at a glance in a one-line diff, with no possibility of a missed
+   forty-first copy.
+</WorkedExample>
+
+<Quiz
+  question="A framework reads base.url from config.properties, but a teammate adds a page object with a 'temporary' hardcoded fallback: if the config value looks wrong, use the literal staging URL instead. Six months later the team retargets the suite by editing the config file, and most tests move - but a handful keep hitting the old staging domain. What went wrong?"
+  options={[
+    "The config file should have been JSON instead of .properties - properties files cannot be retargeted",
+    "The hardcoded fallback made the page object a shadow copy of the setting, so the file silently stopped being the single source of truth for those tests - exactly the drift externalizing was meant to prevent",
+    "Config files must be re-read before every test or their values expire",
+    "Retargeting a suite always requires a recompile, so the team skipped a required build step"
+  ]}
+  answer={1}
+  explain="The tip callout warns about exactly this: the moment a hardcoded twin of a config value exists anywhere in code, editing the file no longer reliably changes behavior, and the mismatch surfaces as a confusing partial retarget. Option one is wrong because the file format is irrelevant - .properties, .yaml, and .json all serve identically as externalized settings. Option three inverts the note's guidance: config is deliberately read once at startup, and values don't expire. Option four is wrong because avoiding recompiles is precisely what externalizing achieves - no build step was missing; a shadow literal was present."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What belongs in a test framework's config file?", back: "Values that legitimately vary between runs, machines, or targets: base URL, browser choice, default timeouts, retry counts, report paths. Logic (locators, assertions, flow) stays in code." },
+    { front: "When is the config file read, and how often?", back: "Once, at startup - via a static block or singleton reader. Everything else asks the loaded object by key; re-reading per test wastes I/O and risks mid-run inconsistency." },
+    { front: "The core payoff of externalizing settings", back: "Retargeting the whole suite (new URL, longer timeout, different browser) is a one-line edit in one file - no code changes, no recompile, no missed hardcoded copies." },
+    { front: "Why should Config.get() throw on a missing key instead of returning null?", back: "A null surfaces later as a baffling NullPointerException deep in a test; throwing immediately with the key's name makes the typo a ten-second fix." },
+    { front: "The control-panel analogy for config files", back: "A CNC machine is adjusted from its labeled panel (dial = one setting, keypad = named key-value pairs) without opening the housing - the way a suite retargets by editing the file, never the code." },
+  ]}
+/>
+
+<Challenge>
+Audit a real test project (yours or an open-source Selenium/TestNG repo) with three project-wide
+searches: `http`, a common timeout literal like `10`, and browser names like `chrome`. List every
+hardcoded hit in test or page-object code, then extract them into a single config file with a
+reader class that loads once and throws on missing keys. Finish by retargeting one value (URL or
+timeout) purely through the file and confirming the suite obeys without a code change.
+</Challenge>
+
+<AskCommunity prompt="My framework loads config from `[file name and location]` using `[paste your reader class]`, but `[the value seems ignored / the file isn't found / the key comes back null]`. Here's the config file too: `[paste it]`.">
+Pasting the reader class next to the actual file almost always lets someone spot the problem in
+seconds - a classpath-vs-filesystem load, a typo'd key, or a stale copy under the build output
+directory are the three usual suspects.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://toolsqa.com/selenium-cucumber-framework/read-configurations-from-property-file/", title: "ToolsQA — Read Configurations from Property File in Selenium", kind: "read" },
+    { href: "https://docs.oracle.com/javase/8/docs/api/java/util/Properties.html", title: "Oracle — java.util.Properties API documentation", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=bljA8dpfWeQ" title="Selenium Beginner Tutorial 10 - How To Use Config Properties File — Automation Step by Step" minutes={16} />
+
+<Takeaways
+  points={[
+    "A config file externalizes run-varying settings (base URL, browser, timeouts, retries) into one .properties/.yaml/.json file instead of hardcoded literals across test code.",
+    "The file is read once at startup by a small reader; code asks for values by key and never knows the values themselves.",
+    "The payoff: retargeting the entire suite is a one-line file edit - no code changes, no recompile, no missed copies.",
+    "Fail loudly on missing keys and convert types once in the reader - silent nulls and per-call-site parsing turn typos into long debugging sessions.",
+    "A hardcoded 'fallback' twin of any config value silently breaks the file's single-source-of-truth guarantee - externalize fully or the drift returns.",
+  ]}
+/>
+
+<Complete xp={10} />

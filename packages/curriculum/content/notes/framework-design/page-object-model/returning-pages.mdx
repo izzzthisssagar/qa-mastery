@@ -1,0 +1,316 @@
+---
+title: "Returning pages"
+summary: "In fluent POM, an action that navigates returns the NEXT page's object - LoginPage.submit() returns a DashboardPage - so tests chain naturally and the compiler tracks where you are. Powerful for linear flows, awkward when one action has several possible destinations."
+tags: ["framework-design", "page-object-model", "track-d"]
+updated: "2026-07-17"
+related:
+  - "framework-design/page-object-model/the-pom-pattern"
+  - "framework-design/page-object-model/page-classes"
+  - "framework-design/page-object-model/component-objects"
+---
+
+<Hook>
+`loginPage.submit();` - and then what? The next line of the test is about to act on a page, and
+nothing in the code says which one. Now compare: `DashboardPage dashboard = loginPage.submit();`.
+Same click, but the return type just told you - and told the compiler - exactly where the user is
+standing now.
+</Hook>
+
+<Callout type="analogy">
+A Swiss hiking signpost at a trail junction does two honest things at once. Each yellow finger names
+exactly where its path leads - Bachsee, Grindelwald, Bussalp - so you know your destination BEFORE
+you commit a single step, not after an hour of walking. And when a junction genuinely offers several
+onward routes, the post doesn't pretend otherwise: it grows one clearly named finger per
+destination. One path, one promise - many possible destinations, many explicitly named fingers.
+</Callout>
+
+<Term define="Returning pages (the fluent page-object convention) is the practice of giving every page-object action method a return type that names the page the user is on after the action completes: a navigating action returns the NEXT page's object (LoginPage.submit() returns DashboardPage), while a same-page action returns the current page (often 'this') so calls can chain. Tests then read as a natural flow - loginPage.submit().openReports() - and the type system provides compile-time-ish guidance about which page's methods are legal next. When one action can lead to several different pages (login succeeds OR shows an error), the convention requires one explicitly named method per expected destination rather than one method guessing.">Returning pages</Term>
+
+## Encoding navigation in return types
+
+```java
+public class LoginPage {
+    private final WebDriver driver;
+    private final By username = By.id("username");
+    private final By password = By.id("password");
+    private final By loginButton = By.id("login-btn");
+
+    public LoginPage(WebDriver driver) {
+        this.driver = driver;
+    }
+
+    // Same-page action: returns this, so calls chain
+    public LoginPage enterCredentials(String user, String pass) {
+        driver.findElement(username).sendKeys(user);
+        driver.findElement(password).sendKeys(pass);
+        return this;
+    }
+
+    // Navigating action: returns the NEXT page's object
+    public DashboardPage submit() {
+        driver.findElement(loginButton).click();
+        return new DashboardPage(driver);
+    }
+
+    // The OTHER destination gets its own honestly named method
+    public LoginPage submitExpectingError() {
+        driver.findElement(loginButton).click();
+        return this;   // invalid login stays on the login page
+    }
+}
+
+// The test reads as one continuous journey:
+ReportsPage reports = new LoginPage(driver)
+    .enterCredentials("standard_user", "secret_sauce")
+    .submit()               // now typed as DashboardPage
+    .openReports();         // a DashboardPage method - the compiler agrees you're there
+```
+
+- **Navigation methods return the destination** — the return type is a machine-checked statement of
+  "where the user is now." Call a method that doesn't exist on that page and the code won't compile.
+- **Same-page actions return `this`** — typing, toggling, filling forms - so a sequence of steps on
+  one page chains without repeating the variable name.
+- **Branching actions get one method per destination** — `submit()` returns `DashboardPage`;
+  `submitExpectingError()` returns `LoginPage`. The test declares its expectation by choosing the
+  method, exactly like choosing a signpost finger.
+- **The tradeoff is real** — for genuinely linear flows (login, checkout, wizards) the chain is
+  compact and self-documenting. For pages with many conditional outcomes, the convention multiplies
+  methods (`submitExpecting...` variants) and can become ceremony; some teams let tests construct
+  the next page themselves and keep action methods `void`.
+
+<Callout type="tip">
+Name each branch method by the expectation it encodes - submitExpectingError(),
+checkoutAsGuest(), saveAndStay() - so the test's choice of method IS its documentation. A reader
+should be able to reconstruct the intended user journey from the method chain alone, without
+opening a single page class.
+</Callout>
+
+<Callout type="mistake">
+Forcing every action to return exactly one hard-coded next page - a submit() that always returns
+DashboardPage - and then reusing it in the invalid-password test. The test receives a DashboardPage
+object while the browser is actually still showing the login form: the type is now lying, the first
+DashboardPage method call fails with a confusing locator error far from the real cause, and the
+"compile-time guidance" has become compile-time misinformation. If an action has two real outcomes,
+it needs two named methods - not one optimistic one.
+</Callout>
+
+{/* IMAGE: a real photograph of a yellow Swiss hiking signpost at Feld (2160 m) above Grindelwald against blue sky and snowy Bernese Alps, with fingers pointing left toward Bachsee/First and Hoehenweg 2000/Spielmatten/Waldspitz/First, fingers pointing right toward Bussalp Oberlaeger/Bussalp and Feld-Alphuetten/Grindelwald, each with walking-time estimates, and a white location plate reading Feld 2160 m on the post */}
+<HotspotImage
+  src="/notes/framework-design/page-object-model/returning-pages.jpg"
+  alt="A yellow Swiss hiking signpost at a mountain trail junction against blue sky and snowy peaks, with fingers pointing left toward Bachsee and First and right toward Bussalp and Grindelwald, each showing walking times, and a white plate on the post reading Feld 2160 m"
+  credit="Swiss Hiking Network signpost at Feld — Wikimedia Commons, CC BY-SA 4.0 (Gubaer)"
+  creditHref="https://commons.wikimedia.org/wiki/File:Swiss_Hiking_Network_-_Signpost_-_Feld.jpg"
+  pins={[
+    { x: 52, y: 53, label: "Feld 2160 m — the plate naming where you stand right now", desc: "Every finger's promise is relative to this point - the way each action method's return type declares which page object you're holding after the call." },
+    { x: 40, y: 47, label: "Bachsee / First — one finger, one named destination", desc: "Take this path and you arrive at Bachsee, not 'somewhere' - a navigating method returning DashboardPage makes the same specific promise." },
+    { x: 63, y: 33, label: "Bussalp Oberlaeger, 30 Min — the outcome known before you commit", desc: "Destination and cost are declared before the first step, like a return type telling you at compile time what the click will lead to - not after it fails." },
+    { x: 62, y: 57, label: "Feld/Alphuetten and Grindelwald — a real branch, one finger per route", desc: "The junction offers several onward destinations, so the post grows several explicitly named fingers - the honest design for a branching action: submit() and submitExpectingError(), one method per destination." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One fluent chain, tracked page by page"
+  intervalMs={1800}
+  nodes={[
+    { label: "new LoginPage(driver)", desc: "The journey starts holding a LoginPage - only login-page methods are callable." },
+    { label: ".enterCredentials(user, pass) returns this", desc: "A same-page action: still on LoginPage, so the chain continues with login methods." },
+    { label: ".submit() returns DashboardPage", desc: "A navigating action: the return type switches - from here, only dashboard methods compile." },
+    { label: ".openReports() returns ReportsPage", desc: "Each hop hands over the next page's object - the chain reads like the user's actual route." },
+    { label: "Try .enterCredentials() here: it does not compile", desc: "ReportsPage has no such method - the type system just caught a wrong-page action before any browser ran." },
+  ]}
+/>
+
+Underneath the convention is a simple contract: every action names the page it lands on, and a
+test is a walk that must only use actions available where it currently stands. Here's that contract
+as a small, generic simulation.
+
+<CodePlayground
+  language="python"
+  title="Run it - walk a page graph where every action declares its destination (Python)"
+  code={`# Each page declares its actions and where each one lands.
+pages = {
+    "LoginPage": {
+        "enter_credentials": "LoginPage",       # same-page: returns itself
+        "submit": "DashboardPage",              # navigating: returns the next page
+        "submit_expecting_error": "LoginPage",  # the OTHER branch, named honestly
+    },
+    "DashboardPage": {"open_reports": "ReportsPage"},
+    "ReportsPage": {"export_csv": "ReportsPage"},
+}
+
+def walk(start, actions):
+    here = start
+    for action in actions:
+        if action not in pages[here]:
+            return f"BROKEN at '{action}': {here} has no such action (wrong-page call)"
+        here = pages[here][action]
+        print(f"  {action}() -> now on {here}")
+    return f"OK: journey ends on {here}"
+
+print("A linear flow, chained:")
+print(walk("LoginPage", ["enter_credentials", "submit", "open_reports", "export_csv"]))
+print()
+print("A wrong-page call, caught by the contract:")
+print(walk("LoginPage", ["submit", "enter_credentials"]))`}
+/>
+
+Same page-graph contract in Java.
+
+<CodePlayground
+  language="java"
+  title="Run it - walk a page graph where every action declares its destination (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static final Map<String, Map<String, String>> PAGES = Map.of(
+        "LoginPage", Map.of(
+            "enterCredentials", "LoginPage",        // same-page: returns itself
+            "submit", "DashboardPage",              // navigating: returns the next page
+            "submitExpectingError", "LoginPage"),   // the OTHER branch, named honestly
+        "DashboardPage", Map.of("openReports", "ReportsPage"),
+        "ReportsPage", Map.of("exportCsv", "ReportsPage")
+    );
+
+    static String walk(String start, List<String> actions) {
+        String here = start;
+        for (String action : actions) {
+            Map<String, String> available = PAGES.get(here);
+            if (!available.containsKey(action)) {
+                return "BROKEN at '" + action + "': " + here
+                     + " has no such action (wrong-page call)";
+            }
+            here = available.get(action);
+            System.out.println("  " + action + "() -> now on " + here);
+        }
+        return "OK: journey ends on " + here;
+    }
+
+    public static void main(String[] args) {
+        System.out.println("A linear flow, chained:");
+        System.out.println(walk("LoginPage",
+            List.of("enterCredentials", "submit", "openReports", "exportCsv")));
+        System.out.println();
+        System.out.println("A wrong-page call, caught by the contract:");
+        System.out.println(walk("LoginPage", List.of("submit", "enterCredentials")));
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: convert one void-returning page object to fluent returns and feel both sides of the tradeoff">
+<StepChecklist
+  steps={[
+    { text: "Take a LoginPage whose methods return void and give each one an honest return type", detail: "Same-page actions return this; submit() returns the next page's object, constructed with the same driver." },
+    { text: "Rewrite one test as a single fluent chain from login to a second page", detail: "Notice the test now reads as a route - and that your IDE only autocompletes methods that exist on the current page." },
+    { text: "Now write the invalid-password test using the SAME submit()", detail: "Feel the problem: you're handed a DashboardPage while the browser still shows the login form - the type is lying." },
+    { text: "Add submitExpectingError() returning LoginPage and rewrite that test with it", detail: "Both tests are now honest, and each one's chosen method documents its expectation." },
+  ]}
+/>
+You've now built the convention, hit its branching limitation, and applied the standard fix - the
+full arc of this pattern in one exercise.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A test fails with element-not-found inside DashboardPage methods, but the screenshot shows the login form with an error banner.",
+      fix: "A navigating method's optimistic return type was used on a branch where navigation never happened. Check which outcome the test actually expects and call the branch method that returns the page the browser is really on (submitExpectingError returning LoginPage).",
+    },
+    {
+      symptom: "A page class has sprouted six submitExpectingX() variants and the ceremony is drowning the value.",
+      fix: "This page is past the convention's sweet spot. For that action, return void (or this) and let each test construct the page it expects next - keep fluent returns for the genuinely linear flows where they pay for themselves.",
+    },
+    {
+      symptom: "Returning new DashboardPage(driver) compiles, but the dashboard hasn't finished loading and its first method call races the page.",
+      fix: "Returning a page object doesn't wait for the page. Have the destination page's constructor (or an isLoaded check, as in Selenium's LoadableComponent) verify a known element before the object is handed to the test.",
+    },
+    {
+      symptom: "Two page classes need to return each other and now there's an import/design tangle.",
+      fix: "Navigation cycles (Dashboard opens Settings, Settings returns to Dashboard) are normal and fine in one package - but if the tangle sprawls, check whether one 'page' is really a component (like a nav bar) that belongs in its own composed object instead.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Return types across your page-objects package** — a quick scan shows instantly which actions
+  navigate, which stay, and which are still `void` and telling the reader nothing.
+- **Your IDE's autocomplete on a page object mid-chain** — the list it offers after `.submit()` is
+  exactly the compile-time guidance this convention exists to provide; if it offers wrong-page
+  methods, the returns are dishonest somewhere.
+- **The failing line versus the screenshot/DOM at failure time** — a mismatch (dashboard method,
+  login form on screen) is the classic signature of an optimistic return type on a branching action.
+- **Selenium's LoadableComponent documentation** — the standard answer to "the returned page hasn't
+  actually loaded yet," worth reading before inventing your own wait-on-construction scheme.
+</WhereToCheck>
+
+<WorkedExample title="the misleading DashboardPage that pointed a debugging session at the wrong page">
+1. A suite's LoginPage has one method: `public DashboardPage submit()`. The happy-path test chains
+   `.submit().getWelcomeText()` and passes for months.
+2. A new test covers locked-out accounts: same `submit()`, then asserts on the error message - but
+   the only object it holds is a DashboardPage, so it calls `dashboard.getWelcomeText()` and
+   expects a failure to prove the login was rejected.
+3. The failure it gets is `NoSuchElementException` on the welcome banner locator - technically red,
+   but pointing at the dashboard, with nothing anywhere saying "we never left the login page."
+   A teammate loses an hour reading DashboardPage for a bug that isn't there.
+4. The fix: LoginPage gains `submitExpectingError()` returning LoginPage, and the lockout test
+   becomes `loginPage.submitExpectingError().getErrorMessage()` asserted against "Account locked."
+5. The failure mode disappears structurally: each test now holds an object matching the page the
+   browser is really on, and the choice of method documents each test's expectation at a glance.
+</WorkedExample>
+
+<Quiz
+  question="A login can succeed (dashboard) or fail validation (stays on login with an error). Under the fluent convention, what's the honest design for the page object?"
+  options={[
+    "One submit() returning DashboardPage - tests expecting failure just catch the exception it eventually causes",
+    "One submit() returning Object, which each test casts to whatever page it expects",
+    "Two methods, each named for its expected destination: submit() returning DashboardPage for the success path, and submitExpectingError() returning LoginPage for the failure path - the test declares its expectation by choosing the method",
+    "The fluent convention cannot be used at all on any application whose actions ever branch"
+  ]}
+  answer={2}
+  explain="A branching action gets one explicitly named method per real destination - the signpost grows one finger per route - so every test holds an object matching the page the browser is actually on. Option one is the optimistic-return mistake: the failure test receives a lying DashboardPage and fails far from the real cause. Option two abandons exactly the compile-time guidance the convention exists to provide - a cast that can be wrong at runtime is no better than no types. Option four overcorrects: branching limits where the convention shines, and heavily branching actions may warrant opting out locally, but two named methods handle the common two-outcome case cleanly."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What does a navigating action return under the fluent convention?", back: "The NEXT page's object - LoginPage.submit() returns a DashboardPage - so the return type declares where the user now stands." },
+    { front: "What does a same-page action return, and why?", back: "The current page (this), so sequences of steps on one page chain fluently without repeating the variable." },
+    { front: "The standard fix when one action has two possible destinations", back: "One explicitly named method per destination - submit() returning DashboardPage, submitExpectingError() returning LoginPage - the test's method choice documents its expectation." },
+    { front: "The optimistic-return failure signature", back: "A test fails inside next-page methods while the screenshot shows the previous page - the hard-coded return type promised navigation that never happened." },
+    { front: "The signpost analogy for returning pages", back: "The location plate = the page object you hold now; each named finger = an action method's declared destination; several fingers at one junction = one named method per possible destination of a branching action." },
+  ]}
+/>
+
+<Challenge>
+Map one real multi-page flow you know (login to checkout, or search to detail page) as a page graph:
+each page, each action, and each action's destination page. Mark every action with more than one
+possible destination. Then decide, action by action, whether you'd model it with a fluent return,
+two expectation-named methods, or a void return with the test constructing the next page - and write
+one sentence justifying each choice.
+</Challenge>
+
+<AskCommunity prompt="My page action `[name]` can land on `[N]` different pages depending on `[condition]`. I'm torn between expectation-named methods and letting the test construct the next page. Here's the flow: `[describe it]`.">
+Describing the actual branching condition usually settles it quickly - the community consensus
+tends to hinge on whether each test KNOWS its expected outcome up front (name the methods) or
+genuinely can't know (let the test decide), and your specific flow will make that obvious to
+experienced readers.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://martinfowler.com/bliki/PageObject.html", title: "Martin Fowler — PageObject (on methods returning other page objects)", kind: "read" },
+    { href: "https://www.eviltester.com/webdriver/faqs/how-to-create-fluent-page-objects/", title: "EvilTester — How to Create Fluent Page Objects", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=na78LmAGvu4" title="How to create Fluent Page Object Models - a Tip for Selenium WebDriver using Java — EvilTester" minutes={5} />
+
+<Takeaways
+  points={[
+    "Under the fluent convention, every action's return type names the page the user is on afterward: navigating actions return the next page's object, same-page actions return this.",
+    "Tests become chains that read as the user's actual route, and the type system rejects wrong-page method calls before any browser runs.",
+    "A branching action needs one explicitly named method per real destination - the test documents its expectation by choosing the method.",
+    "The classic failure is the optimistic return: a hard-coded next page handed to a test whose branch never navigated, producing confusing failures far from the cause.",
+    "The convention shines on genuinely linear flows and turns to ceremony on heavily branching pages - it's a tool to apply per flow, not a law to apply everywhere.",
+  ]}
+/>
+
+<Complete xp={10} />

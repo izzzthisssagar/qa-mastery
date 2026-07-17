@@ -1,0 +1,316 @@
+---
+title: "Page classes"
+summary: "A page class has a fixed anatomy: locators as private fields, a constructor that receives the driver, and public methods named after user intent. It describes what CAN be done and what state IS - assertions about what SHOULD be true stay in the test."
+tags: ["framework-design", "page-object-model", "track-d"]
+updated: "2026-07-17"
+related:
+  - "framework-design/page-object-model/the-pom-pattern"
+  - "framework-design/page-object-model/returning-pages"
+  - "framework-design/page-object-model/component-objects"
+---
+
+<Hook>
+Two page classes can both "follow POM" and still be worlds apart. One offers `clickButton3()` and
+`typeInSecondBox()` - mechanics nobody can read. The other offers `submitOrder()` and
+`getErrorMessage()` - an API a teammate can use without ever opening the class. The difference isn't
+the pattern; it's the anatomy and discipline inside the class.
+</Hook>
+
+<Callout type="analogy">
+A helicopter cockpit panel is a purpose-built interface to one machine. Every switch sits in a
+labeled group - FIRE, ENGINE, ENGINE CONTROL - named for what it does to the aircraft, not for the
+wire behind it. The instruments report state: altitude, torque, fuel. And here is the discipline
+that keeps flying safe: the panel never decides whether 2,160 meters is the RIGHT altitude. It
+reports what IS; the pilot judges what SHOULD be. A panel that hid readings it "disagreed with"
+would be lethal - and a page class that judges outcomes instead of reporting state corrupts tests
+the same way.
+</Callout>
+
+<Term define="A page class is the concrete unit of the Page Object Model: a class whose fields are that page's locators (By objects assigned in or near the constructor, or @FindBy-annotated WebElements initialized by Selenium's PageFactory), whose constructor receives the driver (or, in Playwright, the Page), and whose public methods represent user-meaningful actions (submitOrder, applyCoupon) and state queries (getErrorMessage, isCartEmpty). It deliberately contains no assertions: a page class describes what CAN be done on the page and what state IS, while deciding what SHOULD be true is the test's job.">Page class</Term>
+
+## The anatomy, piece by piece
+
+```java
+public class CheckoutPage {
+    private final WebDriver driver;
+
+    // 1. Locators as fields - the page's private knowledge
+    private final By cardNumber = By.id("card-number");
+    private final By placeOrderButton = By.cssSelector("[data-test='place-order']");
+    private final By errorBanner = By.cssSelector(".error-banner");
+
+    // 2. A constructor that receives the driver
+    public CheckoutPage(WebDriver driver) {
+        this.driver = driver;
+    }
+
+    // 3. Public methods named after user intent - not mechanics
+    public void submitOrder(String card) {
+        driver.findElement(cardNumber).sendKeys(card);
+        driver.findElement(placeOrderButton).click();
+    }
+
+    // 4. State queries - report what IS, decide nothing
+    public String getErrorMessage() {
+        return driver.findElement(errorBanner).getText();
+    }
+}
+
+// The test owns the judgment:
+checkoutPage.submitOrder("4111-XXXX");
+assertEquals("Card declined", checkoutPage.getErrorMessage());
+```
+
+- **Locators as fields** — plain `By` objects assigned as fields keep the "what to find" knowledge
+  in one visible block. Java Selenium also offers `@FindBy(id = "card-number")` annotations on
+  `WebElement` fields, initialized via `PageFactory.initElements(driver, this)` - same idea, more
+  framework magic. In Playwright the equivalent is constructor-assigned `Locator` objects.
+- **A constructor that takes the driver** — the page class never creates or owns the browser; it
+  receives the session it operates on, which keeps it usable from any test and any fixture setup.
+- **Methods named for user intent** — `submitOrder`, not `clickButton3`. A method name should
+  survive a redesign that moves the button, because the user's goal didn't change.
+- **State queries return values** — `getErrorMessage()` returns a String; `isCartEmpty()` returns a
+  boolean. The test compares them against expectations. The page class itself never calls `assert`.
+
+<Callout type="tip">
+Name every public method so it would still be accurate if the page's markup were rebuilt from
+scratch tomorrow. "submitOrder" survives any redesign; "clickGreenButtonBottomRight" is wrong the
+moment the button turns blue. If you can't name an action by intent, you may not yet understand what
+the user is doing on that page - which is worth finding out before automating it.
+</Callout>
+
+<Callout type="mistake">
+Putting assertions inside the page class - a `verifyErrorMessageIsCorrect()` method with an
+`assertEquals` buried in it. Now the class silently decides what SHOULD be true for every test that
+calls it: the test that expects a DIFFERENT error can't use the method, failures point into page
+code instead of test code, and the page class needs editing every time an expectation changes.
+Expose `getErrorMessage()` and let each test assert what it, specifically, expects.
+</Callout>
+
+{/* IMAGE: a real photograph of the Bell 429 helicopter cockpit instrument panel of Air Zermatt, showing an upper switch row with labeled groups FIRE, ENGINE and ENGINE CONTROL, a large primary flight display on the left with green torque and fuel readouts, GPS and radio units in the center stack, a second flight display on the right, and a lower console with a moving-map display and rows of labeled toggle switches */}
+<HotspotImage
+  src="/notes/framework-design/page-object-model/page-classes.jpg"
+  alt="The cockpit instrument panel of an Air Zermatt Bell 429 helicopter, showing labeled switch groups FIRE, ENGINE and ENGINE CONTROL along the top, a large primary flight display with green readouts on the left, GPS and radio units in the center, a second display on the right, and a lower console with a moving-map display and labeled toggle switches"
+  credit="Bell 429 Cockpit Instrument Panel — Wikimedia Commons, CC BY-SA 4.0 (HBZSU)"
+  creditHref="https://commons.wikimedia.org/wiki/File:Bell_429_Cockpit_Instrument_Panel.JPG"
+  pins={[
+    { x: 55, y: 11, label: "ENGINE / ENGINE CONTROL — controls grouped and named by purpose", desc: "Every switch lives in a labeled group named for what it does to the machine - the way a page class's public methods are named submitOrder and applyCoupon, never clickButton3." },
+    { x: 25, y: 13, label: "The FIRE panel — one clearly named, purpose-built action", desc: "An action so important its label must be unmistakable. Intent-revealing names are a safety feature in a cockpit and a readability feature in a page class." },
+    { x: 22, y: 45, label: "The primary flight display — state reported, never judged", desc: "Torque, fuel, altitude: the panel reports what IS and leaves deciding what SHOULD be to the pilot - exactly the assertion discipline of a page class: getters return state, the test judges it." },
+    { x: 45, y: 77, label: "The moving-map and lower console — the wiring stays behind the panel", desc: "Behind every labeled control is a loom of wires no pilot touches - like locators kept as private fields behind public methods, invisible to the tests that fly the page." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Anatomy of a page class, assembled in order"
+  intervalMs={1800}
+  nodes={[
+    { label: "Fields: the page's locators", desc: "By objects (or @FindBy WebElements) - the private knowledge of how to find each element." },
+    { label: "Constructor: receives the driver", desc: "The class operates on a session it's given - it never creates or owns the browser." },
+    { label: "Action methods: user intent, made callable", desc: "submitOrder(card), applyCoupon(code) - named for the goal, not the mechanics." },
+    { label: "State queries: what IS, as return values", desc: "getErrorMessage(), isCartEmpty() - facts handed back to whoever asked." },
+    { label: "Assertions: deliberately absent", desc: "Deciding what SHOULD be true happens in the test - each test judges the same reported state against its own expectation." },
+  ]}
+/>
+
+The assertion discipline is really a rule about which side of the API judgment lives on: pages
+report, tests judge. Here's that separation as a small, generic simulation.
+
+<CodePlayground
+  language="python"
+  title="Run it - pages report state, tests judge it (Python)"
+  code={`# A page class is a reporter: it returns facts and decides nothing.
+class CheckoutPage:
+    def __init__(self, browser_state):
+        self._state = browser_state          # the "driver" it was given
+
+    def submit_order(self, card):            # user-intent action
+        self._state["error"] = "Card declined" if card == "bad-card" else ""
+        self._state["confirmed"] = (card != "bad-card")
+
+    def get_error_message(self):             # state query - reports, never judges
+        return self._state["error"]
+
+# Two tests, SAME page methods, DIFFERENT judgments - only possible
+# because the page class left the judging to them.
+def test_valid_card():
+    page = CheckoutPage({"error": "", "confirmed": False})
+    page.submit_order("4111-good")
+    assert page.get_error_message() == "", "expected no error"
+    return "PASS: valid card produces no error"
+
+def test_declined_card():
+    page = CheckoutPage({"error": "", "confirmed": False})
+    page.submit_order("bad-card")
+    assert page.get_error_message() == "Card declined"
+    return "PASS: declined card produces the right error"
+
+print(test_valid_card())
+print(test_declined_card())
+print()
+print("One reporter, two judgments - assertions belong to the tests.")`}
+/>
+
+Same separation of reporting and judging in Java.
+
+<CodePlayground
+  language="java"
+  title="Run it - pages report state, tests judge it (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    // A page class is a reporter: it returns facts and decides nothing.
+    static class CheckoutPage {
+        private final Map<String, String> state;   // the "driver" it was given
+
+        CheckoutPage(Map<String, String> state) {
+            this.state = state;
+        }
+
+        void submitOrder(String card) {            // user-intent action
+            state.put("error", card.equals("bad-card") ? "Card declined" : "");
+        }
+
+        String getErrorMessage() {                  // state query - reports, never judges
+            return state.get("error");
+        }
+    }
+
+    static String check(String name, String actual, String expected) {
+        return actual.equals(expected)
+            ? "PASS: " + name
+            : "FAIL: " + name + " (got '" + actual + "')";
+    }
+
+    public static void main(String[] args) {
+        // Two tests, SAME page methods, DIFFERENT judgments.
+        CheckoutPage page1 = new CheckoutPage(new HashMap<>());
+        page1.submitOrder("4111-good");
+        System.out.println(check("valid card produces no error",
+                page1.getErrorMessage(), ""));
+
+        CheckoutPage page2 = new CheckoutPage(new HashMap<>());
+        page2.submitOrder("bad-card");
+        System.out.println(check("declined card produces the right error",
+                page2.getErrorMessage(), "Card declined"));
+
+        System.out.println();
+        System.out.println("One reporter, two judgments - assertions belong to the tests.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: build one page class with the full anatomy, then audit its API">
+<StepChecklist
+  steps={[
+    { text: "Pick one real page on a practice site (SauceDemo's login or inventory page works well)", detail: "List, on paper, the 3-5 things a user can DO there and the 2-3 facts they can SEE there." },
+    { text: "Write the class: locator fields, a constructor taking WebDriver, one method per action, one getter per fact", detail: "Every action named by intent; every getter returning a value, asserting nothing." },
+    { text: "Write two tests that call the SAME getter but assert DIFFERENT expectations", detail: "For example, one expects an error message, the other expects none - this only works because the page class didn't judge." },
+    { text: "Audit your class line by line: any method name describing mechanics? Any assert statement? Any locator leaking out?", detail: "Fix each one - this audit is the same review you'll later run on teammates' page classes." },
+  ]}
+/>
+You've now built the full anatomy once by hand - and applied the discipline that keeps it clean.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "@FindBy fields are all null and every method throws NullPointerException.",
+      fix: "PageFactory.initElements(driver, this) was never called - it's what populates @FindBy fields, and it usually belongs in the constructor. Plain By fields don't have this trap, which is one reason many teams prefer them.",
+    },
+    {
+      symptom: "A test needs to verify a DIFFERENT outcome than the page class's verify method checks, and can't.",
+      fix: "That verify method is an assertion baked into the page. Replace it with a state getter (getErrorMessage, isConfirmed) and move each test's expectation into the test itself - both tests can now share the same page method.",
+    },
+    {
+      symptom: "The page class compiles but methods read like a driver transcript: clickFirst(), typeSecond(), clickAgain().",
+      fix: "The class was written by transcribing recorded steps rather than modeling user goals. Rename and merge methods around intent - three mechanical steps that always happen together are one action with a real name (submitOrder).",
+    },
+    {
+      symptom: "Every test needs three lines of setup just to construct the page object.",
+      fix: "The constructor is doing too much (navigating, waiting, logging in). Keep construction cheap - take the driver, assign fields - and put navigation in an explicit open() or in the previous page's action that leads here.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The class's public method list, read in isolation** — if a teammate can't tell what users do on
+  this page from the method names alone, the naming has drifted to mechanics.
+- **A grep for `assert` inside your page-objects package** — any hit is an expectation that has
+  leaked out of a test and into a page.
+- **The constructor body** — it should receive the driver and assign fields; navigation, waits, and
+  logins hiding in there make every construction slow and surprising.
+- **Selenium's PageFactory wiki page** — the reference for how `@FindBy` initialization actually
+  works before you adopt it over plain `By` fields.
+</WhereToCheck>
+
+<WorkedExample title="the verify method that had to be deleted before two tests could share a page">
+1. A page class for a signup form ships with `verifySignupSucceeded()` - it finds the banner and
+   asserts the text equals "Welcome aboard!". The happy-path test uses it and passes.
+2. A second tester writes the duplicate-email test. The page shows "Email already registered" - but
+   the only way the page class exposes the banner is a method that asserts the WRONG expectation
+   for this test.
+3. The tester works around it with a raw `driver.findElement` in the test - now a locator lives in
+   test code, and the next banner redesign will break two places instead of one.
+4. In review, the team replaces `verifySignupSucceeded()` with `getBannerText()` - a getter that
+   reports state and judges nothing.
+5. Both tests now call the same getter and assert their own expectations; the workaround locator is
+   deleted, and the banner's locator once again has exactly one owner.
+</WorkedExample>
+
+<Quiz
+  question="A page class offers isOrderConfirmed() returning boolean, and a teammate proposes 'improving' it to assertOrderConfirmed() which fails the test internally if the order isn't confirmed. Why is the original design better?"
+  options={[
+    "It isn't - the assert version saves every test a line of code, which is the better trade",
+    "Boolean getters run faster than assertions in Java",
+    "A getter reports state and leaves judgment to each test, so the test expecting a FAILED order can use the same method; the assert version bakes one expectation into the page, forcing other tests to work around it and pointing failures into page code instead of test code",
+    "Assertions are only allowed in @Test-annotated methods, so the assert version won't compile"
+  ]}
+  answer={2}
+  explain="The page class's job is describing what CAN be done and what state IS - the moment it asserts, it has decided what SHOULD be true on behalf of every caller, and the test that legitimately expects the opposite state (a declined payment test, say) can no longer use the method. Option one counts the saved line but not the cost: workaround locators in tests and failures reported from page code. Option two invents a performance difference that doesn't exist and was never the point. Option four is simply false - assert statements and assertion-library calls compile anywhere; the rule against assertions in page classes is a design discipline, not a language restriction."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The three anatomical parts of a page class", back: "Locator fields (By objects or @FindBy WebElements), a constructor that receives the driver/page, and public methods for user-meaningful actions plus getters for state." },
+    { front: "What does PageFactory.initElements do?", back: "It populates a page class's @FindBy-annotated WebElement fields - without calling it (usually in the constructor), those fields stay null." },
+    { front: "Why no assertions in page classes?", back: "A page class describes what CAN be done and what state IS; asserting bakes one test's expectation into shared code, blocking tests that expect different outcomes and misdirecting failures into page code." },
+    { front: "Good vs bad page method naming", back: "Name by user intent (submitOrder, applyCoupon) - it survives redesigns. Mechanics-based names (clickButton3, typeInSecondBox) are wrong the moment the markup changes." },
+    { front: "The cockpit analogy for page classes", back: "Labeled switch groups = intent-named methods; instruments = state getters; the wiring behind the panel = private locators; and the panel never judges the reading - the pilot (test) does." },
+  ]}
+/>
+
+<Challenge>
+Take one existing page class (yours or from any open-source Selenium/Playwright project on GitHub)
+and run a three-question audit on every public method: (1) does the name describe user intent or
+mechanics? (2) does it assert anything? (3) does it leak a locator or WebElement to the caller?
+Produce a table of findings and rewrite the worst offender - then check how many tests would have
+been able to share it after the rewrite.
+</Challenge>
+
+<AskCommunity prompt="My page class has a method `[name]` and I can't decide if it belongs there - here's what it does: `[describe or paste it]`. Is this a page action, a state query, or something that belongs in the test?">
+Classifying one concrete method usually settles faster than debating the rules in the abstract -
+and the answers tend to teach the boundary (can-do and is versus should-be) better than any
+checklist.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.selenium.dev/documentation/test_practices/encouraged/page_object_models/", title: "Selenium — official Page Object Models documentation", kind: "read" },
+    { href: "https://github.com/SeleniumHQ/selenium/wiki/PageFactory", title: "Selenium wiki — PageFactory and @FindBy", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=w_iPCT1ETO4" title="Page Object Model in Selenium Webdriver Step by Step Guide — Mukesh otwani" minutes={31} />
+
+<Takeaways
+  points={[
+    "A page class's anatomy is fixed: locator fields, a constructor receiving the driver, public action methods, and state getters.",
+    "Locators can be plain By fields or @FindBy WebElements initialized by PageFactory - plain By avoids the null-fields trap of forgetting initElements.",
+    "Method names describe user intent (submitOrder) and should survive any markup redesign; mechanical names (clickButton3) rot instantly.",
+    "Page classes report state via getters and never assert - deciding what SHOULD be true is the test's job, and baking expectations into pages blocks tests that expect different outcomes.",
+    "Keep constructors cheap: receive the driver and assign fields; navigation and waits belong in explicit actions, not construction.",
+  ]}
+/>
+
+<Complete xp={10} />
