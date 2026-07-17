@@ -1,0 +1,280 @@
+---
+title: "API keys"
+summary: "An API key is one opaque string identifying the CALLER (an app or project, not a person) - sent as a header on every request, checked server-side. Tester's questions: no key, wrong key, revoked key, wrong-scope key - and does it ever leak into a URL?"
+tags: ["api-testing-fundamentals", "auth-manually", "track-c"]
+updated: "2026-07-17"
+related:
+  - "api-testing-fundamentals/auth-manually/basic-auth"
+  - "api-testing-fundamentals/auth-manually/bearer-and-jwt"
+  - "api-testing-fundamentals/postman-and-curl/collections-and-environments"
+  - "security/owasp/auth-failures"
+---
+
+<Hook>
+The simplest auth scheme an API can have is one string: send the right value in the right header and you're in, send anything else and you're not. That simplicity is exactly why API keys are everywhere - and exactly why they're a tester's playground. One string means one lookup, and one lookup means a short, brutal list of questions: what if the string is missing? Wrong? Revoked last Tuesday? Valid but only allowed to READ while this request WRITES? And the quietest question of all: where does that string end up written down?
+</Hook>
+
+<Callout type="analogy">
+The photo below is a car's key set: the main ignition key, a remote fob, and - the interesting one - a smaller green key. That green key is a valet key: it starts the engine but won't open the trunk or the glovebox. All three identify a holder to the same car with different levels of trust, and none of them care WHO is holding them - possession is the whole story. That's an API key set: the main key is your full-access production key, the valet key is a restricted-scope key you hand to a third party, and losing any of them means whoever picks it up IS you, until you rotate the lock.
+</Callout>
+
+<Term define="An API key is a single opaque string (e.g. sk_live_FAKE_EXAMPLE_KEY_01) issued to a caller - typically an application, project, or integration rather than an individual human. The client sends it on every request, usually in a header (X-API-Key: ... or Authorization: ...), and the server checks it against a stored table: does it exist, is it still active, and does it carry the scopes/permissions this endpoint needs? Keys usually don't expire on their own (unlike tokens) - they live until rotated or revoked, which makes leaking one worse, not better. Because the key identifies an app rather than a user, API keys are identification more than user authentication - many APIs pair them with a separate user-auth layer.">API key</Term>
+
+## What a tester needs to know about keys
+
+- **A key identifies the CALLER, not a user** — "which app/project is this request from" (rate limiting, billing, per-integration permissions), not "which human is logged in." When an API needs both, the key and the user credential travel as two separate things; test that each is checked independently.
+- **Placement matters as much as validity** — the same key works in a header, or as `?api_key=...` in the URL on some APIs. Headers stay out of access logs, browser history, and pasted links; query strings land in all three. If an API accepts keys in the query string, that acceptance is itself worth a finding.
+- **Keys are long-lived by default** — no built-in expiry means the interesting lifecycle events are creation, rotation, and revocation. "Does a revoked key actually stop working, immediately, on every endpoint?" is a real test, and it fails more often than you'd hope.
+- **Scopes turn one yes/no into a matrix** — a read-only key hitting a write endpoint should get 403 (known caller, insufficient rights), not 401 (unknown caller), and definitely not 200. The 401/403 split tells a client what to fix; a wrong split misleads every consumer.
+- **Prefixes are your friend** — well-designed keys carry a readable prefix (`sk_live_`, `sk_test_`, a vendor tag) so humans and secret scanners can tell what leaked and how bad it is. When you test with keys, that prefix is also how you confirm you're holding the environment you think you are.
+
+<Callout type="tip">
+Keep keys in your tool's variable store, never typed into the request itself: a Postman environment variable, an env var for curl (`-H "X-API-Key: $API_KEY"`). It's the same discipline as [[api-testing-fundamentals/postman-and-curl/collections-and-environments]] - and it means a screenshot, a shared collection export, or a pasted curl command never contains the real string.
+</Callout>
+
+<Callout type="mistake">
+Testing only the happy path plus "no key." The revealing cases live between those: a syntactically plausible but unknown key, a real key that was revoked, a real key from the WRONG environment (a test key against prod), and a real key without the scope this endpoint needs. Each should produce a distinct, correct status - and every API that collapses them into one generic error (or lets one through) is handing you bug reports.
+</Callout>
+
+{/* IMAGE: a car key set - remote fob, black-headed main ignition key on a ring, and a separate green-headed valet key, studio shot on white */}
+<HotspotImage
+  src="/notes/api-testing-fundamentals/auth-manually/api-keys.jpg"
+  alt="A car key set: a remote fob and black main ignition key on a key ring, beside a separate green-headed valet key"
+  credit="Jaguar X300 ignition key, keyfob, and valet key — Magnus Bäck, Wikimedia Commons, CC BY 3.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Jaguar_X300_ignition_key,_keyfob,_and_valet_key.jpg"
+  pins={[
+    { x: 64, y: 32, label: "The main key — full access, and no idea who's holding it", desc: "Starts the engine, opens everything. Possession IS the authentication - exactly like a production API key with all scopes. Whoever has the string is the caller, which is why rotation after any suspected leak is non-negotiable." },
+    { x: 36, y: 53, label: "The green valet key — same car, restricted scope", desc: "Starts the engine but won't open the trunk. This is a scoped key: a deliberately limited credential you can hand to a third party. The test that matters: does the trunk ACTUALLY stay locked - does the read-only key really get a 403 on every write endpoint?" },
+    { x: 17, y: 17, label: "The remote fob — identification at a distance", desc: "The fob's job is mostly to IDENTIFY its holder to the car (unlock, find me). API keys lean the same way: they identify which app or project is calling - which is why many APIs pair a key (the app) with separate user auth (the human), and each needs testing on its own." },
+  ]}
+/>
+
+<FlowAnimation
+  title="What the server does with X-API-Key - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Request arrives: is a key present at all?", desc: "No key -> 401 immediately. The error should say a credential is required without hinting at anything else." },
+    { label: "Look the key up: does it exist in the table?", desc: "Unknown string -> 401. Same status as missing, deliberately - the response shouldn't reveal whether a guessed key was 'close'." },
+    { label: "Check the key's state: still active?", desc: "Revoked or disabled -> 401. This is the lifecycle test: revocation must take effect immediately, everywhere, not after some cache expires next hour." },
+    { label: "Check scopes: is THIS operation allowed for THIS key?", desc: "Known caller without the needed scope -> 403, not 401. The caller is authenticated; the operation is refused. Getting this split right is a real API-quality signal." },
+    { label: "All checks pass: 200, and the request is attributed", desc: "The key's owner is now the request's identity - for rate limits, billing, and audit logs. One string carried all of that." },
+  ]}
+/>
+
+The entire server-side check is a lookup and three questions - which means your negative-test checklist writes itself:
+
+<CodePlayground
+  language="python"
+  title="Run it - one write endpoint, five key situations, five verdicts (Python)"
+  code={`# The server side of an API key check, boiled down - a lookup table and
+# three questions: present? known? allowed to do THIS?
+KEYS = {
+    "sk_live_FAKE_KEY_MOBILE_APP": {"owner": "mobile-app", "scopes": ["read"], "active": True},
+    "sk_live_FAKE_KEY_PARTNER":    {"owner": "partner-integration", "scopes": ["read", "write"], "active": True},
+    "sk_live_FAKE_KEY_OLD_CMS":    {"owner": "legacy-cms", "scopes": ["read", "write"], "active": False},  # revoked
+}
+
+def check(key, needed_scope):
+    if key is None:
+        return "401 Unauthorized - no key sent at all"
+    if key not in KEYS:
+        return "401 Unauthorized - key not recognized"
+    record = KEYS[key]
+    if not record["active"]:
+        return "401 Unauthorized - key was revoked"
+    if needed_scope not in record["scopes"]:
+        return f"403 Forbidden - key belongs to '{record['owner']}' but lacks the '{needed_scope}' scope"
+    return f"200 OK - authenticated as '{record['owner']}'"
+
+# A tester's checklist for one write endpoint - each row is a test case:
+cases = [
+    ("no key at all",              None,                          "write"),
+    ("gibberish key",              "sk_live_FAKE_TOTALLY_MADE_UP","write"),
+    ("revoked key",                "sk_live_FAKE_KEY_OLD_CMS",    "write"),
+    ("valid key, missing scope",   "sk_live_FAKE_KEY_MOBILE_APP", "write"),
+    ("valid key, correct scope",   "sk_live_FAKE_KEY_PARTNER",    "write"),
+]
+
+print("POST /flights (requires 'write' scope):")
+for name, key, scope in cases:
+    print(f"  {name:<26} -> {check(key, scope)}")
+
+print()
+print("Five requests, five DIFFERENT outcomes - and only one is a 200. If an")
+print("API returns the same generic error for all four failures, or worse, a")
+print("200 for any of them, each row above is a separate bug report. Note the")
+print("401 vs 403 split: 401 = 'who are you?', 403 = 'I know who you are,")
+print("and the answer is no.'")
+
+# POST /flights (requires 'write' scope):
+#   no key at all              -> 401 Unauthorized - no key sent at all
+#   gibberish key              -> 401 Unauthorized - key not recognized
+#   revoked key                -> 401 Unauthorized - key was revoked
+#   valid key, missing scope   -> 403 Forbidden - key belongs to 'mobile-app' but lacks the 'write' scope
+#   valid key, correct scope   -> 200 OK - authenticated as 'partner-integration'
+#
+# Five requests, five DIFFERENT outcomes - and only one is a 200. If an
+# API returns the same generic error for all four failures, or worse, a
+# 200 for any of them, each row above is a separate bug report. Note the
+# 401 vs 403 split: 401 = 'who are you?', 403 = 'I know who you are,
+# and the answer is no.'`}
+/>
+
+And the placement question - the same valid key can be perfectly checked and still be a security finding, depending on WHERE it rode:
+
+<CodePlayground
+  language="java"
+  title="Run it - auditing an access log for keys leaked via the query string (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    public static void main(String[] args) {
+        // Access-log lines the way a real server writes them - URLs included,
+        // header values NOT included. That asymmetry is the whole lesson.
+        List<String> accessLog = List.of(
+            "GET /v1/flights?dep=KTM&arr=DEL HTTP/1.1 200",
+            "GET /v1/flights?dep=KTM&arr=DEL&api_key=sk_live_FAKE_KEY_MOBILE_APP HTTP/1.1 200",
+            "POST /v1/bookings HTTP/1.1 201",
+            "GET /v1/me?api_key=sk_live_FAKE_KEY_PARTNER HTTP/1.1 200",
+            "GET /v1/flights/QA123 HTTP/1.1 200"
+        );
+
+        System.out.println("Scanning access log for keys sent in the URL (query string):");
+        System.out.println();
+        int leaks = 0;
+        for (String line : accessLog) {
+            if (line.contains("api_key=")) {
+                leaks++;
+                int start = line.indexOf("api_key=") + "api_key=".length();
+                int end = line.indexOf(' ', start);
+                String key = line.substring(start, end == -1 ? line.length() : end);
+                String redacted = key.substring(0, 12) + "..." + key.substring(key.length() - 4);
+                System.out.println("  LEAK: " + line.replace(key, redacted));
+            } else {
+                System.out.println("  ok:   " + line);
+            }
+        }
+        System.out.println();
+        System.out.println("Findings: " + leaks + " of " + accessLog.size() + " logged requests expose a key.");
+        System.out.println();
+        System.out.println("The two clean authenticated requests sent their key in a header");
+        System.out.println("(X-API-Key / Authorization) - headers never appear in standard access");
+        System.out.println("logs, browser history, or copy-pasted URLs. A key in the query string");
+        System.out.println("appears in ALL of them, plus any proxy or analytics tool in between.");
+        System.out.println("Same key, same 200 response - one placement is a finding, one is fine.");
+    }
+}
+
+/* Scanning access log for keys sent in the URL (query string):
+
+     ok:   GET /v1/flights?dep=KTM&arr=DEL HTTP/1.1 200
+     LEAK: GET /v1/flights?dep=KTM&arr=DEL&api_key=sk_live_FAKE..._APP HTTP/1.1 200
+     ok:   POST /v1/bookings HTTP/1.1 201
+     LEAK: GET /v1/me?api_key=sk_live_FAKE...TNER HTTP/1.1 200
+     ok:   GET /v1/flights/QA123 HTTP/1.1 200
+
+   Findings: 2 of 5 logged requests expose a key.
+
+   The two clean authenticated requests sent their key in a header
+   (X-API-Key / Authorization) - headers never appear in standard access
+   logs, browser history, or copy-pasted URLs. A key in the query string
+   appears in ALL of them, plus any proxy or analytics tool in between.
+   Same key, same 200 response - one placement is a finding, one is fine. */`}
+/>
+
+<FirstTime title="Your mission: run the five-case key checklist against a real endpoint">
+<StepChecklist
+  steps={[
+    { text: "Pick an API-key-protected endpoint you're allowed to test", detail: "TaskFlight (this platform's practice API) issues sandbox API keys, or any public API whose docs hand out a free key - the checklist is the same everywhere." },
+    { text: "Store the key as a variable, not in the request", detail: "Postman environment variable or a shell env var for curl. From this step on, the literal key never appears in anything you might share." },
+    { text: "Send the happy path and confirm 200 plus correct attribution", detail: "If the API echoes who you are (an /me endpoint, a rate-limit header naming your plan), confirm it matches the key you sent." },
+    { text: "Now the four negatives: no key, gibberish key, truncated real key, and (if you can create/revoke keys) a freshly revoked one", detail: "Record the exact status and body for each. Expect 401s - and note whether the error messages stay appropriately vague." },
+    { text: "Check placement: does the API also accept the key as a query parameter?", detail: "Try ?api_key=... deliberately. If it works, note where that URL would now be written down (logs, history, proxies) - acceptance of query-string keys is worth raising even when the docs advertise it." },
+  ]}
+/>
+You've tested a whole authentication scheme with five requests - and practiced the discipline (variables, placement-awareness, distinct-status checking) that carries into every other auth type in this chapter.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A request that worked yesterday now gets 401, and the key variable looks unchanged.",
+      fix: "Keys don't expire but they DO get rotated and revoked - check with whoever owns the key registry before debugging your request. Also compare key PREFIXES against the environment: a sk_test_-prefixed key against a production base URL (or vice versa) is the classic wrong-environment 401, and the prefix makes it diagnosable at a glance.",
+    },
+    {
+      symptom: "Every failure case - missing key, bad key, revoked key, wrong scope - returns the same status and identical body.",
+      fix: "Decide which side of the line each collapse sits on. Missing/unknown/revoked collapsing into one vague 401 is often DELIBERATE (don't help attackers enumerate keys). But wrong-scope collapsing into 401 instead of 403 is a genuine bug - it tells a legitimate integrator their key is invalid when the real fix is requesting a scope. Report the 401/403 confusion; leave the deliberate vagueness alone.",
+    },
+    {
+      symptom: "You accidentally pasted a real key into a ticket, chat, or committed file.",
+      fix: "Treat it as leaked the moment it left your clipboard - rotate/revoke it first, THEN clean up the paste. Deleting the message or force-pushing the commit doesn't unsee it (history, notifications, CI logs, and secret scanners already have it). This is also why sk_-style prefixes exist: secret scanners like the one in this repo's CI catch prefixed keys in commits automatically - a safety net, not a substitute for the rotation.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The API's own docs, auth section** — which header the key goes in, whether query-string keys are (regrettably) supported, and what scopes exist. Test against what's DOCUMENTED, then poke at what isn't.
+- **The provider's key-management dashboard** — where keys are created, scoped, rotated, and revoked; also usually where per-key usage shows up, which is how you confirm your test requests were attributed to the right key.
+- **Response headers on a 200** — many key-authed APIs return rate-limit headers (X-RateLimit-*) tied to the key; they're evidence of which caller the server thinks you are.
+- **[[security/owasp/auth-failures]]** — the wider catalog of authentication failures this chapter's checks feed into; a leaked or unrevokable key is one instance of a bigger pattern.
+</WhereToCheck>
+
+<WorkedExample title="the revoked key that kept working">
+1. A team offboards a third-party integration and revokes its API key in the admin dashboard. Standard practice says test it, so a tester keeps a copy of the now-revoked key (in a variable, in a sandbox) and sends one read request.
+2. Expected: 401. Actual: 200, full data. The tester waits five minutes, retries - still 200. An hour later: 401 at last.
+3. Digging with the developers: the API's gateway caches key lookups for 60 minutes to save database reads. Revocation updated the database instantly but the cache kept honoring the old answer until it expired.
+4. Filed: "Revoked API keys remain valid for up to 60 minutes (gateway lookup cache). Repro: revoke key, send request within the hour, observe 200. Expected: revocation effective within seconds - a revoked credential is usually revoked FOR A REASON, and an hour is a long time for a compromised key to keep working."
+5. The fix wasn't removing the cache - it was invalidating the cache entry on revocation. Retested: revoke, immediate request, 401 within seconds. Closed.
+6. The lesson generalizes: for long-lived credentials, the lifecycle events (rotation, revocation) are where the bugs hide - the happy path was never broken.
+</WorkedExample>
+
+<Quiz
+  question="A read-only API key (scopes: ['read']) sends POST /v1/flights, a write operation. The API returns 401 Unauthorized. The key is active and was accepted fine on GET requests moments earlier. Is the 401 correct?"
+  options={[
+    "Yes - any refused request should be 401, since the key lacks permission",
+    "No - the server clearly recognized and authenticated this active key, so refusing the operation for insufficient scope should be 403 Forbidden; 401 falsely tells the caller their credential itself is invalid",
+    "No - the request should succeed with 200, since a valid key grants access to all endpoints",
+    "Yes - 401 and 403 are interchangeable by convention, and which one an API uses is purely stylistic"
+  ]}
+  answer={1}
+  explain="This note's playground and flow both hinge on this split: 401 answers 'who are you?' (missing, unknown, revoked credential), while 403 answers 'I know who you are, and the answer is no' (authenticated caller, refused operation). An active key that just worked on GET is unambiguously authenticated, so a scope refusal on POST is a 403 case - returning 401 sends the integrator off to debug a perfectly valid credential instead of requesting the write scope. Option one collapses the two questions into one status, which is exactly the misleading behavior worth reporting. Option three ignores scopes entirely - the valet key isn't supposed to open the trunk. Option four is wrong because the two codes carry different, actionable meanings; [[api-testing-fundamentals/finding-api-bugs/negative-api-tests]] builds whole test charters out of exactly this kind of status-code precision."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What an API key identifies", back: "The CALLER - an app, project, or integration - rather than a human user. Used for attribution, rate limits, billing, and per-integration permissions; often paired with separate user auth." },
+    { front: "The five-case key checklist", back: "No key, unknown key, revoked key, valid-but-wrong-scope key, valid key. Expect 401/401/401/403/200 - every collapse or wrong status is a potential finding." },
+    { front: "401 vs 403, in one line each", back: "401 = 'who are you?' (credential missing/invalid/revoked). 403 = 'I know who you are, and the answer is no' (authenticated, but this operation isn't allowed)." },
+    { front: "Why key placement matters", back: "Headers stay out of access logs, history, and pasted URLs; query strings land in all of them. The same valid key is safe in a header and a leak in ?api_key=..." },
+    { front: "The key lifecycle events worth testing", back: "Rotation and revocation - keys don't expire on their own, so 'does a revoked key stop working immediately, everywhere?' is the test, and caches make it fail more often than you'd think." },
+  ]}
+/>
+
+<Challenge>
+Take any API-key-protected endpoint you can legitimately use and produce a five-row evidence table: case (no key / unknown key / revoked-or-wrong-env key / wrong-scope key / valid key), exact request sent (with the key redacted to prefix + last 4 characters), status received, and one line on whether that status is correct. If you can't produce one of the rows (no revocation rights, no scoped keys), write down what you'd NEED from the provider to test it - that gap is itself a real observation about the API's testability.
+</Challenge>
+
+<AskCommunity prompt="Testing an API-key-protected endpoint, I found [describe: e.g. wrong-scope requests return 401 not 403 / revoked keys work for N minutes / keys accepted in the query string]. Docs say [what they say, or 'nothing']. Is this worth filing, and how would you frame the risk?">
+The most useful replies will separate the deliberate ambiguities (unknown vs revoked both 401 - usually fine, even good) from the genuinely misleading ones (scope failures as 401, revocation lag, query-string acceptance) and help you frame the latter in terms of who gets hurt: the integrator debugging the wrong thing, or the key owner whose credential outlives its revocation.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://cloud.google.com/docs/authentication/api-keys-best-practices", title: "Google Cloud — Best practices for managing API keys", kind: "read" },
+    { href: "https://swagger.io/docs/specification/v3_0/authentication/api-keys/", title: "Swagger/OpenAPI — API Keys (how specs describe them)", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=xoriGNUNF7E" title="Postman — What Is an API Key? (and How to Keep Them Safe)" minutes={2} />
+
+<Takeaways
+  points={[
+    "An API key is one opaque string identifying the calling app/project - possession is the authentication, which makes leakage and revocation the highest-stakes events in its life.",
+    "The five-case checklist (none/unknown/revoked/wrong-scope/valid) tests an entire key scheme in five requests - expect 401/401/401/403/200 and question every deviation.",
+    "401 means 'who are you?', 403 means 'I know you, and no' - APIs that return 401 for scope failures send integrators debugging a valid credential.",
+    "Placement is a finding in itself: keys in headers stay out of logs and history; keys in query strings get written down everywhere the URL travels.",
+    "Keys don't expire - so test the lifecycle: rotation, and whether revocation takes effect immediately or hides behind a cache for an hour.",
+  ]}
+/>
+
+<Complete xp={10} />

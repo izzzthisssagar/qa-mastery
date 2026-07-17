@@ -1,0 +1,305 @@
+---
+title: "Bearer / JWT"
+summary: "A Bearer token rides in Authorization: Bearer <token> and means 'whoever holds this IS authorized' - no further proof. JWTs are the common shape: three base64url parts (header.payload.signature); the payload is READABLE by anyone, but the signature makes it tamper-evident."
+tags: ["api-testing-fundamentals", "auth-manually", "track-c"]
+updated: "2026-07-17"
+related:
+  - "api-testing-fundamentals/auth-manually/basic-auth"
+  - "api-testing-fundamentals/auth-manually/oauth2-for-testers"
+  - "api-testing-fundamentals/postman-and-curl/postman-tests-and-variables"
+  - "security/owasp/auth-failures"
+---
+
+<Hook>
+"Bearer" is the most honest word in authentication: whoever BEARS the token is treated as authorized, full stop, no second question. It's a concert wristband, not a passport - the door checks the band, not your face. Most bearer tokens you'll meet are JWTs, and a JWT has a property that surprises every tester the first time: you can read its entire contents without any secret at all. The signature isn't there to HIDE anything - it's there to prove nobody TAMPERED with it. Grasp that one distinction and the whole test plan (expiry, tampering, and "wait, is this thing a secret?") falls out of it.
+</Hook>
+
+<Callout type="analogy">
+The photo below is a hospital ID wristband. Look at what it is and isn't. It's not YOU - it's a claim ABOUT you (name, ID number, date of birth) printed on a band, and any staff member reads it at a glance without unlocking anything. Its power is entirely "whoever's wrist this is on gets treated as this patient" - a bearer credential. And crucially: the printed details are plainly legible to everyone, while the band's real security is that it's sealed and hard to forge without the printer. A JWT is this wristband: claims anyone can read, protected by a signature (the seal) they can't reproduce - and if it slips off your wrist onto someone else's, the system believes them, not you.
+</Callout>
+
+<Term define="A Bearer token is a credential sent as Authorization: Bearer <token>, where mere possession grants access - the server does not ask the holder to prove anything further. A JWT (JSON Web Token) is the most common bearer-token format: three base64url-encoded parts joined by dots - header (algorithm/type), payload (the claims: subject, roles, iat/exp timestamps), and signature (an HMAC or asymmetric signature over the first two parts, made with a key only the server holds). The header and payload are ENCODED, not encrypted, so anyone holding the token can read every claim; the signature makes the token tamper-EVIDENT (any edit invalidates it) but not secret. Tokens typically carry an exp expiry claim, making them short-lived by design - the opposite of a long-lived API key.">Bearer / JWT</Term>
+
+## What a tester actually checks
+
+- **Possession is everything - so leakage is catastrophic** — a stolen bearer token IS the user until it expires. There's no second factor at the API. This makes "where does this token get written down?" (logs, URLs, localStorage, error messages) the single highest-value question, exactly as with API keys but with a time limit.
+- **The payload is readable - so nothing private belongs in it** — paste any JWT into a decoder (or the playground below) and every claim is right there: user id, roles, email sometimes. That's by design, and it means a JWT carrying a secret is a bug. Decoding it is not "hacking"; it's base64.
+- **The signature makes tampering detectable - so test that it actually does** — decode the payload, change `role: viewer` to `role: admin`, re-encode, resend with the original signature. The server MUST reject it (401). A server that doesn't has handed every user an admin button.
+- **Expiry is a claim, so test the boundary** — `exp` is a timestamp in the payload. Send an expired token and expect 401 with an "expired" signal. Then the harder questions: does a token that expires MID-session get rejected on the next call? Is there a refresh flow, and does it actually issue a fresh token (next note's territory)?
+- **The `alg` field is an attack surface worth knowing exists** — historically, servers that trusted the token's own `alg` header could be fed `alg: none` (no signature) or tricked into using the wrong algorithm. You don't need to exploit it, but "does this endpoint accept an unsigned token?" is a legitimate, high-value negative test.
+
+<Callout type="tip">
+Decode every token you're handed before you use it - Postman shows JWT contents, jwt.io does, or three lines of Python do. Read the `exp` (is it already expired?), the `sub`/`role` claims (are you testing as who you think you are?), and confirm nothing sensitive is sitting in there. Thirty seconds of decoding routinely explains a 401 that would otherwise cost an hour.
+</Callout>
+
+<Callout type="mistake">
+Assuming a JWT is encrypted because it looks like opaque gibberish. The `eyJ...` blob is base64url of `{"alg":...}` - "eyJ" is literally what `{"` encodes to, which is why nearly every JWT starts that way. Treating the payload as confidential (putting a password, a full credit-card number, or an internal secret in it) is a real and common vulnerability, because the token's holder - and anyone who intercepts it - reads those claims trivially.
+</Callout>
+
+{/* IMAGE: a hospital patient ID wristband on a person's wrist, printed with a name, ID number, and barcodes, against a red background */}
+<HotspotImage
+  src="/notes/api-testing-fundamentals/auth-manually/bearer-and-jwt.jpg"
+  alt="A hospital patient identification wristband on a wrist, printed with a name, ID number and barcodes"
+  credit="Wrist Identification Band — Whoisjohngalt, Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Wrist_Identification_Band.jpg"
+  pins={[
+    { x: 40, y: 47, label: "The printed claims — readable by anyone, no unlocking", desc: "Name, ID, date of birth, plainly legible at arm's length. A JWT's payload is exactly this: claims anyone holding the token can read with a base64 decode - which is why nothing private ever belongs there." },
+    { x: 47, y: 66, label: "The barcode — machine-checkable, hard to forge", desc: "Staff scan it and trust the result because reproducing a valid band requires the hospital's printer. That's the signature: verifiable by the system, unforgeable without the server's secret key - it proves the band wasn't tampered with, not that it's secret." },
+    { x: 62, y: 30, label: "The band is on THIS wrist — possession is the whole claim", desc: "The system treats whoever wears the band as the patient. A bearer token is identical: hold it and you ARE the user, no further proof asked - so a token that slips onto the wrong wrist is believed, and leakage is the highest-stakes failure." },
+  ]}
+/>
+
+<FlowAnimation
+  title="A bearer token's life, and the tests along it - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "The client authenticates once and receives a token", desc: "Login (or an OAuth2 flow) returns a JWT. From here on, the password is out of the picture - the token stands in for it." },
+    { label: "Every request carries Authorization: Bearer <token>", desc: "No re-login, no username. The server verifies the signature and reads the claims. Test: does an endpoint that needs auth actually reject a request with NO bearer header (401)?" },
+    { label: "Decode the payload - what's actually in there?", desc: "sub, role, exp, maybe email. Test: is anything private in the claims? Are you authenticated as the role you expected? The decode needs no secret." },
+    { label: "Tamper test: edit a claim, reattach the old signature, resend", desc: "role: viewer -> admin. The server recomputes the signature over the changed payload, it no longer matches, 401. A 200 here is a critical finding." },
+    { label: "Expiry test: send a token past its exp, then a not-yet-valid one", desc: "Expect 401 with an 'expired'/'invalid_token' signal. Then check the boundary - a token expiring mid-session should fail the NEXT call, and any refresh flow should mint a genuinely new token." },
+  ]}
+/>
+
+Decode a JWT yourself and the "readable payload, protective signature" split stops being abstract - and so does expiry, which is just a number you compare against now:
+
+<CodePlayground
+  language="python"
+  title="Run it - building, DECODING (no secret!), and expiry-checking a JWT (Python)"
+  code={`import base64, hashlib, hmac, json
+
+# Build a JWT the way an auth server does - three parts, dot-joined.
+# Everything here is FAKE and runs locally; no real secrets involved.
+def b64url(data):
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+SECRET = b"FAKE_DEMO_SIGNING_SECRET"
+
+header = {"alg": "HS256", "typ": "JWT"}
+payload = {
+    "sub": "user_8841",
+    "name": "QA Tester",
+    "role": "viewer",
+    "iat": 1752710400,   # issued at  (fixed timestamps so the demo is repeatable)
+    "exp": 1752714000,   # expires    (exactly 1 hour later)
+}
+
+h = b64url(json.dumps(header, separators=(",", ":")).encode())
+p = b64url(json.dumps(payload, separators=(",", ":")).encode())
+sig = b64url(hmac.new(SECRET, f"{h}.{p}".encode(), hashlib.sha256).digest())
+
+print(f"Token structure: 3 dot-separated parts, lengths {len(h)}.{len(p)}.{len(sig)} chars")
+print()
+
+# THE POINT: anyone can read the payload WITHOUT the secret. Decoding is
+# just base64url - no key required:
+def decode_part(part):
+    padded = part + "=" * (-len(part) % 4)
+    return json.loads(base64.urlsafe_b64decode(padded))
+
+print("Payload, decoded with ZERO knowledge of the signing secret:")
+for k, v in decode_part(p).items():
+    print(f"  {k}: {v}")
+print()
+
+# Expiry is just a claim - compare exp to 'now':
+now = 1752717600  # pretend current time: 2 hours after issuance
+exp = decode_part(p)["exp"]
+print(f"exp claim: {exp}, current time: {now}")
+print(f"Token is {'EXPIRED - expect 401 invalid_token' if now >= exp else 'still valid'}")
+print(f"(expired {(now - exp) // 60} minutes ago)")
+print()
+print("Two lessons in one: (1) never put anything private in a JWT payload -")
+print("it's readable by anyone who holds the token, signature or not;")
+print("(2) the signature protects INTEGRITY (tamper-evidence), not SECRECY -")
+print("and only the server, which has the secret, can verify it.")
+
+# Token structure: 3 dot-separated parts, lengths 36.118.43 chars
+#
+# Payload, decoded with ZERO knowledge of the signing secret:
+#   sub: user_8841
+#   name: QA Tester
+#   role: viewer
+#   iat: 1752710400
+#   exp: 1752714000
+#
+# exp claim: 1752714000, current time: 1752717600
+# Token is EXPIRED - expect 401 invalid_token
+# (expired 60 minutes ago)
+#
+# Two lessons in one: (1) never put anything private in a JWT payload -
+# it's readable by anyone who holds the token, signature or not;
+# (2) the signature protects INTEGRITY (tamper-evidence), not SECRECY -
+# and only the server, which has the secret, can verify it.`}
+/>
+
+The tamper test is the one every API tester should run at least once - it's the difference between "the signature is decorative" and "the signature actually defends the endpoint":
+
+<CodePlayground
+  language="java"
+  title="Run it - the tamper test: forge admin, keep the old signature, watch it fail (Java)"
+  code={`import java.util.*;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
+public class Main {
+    static final byte[] SECRET = "FAKE_DEMO_SIGNING_SECRET".getBytes();
+
+    static String b64url(byte[] data) {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(data);
+    }
+
+    static String sign(String headerAndPayload) throws Exception {
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(SECRET, "HmacSHA256"));
+        return b64url(mac.doFinal(headerAndPayload.getBytes()));
+    }
+
+    static String verify(String token) throws Exception {
+        String[] parts = token.split("\\\\.");
+        if (parts.length != 3) return "401 - malformed token";
+        String expected = sign(parts[0] + "." + parts[1]);
+        if (!expected.equals(parts[2])) return "401 - signature verification FAILED";
+        String payload = new String(Base64.getUrlDecoder().decode(parts[1]));
+        return "200 - signature valid, claims trusted: " + payload;
+    }
+
+    public static void main(String[] args) throws Exception {
+        // The auth server issues a token for a low-privilege user:
+        String header  = b64url("{\\"alg\\":\\"HS256\\",\\"typ\\":\\"JWT\\"}".getBytes());
+        String payload = b64url("{\\"sub\\":\\"user_8841\\",\\"role\\":\\"viewer\\"}".getBytes());
+        String token = header + "." + payload + "." + sign(header + "." + payload);
+
+        System.out.println("1. Server verifies the token exactly as issued:");
+        System.out.println("   " + verify(token));
+        System.out.println();
+
+        // THE ATTACK a tester simulates: decode the payload (no secret needed),
+        // promote yourself to admin, re-encode, and keep the OLD signature:
+        String tampered = b64url("{\\"sub\\":\\"user_8841\\",\\"role\\":\\"admin\\"}".getBytes());
+        String forged = header + "." + tampered + "." + token.split("\\\\.")[2];
+
+        System.out.println("2. Same token with payload edited (role: viewer -> admin),");
+        System.out.println("   old signature reattached:");
+        System.out.println("   " + verify(forged));
+        System.out.println();
+        System.out.println("The signature is an HMAC over header.payload using a secret only");
+        System.out.println("the server holds. Change ONE character of the payload and the");
+        System.out.println("recomputed HMAC no longer matches the attached one - which is");
+        System.out.println("precisely what a tester should CONFIRM: edit a claim, resend, and");
+        System.out.println("expect 401. A server that accepts the forged token just promoted");
+        System.out.println("every one of its users to admin-on-request.");
+    }
+}
+
+/* 1. Server verifies the token exactly as issued:
+      200 - signature valid, claims trusted: {"sub":"user_8841","role":"viewer"}
+
+   2. Same token with payload edited (role: viewer -> admin),
+      old signature reattached:
+      401 - signature verification FAILED
+
+   The signature is an HMAC over header.payload using a secret only
+   the server holds. Change ONE character of the payload and the
+   recomputed HMAC no longer matches the attached one - which is
+   precisely what a tester should CONFIRM: edit a claim, resend, and
+   expect 401. A server that accepts the forged token just promoted
+   every one of its users to admin-on-request. */`}
+/>
+
+<FirstTime title="Your mission: decode, tamper, and expiry-check a real token">
+<StepChecklist
+  steps={[
+    { text: "Get a JWT from any app you're allowed to test", detail: "TaskFlight (this platform's practice API) issues them on login; or grab a sample from jwt.io. Copy the whole eyJ...eyJ...<sig> string." },
+    { text: "Decode it without any secret", detail: "Paste into Postman (it shows JWT contents), jwt.io, or run the Python above. Read every claim: who are you (sub/role)? When does it expire (exp)? Is anything in there that shouldn't be public?" },
+    { text: "Use it as a bearer token and confirm the happy path", detail: "curl -H \"Authorization: Bearer $TOKEN\" against a protected endpoint - store the token in a variable, never inline. Confirm 200 and that the response identity matches the sub you decoded." },
+    { text: "Run the tamper test", detail: "Change one character anywhere in the token (in the payload section for realism) and resend. Expect 401. If you get 200, you've found a critical signature-verification bug - stop and write it up." },
+    { text: "Run the expiry test", detail: "Send a token you know is expired (wait one out, or use an old one). Expect 401 with an expired/invalid_token signal - and note whether the error clearly distinguishes 'expired' from 'malformed', which matters for a client deciding whether to refresh or re-login." },
+  ]}
+/>
+You've exercised the three tests that matter most on any bearer scheme - decode, tamper, expire - and seen firsthand that reading a JWT needs no secret while forging one does.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A token that worked ten minutes ago now returns 401, and nothing about the request changed.",
+      fix: "Decode it and read exp - bearer tokens are short-lived by design, and an expired token is the single most common cause of a 'suddenly 401' report. Check whether the error body distinguishes expired from invalid; if there's a refresh-token flow, this is where it should have kicked in, and 'the client didn't refresh' is a real client-side bug worth its own ticket.",
+    },
+    {
+      symptom: "A tampered token (edited claim) is ACCEPTED with a 200 instead of rejected.",
+      fix: "Stop - this is a critical finding, not a curiosity. Confirm it cleanly: take a valid token, change exactly one character in the payload segment, resend, capture the 200. Common root causes worth naming in the report: signature not verified at all, alg:none accepted, or the wrong key used. This is the OWASP-catalogued class of broken authentication - see [[security/owasp/auth-failures]] - and it means any user can self-promote.",
+    },
+    {
+      symptom: "The same token works on some endpoints but 401s on others within the same API.",
+      fix: "Decode the claims and compare against what each endpoint needs. A valid, correctly-signed token can still be refused for INSUFFICIENT scope/role - and that refusal should be 403 (authenticated but not allowed), not 401 (not authenticated). A 401 for a scope failure is the same 401-vs-403 confusion covered in the API keys note; a genuinely-expired-on-some-clocks token is the subtler case (server clock skew), worth checking if the exp is very close to now.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **jwt.io or Postman's token decoder** — paste any JWT to see its header and payload instantly; the fastest way to read exp, sub, and role without touching a secret.
+- **The 401 response body's error code** — `invalid_token`, `token_expired`, `invalid_signature`; a well-behaved API distinguishes these, and the distinction tells a client whether to refresh, re-login, or panic.
+- **The login/token response** — where you first receive the token and can confirm its claims match the account you authenticated as; also where a refresh token (if any) is issued.
+- **[[security/owasp/auth-failures]]** — the tamper test and alg:none check feed directly into this broader identification-and-authentication-failures category.
+</WhereToCheck>
+
+<WorkedExample title="the token that lived in the URL">
+1. A tester notices a shared "magic link" feature emails users a URL like `https://app.example/dashboard?access_token=eyJhbGci...` - a bearer JWT sitting in the query string.
+2. First, decode it (no secret needed): it's a full-access token, `exp` two hours out, `role: member`. So this URL, for two hours, IS the user.
+3. Now the exposure inventory, the same one from the API keys note but sharper because a bearer token is the whole identity: the URL is in the recipient's email (and their provider's servers), their browser history, the server's access logs, any analytics that capture the full URL, and the Referer header sent to any third-party resource the dashboard page loads.
+4. Filed: "Full-access bearer token transmitted in URL query string (magic-link feature). A JWT in the URL leaks into browser history, server/proxy access logs, and outbound Referer headers, and remains valid for ~2 hours - anyone recovering the URL from any of those becomes the user. Recommend delivering the token in a POST body or exchanging the link for a session server-side, never carrying the bearer token in the URL."
+5. The tamper test was ALSO run and passed cleanly (edited tokens got 401) - so the signature was solid; the finding was purely about placement and lifetime, which are orthogonal to whether the crypto works.
+6. Lesson: a perfectly-implemented JWT is still only as safe as where it's allowed to travel - and "in the URL" is the one place a bearer token should never be.
+</WorkedExample>
+
+<Quiz
+  question="A tester decodes a JWT with jwt.io and sees the user's email, role, and internal account tier in plain, readable JSON - no password required to see any of it. What's the correct conclusion?"
+  options={[
+    "The token is broken - a JWT's payload should be encrypted, so readable claims mean the signing failed",
+    "This is normal: a JWT's payload is base64url-ENCODED, not encrypted, so any holder can read every claim - the finding (if any) is whether anything genuinely SENSITIVE was placed in those readable claims",
+    "jwt.io must have the server's secret key, which is how it decoded the payload",
+    "The claims are readable only because this particular token used a weak algorithm; strong-algorithm JWTs hide their payloads"
+  ]}
+  answer={1}
+  explain="This note's Python playground decodes the payload with zero knowledge of the signing secret - because a JWT's header and payload are base64url-ENCODED, a reversible transport encoding, not encrypted. So readable claims are the normal, expected behavior of every standard JWT, and the real question is whether anything SENSITIVE (a password, full card number, internal secret) was put into claims that any token-holder can trivially read - that would be the actual finding. Option one confuses encoding with encryption; option three is wrong because decoding needs no key at all (only VERIFYING the signature needs the secret); option four is wrong because the signing algorithm protects the signature's strength, not the payload's readability - no standard JWT algorithm encrypts the payload (that would be JWE, a different construct). The tamper defense - not the readability - is what the signature provides, which is why [[security/owasp/auth-failures]] pairs the readable-payload fact with the edit-a-claim test."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What 'Bearer' means", back: "Whoever holds the token is treated as authorized - no further proof asked. Possession IS authentication, so a leaked bearer token is the user until it expires." },
+    { front: "A JWT's three parts", back: "header.payload.signature, base64url-encoded and dot-joined. Header = alg/type; payload = claims (sub, role, iat, exp); signature = HMAC/asymmetric signature over the first two." },
+    { front: "Encoded vs encrypted vs signed", back: "The payload is ENCODED (anyone can read it), not encrypted. The SIGNATURE makes it tamper-evident (any edit invalidates it) - integrity, not secrecy. Reading needs no secret; forging does." },
+    { front: "The three core bearer/JWT tests", back: "Decode (is anything private in the claims? are you the role you expected?), Tamper (edit a claim, reattach old signature, expect 401), Expiry (send an expired token, expect 401 with a clear signal)." },
+    { front: "Why a JWT must never ride in a URL", back: "It's the whole identity, and URLs land in history, access logs, and Referer headers - a bearer token there is recoverable and valid until exp by anyone who finds it." },
+  ]}
+/>
+
+<Challenge>
+Get a real JWT (TaskFlight login, or jwt.io's sample). Produce three pieces of evidence: (1) its decoded header and payload with a one-line note on each claim and whether anything sensitive is present; (2) a tamper test - the exact edited token, the request, and the status (must be 401, and if it's 200 you've found a critical bug, so document it hard); (3) an expiry observation - either an expired token's 401 response, or a note on what the exp claim says and how long the token lives. Store the token in a variable throughout, and redact it to header + first 8 chars anywhere you write it down.
+</Challenge>
+
+<AskCommunity prompt="Testing a bearer/JWT endpoint I found: [describe - e.g. tampered tokens return 200 / sensitive data in the payload / token carried in a URL / no distinction between expired and invalid in the 401]. Here's the decoded payload with anything sensitive redacted: [paste]. How severe is this and how should I frame it?">
+The most useful replies will sort your finding into the right bucket: a tamper-accepted or alg:none finding is critical (broken authentication); sensitive data in readable claims is a real information-exposure finding; token-in-URL is an exposure finding; and a fuzzy expired-vs-invalid error is a modest usability/client-behavior issue. Each frames the risk to a different victim, and reviewers will help you name the right one.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://datatracker.ietf.org/doc/html/rfc6750", title: "RFC 6750 — The OAuth 2.0 Bearer Token Usage spec", kind: "read" },
+    { href: "https://jwt.io/introduction", title: "jwt.io — Introduction to JSON Web Tokens", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=0WH9oiYMS3M" title="JayPMedia — JWT (JSON Web Token) explained in 4 minutes with visuals" minutes={4} />
+
+<Takeaways
+  points={[
+    "Bearer means possession = authorization: whoever holds the token is the user, no further proof - so leakage is the highest-stakes failure, and a bearer token in a URL is the classic critical placement bug.",
+    "A JWT is three base64url parts (header.payload.signature); the payload is READABLE by anyone (encoded, not encrypted), so nothing private belongs in the claims.",
+    "The signature provides integrity, not secrecy - it makes tampering detectable. The tamper test (edit a claim, reattach the old signature, expect 401) is the one every API tester should run.",
+    "Expiry is just an exp claim compared to now - test expired tokens (expect 401 with a clear signal) and the boundaries around refresh flows.",
+    "Reading a JWT needs no secret and isn't 'hacking' - it's base64; forging a valid one is what requires the server's key, which is exactly why the signature defends the endpoint.",
+  ]}
+/>
+
+<Complete xp={10} />

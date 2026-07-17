@@ -1,0 +1,283 @@
+---
+title: "Basic auth"
+summary: "HTTP Basic auth sends username:password, base64-encoded, in the Authorization header of EVERY request - and base64 is reversible encoding, not encryption, so the scheme is only as safe as the HTTPS underneath it. Testable in one curl flag (-u) and one Postman tab."
+tags: ["api-testing-fundamentals", "auth-manually", "track-c"]
+updated: "2026-07-17"
+related:
+  - "api-testing-fundamentals/auth-manually/api-keys"
+  - "api-testing-fundamentals/auth-manually/bearer-and-jwt"
+  - "the-internet-and-the-web/domains-urls-and-hosting/https-and-the-padlock"
+  - "security/owasp/auth-failures"
+---
+
+<Hook>
+Basic auth is the oldest trick in HTTP's book: glue the username and password together with a colon, base64 the result, and send it in a header - on every. single. request. No sessions, no tokens, no state; the server checks the same credentials every time like it's never met you. That total simplicity makes it the easiest scheme to test manually (one curl flag builds the whole thing) and also hands you its two sharpest test angles for free: base64 is NOT encryption, and "every request" means the password travels a lot more often than anyone pictures.
+</Hook>
+
+<Callout type="analogy">
+The photo below is airport passport control - the automated gates and the staffed booths of the border police. Notice what the border does NOT do: remember you. Cross today, cross again tomorrow, cross five times in one day - you present the full passport every single time, and the officer (or the machine) runs the same complete check from scratch. Basic auth is that border: full credentials presented on every request, verified statelessly, nothing carried over from the last crossing. Convenient to reason about, exhausting for the credentials - they're out of your pocket constantly, which is exactly why the corridor itself (HTTPS) has to be secure.
+</Callout>
+
+<Term define="HTTP Basic authentication (RFC 7617) is a scheme where the client sends Authorization: Basic base64(username:password) on each request. The server decodes the value, splits on the FIRST colon (usernames must not contain colons; passwords may), and verifies the pair. An unauthenticated request receives 401 with a WWW-Authenticate: Basic challenge header naming the realm. Base64 here is a reversible transport encoding - anyone who sees the header recovers the password in one command - so Basic auth is only acceptable over HTTPS, where TLS encrypts the whole exchange. In curl it's the -u user:pass flag; in Postman it's the Authorization tab's Basic Auth type.">Basic auth</Term>
+
+## The mechanics, and where the tests hide
+
+- **The header is pure construction, no secrets involved** — `base64("user:pass")` is something you can build yourself in one line (the playground below does). That means you can also DECONSTRUCT any Basic header you see - a fact worth internalizing before you ever paste one into a ticket.
+- **Sent on every request, remembered by no one** — statelessness is the design. There's no logout to test, but there IS a "credentials in flight constantly" surface: every log, proxy, and capture of request headers is a place the (reversibly encoded) password now lives.
+- **The 401 challenge is part of the contract** — an unauthenticated request should come back `401` WITH a `WWW-Authenticate: Basic realm="..."` header. Browsers use that header to pop the native login dialog; API clients use it to know which scheme to speak. A 401 without the challenge is a small spec violation worth noting.
+- **The first colon is load-bearing** — `user:pa:ss:word` is legal (password contains colons); `us:er:password` is not (username can't). Server code that splits on ALL colons and grabs index 1 rejects legitimate passwords - a genuinely common bug with an easy test.
+- **curl and Postman both build it for you** — `curl -u user:pass` or Postman's Authorization tab → Basic Auth. Both are also the fastest way to send DELIBERATELY wrong credentials, which is where testing actually starts.
+
+<Callout type="tip">
+When a Basic-auth request misbehaves, decode the header you're actually sending before debugging anything else: copy the base64 blob after "Basic " and run it through a decoder (or Python's base64 module). Ten seconds of decoding catches the stray whitespace, the wrong account, or the shell-mangled special character that an hour of server-side theorizing won't.
+</Callout>
+
+<Callout type="mistake">
+Treating the base64 blob as safe to share because it "looks encrypted." A Basic Authorization header pasted into a bug ticket, a HAR file attached to an issue, or a screenshot of a request panel IS the password, one trivial decode away. Redact the header value like you'd redact the password itself - because it is the password itself.
+</Callout>
+
+{/* IMAGE: airport border control hall - automated biometric e-gates on the left under a "Contrôle frontière automatisé / Biometric border control" sign, staffed Police Aux Frontières booths behind */}
+<HotspotImage
+  src="/notes/api-testing-fundamentals/auth-manually/basic-auth.jpg"
+  alt="An airport border control hall with automated biometric gates under a bilingual sign and staffed border police booths behind the barriers"
+  credit="France, Marseille Provence Airport border control — Okki (derivative: Bonus bon), Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:France_Marseille_Provence_Airport_border_control.jpg"
+  pins={[
+    { x: 23, y: 26, label: "The automated gates — the same full check, every crossing", desc: "No gate remembers your last crossing; the complete document is verified from scratch each time. Basic auth is exactly this stateless: full credentials on every request, no session, nothing carried over." },
+    { x: 74, y: 17, label: "The staffed booths — the challenge when automation says no", desc: "Fail the gate and you're sent to the booth - an explicit, structured escalation. HTTP's version is the 401 + WWW-Authenticate: Basic challenge: not just 'no', but 'no, and here is the scheme and realm to authenticate against.'" },
+    { x: 17, y: 5, label: "The corridor itself — where the real protection lives", desc: "Passports get presented constantly here because the hall is controlled space. Basic auth's equivalent is HTTPS: the scheme sends a reversibly-encoded password on every request, so the encrypted channel is doing ALL the protecting. Basic over plain http is a passport waved around in the parking lot." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One Basic-auth exchange, end to end - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Client requests a protected endpoint with no credentials", desc: "GET /v1/me, no Authorization header. The server can't identify the caller." },
+    { label: "Server challenges: 401 + WWW-Authenticate: Basic realm='api'", desc: "The challenge names the scheme and realm. This header is what makes browsers pop their native login dialog - and its absence on a 401 is itself a small finding." },
+    { label: "Client builds the header: base64('qa-tester:S3cret!FAKE')", desc: "curl -u does this; so does Postman's Basic Auth tab. Note what DIDN'T happen: no handshake, no token issued, no session created." },
+    { label: "Same request again, now with Authorization: Basic cWEtdGVzdGVy...", desc: "The server decodes, splits on the FIRST colon, verifies the pair, returns 200. Statelessly - it will do all of this again next request." },
+    { label: "Every subsequent request repeats step 4 in full", desc: "The password is in flight on every call. Over HTTPS that's acceptable; over http it's cleartext-equivalent, and any log or proxy that captures headers now holds the password." },
+  ]}
+/>
+
+Build the header yourself once and the whole scheme demystifies - including exactly why "base64" and "secure" don't belong in the same sentence:
+
+<CodePlayground
+  language="python"
+  title="Run it - building (and trivially reversing) a Basic auth header (Python)"
+  code={`import base64
+
+# Building the exact header curl -u and Postman's Basic Auth tab produce:
+username = "qa-tester"
+password = "S3cret!FAKE"
+
+credentials = f"{username}:{password}"
+encoded = base64.b64encode(credentials.encode("utf-8")).decode("ascii")
+header = f"Authorization: Basic {encoded}"
+
+print("What the client builds:")
+print(f"  username:password -> {credentials}")
+print(f"  base64 of that    -> {encoded}")
+print(f"  header sent       -> {header}")
+print()
+
+# The critical demonstration: base64 is ENCODING, not encryption.
+# Anyone who sees the header gets the password back in one line:
+decoded = base64.b64decode(encoded).decode("utf-8")
+print("What anyone who intercepts the header can do:")
+print(f"  base64 -d         -> {decoded}")
+print()
+print("No key, no secret, no computation worth mentioning - base64 is a")
+print("reversible TRANSPORT encoding (it exists so binary-unfriendly headers")
+print("can carry arbitrary characters), not protection. This is why Basic")
+print("auth over plain http:// is equivalent to sending the password in")
+print("clear text, and why it's only acceptable over HTTPS - the TLS layer")
+print("is doing ALL of the protecting; the scheme itself does none.")
+
+# What the client builds:
+#   username:password -> qa-tester:S3cret!FAKE
+#   base64 of that    -> cWEtdGVzdGVyOlMzY3JldCFGQUtF
+#   header sent       -> Authorization: Basic cWEtdGVzdGVyOlMzY3JldCFGQUtF
+#
+# What anyone who intercepts the header can do:
+#   base64 -d         -> qa-tester:S3cret!FAKE
+#
+# No key, no secret, no computation worth mentioning - base64 is a
+# reversible TRANSPORT encoding (it exists so binary-unfriendly headers
+# can carry arbitrary characters), not protection. This is why Basic
+# auth over plain http:// is equivalent to sending the password in
+# clear text, and why it's only acceptable over HTTPS - the TLS layer
+# is doing ALL of the protecting; the scheme itself does none.`}
+/>
+
+And the server's half - including the first-colon rule that real implementations genuinely get wrong:
+
+<CodePlayground
+  language="java"
+  title="Run it - a server-side Basic auth check against six test cases (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static final Map<String, String> USERS = Map.of(
+        "qa-tester", "S3cret!FAKE",
+        "ci-bot", "with:colon:FAKE"   // password legally contains colons
+    );
+
+    static String check(String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Basic ")) {
+            return "401 + WWW-Authenticate: Basic realm=\\"api\\" (no/invalid scheme)";
+        }
+        String decoded;
+        try {
+            decoded = new String(Base64.getDecoder().decode(authHeader.substring(6)));
+        } catch (IllegalArgumentException e) {
+            return "401 (header value is not valid base64)";
+        }
+        // RFC 7617: split on the FIRST colon only - the username cannot
+        // contain a colon, but the password may contain as many as it likes.
+        int firstColon = decoded.indexOf(':');
+        if (firstColon < 0) {
+            return "401 (decoded value has no colon separator)";
+        }
+        String user = decoded.substring(0, firstColon);
+        String pass = decoded.substring(firstColon + 1);
+        if (pass.equals(USERS.get(user))) {
+            return "200 OK - authenticated as '" + user + "'";
+        }
+        return "401 (unknown user or wrong password)";
+    }
+
+    static String encode(String userColonPass) {
+        return "Basic " + Base64.getEncoder().encodeToString(userColonPass.getBytes());
+    }
+
+    public static void main(String[] args) {
+        String[][] cases = {
+            { "no header at all",            null },
+            { "correct credentials",         encode("qa-tester:S3cret!FAKE") },
+            { "wrong password",              encode("qa-tester:wrong") },
+            { "empty password",              encode("qa-tester:") },
+            { "password containing colons",  encode("ci-bot:with:colon:FAKE") },
+            { "raw creds, not base64",       "Basic qa-tester:S3cret!FAKE" },
+        };
+        for (String[] c : cases) {
+            System.out.printf("  %-28s -> %s%n", c[0], check(c[1]));
+        }
+        System.out.println();
+        System.out.println("The 'password containing colons' row is the classic server-side bug:");
+        System.out.println("code that does decoded.split(\\":\\") and takes parts[1] silently");
+        System.out.println("truncates 'with:colon:FAKE' to 'with' and rejects a correct login.");
+        System.out.println("RFC 7617 says: first colon separates, everything after it is password.");
+    }
+}
+
+/*   no header at all             -> 401 + WWW-Authenticate: Basic realm="api" (no/invalid scheme)
+     correct credentials          -> 200 OK - authenticated as 'qa-tester'
+     wrong password               -> 401 (unknown user or wrong password)
+     empty password               -> 401 (unknown user or wrong password)
+     password containing colons   -> 200 OK - authenticated as 'ci-bot'
+     raw creds, not base64        -> 401 (header value is not valid base64)
+
+   The 'password containing colons' row is the classic server-side bug:
+   code that does decoded.split(":") and takes parts[1] silently
+   truncates 'with:colon:FAKE' to 'with' and rejects a correct login.
+   RFC 7617 says: first colon separates, everything after it is password. */`}
+/>
+
+<FirstTime title="Your mission: drive one Basic-auth exchange by hand, both directions">
+<StepChecklist
+  steps={[
+    { text: "Send an unauthenticated request to a Basic-protected endpoint and read the challenge", detail: "curl -i https://postman-echo.com/basic-auth - confirm the 401 arrives and look for the WWW-Authenticate header naming the scheme and realm." },
+    { text: "Authenticate with curl's -u flag", detail: "curl -i -u postman:password https://postman-echo.com/basic-auth - Postman's echo API documents exactly these practice credentials. Confirm the 200 and the authenticated: true body." },
+    { text: "Prove what -u actually built", detail: "Re-run with -v and find the Authorization: Basic ... line in the outgoing headers. Copy the blob and decode it (python3 -c 'import base64; print(base64.b64decode(\"PASTE\"))') - it's your user:pass, verbatim." },
+    { text: "Now break it three ways", detail: "Wrong password, empty password (-u postman:), and the header sent with the base64 blob mangled (change one character). Each should be a 401 - record whether the response bodies differ." },
+    { text: "Build the same request in Postman's Authorization tab and compare", detail: "Type: Basic Auth, same credentials, Send - then use the Code button to confirm Postman generated exactly the header you built by hand with curl." },
+  ]}
+/>
+You've now seen the entire scheme naked: the challenge, the construction, the reversal, and the failure modes - nothing about Basic auth is hidden from you anymore.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "Credentials that definitely work in the browser fail with 401 through curl.",
+      fix: "Almost always the shell mangling a special character in the password before curl sees it - a $, !, or quote getting interpreted. Wrap the -u argument in single quotes ('user:p@$$w0rd'), or better, decode the header you actually sent (-v, then base64-decode the blob) and compare it character-for-character against the real password. The decode tells you instantly whether the problem is in your shell or on the server.",
+    },
+    {
+      symptom: "A 401 comes back but the client keeps retrying identical credentials instead of surfacing an error.",
+      fix: "Check whether the 401 includes the WWW-Authenticate challenge header. Some clients (and browser dialogs) key their behavior off it - a 401 without the challenge can leave clients guessing at the scheme, and a 401 with a DIFFERENT scheme named (e.g. Bearer) means you're speaking Basic to an endpoint that wants tokens; see the next note in this chapter.",
+    },
+    {
+      symptom: "A user with a long or special-character password can't authenticate, while simple passwords work fine.",
+      fix: "Two classic server-side suspects this note's playground demonstrates: splitting the decoded value on every colon instead of the first (breaks any password containing ':'), and charset mismatches (RFC 7617 leaves encoding negotiation murky - UTF-8 passwords through a Latin-1-assuming server corrupt silently). Test with a password containing a colon and one with non-ASCII characters; each failure is a separate, specific bug report.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **`curl -v` output, the outgoing headers** — the Authorization: Basic line as actually sent; the ground truth for what credentials left your machine.
+- **The 401 response's WWW-Authenticate header** — which scheme and realm the server expects; also the fastest way to discover an endpoint moved from Basic to Bearer.
+- **postman-echo.com/basic-auth** — a free practice endpoint with documented credentials, built for exactly this exercise.
+- **[[the-internet-and-the-web/domains-urls-and-hosting/https-and-the-padlock]]** — the layer doing all the actual protecting under Basic auth; if that padlock isn't there, Basic auth is cleartext with extra steps.
+</WhereToCheck>
+
+<WorkedExample title="the HAR file that shipped a password">
+1. A tester reproduces a flaky API failure and does the diligent thing: exports a HAR file of the session from DevTools and attaches it to the bug ticket so developers can see every request.
+2. The API in question uses Basic auth. A HAR file records complete request headers - including `Authorization: Basic cWEtdGVzdGVyOlMzY3JldCFGQUtF` on all forty-two captured requests.
+3. Anyone with ticket access now holds base64 of the tester's real username:password - one decode away, forty-two times over. The ticket system's search even indexes attachment text.
+4. Caught during triage by a developer who recognized the header. Response: treat the password as leaked - rotate it FIRST, then scrub the attachment (deleting the file doesn't unsee it: notifications, watchers, and backups already fired).
+5. New team habit written down: HAR files and raw header dumps get sanitized before attaching (DevTools' own export warns about this; several HAR-sanitizer tools exist), and Basic headers specifically are treated as the password itself, because they are.
+6. The deeper lesson: Basic auth's "credentials on every request" design means ANY complete capture of traffic - HAR, proxy log, verbose curl output in a CI log - is a credentials file. The capture habit was good; the redaction habit was the missing half.
+</WorkedExample>
+
+<Quiz
+  question="A security-conscious teammate sees Authorization: Basic cWEtdGVzdGVyOlMzY3JldCFGQUtF in a request log and says 'at least it's encrypted.' What's the accurate correction?"
+  options={[
+    "They're right - base64 is a form of encryption, just a weak one",
+    "It's not encrypted at all - base64 is a reversible transport encoding, and anyone with that string recovers the exact username and password in one command; only the HTTPS channel it traveled over (if it did) protected it",
+    "It's encrypted, but only the password half - the username is readable",
+    "It's hashed, so the original password can't be recovered, but the string can be replayed as-is"
+  ]}
+  answer={1}
+  explain="This note's Python playground performs the exact one-line reversal: base64.b64decode returns qa-tester:S3cret!FAKE with no key, no secret, and no meaningful computation - base64 exists so headers can safely carry arbitrary characters, not to protect anything. Option one misuses 'encryption', which requires a key and is precisely what base64 lacks. Option three invents a half-encryption that isn't how the scheme works - the ENTIRE user:pass string is encoded together and decodes together. Option four confuses encoding with hashing: a hash would be one-way (and also wouldn't be how Basic works - the server needs the real credentials to verify). The teammate's underlying instinct isn't worthless though: over HTTPS the wire WAS protected - by TLS, not by base64 - which is exactly the distinction [[the-internet-and-the-web/domains-urls-and-hosting/https-and-the-padlock]] covers."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Basic auth's header, constructed", back: "Authorization: Basic base64(username + ':' + password) - built fresh and sent on EVERY request; no session, no state, no logout." },
+    { front: "Base64's actual role in the scheme", back: "Reversible transport encoding (headers can't safely carry arbitrary bytes) - NOT encryption. Anyone seeing the header recovers the password in one decode." },
+    { front: "The correct unauthenticated response", back: "401 with a WWW-Authenticate: Basic realm=\"...\" challenge header - the challenge names the scheme/realm and drives browser login dialogs and client retries." },
+    { front: "The first-colon rule (RFC 7617)", back: "Split the decoded value on the FIRST colon only: usernames can't contain colons, passwords can. Server code splitting on every colon rejects legitimate passwords - an easy, high-yield test." },
+    { front: "Why Basic auth demands HTTPS", back: "The password travels (reversibly encoded) on every request - over plain http that's cleartext-equivalent, and every header-capturing log or proxy becomes a credentials store. TLS does all the protecting the scheme itself doesn't." },
+  ]}
+/>
+
+<Challenge>
+Using postman-echo.com/basic-auth (documented credentials: postman/password), produce a six-row evidence table matching this note's Java playground: no header, correct credentials, wrong password, empty password, credentials sent un-encoded, and one case of your own invention. For each: the exact curl command, the status code, and whether a WWW-Authenticate challenge appeared. Then decode your own successful request's Authorization header back to plaintext and write one sentence on where that header would be visible in your own team's tooling (logs? proxies? ticket attachments?).
+</Challenge>
+
+<AskCommunity prompt="Testing a Basic-auth endpoint: [describe behavior - e.g. 401 without a WWW-Authenticate challenge / colon-containing passwords rejected / credentials visible in our logging pipeline at N places]. Is this finding worth filing, and how severe would you rate it?">
+The most useful replies will distinguish spec-correctness findings (missing challenge header, first-colon violations - real but modest) from exposure findings (Basic over http, headers landing in logs or HAR attachments - potentially severe), and will ask where the header travels in YOUR infrastructure before rating anything.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://datatracker.ietf.org/doc/html/rfc7617", title: "RFC 7617 — The 'Basic' HTTP Authentication Scheme", kind: "read" },
+    { href: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Authentication", title: "MDN — HTTP authentication (schemes, challenges, WWW-Authenticate)", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=rhi1eIjSbvk" title="OktaDev — 'Basic Authentication' in Five Minutes" minutes={5} />
+
+<Takeaways
+  points={[
+    "Basic auth = base64(user:pass) in the Authorization header of every request - stateless, sessionless, and completely constructible (and reversible) by hand.",
+    "Base64 is encoding, not encryption: the header IS the password, so redact it everywhere you'd redact the password - tickets, HAR files, logs, screenshots.",
+    "The scheme is only acceptable over HTTPS - TLS does all the protecting; Basic over plain http is cleartext-equivalent.",
+    "Test the contract, not just the login: 401s should carry a WWW-Authenticate: Basic challenge, and the first-colon rule means colon-containing passwords must work.",
+    "curl -u and Postman's Basic Auth tab build the header for you - which also makes them the fastest tools for sending deliberately wrong credentials, where the real testing lives.",
+  ]}
+/>
+
+<Complete xp={10} />

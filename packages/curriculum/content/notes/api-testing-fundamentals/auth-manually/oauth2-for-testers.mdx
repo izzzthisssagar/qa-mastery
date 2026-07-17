@@ -1,0 +1,314 @@
+---
+title: "OAuth2, what a tester needs"
+summary: "OAuth2 is delegated authorization - a resource owner lets an app act on their behalf, scoped and revocable, without ever handing over their password. The tester's job isn't implementing the flow; it's confirming scopes, expiry, and revocation actually hold."
+tags: ["api-testing-fundamentals", "auth-manually", "track-c"]
+updated: "2026-07-17"
+related:
+  - "api-testing-fundamentals/auth-manually/bearer-and-jwt"
+  - "api-testing-fundamentals/auth-manually/api-keys"
+  - "security/owasp/auth-failures"
+---
+
+<Hook>
+Every scheme so far in this chapter answers "who is this?" with something the caller directly
+holds - a key, a password, a token they already had. OAuth2 answers a different question: "this app
+wants to act as ME, on THIS specific thing, for a while - do I allow it?" You never type your
+password into the third-party app at all. That single design choice is the entire point of OAuth2,
+and it's also exactly what a tester needs to verify actually holds under pressure.
+</Hook>
+
+<Callout type="analogy">
+A hotel valet parking sign. Read what it actually authorizes: "Hilton - VALET PARKING ONLY." You
+hand your car key to a valet you've never met, and that ONE key lets them do exactly one thing -
+park your car - for exactly as long as your stay. They never got your house key, your ID, or your
+wallet. If you never wanted valet service, you simply never hand over that key, and nothing about
+your car changes. That's OAuth2's whole shape: you (the resource owner) grant a specific, scoped,
+time-limited permission (park my car) to a third party (the valet) without handing over your actual
+identity (your house key, your password). And notice the sign is one of SEVERAL signs on that same
+pole - permit parking, taxi rules - each granting a different, narrow permission to a different
+audience. Real OAuth2 scopes work exactly like that: narrow, named, and stackable.
+</Callout>
+
+<Term define="OAuth2 is a DELEGATED AUTHORIZATION framework (not authentication itself - OpenID Connect layers identity on top of it) where a RESOURCE OWNER (the user) grants a CLIENT (a third-party app) limited access to their data on a RESOURCE SERVER (the API), via an AUTHORIZATION SERVER that issues the actual tokens - without the client ever seeing the resource owner's password. The most common flow a tester meets is the Authorization Code flow: the user is redirected to the authorization server, logs in there (not in the client app), approves specific SCOPES (e.g. read:profile, write:calendar), and is redirected back with a short-lived authorization CODE, which the client exchanges server-side for an ACCESS TOKEN (usually a bearer JWT, see the previous note) and often a longer-lived REFRESH TOKEN used to obtain new access tokens without re-prompting the user. A tester's job is rarely to implement this flow - it's to verify the resulting tokens are correctly scoped, correctly expire, and are actually revocable.">OAuth2</Term>
+
+## The vocabulary, mapped to the valet analogy - and what to test
+
+- **Resource owner (you) grants; client (the valet company) receives a SCOPED permission** — never
+  the master credential. Test: does a token issued for `read:profile` actually get rejected on a
+  `write:profile` call? A scope leak here is the equivalent of the valet getting a key to your house.
+- **The authorization server, not the client, collects the password** — the whole redirect dance
+  exists so the third-party app never sees your real credentials. Test: during the auth flow, is the
+  login page actually served by the real provider's domain, or does anything ask for credentials on
+  the CLIENT's own domain? The latter defeats OAuth2's entire purpose.
+- **The authorization code is single-use and short-lived, by design** — it exists only to be
+  exchanged once, immediately, for a token. Test: does replaying the same authorization code a
+  second time correctly fail?
+- **Access tokens expire; refresh tokens renew them without re-prompting the user** — this is the
+  practical reason OAuth2 exists at all for long-lived integrations. Test: does an expired access
+  token get a clean 401, and does the refresh flow actually issue a genuinely NEW access token (not
+  the same one, not a rubber-stamp)?
+- **Revocation is the sign coming down** — if the user revokes an app's access (or the app's own
+  credentials get compromised and the provider revokes them), every outstanding token tied to that
+  grant should stop working. Test: revoke, then immediately retry a call with the still-held access
+  token - it should fail, not keep working until it happens to expire naturally.
+
+<Callout type="tip">
+Never manually implement OAuth2's cryptography or redirect logic to "test" it - that's re-testing a
+library, not the integration. Instead, drive a REAL flow once (through a UI or Postman's built-in
+OAuth2 helper), then focus all your actual testing effort on the four things above: scopes,
+password-never-leaves-the-authorization-server, code single-use, and expiry/revocation. Those are
+where real integration bugs live.
+</Callout>
+
+<Callout type="mistake">
+Treating "the login screen looks right" as proof the flow is secure. A convincing-looking login page
+served from the CLIENT's own domain (instead of a redirect to the real authorization server) means
+the client app is capturing the raw password directly - the exact thing OAuth2 exists to prevent -
+regardless of how legitimate the page looks. Always check the actual URL/domain the credentials are
+typed into, not just the page's appearance.
+</Callout>
+
+{/* IMAGE: a street sign pole in a European city showing multiple stacked signs - a blue "Hilton, uitsluitend VALET PARKING only" sign at the top, a blue permit-parking "P vergunninghouders" sign with a "2x" plate and "Keurmerk Taxi" plate below it, and a green "Verboden te voeren" (no bird feeding) sign, mounted against a modern building facade with bicycles parked nearby */}
+<HotspotImage
+  src="/notes/api-testing-fundamentals/auth-manually/oauth2-for-testers.jpg"
+  alt="A street sign pole with several stacked signs - a Hilton valet parking only sign at top, a permit-parking sign with a taxi permit plate below it, and a no-bird-feeding sign, against a modern building facade"
+  credit="Street signage, Amsterdam — Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/Category:Street_signs_in_Amsterdam"
+  pins={[
+    { x: 47, y: 24, label: "The Hilton valet sign — one scope, one audience", desc: "'VALET PARKING ONLY' - a single, narrow, named permission (park this car) granted to a specific party (Hilton's valets). This is exactly what an OAuth2 scope like read:calendar is: named, narrow, and meaningless outside its stated purpose." },
+    { x: 47, y: 55, label: "The permit-parking sign, stacked below — a DIFFERENT scope, different audience", desc: "A separate sign granting a separate permission (permit-holder parking) to a separate audience, on the SAME pole. Real OAuth2 grants routinely stack several scopes for one client - each one independently testable, and none implying the others." },
+    { x: 47, y: 47, label: "The 'Keurmerk Taxi' plate — a permission that can be revoked or re-certified", desc: "A certification plate, not a permanent fixture - taxi permits get renewed, suspended, or pulled. This is the revocation test: when a grant is pulled, does everything issued under it actually stop working, or does some cached token keep it alive past its supposed end?" },
+  ]}
+/>
+
+<FlowAnimation
+  title="The Authorization Code flow, and where a tester checks each step - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "User clicks 'Connect' in the third-party app", desc: "The client redirects the browser to the AUTHORIZATION SERVER's login page - not its own. Test: confirm the URL bar shows the real provider's domain at this exact moment." },
+    { label: "User logs in and approves specific scopes", desc: "'This app wants to: read your profile, read your calendar.' The password is typed here, at the authorization server, never at the client. Test: are the requested scopes shown accurately, not vaguely bundled?" },
+    { label: "Authorization server redirects back with a short-lived CODE", desc: "The code is meaningless on its own - a single-use voucher. Test: try using the same code twice; the second attempt must fail." },
+    { label: "Client exchanges the code, server-side, for an access token (+ refresh token)", desc: "This exchange happens server-to-server, away from the browser. Test: decode the resulting access token (previous note's skills) and confirm its scopes match exactly what the user approved, no more." },
+    { label: "Later: access token expires, refresh token gets a new one; or the grant is revoked", desc: "Test both directions: does refresh actually mint a new, valid token? And does revoking the grant immediately invalidate every token issued under it, not just block future refreshes?" },
+  ]}
+/>
+
+A tiny model of the two properties worth testing hardest - scope containment and revocation
+propagation - with five requests against one grant:
+
+<CodePlayground
+  language="python"
+  title="Run it - checking scope containment and revocation on an OAuth2 grant (Python)"
+  code={`grants = {
+    "grant_772": {"user": "qa-tester", "scopes": ["read:profile", "read:calendar"], "revoked": False},
+}
+# access_token -> which grant issued it (tokens outlive nothing the grant doesn't allow)
+tokens = {
+    "tok_abc123": "grant_772",
+}
+
+def call(token, needed_scope):
+    grant_id = tokens.get(token)
+    if grant_id is None:
+        return "401 - unknown token"
+    grant = grants[grant_id]
+    if grant["revoked"]:
+        return "401 - token's grant has been revoked"
+    if needed_scope not in grant["scopes"]:
+        return f"403 - grant lacks scope '{needed_scope}'"
+    return f"200 - OK, acting for '{grant['user']}' with scope '{needed_scope}'"
+
+print("Before revocation:")
+print("  GET /profile  (needs read:profile) ->", call("tok_abc123", "read:profile"))
+print("  GET /calendar (needs read:calendar) ->", call("tok_abc123", "read:calendar"))
+print("  POST /calendar (needs write:calendar) ->", call("tok_abc123", "write:calendar"))
+print()
+
+# The user revokes the app's access from their account settings:
+grants["grant_772"]["revoked"] = True
+
+print("Immediately after revocation, SAME still-held access token:")
+print("  GET /profile  (needs read:profile) ->", call("tok_abc123", "read:profile"))
+print()
+print("The token itself never changed - only the grant's revoked flag did. A")
+print("correct implementation checks the grant on every call, so revocation")
+print("takes effect on the very next request, not whenever the token would")
+print("have expired naturally anyway.")
+
+# Before revocation:
+#   GET /profile  (needs read:profile) -> 200 - OK, acting for 'qa-tester' with scope 'read:profile'
+#   GET /calendar (needs read:calendar) -> 200 - OK, acting for 'qa-tester' with scope 'read:calendar'
+#   POST /calendar (needs write:calendar) -> 403 - grant lacks scope 'write:calendar'
+#
+# Immediately after revocation, SAME still-held access token:
+#   GET /profile  (needs read:profile) -> 401 - token's grant has been revoked
+#
+# The token itself never changed - only the grant's revoked flag did. A
+# correct implementation checks the grant on every call, so revocation
+# takes effect on the very next request, not whenever the token would
+# have expired naturally anyway.`}
+/>
+
+The same two checks in Java - scope containment first, then the revocation-must-be-immediate test:
+
+<CodePlayground
+  language="java"
+  title="Run it - checking scope containment and revocation on an OAuth2 grant (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    record Grant(String user, Set<String> scopes, boolean revoked) {}
+
+    static Map<String, Grant> grants = new HashMap<>();
+    static Map<String, String> tokens = new HashMap<>();
+
+    static String call(String token, String neededScope) {
+        String grantId = tokens.get(token);
+        if (grantId == null) return "401 - unknown token";
+        Grant grant = grants.get(grantId);
+        if (grant.revoked()) return "401 - token's grant has been revoked";
+        if (!grant.scopes().contains(neededScope)) return "403 - grant lacks scope '" + neededScope + "'";
+        return "200 - OK, acting for '" + grant.user() + "' with scope '" + neededScope + "'";
+    }
+
+    public static void main(String[] args) {
+        grants.put("grant_772", new Grant("qa-tester", Set.of("read:profile", "read:calendar"), false));
+        tokens.put("tok_abc123", "grant_772");
+
+        System.out.println("Before revocation:");
+        System.out.println("  GET /profile  (needs read:profile) -> " + call("tok_abc123", "read:profile"));
+        System.out.println("  GET /calendar (needs read:calendar) -> " + call("tok_abc123", "read:calendar"));
+        System.out.println("  POST /calendar (needs write:calendar) -> " + call("tok_abc123", "write:calendar"));
+        System.out.println();
+
+        // User revokes access - the grant's flag flips, the token itself is untouched:
+        grants.put("grant_772", new Grant("qa-tester", Set.of("read:profile", "read:calendar"), true));
+
+        System.out.println("Immediately after revocation, SAME still-held access token:");
+        System.out.println("  GET /profile  (needs read:profile) -> " + call("tok_abc123", "read:profile"));
+    }
+}
+
+// Before revocation:
+//   GET /profile  (needs read:profile) -> 200 - OK, acting for 'qa-tester' with scope 'read:profile'
+//   GET /calendar (needs read:calendar) -> 200 - OK, acting for 'qa-tester' with scope 'read:calendar'
+//   POST /calendar (needs write:calendar) -> 403 - grant lacks scope 'write:calendar'
+//
+// Immediately after revocation, SAME still-held access token:
+//   GET /profile  (needs read:profile) -> 401 - token's grant has been revoked`}
+/>
+
+<FirstTime title="Your mission: drive one real OAuth2 flow and test its edges">
+<StepChecklist
+  steps={[
+    { text: "Find an app you can legitimately connect via OAuth2 (Postman's own OAuth2 helper, or any 'Sign in with X' you're allowed to test)", detail: "Watch the redirect happen - note the domain the login page is actually served from." },
+    { text: "Approve the requested scopes and capture the resulting access token", detail: "Decode it (previous note's skill) and list every scope it actually carries." },
+    { text: "Try an API call requiring a scope you did NOT approve", detail: "Expect 403 - if you get 200, the app has more access than you granted, a serious finding." },
+    { text: "If the client exposes the raw authorization code (dev tools, a redirect URL), try reusing it a second time", detail: "Expect a failure on the second exchange - codes are meant for exactly one use." },
+    { text: "Revoke the app's access from the provider's account settings, then immediately retry a call with your still-held access token", detail: "Expect the call to fail right away, not keep working until the token's natural expiry." },
+  ]}
+/>
+You've verified the four properties that actually matter in an OAuth2 integration - scope
+containment, code single-use, and immediate revocation - without touching a line of the underlying
+cryptography, which was never the tester's job to re-verify.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A token issued for read-only scopes successfully performs a write operation.",
+      fix: "This is a critical scope-containment bug, the OAuth2 equivalent of the valet getting a key to your house. Confirm by decoding the token's actual scope claims and comparing against what the write endpoint should require - report it as broken authorization, not a minor inconsistency.",
+    },
+    {
+      symptom: "Revoking an app's access in account settings doesn't stop that app's existing access token from working for several more minutes (or longer).",
+      fix: "This is a real finding worth reporting, though check first whether it's a documented, bounded caching window (some systems intentionally cache grant checks briefly for performance) versus an unbounded gap. A revoked grant that's honored 'eventually, within a documented short window' is a design tradeoff; one that takes an hour or more, or never actually rechecks, is a security bug.",
+    },
+    {
+      symptom: "The 'Sign in with X' login form appears to be rendered inside the third-party app itself, not as a redirect to the real provider.",
+      fix: "Check the actual URL/domain the credentials are being typed into. If it's the client's own domain rather than the authorization server's, the client is capturing raw passwords directly - defeating OAuth2's entire purpose regardless of how convincing the UI looks. This is a critical finding, not a UX nitpick.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The browser's address bar during the login step** — the single fastest way to confirm credentials are being typed into the real authorization server's domain, not the client's.
+- **The decoded access token's scope claims** — compare against exactly what was approved on the consent screen; see [[api-testing-fundamentals/auth-manually/bearer-and-jwt]] for how to decode it.
+- **The provider's connected-apps / account settings page** — where a grant is revoked from the user's side; the natural place to trigger the revocation test.
+- **[[security/owasp/auth-failures]]** — scope escalation and broken revocation are both catalogued authentication/authorization failure classes this note's tests feed directly into.
+</WhereToCheck>
+
+<WorkedExample title="a scope-escalation bug found by decoding, not by reading docs">
+1. A calendar-sync app requests (per its own consent screen) `read:calendar` only - it advertises
+   itself as "view-only, never modifies your calendar."
+2. A tester connects it, approves the single requested scope, and - out of habit, per this note's
+   checklist - decodes the resulting access token instead of trusting the consent screen's wording.
+3. The decoded token's `scope` claim reads `read:calendar write:calendar` - both, despite the consent
+   screen showing only one.
+4. Testing directly: a `POST` to a calendar-write endpoint using this token succeeds. The app
+   genuinely has write access it never disclosed or was granted through the UI the user actually saw.
+5. Root cause, once escalated: the authorization server's default scope set for this client's
+   registration included `write:calendar`, and the consent screen's displayed text hadn't been kept
+   in sync with the client's actual registered scopes.
+6. Finding: "OAuth2 client 'CalendarSync' holds write:calendar despite requesting and displaying only
+   read:calendar on consent - token decode confirms both scopes are present and write access
+   succeeds. Users are granting more access than the consent screen discloses." Found entirely by
+   decoding the actual token instead of trusting what the UI claimed was being granted.
+</WorkedExample>
+
+<Quiz
+  question="A user revokes a third-party app's OAuth2 access from their account settings. The app's already-issued access token, when used two seconds later, still returns 200 OK on a protected endpoint. Is this necessarily a bug?"
+  options={[
+    "No, never - OAuth2 access tokens are designed to keep working regardless of revocation until they naturally expire",
+    "Yes, always, with no exceptions - any delay whatsoever between revocation and enforcement is unacceptable in every system",
+    "It depends: if the system documents a short, bounded grant-check caching window (a deliberate performance tradeoff) and two seconds falls within it, this may be expected; if there's no such documented window, or the delay is long/unbounded, it's a real revocation-enforcement bug worth reporting",
+    "No, because access tokens can't be revoked at all - only refresh tokens can be revoked"
+  ]}
+  answer={2}
+  explain="This note is explicit that revocation should take effect immediately in a correct implementation, but also flags that some systems intentionally cache grant checks briefly for performance, as a bounded, documented tradeoff. The right test response is to check WHICH situation you're in - a short, disclosed caching window is a design decision, not automatically a defect, while an undocumented or lengthy gap is a genuine security bug. Option one wrongly treats indefinite delay as always fine. Option two is too absolute - it ignores that legitimate, bounded, documented tradeoffs exist in real systems. Option four is simply factually wrong: access tokens tied to a grant are exactly what revocation is supposed to invalidate, per this note's own Python/Java playground demonstrating the grant-check-on-every-call pattern."
+/>
+
+<Flashcards
+  cards={[
+    { front: "OAuth2, in one line", back: "Delegated, scoped, revocable authorization - a resource owner lets a client act on their behalf without ever handing over their actual password." },
+    { front: "Why the login happens on the authorization server's domain, not the client's", back: "So the client app never sees the real password - if credentials are typed into the client's own domain instead, OAuth2's core protection is defeated regardless of appearance." },
+    { front: "The authorization code's key property", back: "Single-use and short-lived - it exists only to be exchanged once for a token. Replaying it a second time should fail." },
+    { front: "The four things worth testing in an OAuth2 integration", back: "Scope containment (does a token only do what its scopes allow?), password never leaves the authorization server, code single-use, and immediate revocation propagation." },
+    { front: "Why decoding the actual token beats trusting the consent screen", back: "A consent screen can drift from what's actually registered/issued - the decoded token's real scope claims are the ground truth, as this note's worked example demonstrates." },
+  ]}
+/>
+
+<Challenge>
+Connect any app via a real OAuth2 flow you're allowed to test (Postman's OAuth2 helper works well
+for this). Decode the resulting access token and write down every scope it actually carries versus
+what the consent screen displayed. Then attempt one API call using a scope you did NOT approve, and
+one call after deliberately revoking the app's access from your account settings - record both
+results and whether they match the expected 403/401.
+</Challenge>
+
+<AskCommunity prompt="Testing an OAuth2 integration: [describe - e.g. token carries a scope never shown on the consent screen / revoked grant's token still works after N seconds/minutes / login form doesn't redirect to the real provider domain]. Here's what I found: [details, with any tokens redacted]. How should I frame the severity of this?">
+Useful replies typically separate a genuine scope-escalation or non-redirecting-login finding
+(critical, broken authorization) from a bounded, documented revocation-caching delay (a design
+tradeoff worth confirming is intentional, not automatically a bug) - the framing depends heavily on
+whether a behavior is disclosed and bounded or not.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://datatracker.ietf.org/doc/html/rfc6749", title: "RFC 6749 — The OAuth 2.0 Authorization Framework", kind: "read" },
+    { href: "https://developer.okta.com/blog/2019/10/21/illustrated-guide-to-oauth-and-oidc", title: "Okta — An Illustrated Guide to OAuth and OpenID Connect", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=-ZwrHi03MtU" title="Code with tkssharma — OAuth 2.0 Explained in 10 Minutes — What, Why, and How" minutes={10} />
+
+<Takeaways
+  points={[
+    "OAuth2 is delegated authorization, not authentication itself: a resource owner grants a client scoped, revocable access without ever sharing their actual password.",
+    "The login step must happen on the real authorization server's domain - a convincing-looking login form on the client's own domain defeats the entire scheme.",
+    "Authorization codes are single-use and short-lived; replaying one should fail on the second attempt.",
+    "The four properties actually worth testing: scope containment, password-never-leaves-the-authorization-server, code single-use, and immediate revocation propagation.",
+    "Always decode the actual issued token's scopes rather than trusting a consent screen's wording - the two can drift, and the token is the ground truth.",
+  ]}
+/>
+
+<Complete xp={10} />

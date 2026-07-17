@@ -1211,10 +1211,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "auth-manually",
         title: "Auth, manually",
         topics: [
-          { slug: "api-keys", title: "API keys", planned: true },
-          { slug: "basic-auth", title: "Basic auth", planned: true },
-          { slug: "bearer-and-jwt", title: "Bearer / JWT", planned: true },
-          { slug: "oauth2-for-testers", title: "OAuth2, what a tester needs", planned: true },
+          { slug: "api-keys", title: "API keys" },
+          { slug: "basic-auth", title: "Basic auth" },
+          { slug: "bearer-and-jwt", title: "Bearer / JWT" },
+          { slug: "oauth2-for-testers", title: "OAuth2, what a tester needs" },
         ],
       },
       {
