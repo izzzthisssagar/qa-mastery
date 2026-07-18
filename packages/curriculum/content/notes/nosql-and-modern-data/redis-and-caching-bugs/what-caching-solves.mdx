@@ -1,0 +1,200 @@
+---
+title: "What caching solves"
+summary: "Understand cache-aside behavior, distinguish fast copies from the source of truth, and test hits, misses, fills, fallbacks, latency, and correctness."
+tags: ["redis", "caching", "cache-aside", "performance", "track-d"]
+updated: "2026-07-18"
+related:
+  - "nosql-and-modern-data/redis-and-caching-bugs/ttls-and-eviction"
+  - "nosql-and-modern-data/redis-and-caching-bugs/stale-data-bugs-and-cache-invalidation"
+  - "nosql-and-modern-data/redis-and-caching-bugs/testing-around-a-cache"
+  - "nosql-and-modern-data/mongodb-hands-on/documents-and-collections"
+---
+
+<Hook>
+Your product page drops from 420 ms to 18 ms after Redis goes live. Everyone celebrates. Then a price
+changes in the database, the page keeps showing the old number, and the fast response becomes a fast
+lie. A cache solves repeated-read cost; it does not solve truth.
+</Hook>
+
+<Callout type="analogy">
+A pantry keeps ingredients close to the kitchen. It saves a trip to the shop, but it is a small,
+temporary copy of wider stock. Empty jars, wrong labels, and stale contents are pantry problems—not
+proof that the shop changed.
+</Callout>
+
+<Term define="A cache is a faster storage layer that keeps reusable copies of data or computed results so repeated requests avoid slower work. The authoritative source remains the system of record unless the architecture explicitly says otherwise.">cache</Term>
+
+## Fast path, slow path, same answer
+
+In cache-aside, the application asks the cache first. A **hit** returns a stored value. A **miss**
+causes the application to read the source, return the result, and usually fill the cache for later
+requests. Redis is useful here because in-memory access is fast and its data structures are simple to
+address by key.
+
+That design creates two paths that must agree:
+
+- cold path: cache miss, source read, cache fill, response;
+- warm path: cache hit, no source read, response;
+- degraded path: cache unavailable, source still returns correct data;
+- double failure: cache misses or fails while the source is also unavailable;
+- refresh path: authoritative data changes and cached copies must stop winning.
+
+<Callout type="tip">
+Assert both value and work. A warm-read test that checks only the response can pass even when the app
+quietly calls the database every time and the cache provides zero benefit.
+</Callout>
+
+<Callout type="mistake">
+Using Redis as a magic speed switch. Cache keys, fill rules, invalidation, fallback, observability, and
+data ownership are application contracts. Redis cannot infer them from your product requirements.
+</Callout>
+
+<HotspotImage src="/notes/nosql-and-modern-data/redis-and-caching-bugs/what-caching-solves.jpg" alt="Labelled and unlabelled glass jars arranged on wooden pantry shelves" credit="Kitchen pantry containers — Shixart1985, CC BY 2.0" creditHref="https://commons.wikimedia.org/wiki/File:Container_storage_at_a_kitchen_pantry_with_different_types_of_food_items_in_jars_and_bottles_at_home.jpg" pins={[
+  { x: 13, y: 52, label: "Nearby copy", desc: "The labelled coconut-flour jar is quick to reach, like a cached value addressed by a known key." },
+  { x: 33, y: 52, label: "Key and meaning", desc: "A label connects a name to contents. Cache-key design must encode the entity, version, tenant, locale, or other dimensions that change the answer." },
+  { x: 65, y: 47, label: "Empty cache", desc: "An empty jar is a miss. The application must fetch from its source, then decide whether and how long to refill." },
+  { x: 89, y: 35, label: "Source stock", desc: "More supplies sit behind the front row. The cache is a convenient subset, not the complete system of record." },
+]}/>
+
+<FlowAnimation title="Cache-aside read" intervalMs={1700} nodes={[
+  { label: "Request arrives", desc: "The application derives a stable cache key from the requested data and context." },
+  { label: "Read cache", desc: "A present, valid value is a hit; an absent value is a miss." },
+  { label: "Hit: return copy", desc: "The fast path returns without repeating the slower source lookup." },
+  { label: "Miss: read source", desc: "The system of record provides the authoritative value or an explicit error." },
+  { label: "Fill cache", desc: "The application stores a reusable copy with the intended expiry and serialization." },
+  { label: "Observe both paths", desc: "Metrics distinguish hits, misses, source calls, errors, and latency." },
+]}/>
+
+<CodePlayground language="python" title="Run it — prove cache-aside work (Python)" code={```source = {"product:42": "keyboard:80"}
+cache = {}
+hits = misses = source_reads = 0
+
+def read_product(key):
+    global hits, misses, source_reads
+    if key in cache:
+        hits += 1
+        print("HIT", key)
+        return cache[key]
+    misses += 1
+    print("MISS", key)
+    source_reads += 1
+    value = source[key]
+    cache[key] = value
+    return value
+
+first = read_product("product:42")
+second = read_product("product:42")
+print("values", first, second)
+print("source_reads", source_reads, "hits", hits, "misses", misses)
+
+assert first == second == "keyboard:80"
+assert source_reads == 1
+assert hits == 1 and misses == 1```}/>
+
+<CodePlayground language="java" title="Run it — prove cache-aside work (Java)" code={```import java.util.*;
+
+public class Main {
+    static final Map<String, String> source = Map.of("product:42", "keyboard:80");
+    static final Map<String, String> cache = new HashMap<>();
+    static int hits, misses, sourceReads;
+
+    static String readProduct(String key) {
+        if (cache.containsKey(key)) {
+            hits++;
+            System.out.println("HIT " + key);
+            return cache.get(key);
+        }
+        misses++;
+        System.out.println("MISS " + key);
+        sourceReads++;
+        String value = source.get(key);
+        cache.put(key, value);
+        return value;
+    }
+
+    public static void main(String[] args) {
+        String first = readProduct("product:42");
+        String second = readProduct("product:42");
+        System.out.println("values " + first + " " + second);
+        System.out.println("source_reads " + sourceReads + " hits " + hits + " misses " + misses);
+
+        if (!first.equals(second) || !first.equals("keyboard:80")) throw new AssertionError();
+        if (sourceReads != 1 || hits != 1 || misses != 1) throw new AssertionError();
+    }
+}```}/>
+
+<FirstTime title="Your mission: prove a cache earns its keep">
+<StepChecklist steps={[
+  { text: "Name the source of truth", detail: "Write down which database, API, or computation owns the authoritative answer." },
+  { text: "Exercise a cold read", detail: "Clear the key, call the feature, and assert one source read plus a correct response." },
+  { text: "Exercise a warm read", detail: "Call again and assert the same response without another source read." },
+  { text: "Block the cache", detail: "Verify the documented fallback or explicit failure instead of assuming Redis is always reachable." },
+]}/>
+You now have the value, saved-work, and fallback evidence.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "Warm responses are correct but still slow.", fix: "Measure source-call count and cache hit metrics; the key may drift or the fill may fail." },
+  { symptom: "One user sees another user's data.", fix: "Audit key dimensions such as tenant, user, locale, permissions, and API version." },
+  { symptom: "A cache outage takes down an otherwise healthy database.", fix: "Verify timeout, fallback, circuit-breaker, and connection-pool behavior under cache failure." },
+  { symptom: "The app returns an empty object after a miss.", fix: "Distinguish absent cached value from a cached empty result and from a source error." },
+]}/>
+
+<WhereToCheck>
+- **Application trace** — cache lookup, source read, fill, serialization, and returned response.
+- **Redis INFO stats** — keyspace hits, misses, evictions, and expirations.
+- **Database query metrics** — warm traffic should reduce the intended repeated query.
+- **Key schema** — confirm tenant, locale, version, and authorization dimensions.
+- **Timeout configuration** — cache fallback must not wait longer than the source it protects.
+</WhereToCheck>
+
+<WorkedExample title="a product page that became fast but cross-tenant">
+1. The app caches product 42 under the key product:42.
+2. Tenant A and Tenant B both have a product 42 with different prices.
+3. Tenant A fills the shared key; Tenant B receives A's cached response.
+4. Happy-path tests use one tenant and report excellent latency.
+5. A two-tenant test exposes the collision; the key includes tenant and product IDs, then both paths are retested.
+</WorkedExample>
+
+<Quiz question="What should a cache-aside warm-read test prove?" options={[
+  "Only that the response is faster than one second",
+  "That Redis contains at least one key",
+  "That the response stays correct and the intended slower source work is avoided",
+  "That cached data becomes the permanent source of truth"
+]} answer={2} explain="The warm path must preserve correctness and avoid the repeated work the cache was introduced to remove. Speed alone can hide wrong data or unnecessary source calls." />
+
+<Flashcards cards={[
+  { front: "Cache hit", back: "The requested valid value is found in the cache and can use the fast path." },
+  { front: "Cache miss", back: "The value is absent, so the application follows its source or failure path." },
+  { front: "Cache fill", back: "A value read or computed elsewhere is stored for later reuse." },
+  { front: "Source of truth", back: "The authoritative system whose state wins when copies disagree." },
+  { front: "Cache-aside", back: "The application reads the cache first, loads misses from the source, then fills the cache." },
+]}/>
+
+<Challenge>
+Design a five-case test table for one cached endpoint: cold read, warm read, wrong-tenant key, cache
+timeout, and source failure after a miss. Record expected value, source calls, cache calls, and metric
+changes for each.
+</Challenge>
+
+<AskCommunity prompt="Feature [name] caches [data] under key shape [shape]. Source of truth is [system]. Cold path does [calls]; warm path does [calls]; cache outage behavior is [fallback/error]. Which correctness dimension could still be missing?">
+Include sanitized key structure and counts, never production values or credentials.
+</AskCommunity>
+
+<Resources links={[
+  { href: "https://redis.io/docs/latest/develop/reference/client-side-caching/", title: "Redis docs — Client-side caching reference", kind: "read" },
+  { href: "https://redis.io/docs/latest/develop/reference/eviction/", title: "Redis docs — Key eviction and cache metrics", kind: "read" },
+  { href: "https://redis.io/docs/latest/commands/info/", title: "Redis command docs — INFO", kind: "reference" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=AJhTduDOVCs" title="Redis and MongoDB: Cache-Aside Pattern — Redis" minutes={6} />
+
+<Takeaways points={[
+  "A cache is a faster copy; identify the source of truth explicitly.",
+  "Cache-aside creates cold, warm, degraded, and double-failure paths.",
+  "Assert source-call counts and metrics, not response values alone.",
+  "Cache keys are data-isolation contracts.",
+  "A fast wrong answer is still a production defect.",
+]}/>
+
+<Complete xp={10} />

@@ -1,0 +1,254 @@
+---
+title: "Backups and recovery checks"
+summary: "Prove that a backup can be decrypted, restored, reconciled, and returned to service inside explicit recovery point and recovery time limits."
+tags: ["backups", "disaster-recovery", "restore-testing", "rpo", "rto", "track-d"]
+updated: "2026-07-18"
+related:
+  - "nosql-and-modern-data/distributed-data-gently/testing-data-pipelines"
+  - "nosql-and-modern-data/redis-and-caching-bugs/testing-around-a-cache"
+---
+
+<Hook>
+The dashboard says last night's backup completed. During an outage, the archive downloads, the
+checksum fails, and the only engineer with access to the encryption key is asleep. A completed job is
+evidence that bytes were copied. It is not evidence that the business can recover.
+</Hook>
+
+<Callout type="analogy">
+An emergency kit helps only if it is present, opens, contains the required supplies, and reaches the
+incident in time. A sealed bag with a broken zip or expired contents can pass an inventory count and
+still fail the person who needs it. Restore drills open the data kit before the emergency.
+</Callout>
+
+<Term define="A restore drill recovers a chosen backup into an isolated environment and verifies technical integrity, access, timing, and business data before the backup is trusted for an incident.">restore drill</Term>
+
+## Backup success is the start of the test
+
+A useful backup record is a manifest: creation timestamp, source and scope, checksum, encryption-key
+identifier, software version, and every dependent archive or log segment. Testers use that manifest to
+answer separate questions:
+
+- **Existence:** is the expected archive present in independent storage?
+- **Integrity:** do checksums and archive structure match the manifest?
+- **Access:** can the recovery role read, decrypt, create infrastructure, and start the database?
+- **Completeness:** are required tables, records, indexes, configuration, and log segments available?
+- **Recoverability:** can the system restore to an isolated target and pass application-level checks?
+- **Objectives:** is the recovered point recent enough, and does usable service return quickly enough?
+
+The recovery point objective, or RPO, is the maximum acceptable data-loss window. If failure occurs at
+10:00 and the selected recoverable point is 09:40, the achieved recovery point is 20 minutes old. The
+recovery time objective, or RTO, is the maximum acceptable time from disruption until the required
+service is usable. Measure it through restore, startup, validation, and handoff—not merely file copy.
+
+Point-in-time recovery combines a base backup with a continuous change archive so recovery can stop at
+a chosen safe instant. It adds dependencies: missing, corrupt, or misordered log segments can make a
+promising base backup unusable. Preserve the encryption keys, permissions, configuration, and recovery
+runbook on a failure path independent from the primary system.
+
+<Callout type="tip">
+Restore into a network-isolated target with production writes disabled. Record the chosen recovery
+point, every manifest check, elapsed time, and business query results, then destroy only the drill target.
+</Callout>
+
+<Callout type="mistake">
+Calling a restore successful when the database process starts. A technically consistent database can
+still have the wrong tenant count, missing orders, broken permissions, unusable indexes, or an
+application schema the current release cannot read.
+</Callout>
+
+<HotspotImage src="/notes/nosql-and-modern-data/distributed-data-gently/backups-and-recovery-checks.jpg" alt="Emergency responder wearing a large red response pack beside a white vehicle" credit="First Aid Kit for Immediate Emergency Response — ABORISADEADETONA, CC0 1.0" creditHref="https://commons.wikimedia.org/wiki/File:First_Aid_Kit_for_Immediate_Emergency_Response_backed_by_a_first_responder.jpg" pins={[
+  { x: 50, y: 45, label: "Recovery kit", desc: "The red pack is present, but a rehearsal must still prove that it opens and contains every required item." },
+  { x: 57, y: 34, label: "Visible integrity signal", desc: "Reflective bands make the pack easy to identify; backup manifests and checksums make the intended archive verifiable." },
+  { x: 75, y: 48, label: "Authorized operator", desc: "The responder represents the recovery role that needs working permissions, encryption keys, and a practiced runbook." },
+  { x: 18, y: 52, label: "Independent transport", desc: "The vehicle represents the separate infrastructure and access path needed when the primary environment is unavailable." },
+]}/>
+
+<FlowAnimation title="A recovery drill proves usable service" intervalMs={1700} nodes={[
+  { label: "Choose recovery point", desc: "Select a backup and required change-log range that meet the business RPO." },
+  { label: "Validate manifest", desc: "Check archive presence, checksum, dependencies, key access, and software compatibility." },
+  { label: "Restore in isolation", desc: "Recover into a protected target without exposing production clients or writes." },
+  { label: "Start and inspect", desc: "Verify ownership, permissions, indexes, logs, and database consistency." },
+  { label: "Check business truth", desc: "Reconcile required records, totals, tenant boundaries, and critical application journeys." },
+  { label: "Measure objectives", desc: "Compare achieved data age and end-to-end recovery time with explicit RPO and RTO limits." },
+]}/>
+
+<CodePlayground language="python" title="Run it — reject corruption and prove recovery objectives (Python)" code={```from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class Backup:
+    name: str
+    timestamp_minutes: int
+    checksum: str
+    archive_checksum: str
+    records: frozenset[str]
+    restore_seconds: int
+
+required = frozenset({"orders:1001", "payments:1001"})
+backups = [
+    Backup("backup-0950", 590, "sha256:good", "sha256:corrupt",
+           required, 300),
+    Backup("backup-0940", 580, "sha256:valid", "sha256:valid",
+           required | {"customers:42"}, 420),
+]
+
+selected = None
+for backup in backups:
+    checksum_ok = backup.checksum == backup.archive_checksum
+    records_ok = required.issubset(backup.records)
+    if not checksum_ok:
+        print("REJECT", backup.name, "checksum_mismatch")
+        continue
+    if not records_ok:
+        print("REJECT", backup.name, "required_records_missing")
+        continue
+    selected = backup
+    break
+
+assert selected is not None
+incident_minutes = 600
+rpo_limit_minutes = 30
+rto_limit_seconds = 600
+recovery_point_minutes = incident_minutes - selected.timestamp_minutes
+recovery_time_seconds = selected.restore_seconds
+rpo_ok = recovery_point_minutes <= rpo_limit_minutes
+rto_ok = recovery_time_seconds <= rto_limit_seconds
+
+assert selected.name == "backup-0940"
+assert required.issubset(selected.records)
+assert rpo_ok
+assert rto_ok
+
+print("SELECT", selected.name, "restore_valid")
+print("PASS" if rpo_ok else "FAIL", "RPO", recovery_point_minutes,
+      "<=", rpo_limit_minutes, "minutes")
+print("PASS" if rto_ok else "FAIL", "RTO", recovery_time_seconds,
+      "<=", rto_limit_seconds, "seconds")```}/>
+
+<CodePlayground language="java" title="Run it — reject corruption and prove recovery objectives (Java)" code={```import java.util.*;
+
+public class Main {
+    record Backup(String name, int timestampMinutes, String checksum,
+                  String archiveChecksum, Set<String> records, int restoreSeconds) {}
+
+    public static void main(String[] args) {
+        Set<String> required = Set.of("orders:1001", "payments:1001");
+        List<Backup> backups = List.of(
+            new Backup("backup-0950", 590, "sha256:good", "sha256:corrupt",
+                required, 300),
+            new Backup("backup-0940", 580, "sha256:valid", "sha256:valid",
+                Set.of("orders:1001", "payments:1001", "customers:42"), 420)
+        );
+
+        Backup selected = null;
+        for (Backup backup : backups) {
+            boolean checksumOk = backup.checksum().equals(backup.archiveChecksum());
+            boolean recordsOk = backup.records().containsAll(required);
+            if (!checksumOk) {
+                System.out.println("REJECT " + backup.name() + " checksum_mismatch");
+                continue;
+            }
+            if (!recordsOk) {
+                System.out.println("REJECT " + backup.name() + " required_records_missing");
+                continue;
+            }
+            selected = backup;
+            break;
+        }
+
+        if (selected == null) throw new AssertionError("no valid backup");
+        int incidentMinutes = 600;
+        int rpoLimitMinutes = 30;
+        int rtoLimitSeconds = 600;
+        int recoveryPointMinutes = incidentMinutes - selected.timestampMinutes();
+        int recoveryTimeSeconds = selected.restoreSeconds();
+        boolean rpoOk = recoveryPointMinutes <= rpoLimitMinutes;
+        boolean rtoOk = recoveryTimeSeconds <= rtoLimitSeconds;
+
+        if (!selected.name().equals("backup-0940")) throw new AssertionError();
+        if (!selected.records().containsAll(required)) throw new AssertionError();
+        if (!rpoOk) throw new AssertionError();
+        if (!rtoOk) throw new AssertionError();
+
+        System.out.println("SELECT " + selected.name() + " restore_valid");
+        System.out.println((rpoOk ? "PASS" : "FAIL") + " RPO " + recoveryPointMinutes
+            + " <= " + rpoLimitMinutes + " minutes");
+        System.out.println((rtoOk ? "PASS" : "FAIL") + " RTO " + recoveryTimeSeconds
+            + " <= " + rtoLimitSeconds + " seconds");
+    }
+}```}/>
+
+<FirstTime title="Your mission: prove one backup can become usable service">
+<StepChecklist steps={[
+  { text: "Choose a business recovery point", detail: "Name the failure time, maximum data-loss window, required datasets, and safe point before a destructive event." },
+  { text: "Validate every dependency", detail: "Check archive and log checksums, keys, roles, configuration, versions, and storage access." },
+  { text: "Restore into isolation", detail: "Use an empty target, block production traffic, record timings, and preserve the source evidence." },
+  { text: "Reconcile business truth", detail: "Count required records, compare totals, test permissions, and run one critical application journey." },
+]}/>
+You now have recovery evidence, not a green backup icon.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "The newest backup exists but restore validation rejects it.", fix: "Quarantine it, record the checksum or dependency failure, and select the newest older recovery point that passes every manifest check." },
+  { symptom: "The archive is intact but cannot be decrypted.", fix: "Test key retention, recovery-role permission, regional availability, rotation history, and an access path independent from the failed system." },
+  { symptom: "Recovery starts but point-in-time replay stops early.", fix: "Inventory the base backup, timeline, and complete ordered log range; alert on archive gaps before a drill." },
+  { symptom: "The database starts inside RTO but checkout still fails.", fix: "Measure RTO until the agreed business service is usable, including indexes, dependencies, validation, routing, and authorization." },
+]}/>
+
+<WhereToCheck>
+- **Backup manifest** — timestamp, scope, checksum, encryption-key identifier, dependencies, and retention.
+- **Restore job events** — selected recovery point, target, role, failure reason, and elapsed stage time.
+- **Archive continuity** — every required point-in-time log segment and timeline is present and ordered.
+- **Database checks** — consistency, indexes, ownership, permissions, extensions, and configuration.
+- **Business reconciliation** — required record counts, totals, tenant boundaries, and critical read/write journeys.
+</WhereToCheck>
+
+<WorkedExample title="a green backup that could not restore paid orders">
+1. A nightly job reports success at 02:00 and stores an encrypted archive.
+2. A restore drill finds that the recovery role lost access to the rotated key.
+3. After access is repaired, the database starts but the latest payment partition is absent.
+4. The team adds the key identifier and partition inventory to the manifest, then reconciles order and payment totals after every drill.
+5. The next drill restores to isolation, proves a 20-minute recovery point and seven-minute usable-service time, and records both limits explicitly.
+</WorkedExample>
+
+<Quiz question="Which result is the strongest evidence that a backup is usable?" options={[
+  "The scheduled backup job reports completed",
+  "The archive file exists and has a recent timestamp",
+  "An isolated restore passes checksum, access, database, business, RPO, and RTO checks",
+  "The archive is larger than yesterday's archive"
+]} answer={2} explain="Usability requires the bytes, dependencies, permissions, restoration process, business truth, and timing objectives to work together. Existence or job completion proves only one step." />
+
+<Flashcards cards={[
+  { front: "Recovery point objective", back: "The maximum acceptable data-loss window, measured as the age of the recoverable state at failure." },
+  { front: "Recovery time objective", back: "The maximum acceptable time until the agreed service is usable after disruption." },
+  { front: "Point-in-time recovery", back: "Restores a base backup and replays archived changes until a selected safe instant." },
+  { front: "Backup manifest", back: "Metadata describing timestamp, scope, checksums, keys, dependencies, and versions needed to validate and restore an archive." },
+  { front: "Business reconciliation", back: "Post-restore checks that compare required records, totals, relationships, and critical journeys with expected truth." },
+]}/>
+
+<Challenge>
+Take one non-production backup and write its manifest. Corrupt a copy, revoke a test recovery role, and
+remove one simulated archive segment in separate drills. Prove each failure is detected before traffic
+is enabled, then record achieved recovery point and end-to-end recovery time for the valid path.
+</Challenge>
+
+<AskCommunity prompt="System [name] failed at [time]. Candidate recovery point is [time]. Manifest checks are [results], isolated restore took [duration], business checks were [results], RPO limit is [value], and RTO limit is [value]. Which dependency or post-restore check is still missing?">
+Use synthetic identifiers and sanitized counts; never share production archives, keys, credentials, or customer data.
+</AskCommunity>
+
+<Resources links={[
+  { href: "https://docs.aws.amazon.com/aws-backup/latest/devguide/restore-testing.html", title: "AWS Backup docs — Restore testing", kind: "read" },
+  { href: "https://docs.aws.amazon.com/wellarchitected/latest/framework/rel_backing_up_data_periodic_recovery_testing_data.html", title: "AWS Well-Architected — Periodic recovery testing against RPO and RTO", kind: "reference" },
+  { href: "https://www.postgresql.org/docs/current/continuous-archiving.html", title: "PostgreSQL docs — Continuous archiving and point-in-time recovery", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=rD3nBaS3OG4" title="RPO and RTO Explained — Amazon Web Services" minutes={1} />
+
+<Takeaways points={[
+  "Backup completion proves copying, not restoration.",
+  "Validate checksums, keys, permissions, dependencies, and required business records.",
+  "Run restore drills in isolated targets before an incident.",
+  "Measure RPO as recoverable data age and RTO until usable business service.",
+  "Point-in-time recovery depends on a complete base backup and ordered change archive.",
+]}/>
+
+<Complete xp={10} />

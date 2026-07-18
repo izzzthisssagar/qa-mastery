@@ -1,0 +1,198 @@
+---
+title: "Eventual consistency bugs"
+summary: "Reproduce stale reads, define convergence deadlines, protect session guarantees, and test conflict handling without flaky sleeps."
+tags: ["eventual-consistency", "stale-reads", "convergence", "session-guarantees", "distributed-systems", "track-d"]
+updated: "2026-07-18"
+related:
+  - "nosql-and-modern-data/the-nosql-landscape/cap-theorem-in-plain-words"
+  - "nosql-and-modern-data/distributed-data-gently/replication-and-sharding"
+---
+
+<Hook>
+A user saves a delivery address, sees “updated,” then the next page shows the old address. Refreshing
+eventually fixes it. The database converged exactly as designed; the user journey still broke.
+</Hook>
+
+<Callout type="analogy">
+A railway office replaces its phone-number noticeboard, then sends copies to branch stations. For a
+while, headquarters shows version 2 while one branch still shows version 1. “All boards will match
+eventually” is useful only when the team also knows the deadline and what a traveler sees meanwhile.
+</Callout>
+
+<Term define="Eventual consistency permits replicas to return different committed versions temporarily, while promising that they converge when updates stop and propagation succeeds. It does not by itself specify a maximum convergence time, read-your-writes behavior, monotonic reads, or conflict resolution.">eventual consistency</Term>
+
+## Turn “eventually” into a user-visible contract
+
+A convergence window begins when a write is accepted and ends when every required read path returns
+the accepted version. During that window, a replica, index, cache, or regional projection may return a
+stale value. A test should identify the source version, observed version, read route, and elapsed time.
+
+Session guarantees narrow the surprise. **Read-your-writes** means a session can read its own accepted
+update. **Monotonic reads** mean that after a session observes version 2, a later read will not fall back
+to version 1. Systems may provide these through causal sessions, sticky routing, version tokens, or a
+stronger read mode; they are not automatic consequences of eventual convergence.
+
+Concurrent writes add a separate problem. Last-write-wins, version vectors, merge functions, CRDTs,
+or explicit conflicts preserve different kinds of intent. Test the documented resolver and the product
+workflow for rejected or merged intent rather than accepting any common final value.
+
+<Callout type="tip">
+Poll an observable version with a bounded deadline and a short controlled interval. Capture every
+attempt. The assertion should say “version 2 was absent after 5 seconds,” not “sleep 5 and hope.”
+</Callout>
+
+<Callout type="mistake">
+Retrying until the stale read disappears without first asserting it. That turns a reproducible
+read-after-write bug into a passing test and loses the route, version, and convergence-time evidence.
+</Callout>
+
+<HotspotImage
+  src="/notes/nosql-and-modern-data/distributed-data-gently/eventual-consistency-bugs.jpg"
+  alt="A purple railway noticeboard listing enquiry, passenger, security, and grievance phone numbers"
+  credit="Railway station in Goa, India, notice board — Fredericknoronha, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Railway_station_in_Goa,_India,_notice_board.jpg"
+  pins={[
+    { x: 51, y: 9, label: "Board identity", desc: "The railway telephone heading identifies the projection being read; tests should name the exact replica, region, index, or cache path." },
+    { x: 88, y: 19, label: "Enquiry version", desc: "The visible 139 entry is a concrete value. Compare versioned content, not merely a successful response." },
+    { x: 89, y: 29, label: "Passenger number", desc: "A branch may still display an older value after headquarters accepts an update, producing a stale read." },
+    { x: 88, y: 37, label: "Security number", desc: "Once a session has seen the newer board, monotonic reads prevent a later route from showing an older edition." },
+    { x: 86, y: 66, label: "Grievance contact", desc: "Conflict handling needs a visible path when two offices change the same notice before their copies synchronize." },
+  ]}
+/>
+
+<FlowAnimation title="Test a bounded convergence window" intervalMs={1700} nodes={[
+  { label: "Read baseline", desc: "Record version 1 through every relevant read route." },
+  { label: "Write version 2", desc: "Capture acknowledgment, source version, session token, and request ID." },
+  { label: "Read immediately", desc: "Route deliberately to the lagging projection and surface version 1 as a stale-read assertion." },
+  { label: "Poll by version", desc: "Retry with a monotonic clock until version 2 appears or the deadline expires." },
+  { label: "Check session guarantees", desc: "Prove read-your-writes and ensure later reads never regress to an older version." },
+  { label: "Resolve conflicts", desc: "Issue concurrent updates and assert the documented winner, merge, rejection, or conflict record." },
+]}/>
+
+<CodePlayground language="python" title="Run it — stale read then deterministic convergence (Python)" code={```source_version = 1
+replica_version = 1
+
+source_version = 2
+print("WRITE source version=2 status=ACCEPTED")
+
+stale_detected = replica_version < source_version
+print(f"STALE_READ {'DETECTED' if stale_detected else 'MISSED'} replica=1 expected=2")
+
+for attempt in range(1, 4):
+    if attempt == 2:
+        replica_version = source_version
+        print("REPLICATION advanced version=2")
+    if replica_version == source_version:
+        print(f"CONVERGED attempt={attempt} replica=2")
+        break
+
+converged = replica_version == source_version
+print(f"RESULT stale_detected={str(stale_detected).lower()} converged={str(converged).lower()}")
+
+assert stale_detected and converged```}/>
+
+<CodePlayground language="java" title="Run it — stale read then deterministic convergence (Java)" code={```public class Main {
+    public static void main(String[] args) {
+        int sourceVersion = 1;
+        int replicaVersion = 1;
+
+        sourceVersion = 2;
+        System.out.println("WRITE source version=2 status=ACCEPTED");
+
+        boolean staleDetected = replicaVersion < sourceVersion;
+        System.out.println("STALE_READ " + (staleDetected ? "DETECTED" : "MISSED") + " replica=1 expected=2");
+
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            if (attempt == 2) {
+                replicaVersion = sourceVersion;
+                System.out.println("REPLICATION advanced version=2");
+            }
+            if (replicaVersion == sourceVersion) {
+                System.out.println("CONVERGED attempt=" + attempt + " replica=2");
+                break;
+            }
+        }
+
+        boolean converged = replicaVersion == sourceVersion;
+        System.out.println("RESULT stale_detected=" + staleDetected + " converged=" + converged);
+
+        if (!(staleDetected && converged)) throw new AssertionError();
+    }
+}```}/>
+
+<FirstTime title="Your mission: specify one read-after-write journey">
+<StepChecklist steps={[
+  { text: "Expose a version", detail: "Use an entity revision, event offset, update token, or test-only marker rather than comparing ambiguous display text." },
+  { text: "Name each route", detail: "Record whether reads use source, replica, search index, cache, or another region." },
+  { text: "Set the deadline", detail: "Derive a maximum convergence window from the product promise and use a monotonic timer." },
+  { text: "Protect the session", detail: "After observing version 2, assert that the same user never sees version 1 again." },
+]}/>
+You now have a bounded consistency contract instead of a sleep.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "A save succeeds, but the confirmation page shows the old value.", fix: "Use read-your-writes routing or a version/session token, then verify every post-write read path." },
+  { symptom: "Polling passes locally and times out under load.", fix: "Measure propagation percentiles, queue depth, throttling, replica lag, and the full read path against a fixed deadline." },
+  { symptom: "A user sees version 2 and later version 1.", fix: "Test monotonic reads; inspect load-balancer routing, causal/session configuration, and caches serving older versions." },
+  { symptom: "Two accepted edits converge by silently losing one user's intent.", fix: "Inspect conflict metadata and resolver rules; assert merge, rejection, compensation, or a visible conflict workflow." },
+]}/>
+
+<WhereToCheck>
+- **Write acknowledgment** — accepted version, durability or write concern, region, request ID, and session token.
+- **Read routing** — replica identity, consistency option, cache result, and index or projection offset.
+- **Propagation telemetry** — replication lag, queue depth, event offset, retry count, and dead letters.
+- **Version history** — source and observed revisions, logical timestamps, conflict siblings, and resolver decision.
+- **User journey traces** — whether one session moved between routes or regressed after seeing a newer version.
+</WhereToCheck>
+
+<WorkedExample title="delivery tracking that moved backward">
+1. The carrier writes version 42, changing a parcel from “label created” to “collected.”
+2. The mobile API acknowledges the update, then reads from a regional projection still at version 41.
+3. The customer sees “label created,” refreshes, sees “collected,” then another replica sends the journey backward again.
+4. A bounded poll proves all required projections reach version 42 within the objective.
+5. A session token additionally prevents read regression, while a concurrent correction test proves the conflict rule.
+</WorkedExample>
+
+<Quiz question="What does eventual consistency guarantee by itself?" options={[
+  "Every read immediately reflects the latest accepted write",
+  "A session always reads its own writes",
+  "Replicas converge if updates stop and propagation succeeds, without necessarily promising a deadline or session behavior",
+  "Concurrent writes are always merged without lost intent"
+]} answer={2} explain="Eventual convergence is weaker than immediate freshness, bounded convergence, read-your-writes, monotonic reads, or a particular conflict-resolution policy." />
+
+<Flashcards cards={[
+  { front: "Convergence window", back: "Time between an accepted write and all required read paths returning its version." },
+  { front: "Stale read", back: "A read that returns an older committed version than the required freshness contract allows." },
+  { front: "Read-your-writes", back: "A session's reads reflect writes that the same session previously completed." },
+  { front: "Monotonic reads", back: "Once a session observes a version, later reads do not return an earlier state." },
+  { front: "Conflict handling", back: "The documented winner, merge, rejection, sibling exposure, or compensation for concurrent updates." },
+]}/>
+
+<Challenge>
+Adapt the playground to a real asynchronous projection. Write a unique version, deliberately read the
+lagging path, then poll with a bounded deadline. Add assertions for read-your-writes, no version
+regression, exact attempt evidence, and two concurrent updates with a documented conflict outcome.
+</Challenge>
+
+<AskCommunity prompt="After write version [n] is acknowledged on [source], read route [replica/index/cache] returns version [m]. It converges after [time/never], and session [id] does/does not regress. Which guarantee or conflict check is missing?">
+Share sanitized versions, routes, consistency settings, deadlines, and resolver rules; omit customer data.
+</AskCommunity>
+
+<Resources links={[
+  { href: "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html", title: "Amazon DynamoDB — Read consistency", kind: "read" },
+  { href: "https://www.mongodb.com/docs/manual/core/read-isolation-consistency-recency/", title: "MongoDB Manual — Read isolation, consistency, and recency", kind: "reference" },
+  { href: "https://www.mongodb.com/docs/manual/replication/", title: "MongoDB Manual — Replication and secondary reads", kind: "read" },
+  { href: "https://docs.couchdb.org/en/stable/replication/conflicts.html", title: "Apache CouchDB — Replication conflicts", kind: "reference" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=9uCP3qHNbWw" title="Distributed Systems 7.3: Eventual consistency — Martin Kleppmann" minutes={15} />
+
+<Takeaways points={[
+  "Eventual convergence does not automatically bound delay or protect a user's session.",
+  "Expose versions and routes so stale reads are observable and reproducible.",
+  "Use deadline-bounded polling rather than fixed sleeps or unlimited retries.",
+  "Test read-your-writes and monotonic reads as explicit guarantees.",
+  "A common final value is incomplete evidence when concurrent updates can lose user intent.",
+]}/>
+
+<Complete xp={10} />
