@@ -2018,10 +2018,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "performance",
         title: "Performance",
         topics: [
-          { slug: "what-it-measures", title: "What it measures", planned: true },
-          { slug: "load-vs-stress", title: "Load vs stress", planned: true },
-          { slug: "key-metrics", title: "Key metrics", planned: true },
-          { slug: "tools-overview", title: "Tools overview", planned: true },
+          { slug: "what-it-measures", title: "What it measures" },
+          { slug: "load-vs-stress", title: "Load vs stress" },
+          { slug: "key-metrics", title: "Key metrics" },
+          { slug: "tools-overview", title: "Tools overview" },
         ],
       },
       {
