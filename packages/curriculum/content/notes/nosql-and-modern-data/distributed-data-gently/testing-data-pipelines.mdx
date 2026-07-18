@@ -1,0 +1,245 @@
+---
+title: "Testing data pipelines"
+summary: "Test stage contracts, duplicates, poison records, schema changes, freshness, lineage, and end-to-end reconciliation across a data pipeline."
+tags: ["data-pipelines", "data-quality", "idempotency", "schema-evolution", "reconciliation", "track-d"]
+updated: "2026-07-18"
+related:
+  - "nosql-and-modern-data/distributed-data-gently/backups-and-recovery-checks"
+  - "nosql-and-modern-data/redis-and-caching-bugs/testing-around-a-cache"
+---
+
+<Hook>
+The pipeline dashboard is green. The source emitted five order events, the warehouse contains four
+rows, and revenue is too high. One retry became a duplicate while one malformed event vanished. Every
+stage ran; the business result is still wrong.
+</Hook>
+
+<Callout type="analogy">
+A parcel-sorting line does more than keep belts moving. It identifies each parcel, checks its label,
+routes it once, diverts unreadable parcels for inspection, and accounts for every item at the exits.
+A pipeline needs the same stage-by-stage custody trail.
+</Callout>
+
+<Term define="Pipeline reconciliation compares source inputs with loaded outputs plus every explicitly rejected, duplicated, filtered, or still-in-flight record so unexplained loss or inflation cannot hide between stages.">pipeline reconciliation</Term>
+
+## Test the handoffs, not only the destination
+
+Write a contract for every boundary: source to ingest, ingest to transform, and transform to load. Each
+contract names required fields and types, record identifiers, event time, ordering key, accepted schema
+versions, retry behavior, and ownership of invalid records. Then record counts, totals, and lineage at
+each handoff.
+
+Delivery semantics describe what retries may do. At-most-once processing can lose a record. At-least-once
+processing avoids silent loss by allowing redelivery, so consumers must expect duplicates. Exactly-once
+claims have a boundary: a pipeline may commit its internal result once while an external side effect is
+repeated. Stable event IDs and idempotent writes make replay safe at the actual sink.
+
+Ordering is usually meaningful within a key or partition, not across the whole pipeline. Test late and
+out-of-order updates with versions or event time so an older event cannot overwrite newer state. Treat a
+record that repeatedly fails as a poison record: retain its payload and error metadata in a protected
+quarantine or dead-letter path, alert its owner, and support controlled replay after correction.
+
+Schema evolution is a producer-consumer contract. Additive optional fields are often safer than renamed,
+removed, or type-changed required fields, but compatibility must be tested against deployed readers.
+Measure freshness from source event time to queryable output, and preserve lineage linking an output row
+to its source event, schema version, transformations, and pipeline run.
+
+<Callout type="tip">
+Give every deterministic test batch a ledger: input count and amount, accepted IDs, duplicate IDs,
+quarantined IDs with reasons, loaded count and amount, and the reconciliation equation.
+</Callout>
+
+<Callout type="mistake">
+Comparing only source and destination row counts. A duplicate and a lost record can cancel each other,
+leaving equal counts while identifiers and money are wrong. Reconcile stable IDs and business totals too.
+</Callout>
+
+<HotspotImage src="/notes/nosql-and-modern-data/distributed-data-gently/testing-data-pipelines.jpg" alt="Large automated mail sorting line with grey conveyor belts and numbered destination bins" credit="Mail sorting assembly line — Jason V, CC BY-SA 2.0" creditHref="https://commons.wikimedia.org/wiki/File:Mail_sorting_assembly_line.jpg" pins={[
+  { x: 55, y: 44, label: "Main stage", desc: "The wide central belt represents a transformation stage whose inputs, outputs, and elapsed time need a contract." },
+  { x: 66, y: 78, label: "Numbered destination", desc: "Bins such as 122 make routing explicit; pipeline outputs need stable keys and lineage to their destination." },
+  { x: 88, y: 32, label: "Parallel lane", desc: "A separate conveyor shows that global arrival order is not guaranteed when partitions process concurrently." },
+  { x: 29, y: 57, label: "Control and diversion", desc: "Buttons and side bins represent observable failure handling, quarantine, and deliberate replay rather than silent discard." },
+]}/>
+
+<FlowAnimation title="Account for one batch across the pipeline" intervalMs={1700} nodes={[
+  { label: "Capture source contract", desc: "Record batch identity, schema version, input IDs, event times, counts, and totals." },
+  { label: "Ingest durably", desc: "Accept retries while preserving stable IDs, raw payloads, lineage, and arrival evidence." },
+  { label: "Validate schema", desc: "Route invalid or poison records to quarantine with an actionable reason." },
+  { label: "Transform idempotently", desc: "Deduplicate by stable identity and prevent older versions from replacing newer state." },
+  { label: "Load by key", desc: "Use upsert or another sink contract that remains safe when a record is replayed." },
+  { label: "Reconcile and alert", desc: "Balance counts, IDs, totals, freshness, and every rejected or in-flight record." },
+]}/>
+
+<CodePlayground language="python" title="Run it — deduplicate, quarantine, and reconcile a batch (Python)" code={```records = [
+    {"id": "order-1001", "sequence": 1, "amount": 25},
+    {"id": "order-1002", "sequence": 2, "amount": 40},
+    {"id": "order-1002", "sequence": 2, "amount": 40},
+    {"id": "order-1003", "sequence": 3, "amount": "bad"},
+    {"id": "order-1004", "sequence": 4, "amount": 15},
+]
+
+seen = set()
+valid = []
+duplicates = []
+quarantine = []
+
+for record in records:
+    schema_ok = (isinstance(record.get("id"), str)
+                 and type(record.get("sequence")) is int
+                 and type(record.get("amount")) is int)
+    if not schema_ok:
+        quarantine.append((record.get("id"), "schema_invalid"))
+        continue
+    if record["id"] in seen:
+        duplicates.append(record["id"])
+        continue
+    seen.add(record["id"])
+    valid.append(record)
+
+loaded = {record["id"]: record["amount"] for record in valid}
+loaded_total = sum(loaded.values())
+
+print("INGEST count", len(records))
+print("TRANSFORM valid", len(valid), "duplicates", len(duplicates),
+      "quarantined", len(quarantine))
+print("LOAD count", len(loaded), "total", loaded_total)
+print("RECONCILE input", len(records), "= loaded", len(loaded),
+      "+ duplicates", len(duplicates), "+ quarantined", len(quarantine))
+print("PASS counts_and_total")
+
+assert len(records) == len(loaded) + len(duplicates) + len(quarantine)
+assert duplicates == ["order-1002"]
+assert quarantine == [("order-1003", "schema_invalid")]
+assert list(loaded) == ["order-1001", "order-1002", "order-1004"]
+assert loaded_total == 80```}/>
+
+<CodePlayground language="java" title="Run it — deduplicate, quarantine, and reconcile a batch (Java)" code={```import java.util.*;
+
+public class Main {
+    record Input(String id, Object sequence, Object amount) {}
+    record Valid(String id, int sequence, int amount) {}
+
+    public static void main(String[] args) {
+        List<Input> records = List.of(
+            new Input("order-1001", 1, 25),
+            new Input("order-1002", 2, 40),
+            new Input("order-1002", 2, 40),
+            new Input("order-1003", 3, "bad"),
+            new Input("order-1004", 4, 15)
+        );
+
+        Set<String> seen = new HashSet<>();
+        List<Valid> valid = new ArrayList<>();
+        List<String> duplicates = new ArrayList<>();
+        List<String> quarantine = new ArrayList<>();
+
+        for (Input record : records) {
+            boolean schemaOk = record.id() != null
+                && record.sequence() instanceof Integer
+                && record.amount() instanceof Integer;
+            if (!schemaOk) {
+                quarantine.add(record.id() + ":schema_invalid");
+                continue;
+            }
+            if (!seen.add(record.id())) {
+                duplicates.add(record.id());
+                continue;
+            }
+            valid.add(new Valid(record.id(), (Integer) record.sequence(), (Integer) record.amount()));
+        }
+
+        Map<String, Integer> loaded = new LinkedHashMap<>();
+        for (Valid record : valid) loaded.put(record.id(), record.amount());
+        int loadedTotal = loaded.values().stream().mapToInt(Integer::intValue).sum();
+
+        System.out.println("INGEST count " + records.size());
+        System.out.println("TRANSFORM valid " + valid.size() + " duplicates "
+            + duplicates.size() + " quarantined " + quarantine.size());
+        System.out.println("LOAD count " + loaded.size() + " total " + loadedTotal);
+        System.out.println("RECONCILE input " + records.size() + " = loaded " + loaded.size()
+            + " + duplicates " + duplicates.size() + " + quarantined " + quarantine.size());
+        System.out.println("PASS counts_and_total");
+
+        if (records.size() != loaded.size() + duplicates.size() + quarantine.size()) throw new AssertionError();
+        if (!duplicates.equals(List.of("order-1002"))) throw new AssertionError();
+        if (!quarantine.equals(List.of("order-1003:schema_invalid"))) throw new AssertionError();
+        if (!loaded.keySet().equals(new LinkedHashSet<>(List.of("order-1001", "order-1002", "order-1004")))) throw new AssertionError();
+        if (loadedTotal != 80) throw new AssertionError();
+    }
+}```}/>
+
+<FirstTime title="Your mission: build a pipeline batch ledger">
+<StepChecklist steps={[
+  { text: "Freeze one source batch", detail: "Record stable IDs, schema version, event times, input count, and a meaningful business total." },
+  { text: "Inject two controlled faults", detail: "Add one exact duplicate and one invalid required field while keeping every other record deterministic." },
+  { text: "Observe every stage", detail: "Capture accepted, transformed, duplicated, quarantined, loaded, and retried identities with lineage." },
+  { text: "Balance the ledger", detail: "Assert loaded plus duplicate plus quarantined plus in-flight equals input, then compare IDs and totals." },
+]}/>
+You can now identify the exact handoff where data was lost, repeated, or rejected.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "A retry doubles revenue in the sink.", fix: "Carry a stable event or business ID through every stage and make the sink write idempotent at that boundary." },
+  { symptom: "The pipeline is green but a source record is absent.", fix: "Reconcile input IDs against loaded, quarantined, filtered, and in-flight IDs; alert on any unexplained remainder." },
+  { symptom: "A producer deployment sends records consumers cannot read.", fix: "Check schema compatibility before registration, test deployed consumer versions, and quarantine rather than silently dropping invalid records." },
+  { symptom: "An older update replaces a newer customer state.", fix: "Test per-key ordering with sequence or event-time versions and reject stale updates at the stateful stage or sink." },
+]}/>
+
+<WhereToCheck>
+- **Source and ingest ledger** — batch ID, event IDs, schema versions, event times, counts, and totals.
+- **Stage metrics** — accepted, emitted, retried, duplicated, late, invalid, filtered, and processing latency.
+- **Quarantine or dead-letter store** — original payload, reason, first failure, retry count, owner, and replay status.
+- **Sink audit** — idempotency key, upsert result, loaded version, commit time, and business totals.
+- **Lineage and freshness** — source-to-output path and lag from event time until queryable committed data.
+</WhereToCheck>
+
+<WorkedExample title="a daily revenue job whose counts looked correct">
+1. The source publishes 10,000 orders and one worker retries a batch after its acknowledgement times out.
+2. A changed amount type causes 20 new-schema records to be discarded while 20 older records are duplicated.
+3. Source and warehouse row counts both remain 10,000, so the count-only test passes.
+4. Reconciliation by event ID and amount exposes 20 missing IDs, 20 repeated IDs, and an inflated total.
+5. The team enforces schema compatibility, quarantines invalid records, loads by idempotency key, and alerts on IDs and totals at every run.
+</WorkedExample>
+
+<Quiz question="Why can equal source and destination row counts still hide a pipeline defect?" options={[
+  "Row counts always use different number formats",
+  "A missing record and a duplicate can cancel in the count while identities and totals remain wrong",
+  "Destination databases cannot count rows",
+  "Exactly-once processing removes the need for reconciliation"
+]} answer={1} explain="Counts balance arithmetically even when one identity disappears and another repeats. Reconcile stable IDs, business totals, and explicit rejection categories as well." />
+
+<Flashcards cards={[
+  { front: "Idempotent load", back: "Repeating the same logical write leaves the sink in the same state as applying it once." },
+  { front: "Poison record", back: "A record that repeatedly fails processing because its data or assumptions violate the stage contract." },
+  { front: "Dead-letter path", back: "A durable, observable destination for failed records, reasons, ownership, and controlled replay." },
+  { front: "Schema compatibility", back: "A rule describing whether deployed producers and consumers can safely read a new or old schema version." },
+  { front: "Data lineage", back: "Evidence connecting an output to its source identity, schema, transformations, and pipeline run." },
+]}/>
+
+<Challenge>
+Replay the playground batch twice into a persistent in-memory sink, then send the invalid record again
+with a corrected integer amount. Extend the ledger so the replay adds no duplicates, the corrected
+record leaves quarantine exactly once, and the final count, identities, total, and freshness all balance.
+</Challenge>
+
+<AskCommunity prompt="Pipeline [name] received batch [synthetic ID] with [count/total]. Stage counts are [values], duplicates are [IDs], quarantined records are [IDs/reasons], loaded count and total are [values], freshness is [duration], and reconciliation difference is [value]. Which contract or replay case should I test next?">
+Share synthetic payloads and sanitized lineage only; remove customer data, credentials, and production endpoints.
+</AskCommunity>
+
+<Resources links={[
+  { href: "https://cloud.google.com/dataflow/docs/concepts/exactly-once", title: "Google Cloud Dataflow docs — Exactly-once processing and side-effect boundaries", kind: "read" },
+  { href: "https://docs.aws.amazon.com/glue/latest/dg/schema-registry.html", title: "AWS Glue docs — Schema Registry versioning and compatibility", kind: "reference" },
+  { href: "https://cloud.google.com/dataflow/docs/guides/pipeline-best-practices", title: "Google Cloud Dataflow docs — Dead-letter queues for bad records", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=IYffTThXldI" title="Handling Duplicate Data in Streaming Pipelines using Dataflow and Pub/Sub — Apache Beam" minutes={29} />
+
+<Takeaways points={[
+  "Specify and test every source-to-stage and stage-to-sink contract.",
+  "Expect retries and make duplicate handling safe at the real side-effect boundary.",
+  "Quarantine poison and schema-invalid records with reasons and controlled replay.",
+  "Ordering guarantees need a key, version, and explicit stale-update behavior.",
+  "Reconcile counts, stable IDs, business totals, freshness, and lineage end to end.",
+]}/>
+
+<Complete xp={10} />
