@@ -1,0 +1,289 @@
+---
+title: "CRUD verification"
+summary: "Every app action is one of four data operations - Create, Read, Update, Delete - mapping to INSERT, SELECT, UPDATE, DELETE. Verifying a feature means checking each operation against the table itself: row appears, row is accurate, column changes, row disappears."
+tags: ["sql-and-databases-for-testers", "verifying-the-app-against-the-db", "track-c"]
+updated: "2026-07-18"
+related:
+  - "sql-and-databases-for-testers/verifying-the-app-against-the-db/ui-action-to-db-check"
+  - "sql-and-databases-for-testers/reading-data/select-and-where"
+  - "sql-and-databases-for-testers/verifying-the-app-against-the-db/finding-data-bugs"
+---
+
+<Hook>
+Strip away the buttons, forms, and animations, and almost everything an app does to data is one of
+exactly four things: make a record, show a record, change a record, remove a record. That short list
+is a gift to testers - it means "did this feature handle its data correctly?" always decomposes into
+the same four checks, each verifiable with one small query. Learn the four once, and you have a
+verification plan for nearly any screen you will ever test.
+</Hook>
+
+<Callout type="analogy">
+A parking garage entrance: a barrier arm, a ramp down to the deck, and an electronic board counting
+free spaces. Every single thing that happens here is one of four events. A car drives in - one new
+occupant on the deck (create). Someone checks the board or walks the deck to find a car (read). A car
+moves to a different bay, and its recorded spot changes (update). A car drives out - one occupant gone
+(delete). The board out front is only trustworthy if every one of those events was recorded correctly,
+and the way to verify it is to walk down the ramp and compare the board's claim with the actual cars
+in the actual bays. CRUD verification is exactly that walk.
+</Callout>
+
+<Term define="CRUD stands for Create, Read, Update, Delete - the four fundamental operations any app performs on stored data. Each maps one-to-one onto a SQL statement: Create is INSERT (a new row appears), Read is SELECT (existing rows are fetched and displayed), Update is UPDATE (columns of an existing row change), Delete is DELETE (a row is removed). CRUD verification is testing each app operation against the table it touches: after a create, the row exists with the right values; after a read, the screen matches the rows; after an update, the intended columns (and only those) changed; after a delete, the row is genuinely gone - or deliberately kept and flagged, if the app soft-deletes.">CRUD verification</Term>
+
+## Four operations, four checks
+
+- **Create maps to INSERT - check the row appeared, with the right values.** Not just "no error": query
+  the new row and compare every field you entered in the form against every column that landed. A
+  create that saves the name into the email column "worked" in the UI and is still a bug.
+- **Read maps to SELECT - check the screen against the rows.** The list view is a claim about the
+  table's contents. Spot-check it: the row count, a couple of specific records, and whether filters
+  hide rows or actually exclude them from the query.
+- **Update maps to UPDATE - check the change AND the blast radius.** The intended column changed to
+  the intended value, on the intended row only. The classic update bug is collateral damage: a missing
+  condition that changes every row, or a form that quietly resets a field you never touched.
+- **Delete maps to DELETE - check the row is gone, or flagged.** Query for the row afterward. Zero
+  rows back means a hard delete. If the row remains with something like `deleted_at` filled in, the
+  app soft-deletes - fine, but then verify the row stops appearing everywhere it should.
+
+<Callout type="tip">
+Turn any feature into a CRUD grid before testing it. List what the feature can make, show, change, and
+remove, and write the one verification query for each cell. For a "shipping address" feature that is
+four short lines - and now you have a checklist that catches the operation everyone forgets to test:
+usually delete.
+</Callout>
+
+<Callout type="mistake">
+Testing create by immediately reading it back through the same app. The UI that just accepted your
+form will happily show you its own in-memory copy - a broken INSERT can hide behind a perfect-looking
+detail page. Verify the create against the table (or at minimum a fresh session), and only then trust
+the app's read path to display it. One operation verified per check; never let one unverified
+operation vouch for another.
+</Callout>
+
+{/* IMAGE: entrance of an underground office car park (LVM, Muenster): two red-and-white striped barrier arms across the entry and exit lanes, a blue LED display board above the entrance reading counts 087 and 132 for free spaces, a green P visitor sign on the left, and a dark tiled ramp leading down into the garage */}
+<HotspotImage
+  src="/notes/sql-and-databases-for-testers/verifying-the-app-against-the-db/crud-verification.jpg"
+  alt="An underground car park entrance with striped barrier arms, a free-space counter display over the ramp, and a P sign to the left"
+  credit="Underground car park entrance, LVM, Muenster — Dietmar Rabich, Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:M%C3%BCnster,_LVM_--_2017_--_6272-8.jpg"
+  pins={[
+    { x: 60, y: 39, label: "The free-space counter - the recorded state", desc: "This board claims 087 and 132 spaces free. It is the table's answer to a query: a number maintained by recording every create (car in) and delete (car out). If one event goes unrecorded, the board drifts from the deck - silently." },
+    { x: 47, y: 60, label: "The barrier arms - every operation passes one gate", desc: "No car gets in or out without tripping the barrier, and each pass is exactly one recorded event. That is the CRUD idea itself: however fancy the app, every data effect funnels into one of four operations you can verify individually." },
+    { x: 70, y: 65, label: "The ramp down to the deck - where the rows actually are", desc: "The actual cars sit down this ramp, in actual bays. Verification means going down and looking - the SELECT that compares recorded state against real rows - not standing outside admiring the board." },
+    { x: 12, y: 41, label: "The P sign - the promise made to the outside", desc: "The sign advertises parking to people who have not entered yet - like the app's UI advertising what the feature does. The sign being green proves nothing about a specific bay; the claim is only as good as the four operations behind it." },
+  ]}
+/>
+
+<FlowAnimation
+  title="One feature, four verifications - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Create: the app adds task 3 via its form", desc: "Verify with SELECT: row 3 exists and every column holds what the form said - title in title, status in status." },
+    { label: "Read: the app lists all tasks on screen", desc: "Verify the claim against the table: same count, same records. The screen is a rendering of a SELECT, and renderings can drift." },
+    { label: "Update: the app marks task 3 as done", desc: "Verify the status column changed on row 3 - and that title, dates, and every other row were left alone. Blast radius is half the check." },
+    { label: "Delete: the app removes task 2", desc: "Verify a query for row 2 returns nothing (hard delete) - or returns it flagged as deleted (soft delete), in which case check it disappears from every list." },
+    { label: "Verdict: the feature is verified operation by operation", desc: "Four small queries, each pinning one operation to its real effect on the table. No single 'it looks fine' - four separate pieces of evidence." },
+  ]}
+/>
+
+The whole idea, reduced to one line: every feature is just Create, Read, Update, Delete in a costume -
+verify each of the four against the table, and the costume cannot fool you.
+
+<CodePlayground
+  language="python"
+  title="Run it - all four CRUD operations, each verified in the table (Python)"
+  code={`import sqlite3
+
+conn = sqlite3.connect(":memory:")
+cur = conn.cursor()
+
+cur.execute("CREATE TABLE tasks (id INTEGER PRIMARY KEY, title TEXT, status TEXT)")
+cur.executemany("INSERT INTO tasks VALUES (?,?,?)", [
+    (1, "Write test plan", "done"),
+    (2, "Review release notes", "open"),
+])
+conn.commit()
+
+print("--- CREATE: the app adds a task, you verify with SELECT ---")
+cur.execute("INSERT INTO tasks VALUES (3, 'Retest login bug', 'open')")
+conn.commit()
+row = cur.execute("SELECT id, title, status FROM tasks WHERE id = 3").fetchone()
+print("  row 3 after the Create:", row)
+
+print()
+print("--- READ: what the app lists should be exactly what the table holds ---")
+count = cur.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
+print("  total rows in the table:", count)
+
+print()
+print("--- UPDATE: the app marks task 3 done, you verify the COLUMN changed ---")
+cur.execute("UPDATE tasks SET status = 'done' WHERE id = 3")
+conn.commit()
+status = cur.execute("SELECT status FROM tasks WHERE id = 3").fetchone()[0]
+print("  row 3 status after the Update:", status)
+
+print()
+print("--- DELETE: the app removes task 2, you verify the row is GONE ---")
+cur.execute("DELETE FROM tasks WHERE id = 2")
+conn.commit()
+gone = cur.execute("SELECT COUNT(*) FROM tasks WHERE id = 2").fetchone()[0]
+count = cur.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
+print("  rows matching id 2 after the Delete:", gone)
+print("  total rows now:", count)
+print()
+print("Four app actions, four SQL effects - each one checked in the table itself.")
+
+conn.close()`}
+/>
+
+Same four operations in Java - the shared code runner here has no live JDBC/SQLite driver on its
+classpath (unlike your own machine, where `sqlite-jdbc` works fine locally), so this mirrors the exact
+same create/read/update/delete logic in plain Java collections, over the same rows, verified by hand to
+match the real SQLite output above:
+
+<CodePlayground
+  language="java"
+  title="Run it - the same CRUD walk-through, without a live JDBC driver on the shared runner (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    record Task(int id, String title, String status) {
+        String asRow() {
+            return "(" + id + ", '" + title + "', '" + status + "')";
+        }
+    }
+
+    public static void main(String[] args) {
+        Map<Integer, Task> tasks = new LinkedHashMap<>();
+        tasks.put(1, new Task(1, "Write test plan", "done"));
+        tasks.put(2, new Task(2, "Review release notes", "open"));
+
+        System.out.println("--- CREATE: the app adds a task, you verify with SELECT ---");
+        tasks.put(3, new Task(3, "Retest login bug", "open"));
+        System.out.println("  row 3 after the Create: " + tasks.get(3).asRow());
+
+        System.out.println();
+        System.out.println("--- READ: what the app lists should be exactly what the table holds ---");
+        System.out.println("  total rows in the table: " + tasks.size());
+
+        System.out.println();
+        System.out.println("--- UPDATE: the app marks task 3 done, you verify the COLUMN changed ---");
+        Task t3 = tasks.get(3);
+        tasks.put(3, new Task(t3.id(), t3.title(), "done"));
+        System.out.println("  row 3 status after the Update: " + tasks.get(3).status());
+
+        System.out.println();
+        System.out.println("--- DELETE: the app removes task 2, you verify the row is GONE ---");
+        tasks.remove(2);
+        long gone = tasks.values().stream().filter(t -> t.id() == 2).count();
+        System.out.println("  rows matching id 2 after the Delete: " + gone);
+        System.out.println("  total rows now: " + tasks.size());
+        System.out.println();
+        System.out.println("Four app actions, four SQL effects - each one checked in the table itself.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: run one full CRUD pass on a single feature">
+<StepChecklist
+  steps={[
+    { text: "Pick one feature that owns its data - a profile, an address book entry, a task, a cart item", detail: "You need something you can make, view, change, and remove through the UI." },
+    { text: "Create one record via the UI, then verify it against the table", detail: "Every form field should land in its matching column. Check values, not just existence." },
+    { text: "Update one field via the UI, then verify the change and the blast radius", detail: "The one column changed on the one row - and nothing else changed anywhere. Compare against the values you noted at create time." },
+    { text: "Delete the record via the UI, then query for it directly", detail: "Zero rows = hard delete. Row still there with a deleted flag = soft delete; now confirm it vanished from all list views too." },
+  ]}
+/>
+You have now verified one feature the way this chapter means it: operation by operation against the
+data, with the read step checked against the table rather than taken on trust.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "After an update through the UI, the field you edited is correct - but a different field on the same row quietly changed too (or reset to a default).",
+      fix: "Classic full-object update bug: the app wrote the whole form state back, including stale or empty values for fields you never touched. Compare the full row before and after the edit, column by column - the diff is your bug report, and it is invisible if you only check the field you edited.",
+    },
+    {
+      symptom: "A deleted record stops appearing in the app, but the row still exists in the table with no deleted flag set - or reappears after a while.",
+      fix: "Find out which delete the app intends. If it soft-deletes, a flag column should be set and every read path should filter on it. If it hard-deletes, the row should be gone. A row that merely fell out of one cached list is neither - that is a delete that never reached the database at all.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The full row after a create or update, not just the field on screen** — column-by-column comparison catches wrong-column saves and collateral resets.
+- **A query for the row after every delete** — it distinguishes hard delete, soft delete, and the delete that never actually happened.
+- **[[sql-and-databases-for-testers/reading-data/select-and-where]]** — the SELECT and WHERE skills every one of these verification queries is built from.
+- **[[sql-and-databases-for-testers/verifying-the-app-against-the-db/finding-data-bugs]]** — the next note: the bug classes that appear when CRUD operations go subtly wrong at scale.
+</WhereToCheck>
+
+<WorkedExample title="the edit form that reset a column nobody touched">
+1. A tester is verifying "edit profile" - an Update operation. They change only the display name and
+   save. The UI shows the new name. The name column in the row shows it too. Looks like a pass.
+2. Following the blast-radius habit, the tester compares the whole row against the copy they captured
+   before the edit - not just the name column.
+3. The diff shows `notification_preference` flipped from `weekly` to `daily` - the column's default.
+   The tester never touched that setting.
+4. Cause: the edit form loaded with a blank preference field, and the save wrote the entire form back
+   as an UPDATE of every column. Any field the form failed to pre-fill got silently overwritten with
+   its default.
+5. Finding: an Update is not verified when the edited field is correct - it is verified when the
+   intended columns changed and the rest provably did not. One captured before-row made a
+   user-annoying, support-ticket-generating bug visible in seconds.
+</WorkedExample>
+
+<Quiz
+  question="A tester deletes a customer record through the UI. It disappears from the customer list. Querying the table shows the row still exists, with a deleted_at timestamp now filled in. What is the correct conclusion?"
+  options={[
+    "The delete failed - the row still existing means the DELETE statement never ran, so this is a bug",
+    "The app soft-deletes: the row is kept and flagged instead of removed - correct behavior to verify further, such as checking the record stays out of other lists and reports",
+    "The database is caching the row and it will disappear on its own once the cache expires",
+    "The UI and database are out of sync and the page just needs a hard refresh"
+  ]}
+  answer={1}
+  explain="A remaining row with a freshly set deleted_at flag is the signature of a soft delete - the app deliberately keeps the data and marks it deleted, a common design for audit trails and undo. That makes the next verification step checking that every read path filters flagged rows out (lists, searches, exports, reports). Option one would be true only if the row were unchanged - the filled-in timestamp shows the app did exactly what it intended. Databases do not hold deleted rows in a self-expiring cache (option three). And a refresh (option four) is beside the point - the table, not the screen, is what was just checked."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The four CRUD operations and their SQL", back: "Create = INSERT, Read = SELECT, Update = UPDATE, Delete = DELETE. Every app data action is one of these four." },
+    { front: "The parking garage analogy", back: "Car in = create, checking the board or deck = read, changing bays = update, car out = delete - and the free-space board is only trustworthy if all four are recorded. Verifying = walking the deck to compare." },
+    { front: "Verifying a Create properly", back: "Query the new row and compare every form field against every column - existence is not enough; values must land in the right places." },
+    { front: "The two halves of verifying an Update", back: "The intended column changed on the intended row - AND nothing else changed. Blast radius is half the check." },
+    { front: "Hard delete vs soft delete, as a tester", back: "Query for the row after deleting: zero rows = hard delete; row present but flagged (like deleted_at set) = soft delete - then verify it stops appearing in every list and report." },
+  ]}
+/>
+
+<Challenge>
+Build a CRUD grid for one real feature in an app you can test: four rows (Create, Read, Update,
+Delete), and for each write the UI action, the verification query, and the result you expect. Then
+execute the grid top to bottom. Note which cell you could not verify from the UI alone - and which
+cell, if any, produced a surprise worth filing.
+</Challenge>
+
+<AskCommunity prompt="I am verifying an edit feature and found the app rewrites every column on save, not just the one I changed. The values happen to be the same, so nothing visibly breaks. Is 'updates all columns' worth reporting if the outcome looks correct?">
+Useful replies usually point out the risk hiding in that pattern - two people editing at once, one
+silently reverting the other's change, or any field the form fails to pre-fill getting reset - and
+suggest testing exactly those two scenarios before deciding it is harmless.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.freecodecamp.org/news/crud-operations-explained/", title: "freeCodeCamp — CRUD Operations Explained", kind: "read" },
+    { href: "https://www.codecademy.com/article/what-is-crud", title: "Codecademy — What is CRUD?", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=cn6wh_JC9Po", title: "Software Testing Help — Database Testing Tutorial - with Database Testing Interview Questions", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=cn6wh_JC9Po" title="Software Testing Help — Database Testing Tutorial - with Database Testing Interview Questions" minutes={12} />
+
+<Takeaways
+  points={[
+    "Almost everything an app does to data is Create, Read, Update, or Delete - mapping directly to INSERT, SELECT, UPDATE, DELETE.",
+    "Verify each operation against the table: create = row appears with right values, read = screen matches rows, update = right change plus clean blast radius, delete = row gone or properly flagged.",
+    "Never let one unverified operation vouch for another - reading a create back through the same app can hide a broken INSERT.",
+    "Updates need a before-copy of the full row: the edited field being correct says nothing about fields that were silently reset.",
+    "Deletes come in two flavors - hard (row removed) and soft (row flagged) - and a tester should determine which one the app intends before judging what the table shows.",
+  ]}
+/>
+
+<Complete xp={10} />

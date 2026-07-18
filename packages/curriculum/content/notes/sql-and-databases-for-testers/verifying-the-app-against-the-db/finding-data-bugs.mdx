@@ -1,0 +1,322 @@
+---
+title: "Finding data bugs"
+summary: "Some bugs live in the data, not on any screen: orphaned rows pointing at deleted parents, duplicates, stale denormalized copies, wrong timezones, mangled encodings, silent truncation. Each class has a small detector query a tester can run without waiting for a user to stumble on it."
+tags: ["sql-and-databases-for-testers", "verifying-the-app-against-the-db", "track-c"]
+updated: "2026-07-18"
+related:
+  - "sql-and-databases-for-testers/reading-data/joins-gently"
+  - "sql-and-databases-for-testers/verifying-the-app-against-the-db/crud-verification"
+  - "sql-and-databases-for-testers/verifying-the-app-against-the-db/test-data-setup-and-cleanup"
+---
+
+<Hook>
+The nastiest bugs in a system often have no repro steps, because nobody "did" anything wrong on any
+particular day. An order pointing at a customer who no longer exists. The same user registered twice.
+A shipping label showing a name the customer changed months ago. Nothing crashes; every screen looks
+locally fine. These are data bugs - defects in what is stored rather than in what is drawn - and they
+sit invisible until a refund, a report, or a lawyer finds them. The good news: each classic type has
+a small query that flushes it out on demand.
+</Hook>
+
+<Callout type="analogy">
+A museum gallery where the labels have drifted from the artworks. One label card describes a painting
+that was moved to another museum years ago - the card still stands there, pointing at nothing. Two
+label cards, in different rooms, describe the same sculpture as if it were two works. Another label
+still credits "artist unknown" even though the catalog was corrected last spring - the card is a copy
+of the catalog entry, and nobody reprinted it. Every visitor sees neat white cards and suspects
+nothing; only someone systematically walking the rooms comparing card against artwork against catalog
+finds the rot. Data bugs are drifted labels, and a tester with SQL is that person with the catalog.
+</Callout>
+
+<Term define="A data bug is a defect in stored data rather than in code or UI: the application may render its screens perfectly, but what sits in the tables is wrong, inconsistent, or contradictory. The classic classes are orphaned rows (a child row referencing a parent that no longer exists), duplicates (the same real-world thing stored as two or more rows), stale denormalized copies (a value copied into another table for speed that no longer matches its source), timezone errors (times stored or displayed with the wrong offset), encoding damage (text mangled when written or read with mismatched character encodings), and truncation (values silently cut to fit a column's maximum length). Each class persists silently until some query, report, or process trips over it - which is why testers hunt them with targeted queries instead of waiting.">Finding data bugs</Term>
+
+## The classic classes, and the query that catches each
+
+- **Orphaned rows - children whose parent vanished.** An order with `customer_id = 9` when no customer
+  9 exists. Catch with a `LEFT JOIN` from child to parent and keep the rows where the parent side `IS
+  NULL`. Orphans are what deleting a parent without handling its children leaves behind.
+- **Duplicates - one real thing, several rows.** Two accounts with the same email means "which one is
+  real?" forever after. Catch with `GROUP BY` the should-be-unique value `HAVING COUNT(*)` above one.
+- **Stale denormalized copies - a convenience copy that stopped being true.** Apps often copy a value
+  (a customer name onto each order, a price onto each invoice line) for speed or history. When the
+  copy is supposed to stay current but does not, screens disagree depending on which table they read.
+  Catch by joining copy to source and comparing the two columns.
+- **Timezones, encodings, truncation - the quiet corrupters.** A timestamp saved in local time but
+  read as UTC shifts every deadline by hours. Text written under one encoding and read under another
+  turns names into garbage symbols. A 50-character column silently amputates a 60-character address.
+  Catch with boundary values you insert on purpose: a known instant across timezones, a name with
+  accented characters, a value exactly at and just over the column limit.
+
+<Callout type="tip">
+Data bugs cluster around deletes, imports, and "we store it in two places." When you learn a feature,
+ask three questions: what happens to this record's children when it is deleted, where did this data
+originally come from, and is this value stored anywhere else? Each answer marks a spot where one of
+the detector queries above is worth running - that is where the bodies are usually buried.
+</Callout>
+
+<Callout type="mistake">
+Assuming the database enforces its own integrity everywhere. Real schemas - especially older ones -
+often skip foreign key constraints and unique indexes for historical or performance reasons, and
+NoSQL stores rarely have them at all. "The database would never allow an orphan" is a hypothesis, not
+a fact: the only way to know whether orphans or duplicates can exist is to run the query and look.
+</Callout>
+
+{/* IMAGE: a museum portrait gallery with white walls and a vaulted ceiling: framed portrait paintings hung along the left and center walls, each with a small white label card mounted beside it, a wooden doorway on the left wall leading out of the room, and a dark bronze bust on a tall white pedestal with its own label card on the right */}
+<HotspotImage
+  src="/notes/sql-and-databases-for-testers/verifying-the-app-against-the-db/finding-data-bugs.jpg"
+  alt="A museum gallery with framed portraits and small label cards beside them, a doorway on the left, and a bust on a white pedestal to the right"
+  credit="Gallery of Polish Painting, National Museum in Kielce — Krzysztof Poplawski, Wikimedia Commons, CC BY 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Gallery_of_Polish_Painting_and_European_Decorative_Arts,_National_Museum_in_Kielce,_czerwiec_2025,_SOULinPIX_092.jpg"
+  pins={[
+    { x: 7, y: 46, label: "The painting - the source row itself", desc: "The artwork is the authoritative record: what is actually in the collection. In a schema this is the parent table - customers, products, artworks - the thing other records point at and copy from." },
+    { x: 13, y: 55, label: "The label card - a copied value that can go stale", desc: "The card repeats what the catalog says: title, artist, year. It is denormalized data - a copy made for the viewer's convenience. If the catalog is corrected and the card is not reprinted, the two silently disagree. Comparing card to catalog is the stale-copy detector query." },
+    { x: 28, y: 52, label: "The doorway - a reference to somewhere else", desc: "Labels and maps point visitors through doorways to other rooms. A child row's foreign key is such a pointer - and if the room beyond was emptied without updating what points there, everything referencing it becomes an orphan." },
+    { x: 90, y: 50, label: "The bust on its pedestal - one work, one entry, hopefully", desc: "Catalog this bust twice - once as 'bronze bust' and once under the sitter's name - and the collection claims two works where one exists. Duplicates are exactly this: one real thing behind multiple rows, found by grouping on what should be unique." },
+  ]}
+/>
+
+<FlowAnimation
+  title="A delete that plants a data bug, and the query that finds it - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "A support agent deletes customer 9 - a spam account", desc: "The customers row is removed. Every screen still looks fine. Nobody notices anything, because nothing visible references customer 9 today." },
+    { label: "But order 103 still points at customer_id 9", desc: "The delete never handled the children. Order 103 is now an orphan: a row whose parent does not exist. It sits there, harmless-looking, for weeks." },
+    { label: "A month later, the refunds page crashes for one order", desc: "The refund flow looks up the order's customer to send an email - and gets nothing. No repro steps, because the breaking action happened a month before the symptom." },
+    { label: "The tester runs the orphan detector", desc: "SELECT orders LEFT JOIN customers, keep rows where the customer side IS NULL - and order 103 surfaces instantly, along with any siblings." },
+    { label: "Verdict: found by query, not by luck", desc: "The bug existed the moment the delete ran. A scheduled orphan check would have caught it that day, with the cause still fresh - instead of a month later via a crash." },
+  ]}
+/>
+
+The whole idea, reduced to one line: data bugs are disagreements inside the data - and every classic
+class has a small query that makes the disagreement stand up and identify itself.
+
+<CodePlayground
+  language="python"
+  title="Run it - three detector queries over deliberately dirty data (Python)"
+  code={`import sqlite3
+
+conn = sqlite3.connect(":memory:")
+cur = conn.cursor()
+
+cur.execute("CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT, email TEXT)")
+cur.execute("""
+CREATE TABLE orders (
+    id INTEGER PRIMARY KEY,
+    customer_id INTEGER,
+    customer_name TEXT,
+    item TEXT
+)
+""")
+
+cur.executemany("INSERT INTO customers VALUES (?,?,?)", [
+    (1, "Maya Chen", "maya@example.com"),
+    (2, "Leo Ortiz", "leo@example.com"),
+    (3, "Maya Chen", "maya@example.com"),
+])
+cur.executemany("INSERT INTO orders VALUES (?,?,?,?)", [
+    (101, 1, "Maya Chen", "Keyboard"),
+    (102, 2, "Leo Ortis", "Monitor"),
+    (103, 9, "Ghost User", "Webcam"),
+])
+conn.commit()
+
+print("--- Bug hunt 1: duplicate customers (same email twice) ---")
+for row in cur.execute("""
+    SELECT email, COUNT(*) FROM customers
+    GROUP BY email HAVING COUNT(*) > 1
+"""):
+    print("  duplicate:", row)
+
+print()
+print("--- Bug hunt 2: orphaned orders (customer_id that matches nobody) ---")
+for row in cur.execute("""
+    SELECT o.id, o.customer_id, o.item FROM orders o
+    LEFT JOIN customers c ON o.customer_id = c.id
+    WHERE c.id IS NULL
+"""):
+    print("  orphan:", row)
+
+print()
+print("--- Bug hunt 3: stale copied name (orders.customer_name vs customers.name) ---")
+for row in cur.execute("""
+    SELECT o.id, o.customer_name, c.name FROM orders o
+    JOIN customers c ON o.customer_id = c.id
+    WHERE o.customer_name != c.name
+"""):
+    print("  stale copy:", row)
+
+print()
+print("Three classes of data bug, three queries - none visible on any single screen.")
+
+conn.close()`}
+/>
+
+Same three hunts in Java - the shared code runner here has no live JDBC/SQLite driver on its classpath
+(unlike your own machine, where `sqlite-jdbc` works fine locally), so this mirrors the same duplicate,
+orphan, and stale-copy detectors in plain Java collections, over the same rows, verified by hand to
+match the real SQLite output above:
+
+<CodePlayground
+  language="java"
+  title="Run it - the same three bug hunts, without a live JDBC driver on the shared runner (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    record Customer(int id, String name, String email) {}
+    record Order(int id, int customerId, String customerName, String item) {}
+
+    public static void main(String[] args) {
+        List<Customer> customers = List.of(
+            new Customer(1, "Maya Chen", "maya@example.com"),
+            new Customer(2, "Leo Ortiz", "leo@example.com"),
+            new Customer(3, "Maya Chen", "maya@example.com")
+        );
+        List<Order> orders = List.of(
+            new Order(101, 1, "Maya Chen", "Keyboard"),
+            new Order(102, 2, "Leo Ortis", "Monitor"),
+            new Order(103, 9, "Ghost User", "Webcam")
+        );
+
+        System.out.println("--- Bug hunt 1: duplicate customers (same email twice) ---");
+        Map<String, Integer> emailCounts = new LinkedHashMap<>();
+        for (Customer c : customers) {
+            emailCounts.merge(c.email(), 1, Integer::sum);
+        }
+        for (Map.Entry<String, Integer> e : emailCounts.entrySet()) {
+            if (e.getValue() > 1) {
+                System.out.println("  duplicate: ('" + e.getKey() + "', " + e.getValue() + ")");
+            }
+        }
+
+        System.out.println();
+        System.out.println("--- Bug hunt 2: orphaned orders (customer_id that matches nobody) ---");
+        Set<Integer> knownIds = new HashSet<>();
+        for (Customer c : customers) knownIds.add(c.id());
+        for (Order o : orders) {
+            if (!knownIds.contains(o.customerId())) {
+                System.out.println("  orphan: (" + o.id() + ", " + o.customerId() + ", '" + o.item() + "')");
+            }
+        }
+
+        System.out.println();
+        System.out.println("--- Bug hunt 3: stale copied name (orders.customer_name vs customers.name) ---");
+        Map<Integer, String> nameById = new HashMap<>();
+        for (Customer c : customers) nameById.put(c.id(), c.name());
+        for (Order o : orders) {
+            String current = nameById.get(o.customerId());
+            if (current != null && !current.equals(o.customerName())) {
+                System.out.println("  stale copy: (" + o.id() + ", '" + o.customerName() + "', '" + current + "')");
+            }
+        }
+
+        System.out.println();
+        System.out.println("Three classes of data bug, three queries - none visible on any single screen.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: hunt three bug classes in one dataset">
+<StepChecklist
+  steps={[
+    { text: "Pick a parent-child table pair you can query - customers/orders, users/posts, products/reviews", detail: "The playground above works if you have nothing else handy; better, use a test environment's real schema." },
+    { text: "Run the orphan detector: LEFT JOIN child to parent, keep rows where the parent side IS NULL", detail: "Zero rows is a pass worth recording. Any rows back - note how old they are; old orphans mean the leak has existed for a while." },
+    { text: "Run the duplicate detector on a should-be-unique column: GROUP BY it, HAVING COUNT(*) above 1", detail: "Emails, usernames, order numbers, SKU codes - anything the business assumes is unique." },
+    { text: "Find one value stored in two places and compare them with a join", detail: "Ask a developer 'is this copied anywhere?' if unsure. Any mismatch row is a stale copy - and a conversation about which side is the truth." },
+  ]}
+/>
+You have now hunted data bugs proactively - the difference between finding an orphan with a query
+today and finding it with a production crash next month.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "Two screens show different values for the same fact - the order page says one name or price, a report or email says another.",
+      fix: "You are almost certainly looking at a denormalized copy that drifted from its source. Find both storage locations (ask, or follow the queries), join and compare them, and establish with the team which side is authoritative - then file the drift with the mismatching rows as evidence.",
+    },
+    {
+      symptom: "Times in the app are off by a consistent few hours for some users - or every date boundary (deadlines, 'today' lists) shifts around midnight.",
+      fix: "Timezone data bug: check what is actually stored in the column for a known moment (insert a record at a time you control and look at the raw value). Consistent whole-hour offsets mean local time and UTC are being mixed somewhere between write and display.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Child tables after any parent delete** — the LEFT JOIN orphan detector, run where deletes happen, catches the most common leak at its source.
+- **Raw stored values for one record you created with boundary data** — an accented name, a max-length string, a known timestamp: truncation and encoding damage are visible only in the stored value, not the echo on screen.
+- **[[sql-and-databases-for-testers/reading-data/joins-gently]]** — the JOIN mechanics every detector query in this note is built on.
+- **[[sql-and-databases-for-testers/verifying-the-app-against-the-db/test-data-setup-and-cleanup]]** — the next note: planting boundary-value rows like these safely, and cleaning them up afterward.
+</WhereToCheck>
+
+<WorkedExample title="the report that disagreed with every order page">
+1. Support notices something odd: a monthly revenue report lists a customer as "L. Ortis", but the
+   customer's own order pages all say "Leo Ortiz". Same customer, same system, two spellings.
+2. A tester picks it up. First question: where does each screen get the name? The order page joins to
+   the customers table live; the report reads a `customer_name` column stored on each order row -
+   a copy made at order time for reporting speed.
+3. The tester joins copy against source: `SELECT o.id, o.customer_name, c.name FROM orders o JOIN
+   customers c ON o.customer_id = c.id WHERE o.customer_name != c.name` - and gets 41 rows, all
+   older than a specific date.
+4. Cause: the customer corrected a typo in their name last year. The customers table was updated;
+   the copies on already-placed orders never were - and the team's intent (historical snapshot vs
+   always-current) had never been decided, let alone tested.
+5. Finding: filed with the 41 rows and both readings. The fix was a decision first and a backfill
+   second - and the tester's join became a scheduled consistency check that ran from then on.
+</WorkedExample>
+
+<Quiz
+  question="An orders table has rows whose customer_id points at customers that no longer exist. Which query pattern surfaces exactly those rows?"
+  options={[
+    "SELECT * FROM orders WHERE customer_id = NULL",
+    "SELECT * FROM orders INNER JOIN customers ON orders.customer_id = customers.id",
+    "SELECT customer_id, COUNT(*) FROM orders GROUP BY customer_id HAVING COUNT(*) > 1",
+    "SELECT o.* FROM orders o LEFT JOIN customers c ON o.customer_id = c.id WHERE c.id IS NULL"
+  ]}
+  answer={3}
+  explain="The LEFT JOIN keeps every order and attaches its customer where one exists; for an orphan there is no matching customer, so the customer side of the joined row comes back NULL - and the WHERE c.id IS NULL filter keeps exactly those. Option one fails twice: orphans have a real (just dangling) customer_id, not NULL, and comparing with = NULL never matches anything anyway. The INNER JOIN in option two does the opposite of what is needed - it silently drops unmatched orders, hiding the orphans. Option three is the duplicate detector: useful, but it answers a different question."
+/>
+
+<Flashcards
+  cards={[
+    { front: "A data bug, in one line", back: "A defect in what is stored, not in what is drawn - screens can render perfectly while the tables hold wrong, inconsistent, or contradictory data." },
+    { front: "The drifted museum labels analogy", back: "A label pointing at a removed artwork (orphan), two labels for one sculpture (duplicate), a card still showing the uncorrected catalog entry (stale copy) - found only by walking the rooms with the catalog." },
+    { front: "Orphan detector query pattern", back: "LEFT JOIN child to parent, keep rows where the parent side IS NULL - an INNER JOIN would silently hide exactly the rows you are hunting." },
+    { front: "Duplicate detector query pattern", back: "GROUP BY the should-be-unique column, HAVING COUNT(*) greater than 1 - run on emails, usernames, order numbers, SKUs." },
+    { front: "Where data bugs cluster", back: "Around deletes (orphans), imports and integrations (duplicates, encoding, truncation), and any value stored in two places (stale copies)." },
+  ]}
+/>
+
+<Challenge>
+Take the playground above and extend the dirty dataset with one more bug of each class you can
+simulate: add a second orphan, another duplicate pair, and one more stale copy - then confirm each
+detector query catches your additions and nothing else. Bonus: add a customer name with accented
+characters and check it survives the round trip intact.
+</Challenge>
+
+<AskCommunity prompt="My orphan-detector query found 200 orders pointing at customers that no longer exist, some years old. The app works fine day to day. How do I report this so it gets taken seriously rather than closed as 'no user impact'?">
+Useful replies usually suggest tracing one orphan through a real flow that touches it - a refund, an
+export, a support lookup - to convert 'abstract integrity issue' into one concrete failing scenario,
+and reporting the leak's cause (the delete path) separately from the cleanup of the existing rows.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://testsigma.com/blog/database-testing/", title: "Testsigma — Database Testing: Complete Guide, Types, Examples", kind: "read" },
+    { href: "https://lakefs.io/data-quality/data-quality-testing/", title: "lakeFS — Data Quality Testing: Ways to Test Data Validity and Accuracy", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=5HcDJ8e9NwY", title: "IBM Technology — Data Quality Explained", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=5HcDJ8e9NwY" title="IBM Technology — Data Quality Explained" minutes={4} />
+
+<Takeaways
+  points={[
+    "Data bugs live in the tables, not on the screens - every view can look locally fine while the stored data contradicts itself.",
+    "The classic classes: orphaned rows, duplicates, stale denormalized copies, timezone shifts, encoding damage, and silent truncation.",
+    "Each class has a detector: LEFT JOIN with IS NULL for orphans, GROUP BY with HAVING for duplicates, copy-to-source joins for stale copies, boundary-value rows for the rest.",
+    "Hunt where the classes breed: deletes, imports, and any value stored in more than one place.",
+    "Never assume constraints protect you - many real schemas lack the foreign keys and unique indexes that would prevent these, so run the query and look.",
+  ]}
+/>
+
+<Complete xp={10} />

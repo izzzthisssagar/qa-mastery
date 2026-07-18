@@ -1991,10 +1991,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "verifying-the-app-against-the-db",
         title: "Verifying the app against the DB",
         topics: [
-          { slug: "ui-action-to-db-check", title: "UI action → DB check", planned: true },
-          { slug: "crud-verification", title: "CRUD verification", planned: true },
-          { slug: "finding-data-bugs", title: "Finding data bugs", planned: true },
-          { slug: "test-data-setup-and-cleanup", title: "Test data setup & cleanup", planned: true },
+          { slug: "ui-action-to-db-check", title: "UI action → DB check" },
+          { slug: "crud-verification", title: "CRUD verification" },
+          { slug: "finding-data-bugs", title: "Finding data bugs" },
+          { slug: "test-data-setup-and-cleanup", title: "Test data setup & cleanup" },
         ],
       },
       {

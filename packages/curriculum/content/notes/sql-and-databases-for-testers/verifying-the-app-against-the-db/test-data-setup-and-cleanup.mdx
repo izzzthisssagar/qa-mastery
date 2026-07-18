@@ -1,0 +1,305 @@
+---
+title: "Test data setup & cleanup"
+summary: "Create your own test rows instead of borrowing real users' data, make every row identifiable at a glance with a prefix like QA_TEST_, and clean up when done - so the environment is left exactly as found and nobody ever mutates a real customer's record by mistake."
+tags: ["sql-and-databases-for-testers", "verifying-the-app-against-the-db", "track-c"]
+updated: "2026-07-18"
+related:
+  - "sql-and-databases-for-testers/verifying-the-app-against-the-db/finding-data-bugs"
+  - "sql-and-databases-for-testers/verifying-the-app-against-the-db/ui-action-to-db-check"
+  - "sql-and-databases-for-testers/databases-in-plain-words/tables-rows-and-columns"
+---
+
+<Hook>
+A tester needs an account to test password reset, grabs the first row in the users table, and fires
+away. Except that row was a colleague's demo account for tomorrow's customer call - and now its
+password is changed and its profile says "zzz test". Every tester eventually learns this one the hard
+way, so learn it the cheap way instead: bring your own data. Rows you created, named so everyone can
+see whose they are, removed when you leave. Your tests get full control, and nobody's real record
+becomes your collateral damage.
+</Hook>
+
+<Callout type="analogy">
+A campsite and the leave-no-trace rule. You arrive at a shared ground where other people are already
+camped. You pitch your own tent - you do not move into somebody else's just because it is standing
+there empty. Your gear is recognizably yours, so nobody mistakes your stove for the site's equipment
+or another camper's. And when you leave, you pack out everything you brought: the ground looks
+exactly as it did before you arrived, and the campers around you never noticed you testing your tent
+in the rain. A shared test environment is that campsite - other testers, demos, and automated suites
+are camped all around you, and your data habits decide whether they even notice you were there.
+</Callout>
+
+<Term define="Test data setup is creating the specific rows your test needs - accounts, orders, products - rather than borrowing whatever real or shared data happens to exist. Good setup makes rows identifiable: a recognizable marker such as a QA_TEST_ prefix in a name field, or a reserved email domain, so anyone can tell test rows from real ones at a glance and any leftover is traceable to its owner. Cleanup is the matching teardown: after the test, remove (or restore) exactly what you created, leaving counts, states, and everyone else's rows untouched. The discipline has one hard rule - never mutate real user data - because environments get copied from production, demos live alongside tests, and a wrong UPDATE with a loose WHERE is irreversible without a restore.">Test data setup & cleanup</Term>
+
+## Bring your own rows, and take them with you
+
+- **Create rather than borrow.** A row you created is a row you fully know: its password, its state,
+  its history since insert. Borrowed data has invisible dependencies - a demo tomorrow, an automated
+  suite asserting on it, a real customer behind it if the environment was cloned from production.
+- **Make test rows identifiable at a glance.** A consistent marker - `QA_TEST_` in the name, emails
+  like `qa_test_a@example.com` - does three jobs: it declares "safe to touch", it lets one `LIKE
+  'QA_TEST_%'` query find every row you own, and it makes stray leftovers traceable instead of
+  mysterious.
+- **Clean up scoped to your marker.** Delete by your prefix, then verify: zero test rows remaining,
+  and total counts back to your recorded baseline. The queries that clean up are the same ones that
+  prove the cleanup worked.
+- **Leftovers are pollution with a delay.** Abandoned test rows skew counts, trip duplicate checks,
+  surface in demos, and become other people's mystery bugs - the "who is QA_TEST_signup_a and why is
+  it in the investor screenshot" meeting. What you plant, you pull.
+
+<Callout type="tip">
+Record the baseline before you plant anything: a quick `COUNT(*)` of each table you will touch, saved
+in your test notes. After cleanup, the same counts prove the ground is level again - and during the
+test, "my rows" versus "was already there" never becomes a guessing game. Baseline, plant, test,
+pull, re-count: five steps, two of them one-line queries.
+</Callout>
+
+<Callout type="mistake">
+Cleaning up with a delete scoped by anything other than your own marker - "delete the newest rows",
+"delete everything after 3pm", or a hand-typed list of ids. Anyone else's data created in that window
+dies with yours. The marker exists precisely so cleanup can be surgical: `DELETE ... WHERE name LIKE
+'QA_TEST_%'` removes everything you own and nothing you do not. If a row is not identifiable as
+yours, you have no business deleting it.
+</Callout>
+
+{/* IMAGE: a grassy campsite pitch in an alpine valley: a green tunnel tent with a yellow inner door in the foreground with a silver car parked behind it, a black folding camp chair and a small lantern to the right of the tent, camping gear including a blue water jug and gas stove further right, guy ropes staked to the grass, and a fenced court plus wooded mountainside in the background */}
+<HotspotImage
+  src="/notes/sql-and-databases-for-testers/verifying-the-app-against-the-db/test-data-setup-and-cleanup.jpg"
+  alt="A green tent pitched on a grassy campsite with a car behind it, a folding camp chair and camping gear beside it, and mountains in the background"
+  credit="Camping ground at Kippel — Hans Fransen, Wikimedia Commons, CC BY 2.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Camping_ground_at_Kippel_(3).jpg"
+  pins={[
+    { x: 30, y: 65, label: "Your tent - the test data you brought", desc: "Pitched by you, owned by you, fully known to you: you know what is inside because you packed it. That is a created test row - complete control, no hidden dependencies, no colleague's demo account underneath." },
+    { x: 57, y: 76, label: "The chair and lantern - recognizably YOUR gear", desc: "Distinctive kit nobody would mistake for the site's equipment. That is the QA_TEST_ marker: at a glance, everyone knows whose this is, that it is safe for you to touch, and exactly what to pack out later." },
+    { x: 77, y: 79, label: "The stove and jug - every piece gets packed out", desc: "Cleanup is an inventory, not a vibe: each item you brought leaves with you. In SQL terms, delete scoped to your marker, then verify zero of your rows remain and the counts match your baseline." },
+    { x: 70, y: 55, label: "The open ground around your pitch - everyone else's space", desc: "Other campers' pitches and the shared ground itself. In a shared environment that is real and demo data: not yours, possibly production-cloned, never to be edited or deleted - no matter how convenient the borrow looks." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Baseline, plant, test, pull, verify - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Baseline: count what is there before you touch anything", desc: "SELECT COUNT(*) on each table you will use - the recorded 'before' photo of the campsite." },
+    { label: "Setup: insert your own rows, marked as yours", desc: "Accounts named QA_TEST_signup_a and friends - created by you, identifiable by anyone, findable with one LIKE query." },
+    { label: "Test: run your scenario against YOUR rows only", desc: "Reset passwords, cancel orders, exhaust login attempts - full control, zero risk to real or shared records around you." },
+    { label: "Cleanup: delete scoped to your marker", desc: "DELETE WHERE the marker matches - surgical removal of everything you planted and nothing else." },
+    { label: "Verify: prove the ground is level again", desc: "Zero rows match your marker; counts equal the baseline. The environment ends the day exactly as it started - leave no trace, verified." },
+  ]}
+/>
+
+The whole idea, reduced to one line: create what you test on, mark it as yours, and leave the tables
+exactly as you found them.
+
+<CodePlayground
+  language="python"
+  title="Run it - the full setup/test/cleanup cycle with a QA_TEST_ prefix (Python)"
+  code={`import sqlite3
+
+conn = sqlite3.connect(":memory:")
+cur = conn.cursor()
+
+cur.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)")
+cur.executemany("INSERT INTO users VALUES (?,?,?)", [
+    (1, "Maya Chen", "maya@example.com"),
+    (2, "Leo Ortiz", "leo@example.com"),
+])
+conn.commit()
+
+baseline = cur.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+print("--- Before the test: baseline count of REAL rows ---")
+print("  users in the table:", baseline)
+
+print()
+print("--- Setup: insert clearly-labeled test rows (QA_TEST_ prefix) ---")
+cur.executemany("INSERT INTO users VALUES (?,?,?)", [
+    (101, "QA_TEST_signup_a", "qa_test_a@example.com"),
+    (102, "QA_TEST_signup_b", "qa_test_b@example.com"),
+])
+conn.commit()
+mine = cur.execute(
+    "SELECT COUNT(*) FROM users WHERE name LIKE 'QA_TEST_%'"
+).fetchone()[0]
+print("  my test rows, findable by prefix:", mine)
+
+print()
+print("--- Run the test against YOUR rows only - real users untouched ---")
+row = cur.execute(
+    "SELECT name FROM users WHERE name LIKE 'QA_TEST_%' ORDER BY id LIMIT 1"
+).fetchone()
+print("  exercising test row:", row[0])
+
+print()
+print("--- Cleanup: delete ONLY what the prefix marks as yours ---")
+cur.execute("DELETE FROM users WHERE name LIKE 'QA_TEST_%'")
+conn.commit()
+left = cur.execute("SELECT COUNT(*) FROM users WHERE name LIKE 'QA_TEST_%'").fetchone()[0]
+after = cur.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+print("  test rows remaining:", left)
+print("  table back to baseline:", after, "==", baseline, "->", after == baseline)
+print()
+print("Leave the table exactly as you found it - minus nothing, plus nothing.")
+
+conn.close()`}
+/>
+
+Same cycle in Java - the shared code runner here has no live JDBC/SQLite driver on its classpath
+(unlike your own machine, where `sqlite-jdbc` works fine locally), so this mirrors the same
+baseline/setup/test/cleanup logic in plain Java collections, over the same rows, verified by hand to
+match the real SQLite output above:
+
+<CodePlayground
+  language="java"
+  title="Run it - the same setup/cleanup cycle, without a live JDBC driver on the shared runner (Java)"
+  code={`import java.util.*;
+import java.util.stream.*;
+
+public class Main {
+    record User(int id, String name, String email) {}
+
+    public static void main(String[] args) {
+        List<User> users = new ArrayList<>(List.of(
+            new User(1, "Maya Chen", "maya@example.com"),
+            new User(2, "Leo Ortiz", "leo@example.com")
+        ));
+
+        int baseline = users.size();
+        System.out.println("--- Before the test: baseline count of REAL rows ---");
+        System.out.println("  users in the table: " + baseline);
+
+        System.out.println();
+        System.out.println("--- Setup: insert clearly-labeled test rows (QA_TEST_ prefix) ---");
+        users.add(new User(101, "QA_TEST_signup_a", "qa_test_a@example.com"));
+        users.add(new User(102, "QA_TEST_signup_b", "qa_test_b@example.com"));
+        long mine = users.stream().filter(u -> u.name().startsWith("QA_TEST_")).count();
+        System.out.println("  my test rows, findable by prefix: " + mine);
+
+        System.out.println();
+        System.out.println("--- Run the test against YOUR rows only - real users untouched ---");
+        User first = users.stream()
+            .filter(u -> u.name().startsWith("QA_TEST_"))
+            .sorted(Comparator.comparingInt(User::id))
+            .findFirst()
+            .orElseThrow();
+        System.out.println("  exercising test row: " + first.name());
+
+        System.out.println();
+        System.out.println("--- Cleanup: delete ONLY what the prefix marks as yours ---");
+        users.removeIf(u -> u.name().startsWith("QA_TEST_"));
+        long left = users.stream().filter(u -> u.name().startsWith("QA_TEST_")).count();
+        int after = users.size();
+        System.out.println("  test rows remaining: " + left);
+        System.out.println("  table back to baseline: " + after + " == " + baseline
+            + " -> " + (after == baseline ? "True" : "False"));
+        System.out.println();
+        System.out.println("Leave the table exactly as you found it - minus nothing, plus nothing.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: one full leave-no-trace test cycle">
+<StepChecklist
+  steps={[
+    { text: "Pick a table your test will touch and record its baseline count", detail: "One COUNT(*) saved in your notes - in BuggyShop, the users or orders table is a natural choice." },
+    { text: "Create your test records through the app, named with a clear marker", detail: "Sign up as QA_TEST_yourname_scenario with a test email - then verify your rows landed with a LIKE query on the marker." },
+    { text: "Run your actual test scenario using only those records", detail: "Notice the freedom: you can break, lock, exhaust, and mangle these rows without a single thought about who else needs them." },
+    { text: "Clean up by your marker and verify twice", detail: "Delete (through the app or with help from whoever has DB write access), then check: zero rows match your marker, and the count is back at baseline." },
+  ]}
+/>
+You have now run a test that a colleague could not detect afterward - the professional default for
+any shared environment, and the habit that keeps real data safe from your tests.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "Your test needs a row in a state you cannot create through the UI - an account 30 days old, an order in a mid-shipment state, a user with 1000 posts.",
+      fix: "Do not hijack a real row that happens to be in that state - it is in that state because someone or something put it there. Ask for a seeded fixture or a one-off INSERT/UPDATE on a row you created (dev help or a seeding script), keeping your marker on it so it stays identifiable and cleanable.",
+    },
+    {
+      symptom: "Duplicate-prevention or validation blocks your setup - 'email already registered' from a leftover QA_TEST_ row of a previous run that never got cleaned.",
+      fix: "This is yesterday's missing cleanup surfacing as today's blocked setup. Find the leftovers with your marker query, clean them, then fix the leak: make cleanup a fixed final step of the test (or an automated teardown), not something done when remembered. Unique-per-run names (a date or run id in the marker) prevent the collision entirely.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **A marker query before you start** — `LIKE 'QA_TEST_%'` reveals leftovers from previous runs before they collide with yours, and tells you whether the team's cleanup habit actually holds.
+- **Baseline counts of every table you touch, before and after** — the two numbers that prove your cleanup was complete and surgical.
+- **[[sql-and-databases-for-testers/verifying-the-app-against-the-db/ui-action-to-db-check]]** — the verification habit used at every step here: trust the query, not the screen, for what your setup and cleanup really did.
+- **[[sql-and-databases-for-testers/verifying-the-app-against-the-db/finding-data-bugs]]** — leftover test rows are themselves a data-bug source: orphans and duplicates with your name on them.
+</WhereToCheck>
+
+<WorkedExample title="the demo account that testing quietly destroyed">
+1. A tester needs to verify account lockout: five wrong passwords should lock an account for 30
+   minutes. Short on time, they use an existing account from the staging users table - it looks
+   generic, something like "Acme Demo".
+2. The test works beautifully. Five wrong attempts, account locked, timer verified. Test case passed,
+   evidence attached, everyone moves on.
+3. Next morning, sales starts a live customer demo against staging - on that exact account, because
+   that is what it existed for. Login fails with a lockout message in front of the customer. The
+   demo dies. Twenty minutes of debugging later, the timeline points back to the lockout test.
+4. The rework: the tester creates `QA_TEST_lockout_a` through the signup flow, verifies the row
+   landed with a marker query, runs the same five-attempts scenario against it, and deletes it
+   afterward - baseline count confirmed. Same coverage, zero shared-state risk.
+5. Finding: the lockout feature was never the problem - the borrowed row was. "Looks generic" is not
+   ownership. A row you did not create has a purpose you cannot see, and the marker discipline exists
+   so that no test ever has to gamble on it.
+</WorkedExample>
+
+<Quiz
+  question="A tester finishes a signup-flow test that created several QA_TEST_ rows, and wants to clean up. Which cleanup approach is correct?"
+  options={[
+    "Delete rows matching their own marker - WHERE name LIKE 'QA_TEST_%' - then verify zero remain and table counts are back at the recorded baseline",
+    "Delete all rows created today, since the test ran today and this catches everything in one statement",
+    "Leave the rows - test data is harmless, and someone else probably needs examples in the table anyway",
+    "Truncate the whole table so the environment is guaranteed clean for the next person"
+  ]}
+  answer={0}
+  explain="Cleanup must be scoped to what the tester provably owns, and the marker is that proof - the LIKE query removes every planted row and nothing else, and re-checking marker count plus baseline verifies it worked. Deleting by time window (option two) destroys anything anyone else created today: other testers' rows, demo data, real signups on a shared environment. Leaving rows (option three) is pollution with a delay - skewed counts, blocked duplicate checks, mystery accounts in demos. Truncating the table (option four) is maximal collateral damage: it deletes everyone's data, real and test alike, to solve a problem the marker solves surgically."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The three-part test data discipline", back: "Create your own rows (never borrow), make them identifiable (a marker like QA_TEST_), clean up scoped to that marker when done." },
+    { front: "The campsite analogy", back: "Pitch your own tent, use recognizably-your-own gear, pack out everything when you leave - other campers (real and demo data) never notice you were there." },
+    { front: "Why never mutate real user data", back: "Environments get cloned from production and shared rows have invisible purposes - a demo, a suite, a customer. A wrong UPDATE is irreversible without a restore, and 'looks generic' is not ownership." },
+    { front: "What the QA_TEST_ marker buys you", back: "Safe-to-touch is visible at a glance, one LIKE query finds everything you own, and cleanup can be surgical - deleting all your rows and only your rows." },
+    { front: "How to prove a cleanup worked", back: "Two queries: zero rows match your marker, and each touched table's COUNT(*) equals the baseline you recorded before setup." },
+  ]}
+/>
+
+<Challenge>
+Design the test data plan for testing "delete my account" end to end: what rows you would create
+(the account, plus at least one order or post attached to it), what marker scheme makes them all
+findable as a set, what the test does, and what cleanup means when the test itself deletes some of
+the data. Write the before/after verification queries - then, if you have an environment, run the
+whole cycle.
+</Challenge>
+
+<AskCommunity prompt="Our shared staging database is full of ancient test rows - no consistent naming, no owners, some tables have more junk than real data. I want to start the QA_TEST_ discipline but the mess predates me. Where do I even start?">
+Useful replies usually say: start the discipline for new data now (marker plus cleanup, agreed as a
+team), and treat the old mess as a separate inventory-and-archive project with the team's sign-off -
+never a solo bulk delete, since unowned rows are exactly the ones whose purpose you cannot see.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.softwaretestinghelp.com/test-data-management-techniques/", title: "Software Testing Help — What is Test Data Management: Strategy with Example", kind: "read" },
+    { href: "https://www.geeksforgeeks.org/software-engineering/overview-of-test-data-management-tdm/", title: "GeeksforGeeks — Test Data Management (TDM) in Software Testing", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=YY8YomWTf-I", title: "K2view — What is test data management?", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=YY8YomWTf-I" title="K2view — What is test data management?" minutes={1} />
+
+<Takeaways
+  points={[
+    "Create the data you test on - borrowed rows have invisible dependencies, and cloned-from-production environments make borrowing genuinely dangerous.",
+    "Mark every test row with a consistent, queryable identifier like a QA_TEST_ prefix - safe-to-touch at a glance, findable with one LIKE.",
+    "Record baseline counts before setup; verify them again after cleanup - the pair proves your run left no trace.",
+    "Clean up scoped to your marker only - never by time window, recency, or a hand-typed id list that can catch other people's rows.",
+    "Never mutate real user data, full stop - if a needed state cannot be built on rows you created, get a seeded fixture, not someone else's record.",
+  ]}
+/>
+
+<Complete xp={10} />
