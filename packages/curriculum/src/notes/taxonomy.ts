@@ -2085,10 +2085,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "the-automation-pyramid",
         title: "The automation pyramid",
         topics: [
-          { slug: "unit-integration-e2e", title: "Unit / integration / E2E", planned: true },
-          { slug: "ice-cream-cone-anti-pattern", title: "Ice-cream-cone anti-pattern", planned: true },
-          { slug: "balancing-the-suite", title: "Balancing the suite", planned: true },
-          { slug: "roi", title: "ROI", planned: true },
+          { slug: "unit-integration-e2e", title: "Unit / integration / E2E" },
+          { slug: "ice-cream-cone-anti-pattern", title: "Ice-cream-cone anti-pattern" },
+          { slug: "balancing-the-suite", title: "Balancing the suite" },
+          { slug: "roi", title: "ROI" },
         ],
       },
       {
