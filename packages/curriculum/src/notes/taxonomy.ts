@@ -2075,10 +2075,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "why-and-when-to-automate",
         title: "Why & when to automate",
         topics: [
-          { slug: "benefits", title: "Benefits", planned: true },
-          { slug: "what-to-automate", title: "What to automate", planned: true },
-          { slug: "what-not-to-automate", title: "What NOT to", planned: true },
-          { slug: "manual-vs-automated", title: "Manual vs automated", planned: true },
+          { slug: "benefits", title: "Benefits" },
+          { slug: "what-to-automate", title: "What to automate" },
+          { slug: "what-not-to-automate", title: "What NOT to" },
+          { slug: "manual-vs-automated", title: "Manual vs automated" },
         ],
       },
       {
