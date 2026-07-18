@@ -2028,10 +2028,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "security",
         title: "Security",
         topics: [
-          { slug: "why-it-matters", title: "Why it matters", planned: true },
-          { slug: "common-risks", title: "Common risks", planned: true },
-          { slug: "a-testers-role", title: "A tester's role", planned: true },
-          { slug: "owasp-preview", title: "OWASP preview", planned: true },
+          { slug: "why-it-matters", title: "Why it matters" },
+          { slug: "common-risks", title: "Common risks" },
+          { slug: "a-testers-role", title: "A tester's role" },
+          { slug: "owasp-preview", title: "OWASP preview" },
         ],
       },
       {
