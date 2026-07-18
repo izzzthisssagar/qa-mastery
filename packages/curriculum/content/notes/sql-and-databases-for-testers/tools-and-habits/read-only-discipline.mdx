@@ -1,0 +1,300 @@
+---
+title: "Read-only discipline"
+summary: "Testers verify data by reading it - so query with an account that CANNOT write. One UPDATE without a WHERE rewrites every row in a table; a read-only grant makes that mistake impossible, and a transaction with ROLLBACK is the seatbelt when writes are unavoidable."
+tags: ["sql-and-databases-for-testers", "tools-and-habits", "track-c"]
+updated: "2026-07-18"
+related:
+  - "sql-and-databases-for-testers/tools-and-habits/connecting-safely"
+  - "sql-and-databases-for-testers/tools-and-habits/query-snippets-library"
+  - "sql-and-databases-for-testers/verifying-the-app-against-the-db/crud-verification"
+---
+
+<Hook>
+`UPDATE orders SET status = 'cancelled' WHERE id = 4821` fixes one row. Delete the WHERE clause -
+one accidental selection, one careless paste - and the exact same statement rewrites EVERY order in
+the table, instantly, with no confirmation dialog and no undo button. Testers do not need to be able
+to make that mistake, because a tester's whole job at the database is READING: comparing what the app
+claims against what is stored. This note is about making the catastrophic version structurally
+impossible - by querying with an account that cannot write at all.
+</Hook>
+
+<Callout type="analogy">
+A museum gallery. Visitors can study every artifact - walk the rooms, lean in close, read every
+label - but everything sits behind glass, and the signs on the case say no touching. The glass is not
+an insult to visitors; it is what makes it safe to let thousands of people a day stand an arm's
+length from irreplaceable objects. A read-only database account is that glass: you see every row
+perfectly, and the one thing you cannot do is the one thing that cannot be undone. Curators with keys
+to the cases exist - but opening a case is a deliberate, logged act by someone whose job it is, not a
+thing a visitor can do by stumbling.
+</Callout>
+
+<Term define="Read-only discipline means doing verification work through a database account that has SELECT permission but no INSERT, UPDATE, DELETE, or DROP - so reading is unrestricted and writing is refused by the database itself, no matter what gets typed. Databases control this with permission GRANTs per account: ask your team for a read-only account (a one-line grant for a DBA). The companion habit is the transaction seatbelt for the rare, agreed cases where a tester must write test data: BEGIN opens a transaction, your changes stay provisional and invisible to others, and ROLLBACK throws them away as if they never happened - only COMMIT makes them permanent. Discipline means both: read-only by default, seatbelt on when writing is truly required.">Read-only discipline</Term>
+
+## Why the glass exists
+
+- **One missing WHERE is a catastrophe, not a typo.** `UPDATE` and `DELETE` apply to every row the
+  condition matches - and with no condition, that is every row in the table. There is no confirmation
+  step and no undo; recovery means restoring from backups, if the backups are good.
+- **A read-only account turns the disaster into an error message.** With only SELECT granted, the
+  database refuses the write up front - permission denied - before a single row changes. The mistake
+  becomes harmless noise instead of an incident.
+- **Reading covers ninety-nine percent of tester needs.** Verifying a UI action wrote the right row,
+  checking counts, comparing statuses, exporting evidence - all pure SELECT. You lose almost nothing
+  by giving up write access, and everything you lose is something you did not want to risk anyway.
+- **Transactions are the seatbelt for the rare write.** When a test genuinely requires inserting test
+  data (agreed with the team, on the right environment), wrap it: `BEGIN`, make the change, verify,
+  then `ROLLBACK` to erase it - or `COMMIT` only if keeping it is the explicit plan.
+
+<Callout type="tip">
+Asking for read-only access is not an admission of weakness - phrase it exactly that way to your
+team: "Can I get a read-only account for staging so my verification queries can never touch
+anything?" DBAs grant this in one line (PostgreSQL even has a per-session guard: `SET
+default_transaction_read_only = on`), and teams consistently read the request as a sign you take
+their data seriously. It is the cheapest trust-builder in this whole module.
+</Callout>
+
+<Callout type="mistake">
+Believing a transaction left open in your client is "no big deal because I'll roll it back later."
+An open transaction holds locks: rows you have updated inside `BEGIN` can block the application's own
+writes to those rows until you COMMIT or ROLLBACK - meaning a forgotten lunchtime transaction can
+freeze checkouts on staging for an hour. The seatbelt works when the ride is short: begin, change,
+verify, roll back, in one sitting, never leaving a transaction open while you walk away.
+</Callout>
+
+{/* IMAGE: a museum gallery at the National Museum in Delhi - a group of schoolchildren in blue uniforms leaning over a central glass-topped display case, tall wall cases full of pottery behind glass on the left, a white information placard and small circular prohibition signs on the central case, and a labeled doorway sign reading Maurya, Shunga and Satavahana Arts at upper right */}
+<HotspotImage
+  src="/notes/sql-and-databases-for-testers/tools-and-habits/read-only-discipline.jpg"
+  alt="Schoolchildren studying artifacts through the glass top of a museum display case, with glass-fronted wall cases and a labeled gallery doorway nearby"
+  credit="National Museum in Delhi - visitors — juggadery, Wikimedia Commons, CC BY-SA 2.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:National_Museum_in_Delhi_3_-_visitors_(43056980852).jpg"
+  pins={[
+    { x: 50, y: 52, label: "The glass-topped case - look all you want, touch nothing", desc: "The visitors lean right over the artifacts, studying every detail through the glass. That is a read-only account: perfect visibility of every row, with modification physically off the table." },
+    { x: 13, y: 30, label: "The wall cases of pottery - the whole collection on open view", desc: "Nothing is hidden from visitors; every piece is displayed behind glass. Read-only does not mean restricted-view - a SELECT-only account reads exactly the same data a full account does." },
+    { x: 57, y: 71, label: "The prohibition signs on the case - the grants, posted", desc: "Small circular no-touching signs state the rules of the room. In a database these rules are permission grants: SELECT allowed, INSERT/UPDATE/DELETE refused - enforced by the database, not by your carefulness." },
+    { x: 84, y: 19, label: "The labeled doorway to the next gallery - curators pass, visitors browse", desc: "Staff with keys move objects through here as a deliberate, logged act. Writes belong to the same category: deliberate, agreed, done by the right role - never a side effect of a tester browsing." },
+  ]}
+/>
+
+<FlowAnimation
+  title="The careless UPDATE, with and without the seatbelt - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "A tester means to cancel ONE test order on staging", desc: "The intended statement: UPDATE orders SET status = 'cancelled' WHERE id = 4821. Reasonable, agreed with the team." },
+    { label: "The WHERE clause gets lost - a bad paste, a slipped selection", desc: "What actually runs: UPDATE orders SET status = 'cancelled'. Silently valid SQL, aimed at every row in the table." },
+    { label: "Without protection: every order is now cancelled", desc: "No confirmation, no undo. Thousands of rows rewritten; recovery is a backup-restore conversation with very unhappy people." },
+    { label: "With BEGIN first: the damage is provisional", desc: "The same careless UPDATE ran inside a transaction - the rows LOOK changed in this session, but nothing is committed and other sessions still see the original data. ROLLBACK erases it completely." },
+    { label: "With a read-only account: the mistake never starts", desc: "The database answers 'permission denied for table orders' before touching a single row. This is the default testers should work from - the seatbelt is for the rare agreed write." },
+  ]}
+/>
+
+The whole idea, reduced to one line: read-only by default makes the worst mistake impossible, and
+BEGIN...ROLLBACK is the seatbelt for the rare day you must write.
+
+<CodePlayground
+  language="python"
+  title="Run it - a careless UPDATE undone by ROLLBACK, on a real database (Python)"
+  code={`import sqlite3
+
+conn = sqlite3.connect(":memory:")
+conn.isolation_level = None  # manual transaction control
+cur = conn.cursor()
+
+cur.execute("CREATE TABLE orders (id INTEGER PRIMARY KEY, customer TEXT, status TEXT)")
+cur.executemany("INSERT INTO orders VALUES (?,?,?)", [
+    (1, "Mina", "paid"),
+    (2, "Leo", "shipped"),
+    (3, "Ana", "paid"),
+    (4, "Raj", "pending"),
+])
+
+print("--- Before: the real data ---")
+for row in cur.execute("SELECT * FROM orders"):
+    print(" ", row)
+
+print()
+print("--- The careless UPDATE: no WHERE clause, inside a transaction ---")
+cur.execute("BEGIN")
+cur.execute("UPDATE orders SET status = 'cancelled'")
+print("  rows changed:", cur.rowcount, "- EVERY order is now 'cancelled'")
+for row in cur.execute("SELECT * FROM orders"):
+    print(" ", row)
+
+print()
+print("--- ROLLBACK: the seatbelt ---")
+cur.execute("ROLLBACK")
+for row in cur.execute("SELECT * FROM orders"):
+    print(" ", row)
+print("  Every row is back exactly as it was - because the change was never committed.")
+
+print()
+print("--- Without BEGIN, that same UPDATE would have been permanent. ---")
+print("A read-only account cannot make this mistake at all: the UPDATE is refused up front.")
+
+conn.close()`}
+/>
+
+Same seatbelt in Java - the shared code runner here has no live JDBC/SQLite driver on its classpath
+(unlike your own machine, where `sqlite-jdbc` works fine locally), so the transaction becomes an
+explicit snapshot-and-restore over plain collections, which is exactly what ROLLBACK does for you in
+a real database:
+
+<CodePlayground
+  language="java"
+  title="Run it - the same careless update and rollback, modeled with a snapshot (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    record OrderRow(int id, String customer, String status) {}
+
+    static void printAll(List<OrderRow> rows) {
+        for (OrderRow r : rows) {
+            System.out.println("  (" + r.id() + ", " + r.customer() + ", " + r.status() + ")");
+        }
+    }
+
+    public static void main(String[] args) {
+        List<OrderRow> orders = new ArrayList<>(List.of(
+            new OrderRow(1, "Mina", "paid"),
+            new OrderRow(2, "Leo", "shipped"),
+            new OrderRow(3, "Ana", "paid"),
+            new OrderRow(4, "Raj", "pending")
+        ));
+
+        System.out.println("--- Before: the real data ---");
+        printAll(orders);
+
+        System.out.println();
+        System.out.println("--- The careless UPDATE: no WHERE clause, inside a transaction ---");
+        // BEGIN: take a snapshot before touching anything - this is what a transaction gives you
+        List<OrderRow> snapshot = new ArrayList<>(orders);
+        int changed = 0;
+        for (int i = 0; i < orders.size(); i++) {
+            OrderRow r = orders.get(i);
+            orders.set(i, new OrderRow(r.id(), r.customer(), "cancelled"));
+            changed++;
+        }
+        System.out.println("  rows changed: " + changed + " - EVERY order is now 'cancelled'");
+        printAll(orders);
+
+        System.out.println();
+        System.out.println("--- ROLLBACK: the seatbelt ---");
+        orders = snapshot; // restore the pre-transaction state
+        printAll(orders);
+        System.out.println("  Every row is back exactly as it was - because the change was never committed.");
+
+        System.out.println();
+        System.out.println("--- Without BEGIN, that same UPDATE would have been permanent. ---");
+        System.out.println("A read-only account cannot make this mistake at all: the UPDATE is refused up front.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: feel the seatbelt catch you">
+<StepChecklist
+  steps={[
+    { text: "In the Python playground above, delete the ROLLBACK line and rerun", detail: "Watch the 'after' state: without the rollback, the careless UPDATE's damage sticks around for the rest of the session. That is what permanent means." },
+    { text: "Put the ROLLBACK back, and add a correct UPDATE with a WHERE id = 2 inside a new BEGIN", detail: "Verify exactly one row changes, then roll that back too - practicing the full begin-change-verify-rollback loop." },
+    { text: "Ask your team for a read-only account for the environment you verify against", detail: "One sentence: 'Can I get read-only access so my queries can never modify anything?' Note the answer - it tells you how your team thinks about data safety." },
+    { text: "Find out what your DB client does on a double-clicked results cell", detail: "If your client edits rows from the grid, a read-only account is what makes that feature safe to have enabled at all." },
+  ]}
+/>
+You have now seen the difference between a rolled-back mistake (invisible) and a committed one
+(permanent) with your own eyes - which is the entire argument for read-only discipline, compressed
+into one rerun.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "Your query fails with 'permission denied for table orders' even though a SELECT on the same table works fine.",
+      fix: "This is the read-only grant doing its job: the statement that failed was a write (UPDATE, INSERT, DELETE) or touched an object you have no grant for. If the write is genuinely needed for a test, that is a conversation with the team about the right way to seed test data - not a reason to hunt for a more powerful login.",
+    },
+    {
+      symptom: "The app on staging suddenly hangs on saves, and other people's queries against one table never finish.",
+      fix: "Check for an open transaction holding locks - often someone's client sitting in an unfinished BEGIN with uncommitted updates. Find and end the idle transaction (ROLLBACK it), and adopt the rule that transactions are opened and closed in one sitting, never left open while you step away.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **What your account can actually do** — try a harmless write on a scratch table once (or ask the DBA what grants you have) so 'permission denied' is a fact you know, not a surprise mid-test.
+- **Open transactions before you walk away** — an uncommitted BEGIN holds locks that can block the app; end every transaction in the same sitting it started.
+- **[[sql-and-databases-for-testers/tools-and-habits/connecting-safely]]** — the first seatbelt: knowing which environment you are on. Read-only is the second, for when the first fails.
+- **[[sql-and-databases-for-testers/verifying-the-app-against-the-db/crud-verification]]** — the verification workflow where all this reading actually happens, action by action.
+</WhereToCheck>
+
+<WorkedExample title="the one-row fix that became a four-thousand-row incident (in a session that could not hurt anyone)">
+1. A tester on staging needs to reset one stuck test order and types the UPDATE by hand:
+   `UPDATE orders SET status = 'pending'` - reaching for the semicolon before noticing the WHERE
+   clause never got typed.
+2. The statement runs. `rows changed: 4183`. Every order on staging - including the carefully seeded
+   scenarios two other testers were mid-way through using - now reads 'pending'.
+3. But this tester had two habits from this note. First, the change ran inside a transaction: `BEGIN`
+   had been typed before the UPDATE, as always. Nothing was committed; other sessions still saw the
+   original data the whole time.
+4. `ROLLBACK`. The 4183 changes evaporate. A re-run of the UPDATE - this time WITH `WHERE id = 4821`
+   inside a fresh transaction - changes exactly one row, is verified with a SELECT, and is committed
+   deliberately.
+5. Finding: the WHERE clause will eventually be forgotten by everyone - the only question is what
+   catches it. A transaction caught it here; a read-only account would have refused it even earlier.
+   Discipline is choosing to have those nets in place before the day you need them.
+</WorkedExample>
+
+<Quiz
+  question="A tester needs to verify how the app displays a cancelled order, which requires flipping one staging order's status. What does read-only discipline actually prescribe here?"
+  options={[
+    "Never do it - read-only discipline means a tester must refuse any task that involves a write",
+    "Ask for temporary write access, run the UPDATE with a WHERE inside BEGIN, verify the app's display, then ROLLBACK (or COMMIT only if keeping the state was the agreed plan)",
+    "Use the shared admin login for speed, since staging data does not matter anyway",
+    "Run the UPDATE without a transaction so the change is immediately visible to the app"
+  ]}
+  answer={1}
+  explain="Read-only discipline is a default, not a vow of abstinence - the note is explicit that rare, agreed writes happen, and prescribes exactly this shape: the right access for the task, a WHERE clause, a transaction as the seatbelt, verification, then an explicit ROLLBACK or a deliberate COMMIT. Refusing all writes forever (option one) misreads the discipline. The shared admin login (option three) breaks both this note and the credential hygiene from the connecting-safely note - and staging data DOES matter; other testers' work lives there. Skipping the transaction (option four) trades away the safety net for nothing: a committed transaction is just as visible to the app, and an uncommitted one can be verified from the same session before deciding."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Read-only discipline, in one line", back: "Do verification through an account granted SELECT only - reading is unrestricted, and INSERT/UPDATE/DELETE are refused by the database itself, no matter what gets typed." },
+    { front: "Why one careless UPDATE is catastrophic", back: "UPDATE and DELETE without a WHERE apply to every row in the table - no confirmation, no undo. Recovery means restoring backups." },
+    { front: "The museum glass analogy", back: "Visitors study every artifact through the case glass but cannot touch; curators open cases deliberately, with keys and logs. SELECT-only is the glass; writes are the curator's job." },
+    { front: "The transaction seatbelt", back: "BEGIN makes changes provisional, ROLLBACK erases them as if they never happened, COMMIT alone makes them permanent - so wrap any unavoidable write and keep the transaction short." },
+    { front: "The forgotten-transaction trap", back: "An open transaction holds locks that can block the app's own writes - begin, change, verify, and rollback in one sitting; never leave a transaction open while you walk away." },
+  ]}
+/>
+
+<Challenge>
+Rerun the Python playground three ways and write one sentence about each: (1) as-is, confirming
+ROLLBACK restores all four rows; (2) with the ROLLBACK deleted, confirming the damage persists for
+the session; (3) with the WHERE clause added to the UPDATE, confirming rows changed drops from 4 to
+1. Then send your team the one-sentence read-only access request from this note - and note what they
+say.
+</Challenge>
+
+<AskCommunity prompt="I'm a manual tester with full write access to our staging database, which frankly scares me after nearly running an UPDATE without its WHERE clause. How do other testers protect themselves - is asking to have my own access REDUCED a weird request?">
+Useful replies usually confirm it is the opposite of weird - asking for least-privilege access reads
+as professionalism - and stack the same three nets this note teaches: a SELECT-only account as the
+default, BEGIN before any agreed write with ROLLBACK as the exit, and client settings (like
+auto-commit off or a session read-only flag) as a final layer.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.postgresql.org/docs/current/sql-rollback.html", title: "PostgreSQL Documentation — ROLLBACK", kind: "read" },
+    { href: "https://www.digitalocean.com/community/tutorials/sql-commit-sql-rollback", title: "DigitalOcean — SQL Commit And Rollback", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=DvJq4L41ru0", title: "Software Nuggets — How to implement Transactions (COMMIT, ROLLBACK, SavePoint) in PostgreSQL.", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=DvJq4L41ru0" title="Software Nuggets — How to implement Transactions (COMMIT, ROLLBACK, SavePoint) in PostgreSQL." minutes={17} />
+
+<Takeaways
+  points={[
+    "A tester's database job is reading - so query through an account with SELECT only, and the catastrophic missing-WHERE mistake becomes a harmless 'permission denied'.",
+    "UPDATE and DELETE without a WHERE hit every row, instantly, with no undo - never rely on carefulness alone to prevent what a permission grant can make impossible.",
+    "For the rare agreed write: BEGIN first, change, verify with a SELECT, then ROLLBACK - or COMMIT only when keeping the change is the explicit plan.",
+    "Keep transactions short and never leave one open - uncommitted changes hold locks that can block the application and other testers.",
+    "Ask for read-only access in one sentence - it is a one-line grant for a DBA and the cheapest way to show a team you take their data seriously.",
+  ]}
+/>
+
+<Complete xp={10} />

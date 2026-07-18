@@ -1,0 +1,315 @@
+---
+title: "Connecting safely"
+summary: "A connection string names exactly which server, port, user, and database you are about to touch. Read it before every session, prefer read replicas, reach databases through VPNs/tunnels, never share credentials - and always confirm staging vs prod BEFORE running anything."
+tags: ["sql-and-databases-for-testers", "tools-and-habits", "track-c"]
+updated: "2026-07-18"
+related:
+  - "sql-and-databases-for-testers/tools-and-habits/db-clients"
+  - "sql-and-databases-for-testers/tools-and-habits/read-only-discipline"
+  - "sql-and-databases-for-testers/databases-in-plain-words/where-your-apps-data-lives"
+---
+
+<Hook>
+Two databases can look identical from inside a query editor: same tables, same columns, same kinds of
+rows. One is staging, where you are supposed to be. The other is production, holding real customers'
+real data. The ONLY thing separating them is a hostname you glanced at once while connecting - and
+every tester who has run a "harmless" test query against production swears they were certain they were
+on staging. This note is about never being that person: reading a connection string, and proving which
+environment you are on before every session.
+</Hook>
+
+<Callout type="analogy">
+An airport departure board, read before boarding. Your ticket names an exact flight: airline, flight
+number, gate, departure time. Nobody walks onto whichever plane is nearest - you check the board,
+match your flight number to a gate, and confirm the destination on the sign at the gate itself. A
+connection string is your ticket: host, port, user, database, each field naming exactly where you are
+headed. Connecting without reading it is boarding without checking the board - and two planes at
+neighboring gates can look identical from the jet bridge while flying to very different places.
+</Callout>
+
+<Term define="A connection string packs everything needed to reach one specific database into one line, typically protocol://user:password@host:port/database - for example postgres://qa_reader:secret@db.staging.example.com:5432/shopdb. The HOST names which server (and usually which environment - staging vs prod - lives in the hostname); the PORT is the network door the database listens on (5432 for PostgreSQL, 3306 for MySQL); the USER is the account you act as, carrying its permissions; the DATABASE is which one of the server's databases you land in. Many teams also distinguish the PRIMARY (the writable database the app uses) from READ REPLICAS (synced read-only copies) - testers should query replicas when offered. Databases are normally not exposed to the open internet, so you reach them through a VPN or an SSH tunnel, and credentials are personal: issued per person, stored in a password manager, never pasted into chat.">Connecting safely</Term>
+
+## Reading the ticket before you board
+
+- **The host is the environment.** `db.staging.example.com` and `db.prod.example.com` differ by one
+  word, and that word is everything. Teams usually encode the environment in the hostname - read it
+  every time, and treat an unrecognized host as a hard stop.
+- **Port, user, database complete the address.** The port is the server's network door (5432 for
+  PostgreSQL, 3306 for MySQL); the user decides what you are allowed to do once inside; the database
+  picks which of the server's databases you land in. Wrong database on the right server is still the
+  wrong place.
+- **Prefer the read replica when one exists.** Many teams run a writable primary plus read-only
+  replicas that mirror it. A tester verifying data belongs on the replica: same rows to read, zero
+  chance of slowing or changing the primary that serves real traffic.
+- **The path in is a VPN or tunnel, and credentials are personal.** Production-like databases are not
+  on the public internet - you connect through the company VPN or an SSH tunnel, with credentials
+  issued to YOU. Never share them, never paste them into chat or a ticket, and store them in a
+  password manager, not a text file.
+
+<Callout type="tip">
+Make an environment check the first query of every session, before anything else: most databases can
+tell you where you are - `SELECT current_database()` in PostgreSQL, `SELECT DATABASE()` in MySQL - and
+your client shows the connected host in the status bar. Ten seconds to confirm "staging, correct
+database, read-only user" buys you a whole session of confidence. Naming connections loudly in your
+client ("PROD - LOOK OUT" in red, "staging - safe" in green) makes the check automatic.
+</Callout>
+
+<Callout type="mistake">
+Trusting the LOOK of the data to tell you which environment you are on. Staging is often seeded with
+realistic, production-like data on purpose - so "these look like fake users, must be staging" is a
+guess, not a check. The hostname in the connection string and the environment check query are the only
+reliable answers. If real customer emails ever show up where you expected test data, stop querying
+immediately and tell someone - that is either the wrong connection or a real data leak into staging,
+and both are serious.
+</Callout>
+
+{/* IMAGE: a bank of blue departure boards at Geneva Airport - a "Gates / Portes B" sign with an exit arrow at upper left, wide "Departs" screens listing destinations, flight codes, and gate columns with green GO TO GATE statuses, a narrow "Walking time" panel on the right listing gate zones A through F with minutes, and travelers with luggage on the concourse below */}
+<HotspotImage
+  src="/notes/sql-and-databases-for-testers/tools-and-habits/connecting-safely.jpg"
+  alt="Airport departure boards listing destinations, flight codes, and gates, with a gates sign at upper left and a walking-time panel on the right"
+  credit="Departure board at Geneva Airport — Tiia Monto, Wikimedia Commons, CC BY-SA 3.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Departure_board_at_Geneva_Airport.jpg"
+  pins={[
+    { x: 16, y: 23, label: "The Gates B sign - the environment name, posted in the open", desc: "One clear label telling you which zone you are entering. That is the hostname in a connection string: db.staging vs db.prod is the gate sign, and reading it is the whole safety habit." },
+    { x: 23, y: 55, label: "The departures list - destination, flight code, gate, one row each", desc: "Every flight is one row with the exact fields that identify it. A connection string is the same record for a database: host, port, user, database - four fields that pin down exactly one destination." },
+    { x: 38, y: 42, label: "The green GO TO GATE statuses - confirmation before you commit", desc: "The board confirms a flight is boarding before you walk. That is the pre-session check: run SELECT current_database(), read the host in the status bar, and only then start querying." },
+    { x: 88, y: 33, label: "The walking-time panel - the route you take to get there", desc: "Gates are reached by defined walkways with known times, not by wandering the tarmac. Databases are reached through defined paths too: a VPN or an SSH tunnel, never an open internet connection." },
+  ]}
+/>
+
+<FlowAnimation
+  title="A safe connection, from string to first query - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Read the connection string field by field", desc: "postgres://qa_reader:...@db.staging.example.com:5432/shopdb - user qa_reader, host db.staging, port 5432, database shopdb. The host says staging. So far so good." },
+    { label: "Connect through the approved path", desc: "VPN on (or SSH tunnel up), personal credentials from the password manager - never shared ones from a chat message." },
+    { label: "Confirm where you actually landed", desc: "SELECT current_database() returns shopdb, and the client's status bar shows db.staging.example.com. The board and the gate sign agree." },
+    { label: "Check which side you are on: replica, read-only user", desc: "The team offers a read replica for verification work, and qa_reader has no write grants. Even a mistake now cannot change real data." },
+    { label: "Verdict: now - and only now - run the first real query", desc: "Environment confirmed, path approved, account read-only. The ten-second ritual that makes the rest of the session safe." },
+  ]}
+/>
+
+The whole idea, reduced to one line: the connection string is a ticket - read every field, take the
+approved route in, and confirm the destination before you run anything.
+
+<CodePlayground
+  language="python"
+  title="Run it - parse a connection string and check the environment BEFORE querying (Python)"
+  code={`import sqlite3
+
+conn = sqlite3.connect(":memory:")
+cur = conn.cursor()
+
+cur.execute("CREATE TABLE environments (name TEXT, host TEXT, port INTEGER, is_production INTEGER)")
+cur.executemany("INSERT INTO environments VALUES (?,?,?,?)", [
+    ("local", "localhost", 5432, 0),
+    ("staging", "db.staging.example.com", 5432, 0),
+    ("production", "db.prod.example.com", 5432, 1),
+])
+conn.commit()
+
+
+def parse_connection_string(url):
+    # postgres://user:secret@host:port/database
+    rest = url.split("://", 1)[1]
+    creds, location = rest.split("@", 1)
+    user = creds.split(":", 1)[0]
+    hostport, database = location.split("/", 1)
+    host, port = hostport.split(":", 1)
+    return {"user": user, "host": host, "port": int(port), "database": database}
+
+
+def which_environment(host, port):
+    row = cur.execute(
+        "SELECT name, is_production FROM environments WHERE host = ? AND port = ?",
+        (host, port),
+    ).fetchone()
+    return row
+
+
+for url in [
+    "postgres://qa_reader:secret@db.staging.example.com:5432/shopdb",
+    "postgres://qa_reader:secret@db.prod.example.com:5432/shopdb",
+]:
+    parts = parse_connection_string(url)
+    print("Connection string points at:", parts["host"], "port", parts["port"], "db", parts["database"])
+    env = which_environment(parts["host"], parts["port"])
+    if env is None:
+        print("  UNKNOWN host - stop and ask before connecting")
+    elif env[1] == 1:
+        print("  Environment:", env[0], "-> PRODUCTION. Stop. Is this really where you meant to be?")
+    else:
+        print("  Environment:", env[0], "-> safe to run test queries")
+    print()
+
+conn.close()`}
+/>
+
+Same check in Java - the shared code runner here has no live JDBC/SQLite driver on its classpath
+(unlike your own machine, where `sqlite-jdbc` works fine locally), so the environment table becomes a
+plain list of records, with the same parsing and the same verdicts:
+
+<CodePlayground
+  language="java"
+  title="Run it - the same connection-string parse and environment check (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    record Environment(String name, String host, int port, boolean isProduction) {}
+    record ConnectionParts(String user, String host, int port, String database) {}
+
+    static List<Environment> environments = List.of(
+        new Environment("local", "localhost", 5432, false),
+        new Environment("staging", "db.staging.example.com", 5432, false),
+        new Environment("production", "db.prod.example.com", 5432, true)
+    );
+
+    static ConnectionParts parse(String url) {
+        // postgres://user:secret@host:port/database
+        String rest = url.split("://", 2)[1];
+        String[] atSplit = rest.split("@", 2);
+        String user = atSplit[0].split(":", 2)[0];
+        String[] slashSplit = atSplit[1].split("/", 2);
+        String[] hostPort = slashSplit[0].split(":", 2);
+        return new ConnectionParts(user, hostPort[0], Integer.parseInt(hostPort[1]), slashSplit[1]);
+    }
+
+    static Environment whichEnvironment(String host, int port) {
+        for (Environment e : environments) {
+            if (e.host().equals(host) && e.port() == port) return e;
+        }
+        return null;
+    }
+
+    public static void main(String[] args) {
+        String[] urls = {
+            "postgres://qa_reader:secret@db.staging.example.com:5432/shopdb",
+            "postgres://qa_reader:secret@db.prod.example.com:5432/shopdb"
+        };
+        for (String url : urls) {
+            ConnectionParts parts = parse(url);
+            System.out.println("Connection string points at: " + parts.host()
+                + " port " + parts.port() + " db " + parts.database());
+            Environment env = whichEnvironment(parts.host(), parts.port());
+            if (env == null) {
+                System.out.println("  UNKNOWN host - stop and ask before connecting");
+            } else if (env.isProduction()) {
+                System.out.println("  Environment: " + env.name()
+                    + " -> PRODUCTION. Stop. Is this really where you meant to be?");
+            } else {
+                System.out.println("  Environment: " + env.name() + " -> safe to run test queries");
+            }
+            System.out.println();
+        }
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: build the pre-session ritual">
+<StepChecklist
+  steps={[
+    { text: "Take any connection string you have access to (or invent one) and label every field", detail: "Protocol, user, password, host, port, database - write what each part is. If you cannot name a field, you are not ready to connect with it." },
+    { text: "In your DB client, rename your connections to shout their environment", detail: "'staging - safe' and 'PROD - READ ONLY - CAREFUL' beat 'db1' and 'db2'. Many clients also let you color-code connections - make production red." },
+    { text: "Connect, then run the environment check before any real query", detail: "SELECT current_database() (PostgreSQL) or SELECT DATABASE() (MySQL), and read the host in the client's status bar. Confirm both match what you intended." },
+    { text: "Ask your team two questions: is there a read replica I should use, and what is the approved path in (VPN? tunnel?)", detail: "The answers differ per team - knowing them is part of being trusted with database access at all." },
+  ]}
+/>
+You now have the habit this whole note exists for: never run a query on a connection you have not
+positively identified first.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "The client cannot reach the database at all - connection timed out - even though the host and port are copied correctly from the team's docs.",
+      fix: "You are probably not on the approved network path: check that the VPN is actually connected, or that the SSH tunnel is running and your client points at the tunnel's local port. Databases are deliberately unreachable from the open internet - a timeout usually means the road is closed, not that the address is wrong.",
+    },
+    {
+      symptom: "The data you are verifying does not match what the app shows - rows are missing or slightly stale, though the connection is definitely to the right environment.",
+      fix: "Check whether you are on a read replica: replicas mirror the primary with a small delay (replication lag), so a record written seconds ago may not be there yet. Re-run the query after a moment; for freshness-critical checks, ask which endpoint is the primary and whether reading it is appropriate.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The host in the connection string and the client's status bar** — the environment lives in the hostname; read it before the first query, every session.
+- **`SELECT current_database()` (PostgreSQL) or `SELECT DATABASE()` (MySQL)** — ask the database itself where you are, rather than trusting a window title or the look of the data.
+- **[[sql-and-databases-for-testers/tools-and-habits/db-clients]]** — where those host/port/user fields get entered and saved, and why named connections make the check easy.
+- **[[sql-and-databases-for-testers/tools-and-habits/read-only-discipline]]** — the second seatbelt: even on the right environment, the account you connect as should not be able to write.
+</WhereToCheck>
+
+<WorkedExample title="the test query that was one hostname away from a production incident">
+1. A tester joins a new team and gets a doc with two connection strings, identical except for one
+   word in the host: `db.staging.example.com` and `db.prod.example.com`. Both get saved into the
+   client during setup, named "shopdb" and "shopdb 2".
+2. A week later, verifying a checkout bug, the tester opens "shopdb", finds the orders table, and
+   preps a test: the plan is to have engineering insert a fake order and then verify it appears.
+3. Before asking for the insert, the tester runs the pre-session ritual from this note: the client
+   status bar shows `db.prod.example.com`. "shopdb" - saved first during setup - was PRODUCTION.
+   The staging connection was "shopdb 2".
+4. Nothing bad had happened - every query so far had been a read - but the planned fake-order insert
+   would have landed in the live store, visible to the finance team, possibly triggering a real
+   shipment workflow.
+5. Finding: the tester renames the connections to "PROD shopdb - READ ONLY" and "staging shopdb -
+   safe", colors production red, and makes the status-bar check the first act of every session. The
+   habit cost ten seconds; skipping it nearly cost an incident report.
+</WorkedExample>
+
+<Quiz
+  question="A tester is handed postgres://qa_reader:secret@db.prod-replica.example.com:5432/shopdb and asked to verify yesterday's orders. What is the BEST reading of this connection string?"
+  options={[
+    "It points at a production read replica - appropriate for verification reads, but the tester should still confirm the environment after connecting and expect possible replication lag",
+    "The port 5432 means this is a test database, so no special care is needed",
+    "It is unsafe to use under any circumstances because the host contains the word 'prod'",
+    "The qa_reader user guarantees nothing can go wrong, so checking the host is unnecessary"
+  ]}
+  answer={0}
+  explain="The host names a production READ REPLICA - a synced read-only copy that teams provide precisely so verification queries never touch the primary. That makes it appropriate for this task, while the habits from this note still apply: confirm where you landed after connecting, and remember replicas can lag slightly behind the primary. Port 5432 (option two) is just PostgreSQL's standard port - it says nothing about environment. Refusing any host containing 'prod' (option three) would rule out the exact replica built for this job. And a read-named user (option four) is a good sign but not a reason to skip the check - account names can mislead, and the check costs ten seconds."
+/>
+
+<Flashcards
+  cards={[
+    { front: "The five parts of a connection string", back: "protocol://user:password@host:port/database - the user carries your permissions, the host names the server (and usually the environment), the port is the network door, the database picks which one you land in." },
+    { front: "The departure board analogy", back: "The connection string is your ticket and the hostname is the gate sign - read the board and confirm the gate before boarding, because two identical-looking planes fly to very different places." },
+    { front: "The pre-session environment check", back: "Read the host in the client's status bar AND ask the database itself - SELECT current_database() in PostgreSQL, SELECT DATABASE() in MySQL - before running any real query." },
+    { front: "Primary vs read replica", back: "The primary is the writable database the app uses; replicas are synced read-only copies. Testers verifying data should prefer the replica - same rows, zero risk to live traffic, small replication lag possible." },
+    { front: "Credential hygiene, in one line", back: "Personal credentials only, stored in a password manager, sent through approved channels, connected via VPN or SSH tunnel - never shared accounts, never pasted in chat." },
+  ]}
+/>
+
+<Challenge>
+Open your DB client and audit every saved connection: rename each one so the environment is
+unmissable (and color production red if your client supports it). Then write down your team's answers
+to three questions: which hostname is production, is there a read replica testers should use, and
+what is the approved network path in (VPN, tunnel, something else)? If you cannot answer all three,
+getting those answers IS this week's testing task.
+</Challenge>
+
+<AskCommunity prompt="My team gave me one shared database login that several testers use, and the staging and prod hostnames differ by just one word. I'm nervous about mixing them up. What guardrails do experienced testers set up for themselves?">
+Useful replies usually converge on the same stack of habits: ask for personal read-only credentials
+instead of the shared login, rename and color-code connections so production screams at you, and make
+an environment-check query the reflexive first action of every session - plus asking whether a read
+replica exists so verification work never touches the primary at all.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.connectionstrings.com/", title: "ConnectionStrings.com — Connection String Reference", kind: "read" },
+    { href: "https://www.geeksforgeeks.org/postgresql/postgresql-connection-string/", title: "GeeksforGeeks — PostgreSQL Connection String", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=1LoJm_CzFrg", title: "Microsoft Azure Developers — The Anatomy of a Connection String | SQL Tips for Developers 0104", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=1LoJm_CzFrg" title="Microsoft Azure Developers — The Anatomy of a Connection String | SQL Tips for Developers 0104" minutes={10} />
+
+<Takeaways
+  points={[
+    "A connection string is protocol://user:password@host:port/database - five fields that pin down exactly one destination, and the host almost always names the environment.",
+    "Confirm which environment you ACTUALLY landed on before every session: read the client's status bar and run SELECT current_database() / SELECT DATABASE() - never judge by how the data looks.",
+    "Prefer the read replica for verification work when one exists - same rows to read, zero risk to the primary, with small replication lag as the trade-off.",
+    "Reach databases only through the approved path (VPN or SSH tunnel) - a connection timeout usually means the road is closed, not that the address is wrong.",
+    "Credentials are personal: password manager, no sharing, no chat messages - and connections named and colored so production is impossible to open by accident.",
+  ]}
+/>
+
+<Complete xp={10} />
