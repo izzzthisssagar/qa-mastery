@@ -2197,6 +2197,560 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
       },
     ],
   },
+  {
+    slug: "performance-testing",
+    title: "Performance testing",
+    summary: "Load, stress, and soak testing; the metrics that reveal system behavior; and practical introductions to JMeter and k6.",
+    chapters: [
+      {
+        slug: "load-vs-stress-vs-soak",
+        title: "Load vs stress vs soak",
+        topics: [
+          { slug: "types-of-perf-testing", title: "Types of performance testing", planned: true },
+          { slug: "goals", title: "Goals", planned: true },
+          { slug: "recovery", title: "Recovery", planned: true },
+          { slug: "scalability", title: "Scalability", planned: true },
+        ],
+      },
+      {
+        slug: "metrics",
+        title: "Metrics",
+        topics: [
+          { slug: "latency-and-throughput", title: "Latency & throughput", planned: true },
+          { slug: "percentiles-vs-averages", title: "Percentiles vs averages", planned: true },
+          { slug: "error-rate", title: "Error rate", planned: true },
+          { slug: "resource-use", title: "Resource use", planned: true },
+        ],
+      },
+      {
+        slug: "tools-intro",
+        title: "Tools intro",
+        topics: [
+          { slug: "jmeter", title: "JMeter", planned: true },
+          { slug: "k6", title: "k6", planned: true },
+          { slug: "designing-a-test", title: "Designing a test", planned: true },
+          { slug: "reading-results", title: "Reading results", planned: true },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "security-testing-web",
+    title: "Security testing — web",
+    summary: "Hands-on, authorization-bounded web security testing across OWASP risks, injection, authentication, authorization, tools, and reporting.",
+    chapters: [
+      {
+        slug: "owasp-top-10-properly",
+        title: "OWASP Top 10, properly",
+        topics: [
+          { slug: "the-2021-list-and-how-to-use-it", title: "The 2021 list & how to use it", planned: true },
+          { slug: "broken-access-control", title: "Broken access control", planned: true },
+          { slug: "cryptographic-and-config-failures", title: "Cryptographic & config failures", planned: true },
+          { slug: "mapping-findings-to-the-list", title: "Mapping findings to the list", planned: true },
+        ],
+      },
+      {
+        slug: "injection-and-client-side",
+        title: "Injection & client-side",
+        topics: [
+          { slug: "sql-injection-by-hand", title: "SQL injection by hand", planned: true },
+          { slug: "xss-reflected-stored-dom", title: "XSS: reflected / stored / DOM", planned: true },
+          { slug: "command-and-template-injection", title: "Command & template injection", planned: true },
+          { slug: "csrf-and-clickjacking", title: "CSRF & clickjacking", planned: true },
+        ],
+      },
+      {
+        slug: "authentication-testing",
+        title: "Authentication testing",
+        topics: [
+          { slug: "auth-vs-authorization-distinct-skills", title: "Auth vs authorization (distinct skills)", planned: true },
+          { slug: "session-and-cookie-attacks", title: "Session & cookie attacks", planned: true },
+          { slug: "password-and-reset-flows", title: "Password & reset flows", planned: true },
+          { slug: "mfa-bypass-patterns", title: "MFA bypass patterns", planned: true },
+        ],
+      },
+      {
+        slug: "authorization-and-access",
+        title: "Authorization & access",
+        topics: [
+          { slug: "idor-bola-by-hand", title: "IDOR / BOLA by hand", planned: true },
+          { slug: "privilege-escalation", title: "Privilege escalation", planned: true },
+          { slug: "forced-browsing", title: "Forced browsing", planned: true },
+          { slug: "function-level-checks-bfla", title: "Function-level checks (BFLA)", planned: true },
+        ],
+      },
+      {
+        slug: "tools-and-reporting",
+        title: "Tools & reporting",
+        topics: [
+          { slug: "burp-suite-basics", title: "Burp Suite basics", planned: true },
+          { slug: "owasp-zap", title: "OWASP ZAP", planned: true },
+          { slug: "writing-a-security-finding-devs-act-on", title: "Writing a security finding devs act on", planned: true },
+          { slug: "responsible-disclosure", title: "Responsible disclosure", planned: true },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "api-and-modern-security",
+    title: "API & modern security",
+    summary: "Authorization-bounded testing for REST, tokens, GraphQL, and complete API security audits using modern threat models.",
+    chapters: [
+      {
+        slug: "owasp-api-security-top-10-2023",
+        title: "OWASP API Security Top 10 (2023)",
+        topics: [
+          { slug: "bola-and-bfla", title: "BOLA & BFLA", planned: true },
+          { slug: "broken-auth-for-apis", title: "Broken auth for APIs", planned: true },
+          { slug: "unrestricted-resource-consumption", title: "Unrestricted resource consumption", planned: true },
+          { slug: "the-full-api-list", title: "The full API list", planned: true },
+        ],
+      },
+      {
+        slug: "rest-api-attacks",
+        title: "REST API attacks",
+        topics: [
+          { slug: "mass-assignment", title: "Mass assignment", planned: true },
+          { slug: "ssrf", title: "SSRF", planned: true },
+          { slug: "rate-limit-and-abuse-testing", title: "Rate-limit & abuse testing", planned: true },
+          { slug: "excessive-data-exposure", title: "Excessive data exposure", planned: true },
+        ],
+      },
+      {
+        slug: "jwt-and-token-attacks",
+        title: "JWT & token attacks",
+        topics: [
+          { slug: "alg-none-and-weak-secrets", title: "alg:none & weak secrets", planned: true },
+          { slug: "expiry-and-replay", title: "Expiry & replay", planned: true },
+          { slug: "scope-and-audience-abuse", title: "Scope & audience abuse", planned: true },
+          { slug: "key-confusion", title: "Key confusion", planned: true },
+        ],
+      },
+      {
+        slug: "graphql-security",
+        title: "GraphQL security",
+        topics: [
+          { slug: "introspection-leakage", title: "Introspection leakage", planned: true },
+          { slug: "query-depth-and-complexity-dos", title: "Query depth & complexity DoS", planned: true },
+          { slug: "batching-and-alias-abuse", title: "Batching & alias abuse", planned: true },
+          { slug: "field-level-auth-and-mutation-mass-assignment", title: "Field-level auth & mutation mass assignment", planned: true },
+        ],
+      },
+      {
+        slug: "auditing-buggyapi",
+        title: "Auditing BuggyAPI",
+        topics: [
+          { slug: "threat-modeling-an-api", title: "Threat-modeling an API", planned: true },
+          { slug: "a-repeatable-audit-checklist", title: "A repeatable audit checklist", planned: true },
+          { slug: "chaining-findings", title: "Chaining findings", planned: true },
+          { slug: "the-write-up-like-a-real-report", title: "The write-up (like a real report)", planned: true },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "accessibility-testing",
+    title: "Accessibility testing",
+    summary: "Manual and automated accessibility testing grounded in WCAG 2.2, assistive technology, semantic HTML, and actionable reporting.",
+    chapters: [
+      {
+        slug: "why-accessibility-matters",
+        title: "Why accessibility matters",
+        topics: [
+          { slug: "disabilities-and-assistive-tech", title: "Disabilities & assistive tech", planned: true },
+          { slug: "the-business-and-legal-case-ada-eaa", title: "The business & legal case (ADA/EAA)", planned: true },
+          { slug: "wcag-2-2-a-aa-aaa", title: "WCAG 2.2 A / AA / AAA", planned: true },
+          { slug: "pour-principles", title: "POUR principles", planned: true },
+        ],
+      },
+      {
+        slug: "manual-a11y-testing",
+        title: "Manual a11y testing",
+        topics: [
+          { slug: "keyboard-only-navigation", title: "Keyboard-only navigation", planned: true },
+          { slug: "screen-readers-nvda-voiceover", title: "Screen readers (NVDA / VoiceOver)", planned: true },
+          { slug: "focus-order-and-visible-focus", title: "Focus order & visible focus", planned: true },
+          { slug: "contrast-and-zoom-reflow", title: "Contrast & zoom / reflow", planned: true },
+        ],
+      },
+      {
+        slug: "automated-a11y-audits",
+        title: "Automated a11y audits",
+        topics: [
+          { slug: "axe-devtools-and-lighthouse", title: "axe DevTools & Lighthouse", planned: true },
+          { slug: "wave", title: "WAVE", planned: true },
+          { slug: "what-automation-catches-vs-misses", title: "What automation catches vs misses", planned: true },
+          { slug: "ci-a11y-checks", title: "CI a11y checks", planned: true },
+        ],
+      },
+      {
+        slug: "reporting-and-fixing",
+        title: "Reporting & fixing",
+        topics: [
+          { slug: "writing-a11y-findings-devs-act-on", title: "Writing a11y findings devs act on", planned: true },
+          { slug: "aria-help-and-harm", title: "ARIA: help & harm", planned: true },
+          { slug: "semantic-html-first", title: "Semantic HTML first", planned: true },
+          { slug: "re-testing-a-fix", title: "Re-testing a fix", planned: true },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "mobile-testing",
+    title: "Mobile testing",
+    summary: "Device matrices, mobile interactions, Appium fundamentals, and the lifecycle, permission, performance, and store checks unique to mobile apps.",
+    chapters: [
+      {
+        slug: "device-and-os-matrix",
+        title: "Device & OS matrix",
+        topics: [
+          { slug: "fragmentation", title: "Fragmentation", planned: true },
+          { slug: "building-a-matrix", title: "Building a matrix", planned: true },
+          { slug: "real-vs-emulated", title: "Real vs emulated", planned: true },
+          { slug: "device-farms", title: "Device farms", planned: true },
+        ],
+      },
+      {
+        slug: "gestures-interrupts-networks",
+        title: "Gestures, interrupts, networks",
+        topics: [
+          { slug: "touch-gestures", title: "Touch gestures", planned: true },
+          { slug: "interrupts", title: "Interrupts", planned: true },
+          { slug: "network-conditions", title: "Network conditions", planned: true },
+          { slug: "orientation", title: "Orientation", planned: true },
+        ],
+      },
+      {
+        slug: "appium-intro",
+        title: "Appium intro",
+        topics: [
+          { slug: "what-appium-is", title: "What Appium is", planned: true },
+          { slug: "setup", title: "Setup", planned: true },
+          { slug: "first-mobile-test", title: "First mobile test", planned: true },
+          { slug: "mobile-locators", title: "Mobile locators", planned: true },
+        ],
+      },
+      {
+        slug: "mobile-specifics",
+        title: "Mobile specifics",
+        topics: [
+          { slug: "permissions", title: "Permissions", planned: true },
+          { slug: "battery-and-performance", title: "Battery & performance", planned: true },
+          { slug: "app-lifecycle", title: "App lifecycle", planned: true },
+          { slug: "store-testing", title: "Store testing", planned: true },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "agile-and-devops-for-testers",
+    title: "Agile & DevOps for testers",
+    summary: "How testers contribute in Scrum and Kanban, work inside a sprint, and build quality into continuous delivery pipelines.",
+    chapters: [
+      {
+        slug: "scrum-and-kanban",
+        title: "Scrum & Kanban",
+        topics: [
+          { slug: "scrum-roles-and-ceremonies", title: "Scrum roles & ceremonies", planned: true },
+          { slug: "kanban", title: "Kanban", planned: true },
+          { slug: "backlog-and-stories", title: "Backlog & stories", planned: true },
+          { slug: "estimation", title: "Estimation", planned: true },
+        ],
+      },
+      {
+        slug: "tester-in-a-sprint",
+        title: "Tester in a sprint",
+        topics: [
+          { slug: "definition-of-done", title: "Definition of done", planned: true },
+          { slug: "in-sprint-testing", title: "In-sprint testing", planned: true },
+          { slug: "acceptance-criteria", title: "Acceptance criteria", planned: true },
+          { slug: "collaboration", title: "Collaboration", planned: true },
+        ],
+      },
+      {
+        slug: "shift-left-and-cicd",
+        title: "Shift-left & CI/CD",
+        topics: [
+          { slug: "shift-left", title: "Shift-left", planned: true },
+          { slug: "the-cicd-pipeline", title: "The CI/CD pipeline", planned: true },
+          { slug: "quality-gates", title: "Quality gates", planned: true },
+          { slug: "continuous-testing", title: "Continuous testing", planned: true },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "test-management-and-reporting",
+    title: "Test management & reporting",
+    summary: "The tools, metrics, communication, environment controls, and risk decisions that make testing visible and actionable across a team.",
+    chapters: [
+      {
+        slug: "test-management-tools",
+        title: "Test management tools",
+        topics: [
+          { slug: "jira-and-boards-deeper", title: "JIRA & boards, deeper", planned: true },
+          { slug: "testrail-xray-zephyr", title: "TestRail / Xray / Zephyr", planned: true },
+          { slug: "organizing-suites-and-runs", title: "Organizing suites & runs", planned: true },
+          { slug: "linking-bugs-to-cases", title: "Linking bugs to cases", planned: true },
+        ],
+      },
+      {
+        slug: "metrics-and-reporting",
+        title: "Metrics & reporting",
+        topics: [
+          { slug: "test-summary-reports", title: "Test summary reports", planned: true },
+          { slug: "coverage-and-pass-rate-metrics", title: "Coverage & pass-rate metrics", planned: true },
+          { slug: "dashboards", title: "Dashboards", planned: true },
+          { slug: "reporting-to-stakeholders", title: "Reporting to stakeholders", planned: true },
+        ],
+      },
+      {
+        slug: "docs-and-communication",
+        title: "Docs & communication",
+        topics: [
+          { slug: "confluence-and-wikis", title: "Confluence / wikis", planned: true },
+          { slug: "writing-for-developers", title: "Writing for developers", planned: true },
+          { slug: "status-updates", title: "Status updates", planned: true },
+          { slug: "async-communication", title: "Async communication", planned: true },
+        ],
+      },
+      {
+        slug: "environments-and-test-data",
+        title: "Environments & test data",
+        topics: [
+          { slug: "dev-qa-staging-prod", title: "Dev / QA / staging / prod", planned: true },
+          { slug: "environment-parity-and-config", title: "Environment parity & config", planned: true },
+          { slug: "test-data-management-and-anonymization", title: "Test data management & anonymization", planned: true },
+          { slug: "gdpr-and-sensitive-data-in-tests", title: "GDPR & sensitive data in tests", planned: true },
+        ],
+      },
+      {
+        slug: "risk-and-estimation",
+        title: "Risk & estimation",
+        topics: [
+          { slug: "risk-based-testing", title: "Risk-based testing", planned: true },
+          { slug: "prioritizing-what-to-test-first", title: "Prioritizing what to test first", planned: true },
+          { slug: "test-estimation-techniques", title: "Test estimation techniques", planned: true },
+          { slug: "saying-no-with-data", title: "Saying no with data", planned: true },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "ai-and-the-modern-tester",
+    title: "AI & the modern tester",
+    summary: "Using AI critically in testing, automating with AI, evaluating AI systems, and building durable tester judgment as tools change.",
+    chapters: [
+      {
+        slug: "ai-as-your-testing-copilot",
+        title: "AI as your testing copilot",
+        topics: [
+          { slug: "llms-for-test-ideas-and-cases", title: "LLMs for test ideas & cases", planned: true },
+          { slug: "prompting-for-qa-work", title: "Prompting for QA work", planned: true },
+          { slug: "generating-test-data-with-ai", title: "Generating test data with AI", planned: true },
+          { slug: "reviewing-ai-output-critically", title: "Reviewing AI output critically", planned: true },
+        ],
+      },
+      {
+        slug: "ai-powered-test-automation",
+        title: "AI-powered test automation",
+        topics: [
+          { slug: "self-healing-tests", title: "Self-healing tests", planned: true },
+          { slug: "ai-test-generation-tools", title: "AI test generation tools", planned: true },
+          { slug: "autonomous-testing-agents", title: "Autonomous testing agents", planned: true },
+          { slug: "when-ai-automation-lies", title: "When AI automation lies", planned: true },
+        ],
+      },
+      {
+        slug: "testing-ai-systems",
+        title: "Testing AI systems",
+        topics: [
+          { slug: "why-ai-apps-break-differently", title: "Why AI apps break differently", planned: true },
+          { slug: "evaluating-llm-outputs", title: "Evaluating LLM outputs (DeepEval / RAGAS ideas)", planned: true },
+          { slug: "hallucinations-bias-and-safety", title: "Hallucinations, bias & safety", planned: true },
+          { slug: "regression-for-prompts-and-models", title: "Regression for prompts & models", planned: true },
+        ],
+      },
+      {
+        slug: "staying-employable-in-the-ai-era",
+        title: "Staying employable in the AI era",
+        topics: [
+          { slug: "what-ai-wont-replace", title: "What AI won't replace", planned: true },
+          { slug: "the-testers-judgment-premium", title: "The tester's judgment premium", planned: true },
+          { slug: "learning-loop-for-new-tools", title: "Learning loop for new tools", planned: true },
+          { slug: "ai-on-your-resume-honestly", title: "AI on your resume, honestly", planned: true },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "a-portfolio-that-gets-interviews",
+    title: "A portfolio that gets interviews",
+    summary: "Three focused repositories, clear evidence of QA work, and credible public profiles that make practical skills easy to inspect.",
+    chapters: [
+      {
+        slug: "the-3-repo-portfolio",
+        title: "The 3-repo portfolio",
+        topics: [
+          { slug: "repo-1-documented-manual-project", title: "Repo 1: documented manual project", planned: true },
+          { slug: "repo-2-ui-automation-suite", title: "Repo 2: UI automation suite", planned: true },
+          { slug: "repo-3-api-suite-and-ci", title: "Repo 3: API suite + CI", planned: true },
+          { slug: "readmes-that-sell", title: "READMEs that sell", planned: true },
+        ],
+      },
+      {
+        slug: "show-your-work",
+        title: "Show your work",
+        topics: [
+          { slug: "packaging-buggyshop-and-buggyapi-work", title: "Packaging BuggyShop / BuggyAPI work", planned: true },
+          { slug: "architecture-diagrams", title: "Architecture diagrams", planned: true },
+          { slug: "demo-gifs-and-reports", title: "Demo GIFs & reports", planned: true },
+          { slug: "what-recruiters-actually-open", title: "What recruiters actually open", planned: true },
+        ],
+      },
+      {
+        slug: "profiles",
+        title: "Profiles",
+        topics: [
+          { slug: "github-profile-polish", title: "GitHub profile polish", planned: true },
+          { slug: "linkedin-for-qa", title: "LinkedIn for QA", planned: true },
+          { slug: "personal-brand-basics", title: "Personal brand basics", planned: true },
+          { slug: "posting-your-progress", title: "Posting your progress", planned: true },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "resume-and-applications",
+    title: "Résumé & applications",
+    summary: "Evidence-led QA résumés, targeted applications, and an honest framework for deciding whether certifications support a specific goal.",
+    chapters: [
+      {
+        slug: "the-qa-resume",
+        title: "The QA résumé",
+        topics: [
+          { slug: "structure-that-works", title: "Structure that works", planned: true },
+          { slug: "skills-and-keywords-ats", title: "Skills & keywords (ATS)", planned: true },
+          { slug: "numbers-and-impact", title: "Numbers & impact", planned: true },
+          { slug: "common-mistakes", title: "Common mistakes", planned: true },
+        ],
+      },
+      {
+        slug: "applying-smart",
+        title: "Applying smart",
+        topics: [
+          { slug: "reading-job-posts", title: "Reading job posts", planned: true },
+          { slug: "tailoring-per-role", title: "Tailoring per role", planned: true },
+          { slug: "cover-letters-short", title: "Cover letters, short", planned: true },
+          { slug: "tracking-applications", title: "Tracking applications", planned: true },
+        ],
+      },
+      {
+        slug: "certifications-honestly",
+        title: "Certifications, honestly",
+        topics: [
+          { slug: "istqb-worth-it-or-not", title: "ISTQB — worth it or not", planned: true },
+          { slug: "when-certs-matter", title: "When certs matter", planned: true },
+          { slug: "free-alternatives", title: "Free alternatives", planned: true },
+          { slug: "learning-in-public", title: "Learning in public", planned: true },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "interviews",
+    title: "Interviews",
+    summary: "Practical preparation for manual, technical, behavioral, and mock interview rounds without pretending one answer fits every employer.",
+    chapters: [
+      {
+        slug: "manual-qa-questions",
+        title: "Manual QA questions",
+        topics: [
+          { slug: "classic-questions-and-answers", title: "Classic questions & answers", planned: true },
+          { slug: "test-design-exercises", title: "Test-design exercises", planned: true },
+          { slug: "test-this-pen-scenarios", title: "Test this pen scenarios", planned: true },
+          { slug: "talking-through-bugs", title: "Talking through bugs", planned: true },
+        ],
+      },
+      {
+        slug: "technical-rounds",
+        title: "Technical rounds",
+        topics: [
+          { slug: "automation-and-coding-questions", title: "Automation & coding questions", planned: true },
+          { slug: "sql-questions", title: "SQL questions", planned: true },
+          { slug: "api-questions", title: "API questions", planned: true },
+          { slug: "take-home-assignments", title: "Take-home assignments", planned: true },
+        ],
+      },
+      {
+        slug: "behavioral-and-scenarios",
+        title: "Behavioral & scenarios",
+        topics: [
+          { slug: "star-stories", title: "STAR stories", planned: true },
+          { slug: "conflict-and-priority-scenarios", title: "Conflict & priority scenarios", planned: true },
+          { slug: "questions-to-ask-them", title: "Questions to ask them", planned: true },
+          { slug: "salary-conversations", title: "Salary conversations", planned: true },
+        ],
+      },
+      {
+        slug: "mock-practice",
+        title: "Mock practice",
+        topics: [
+          { slug: "mock-interview-drills", title: "Mock interview drills", planned: true },
+          { slug: "recording-yourself", title: "Recording yourself", planned: true },
+          { slug: "feedback-loops", title: "Feedback loops", planned: true },
+          { slug: "handling-rejection", title: "Handling rejection", planned: true },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "your-first-90-days",
+    title: "Your first 90 days",
+    summary: "A practical path through onboarding, solo-QA constraints, continued growth, and deliberate exploration of testing specializations.",
+    chapters: [
+      {
+        slug: "landing-well",
+        title: "Landing well",
+        topics: [
+          { slug: "onboarding-as-a-qa", title: "Onboarding as a QA", planned: true },
+          { slug: "learning-the-product-fast", title: "Learning the product fast", planned: true },
+          { slug: "your-first-bug-report-at-work", title: "Your first bug report at work", planned: true },
+          { slug: "building-trust", title: "Building trust", planned: true },
+        ],
+      },
+      {
+        slug: "working-solo-the-mentor-gap",
+        title: "Working solo (the mentor gap)",
+        topics: [
+          { slug: "being-the-only-qa", title: "Being the only QA", planned: true },
+          { slug: "asking-good-questions", title: "Asking good questions", planned: true },
+          { slug: "using-the-community", title: "Using the community", planned: true },
+          { slug: "when-to-escalate", title: "When to escalate", planned: true },
+        ],
+      },
+      {
+        slug: "growing-from-here",
+        title: "Growing from here",
+        topics: [
+          { slug: "junior-to-mid-roadmap", title: "Junior → mid roadmap", planned: true },
+          { slug: "specializing", title: "Specializing", planned: true },
+          { slug: "keeping-a-brag-doc", title: "Keeping a brag doc", planned: true },
+          { slug: "continued-learning", title: "Continued learning", planned: true },
+        ],
+      },
+      {
+        slug: "domains-and-specializations",
+        title: "Domains & specializations",
+        topics: [
+          { slug: "payments-and-fintech-testing", title: "Payments & fintech testing", planned: true },
+          { slug: "erp-crm-and-enterprise", title: "ERP / CRM & enterprise", planned: true },
+          { slug: "games-iot-and-embedded", title: "Games, IoT & embedded", planned: true },
+          { slug: "picking-a-niche-deliberately", title: "Picking a niche deliberately", planned: true },
+        ],
+      },
+    ],
+  },
 ] as const;
 
 /** Flat list of every (module, chapter, topic) leaf with its URL parts. */
