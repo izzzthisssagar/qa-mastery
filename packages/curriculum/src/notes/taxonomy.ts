@@ -1675,10 +1675,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "redis-and-caching-bugs",
         title: "Redis & caching bugs",
         topics: [
-          { slug: "what-caching-solves", title: "What caching solves", planned: true },
-          { slug: "ttls-and-eviction", title: "TTLs & eviction", planned: true },
-          { slug: "stale-data-bugs-and-cache-invalidation", title: "Stale-data bugs & cache invalidation", planned: true },
-          { slug: "testing-around-a-cache", title: "Testing around a cache", planned: true },
+          { slug: "what-caching-solves", title: "What caching solves" },
+          { slug: "ttls-and-eviction", title: "TTLs & eviction" },
+          { slug: "stale-data-bugs-and-cache-invalidation", title: "Stale-data bugs & cache invalidation" },
+          { slug: "testing-around-a-cache", title: "Testing around a cache" },
         ],
       },
       {
