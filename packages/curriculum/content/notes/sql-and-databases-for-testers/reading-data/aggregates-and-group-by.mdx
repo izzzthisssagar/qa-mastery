@@ -1,0 +1,281 @@
+---
+title: "Aggregates & GROUP BY"
+summary: "COUNT, SUM, and AVG collapse many rows into one number; GROUP BY does that separately for each distinct value in a column - a per-team total, not one grand total for the whole scoreboard."
+tags: ["sql-and-databases-for-testers", "reading-data", "track-c"]
+updated: "2026-07-18"
+related:
+  - "sql-and-databases-for-testers/reading-data/joins-gently"
+  - "sql-and-databases-for-testers/verifying-the-app-against-the-db/finding-data-bugs"
+  - "sql-and-databases-for-testers/tools-and-habits/query-snippets-library"
+---
+
+<Hook>
+"How many open bugs are high severity? How many are low? How many are medium?" That's three separate
+questions - or it's one `GROUP BY`, which splits the rows into buckets by severity FIRST, then counts
+each bucket separately, in a single query. One row of the result per group, each with its own number.
+</Hook>
+
+<Callout type="analogy">
+A baseball scoreboard's per-team totals column. Each team's row shows a per-inning breakdown (1 run
+here, 0 there, 2 more later) AND a "R" column: the total runs, summed across every inning, for THAT
+team alone. It's not one number for the whole ballpark - it's one summary number, computed
+independently, per team. `SUM()` (or `COUNT()`) is the math; `GROUP BY` is what decides "per team"
+instead of "for everyone at once."
+</Callout>
+
+<Term define="An aggregate function (COUNT, SUM, AVG, MIN, MAX) collapses many rows into a single summary value - COUNT(*) counts rows, SUM adds a column's values, AVG averages them. Used alone, an aggregate collapses the ENTIRE result set into one row. GROUP BY changes that: it splits rows into separate groups by one column's distinct values FIRST, then runs the aggregate function separately, once per group - so SELECT severity, COUNT(*) FROM bugs GROUP BY severity doesn't return one total, it returns one row per distinct severity value, each carrying its own independent count.">Aggregates & GROUP BY</Term>
+
+## One number per group, not one number total
+
+- **Aggregate functions collapse rows into a value.** `COUNT(*)` counts them, `SUM(column)` adds them,
+  `AVG(column)` averages them, `MIN`/`MAX` find the extremes.
+- **`GROUP BY column` splits rows into buckets BEFORE aggregating.** Rows with the same value in that
+  column land in the same bucket; the aggregate then runs once, independently, per bucket.
+- **Every SELECTed column has to be grouped or aggregated.** If you `GROUP BY severity`, every other
+  column in `SELECT` must either be `severity` itself or wrapped in an aggregate - a bare, ungrouped
+  column is ambiguous once many rows have folded into one.
+- **`HAVING` filters groups; `WHERE` filters rows.** `WHERE` removes individual rows BEFORE grouping
+  happens. `HAVING` removes entire GROUPS after aggregating - for example, keeping only severities with
+  more than one bug.
+
+<Callout type="tip">
+Before trusting a `GROUP BY` count, sanity-check it: do the per-group counts add up to the same total
+you'd get from a plain `COUNT(*)` with no `GROUP BY` at all? If they don't, something - often a `NULL`
+group being silently dropped, or a JOIN duplicating rows upstream - is worth investigating before you
+trust either number.
+</Callout>
+
+<Callout type="mistake">
+Selecting a non-aggregated, non-grouped column alongside `GROUP BY` - for example,
+`SELECT title, severity, COUNT(*) FROM bugs GROUP BY severity`. `title` isn't the GROUP BY column and
+isn't wrapped in an aggregate, so once multiple rows with different titles have folded into one
+`severity` group, which title does the engine even return? Some engines reject this outright; others
+silently pick an arbitrary one - either way, it's a real, common source of confusing results.
+</Callout>
+
+{/* IMAGE: the manually-operated left field scoreboard at Fenway Park, Boston - a tall green wall with white lettering "FENWAY PARK", numbered inning columns 1 through 10 with slots for individual team scores, an "R H E" totals column on the right, "AMERICAN LEAGUE" and "NATIONAL LEAGUE" sections listing many teams' abbreviations and scores side by side, red and blue ball/strike indicator lights near the bottom */}
+<HotspotImage
+  src="/notes/sql-and-databases-for-testers/reading-data/aggregates-and-group-by.jpg"
+  alt="The manual scoreboard at Fenway Park, showing inning-by-inning score slots, an R H E totals column, and separate American League and National League sections listing many teams"
+  credit="2017 Fenway Park manual scoreboard — Beyond My Ken, Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:2017_Fenway_Park_manual_scoreboard.jpg"
+  pins={[
+    { x: 27, y: 35, label: "The inning-by-inning grid for ST. LOUIS and BOSTON", desc: "Each individual slot is one raw fact - this team's runs in THIS inning. These are the individual rows, before any aggregation has happened at all." },
+    { x: 47, y: 30, label: "The 'R H E' totals column, right of the grid", desc: "The total Runs, summed across all 10 innings, for that ONE team. This is exactly what SUM() or COUNT() computes: many individual values collapsed into one number, per group." },
+    { x: 65, y: 22, label: "The 'AMERICAN LEAGUE' block, listing many teams' scores", desc: "Many different teams, each grouped and summarized separately, side by side - like GROUP BY splitting rows into separate buckets by league before summarizing each bucket." },
+    { x: 88, y: 22, label: "The 'NATIONAL LEAGUE' block, a second grouped section", desc: "A second, completely independent group with its own totals - proof that GROUP BY produces one summary PER group, never one number blending every group together." },
+  ]}
+/>
+
+<FlowAnimation
+  title="GROUP BY, one summary row per group - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "The full bugs table has 6 rows, mixing three severity values freely", desc: "high, low, and medium rows sit side by side in no particular grouped order yet." },
+    { label: "GROUP BY severity splits those 6 rows into 3 separate buckets FIRST", desc: "high, low, medium - this split happens before any counting takes place." },
+    { label: "COUNT(*) then runs separately inside EACH bucket, not once across all 6 rows", desc: "Each bucket's count only ever sees the rows that landed in that one bucket." },
+    { label: "The result has exactly one row per distinct severity value, each with its own count", desc: "Three input values, three output rows - not one blended total." },
+    { label: "Verdict: GROUP BY answers 'how many, per category' in one query", desc: "Instead of running one COUNT(*) per category by hand, three separate times." },
+  ]}
+/>
+
+<CodePlayground
+  language="python"
+  title="Run it - a real SQLite database, GROUP BY and aggregates (Python)"
+  code={`import sqlite3
+
+conn = sqlite3.connect(":memory:")
+cur = conn.cursor()
+
+cur.execute("""
+CREATE TABLE bugs (
+    id INTEGER PRIMARY KEY,
+    title TEXT,
+    severity TEXT,
+    status TEXT
+)
+""")
+
+bugs = [
+    (1, "Login fails on Safari", "high", "open"),
+    (2, "Typo on footer", "low", "closed"),
+    (3, "Checkout 500 error", "high", "open"),
+    (4, "Search returns stale results", "medium", "open"),
+    (5, "Password reset email delayed", "high", "closed"),
+    (6, "Dark mode contrast issue", "low", "open"),
+]
+cur.executemany("INSERT INTO bugs VALUES (?,?,?,?)", bugs)
+conn.commit()
+
+print("--- GROUP BY severity: one row per severity, each with its own count ---")
+for row in cur.execute("SELECT severity, COUNT(*) FROM bugs GROUP BY severity"):
+    print(" ", row)
+
+print()
+print("--- WHERE filters rows BEFORE grouping: only open bugs, grouped by severity ---")
+for row in cur.execute(
+    "SELECT severity, COUNT(*) FROM bugs WHERE status = 'open' GROUP BY severity"
+):
+    print(" ", row)
+
+print()
+print("--- HAVING filters GROUPS after aggregating: only severities with more than 1 bug ---")
+for row in cur.execute(
+    "SELECT severity, COUNT(*) AS bug_count FROM bugs GROUP BY severity HAVING COUNT(*) > 1"
+):
+    print(" ", row)
+print("  Notice: 'medium' (count 1) is missing here - HAVING dropped it, not a bug.")
+
+conn.close()`}
+/>
+
+Same three queries, in Java - the shared code runner here has no live JDBC/SQLite driver on its
+classpath (unlike your own machine, where `sqlite-jdbc` works fine locally), so this mirrors the exact
+same GROUP BY / HAVING logic in plain Java collections instead, verified by hand to match the real
+SQLite output above:
+
+<CodePlayground
+  language="java"
+  title="Run it - the same GROUP BY/HAVING logic, without a live JDBC driver on the shared runner (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    record Bug(int id, String title, String severity, String status) {}
+
+    public static void main(String[] args) {
+        List<Bug> bugs = List.of(
+            new Bug(1, "Login fails on Safari", "high", "open"),
+            new Bug(2, "Typo on footer", "low", "closed"),
+            new Bug(3, "Checkout 500 error", "high", "open"),
+            new Bug(4, "Search returns stale results", "medium", "open"),
+            new Bug(5, "Password reset email delayed", "high", "closed"),
+            new Bug(6, "Dark mode contrast issue", "low", "open")
+        );
+
+        System.out.println("--- GROUP BY severity: one row per severity, each with its own count ---");
+        Map<String, Integer> bySeverity = new LinkedHashMap<>();
+        for (Bug b : bugs) bySeverity.merge(b.severity(), 1, Integer::sum);
+        bySeverity.forEach((sev, count) -> System.out.println("  " + sev + " | " + count));
+
+        System.out.println();
+        System.out.println("--- WHERE filters rows BEFORE grouping: only open bugs, grouped by severity ---");
+        Map<String, Integer> openBySeverity = new LinkedHashMap<>();
+        for (Bug b : bugs) {
+            if (b.status().equals("open")) {
+                openBySeverity.merge(b.severity(), 1, Integer::sum);
+            }
+        }
+        openBySeverity.forEach((sev, count) -> System.out.println("  " + sev + " | " + count));
+
+        System.out.println();
+        System.out.println("--- HAVING filters GROUPS after aggregating: only severities with more than 1 bug ---");
+        bySeverity.forEach((sev, count) -> {
+            if (count > 1) System.out.println("  " + sev + " | " + count);
+        });
+        System.out.println("  Notice: 'medium' (count 1) is missing here - HAVING dropped it, not a bug.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: turn three separate counts into one GROUP BY">
+<StepChecklist
+  steps={[
+    { text: "Pick a column with a small number of repeating values in any dataset you can query", detail: "A status, a category, a severity - anything with a handful of distinct values." },
+    { text: "Write three SEPARATE queries, each counting rows for ONE specific value by hand", detail: "Three WHERE-based COUNT(*) queries, one per value." },
+    { text: "Write ONE GROUP BY query on that same column and confirm its per-group counts match your three manual counts exactly", detail: "Same numbers, one query instead of three." },
+    { text: "Add a HAVING clause to that same GROUP BY that keeps only groups above some count threshold", detail: "Confirm which group(s) it dropped, and that they're the ones you expected." },
+  ]}
+/>
+You've now proven, directly, that GROUP BY's per-group counts are exactly equivalent to running the
+same COUNT manually, once per value - just computed together, in one pass.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A GROUP BY query errors, or returns a value in a non-grouped column that doesn't look consistent.",
+      fix: "Every column in SELECT must be either the GROUP BY column itself or wrapped in an aggregate function. A plain non-aggregated, non-grouped column is ambiguous once multiple rows have folded into one group - the value returned for it may not mean what you think, or the engine may reject the query outright.",
+    },
+    {
+      symptom: "The GROUP BY counts don't add up to the total row count from a plain COUNT(*).",
+      fix: "Check for a row whose grouping column is NULL - NULLs often form their own group, or get treated inconsistently depending on the engine. If the GROUP BY sits on top of a JOIN, also check whether that JOIN is duplicating or dropping rows before the grouping ever happens.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Whether every SELECTed column is either grouped or aggregated** — a bare non-aggregated column alongside GROUP BY is a real, common bug source.
+- **Per-group counts summed against the ungrouped total** — the fastest sanity check that a GROUP BY, especially one built on top of a JOIN, isn't silently duplicating or dropping rows.
+- **[[sql-and-databases-for-testers/reading-data/joins-gently]]** — the matched rows a GROUP BY often summarizes, once two tables have already been combined.
+- **[[sql-and-databases-for-testers/verifying-the-app-against-the-db/finding-data-bugs]]** — using exactly this kind of count/total mismatch to catch real data bugs, not just query mistakes.
+</WhereToCheck>
+
+<WorkedExample title="a GROUP BY count that didn't match the dashboard everyone trusted">
+1. A "bugs by severity" dashboard widget shows `high: 3`, `low: 2` - `medium` isn't shown at all, and a
+   tester wonders whether medium-severity bugs are being silently dropped somewhere.
+2. Checking the underlying query: it's
+   `SELECT severity, COUNT(*) FROM bugs GROUP BY severity HAVING COUNT(*) > 1` - a `HAVING` clause
+   added at some point to "hide noise," filtering out any severity with just a single bug.
+3. Confirming directly: `SELECT COUNT(*) FROM bugs WHERE severity = 'medium'` shows there genuinely IS
+   exactly one medium bug in the table. The dashboard's math is correct - it's deliberately hiding
+   groups of size 1.
+4. Finding: not a bug at all - a documented, if easy-to-misread, `HAVING` filter. Worth flagging to the
+   team that the dashboard should label itself "severities with 2+ bugs" somewhere, since "not shown"
+   currently reads as "doesn't exist."
+</WorkedExample>
+
+<Quiz
+  question="A GROUP BY severity dashboard shows counts for 'high' and 'low' but nothing for 'medium', even though you can confirm with a separate WHERE-based COUNT(*) that exactly one medium-severity bug exists. What's the most likely explanation?"
+  options={[
+    "GROUP BY is broken and dropping rows at random",
+    "The query likely has a HAVING clause filtering out low-count groups (e.g. HAVING COUNT(*) > 1) - the medium group is being correctly computed and then deliberately excluded from the output, not silently lost",
+    "Medium-severity bugs can never be grouped in SQL",
+    "The bugs table has a data corruption issue affecting only medium-severity rows"
+  ]}
+  answer={1}
+  explain="This note is explicit about the difference between WHERE (filters rows before grouping) and HAVING (filters entire groups after aggregating). A group with a real, correctly-computed count can still be excluded from the final output by a HAVING threshold - that's expected, working behavior, not data loss. Confirming the medium bug exists via a separate WHERE-based COUNT(*) rules out corruption (option four) and a fundamental GROUP BY failure (options one and three) - the fix here is checking the query's HAVING clause, not the data."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Aggregate function, in one line", back: "Collapses many rows into one summary value - COUNT, SUM, AVG, MIN, MAX." },
+    { front: "GROUP BY, in one line", back: "Splits rows into separate buckets by a column's distinct values FIRST, then runs the aggregate once per bucket." },
+    { front: "The scoreboard analogy", back: "The R H E totals column is one summed number per TEAM (per group), not one number for the whole game." },
+    { front: "Why every SELECTed column must be grouped or aggregated", back: "A bare, non-aggregated column alongside GROUP BY is ambiguous once many rows have folded into one group - a common real bug." },
+    { front: "WHERE vs HAVING", back: "WHERE filters individual rows BEFORE grouping; HAVING filters entire groups AFTER aggregating (e.g. only groups with count > 1)." },
+  ]}
+/>
+
+<Challenge>
+Pick a column with a small number of repeating values in any dataset you can query. Write three
+separate manual COUNT(*) queries, one per value. Then write one GROUP BY query on that column and
+confirm its counts match exactly. Add a HAVING clause and note which group(s) it removes.
+</Challenge>
+
+<AskCommunity prompt="A GROUP BY dashboard is missing one category I can confirm has real data, via a separate COUNT(*) with a WHERE. Is this a bug, or could a HAVING clause be filtering it out on purpose?">
+Useful replies usually point at checking the query's HAVING clause first - a low-count group being
+deliberately hidden is a common, easy-to-misread pattern, distinct from GROUP BY actually losing or
+dropping real rows.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.w3schools.com/sql/sql_groupby.asp", title: "W3Schools — SQL GROUP BY Statement", kind: "read" },
+    { href: "https://www.w3schools.com/sql/sql_aggregate_functions.asp", title: "W3Schools — SQL Aggregate Functions", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=MXK83I9bTrU", title: "CodeLucky — SQL GROUP BY Explained for Beginners", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=MXK83I9bTrU" title="CodeLucky — SQL GROUP BY Explained for Beginners" minutes={9} />
+
+<Takeaways
+  points={[
+    "Aggregate functions (COUNT, SUM, AVG, MIN, MAX) collapse many rows into one summary value.",
+    "GROUP BY splits rows into separate buckets by a column's distinct values FIRST, then runs the aggregate once per bucket - one output row per group.",
+    "Every SELECTed column must be either the GROUP BY column or wrapped in an aggregate - a bare extra column is a common, real bug.",
+    "WHERE filters individual rows before grouping; HAVING filters entire groups after aggregating.",
+    "Sanity-check any GROUP BY by summing its per-group counts against a plain ungrouped COUNT(*) - a mismatch usually means a NULL group or a JOIN duplicating/dropping rows upstream.",
+  ]}
+/>
+
+<Complete xp={10} />

@@ -1981,10 +1981,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "reading-data",
         title: "Reading data",
         topics: [
-          { slug: "select-and-where", title: "SELECT & WHERE", planned: true },
-          { slug: "sorting-and-limits", title: "Sorting & limits", planned: true },
-          { slug: "joins-gently", title: "JOINs, gently", planned: true },
-          { slug: "aggregates-and-group-by", title: "Aggregates & GROUP BY", planned: true },
+          { slug: "select-and-where", title: "SELECT & WHERE" },
+          { slug: "sorting-and-limits", title: "Sorting & limits" },
+          { slug: "joins-gently", title: "JOINs, gently" },
+          { slug: "aggregates-and-group-by", title: "Aggregates & GROUP BY" },
         ],
       },
       {

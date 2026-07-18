@@ -1,0 +1,277 @@
+---
+title: "SELECT & WHERE"
+summary: "SELECT names the columns you want back; WHERE narrows which rows qualify, checked one row at a time. Together they turn 'give me the table' into one exact, testable question."
+tags: ["sql-and-databases-for-testers", "reading-data", "track-c"]
+updated: "2026-07-18"
+related:
+  - "sql-and-databases-for-testers/databases-in-plain-words/tables-rows-and-columns"
+  - "sql-and-databases-for-testers/reading-data/sorting-and-limits"
+  - "sql-and-databases-for-testers/verifying-the-app-against-the-db/crud-verification"
+---
+
+<Hook>
+A bug tracker has thousands of rows. You need exactly one slice of it: every bug that's high severity
+AND still open. Scrolling and eyeballing doesn't scale past about twenty rows. Asking the database
+directly - "give me only the rows where both of those are true" - scales to millions. That one ask has
+a name: `SELECT` picks the columns, `WHERE` picks the rows.
+</Hook>
+
+<Callout type="analogy">
+A librarian who works from a labeled call-number sign instead of wandering every aisle. The sign says
+exactly which range is fiction, which is non-fiction, which is reference - so a request for "the
+650-680 range" goes straight to one section, no scanning every shelf in the building. `WHERE` is that
+sign: it names the exact condition a row has to satisfy before it's even considered part of the
+answer, instead of handing back everything and making you sort it out yourself.
+</Callout>
+
+<Term define="SELECT names which columns you want back. FROM names the table. WHERE filters which ROWS qualify - the database checks the condition against each row individually, and only rows where it evaluates to true are included in the result. Multiple conditions combine with AND (every condition must be true for that row) or OR (at least one must be true). WHERE runs before the result is returned - it isn't a filter applied afterward to something you already have, it decides what 'the result' even contains in the first place.">SELECT & WHERE</Term>
+
+## Two separate questions, one statement
+
+- **`SELECT` is "which columns."** `SELECT title, severity` returns only those two fields per row -
+  not every column the table has, unless you explicitly ask for all of them with `SELECT *`.
+- **`FROM` is "which table."** Every query needs exactly one starting table to read from (more tables
+  come in with JOINs, later in this chapter).
+- **`WHERE` is "which rows."** It's evaluated per row, independently - each row's own column values
+  either satisfy the condition or they don't. A row's neighbors have zero effect on whether it qualifies.
+- **`AND` narrows, `OR` widens.** `severity = 'high' AND status = 'open'` needs BOTH true for a row to
+  qualify - stricter than either condition alone. `severity = 'high' OR severity = 'low'` needs only
+  one - looser, catching more rows.
+
+<Callout type="tip">
+When a `WHERE` clause isn't behaving the way you expect, don't fight the whole query at once - comment
+out (or temporarily remove) one condition at a time and rerun, watching how the row count changes with
+each one. That isolates exactly which single condition is doing something you didn't expect, instead
+of guessing at the combination.
+</Callout>
+
+<Callout type="mistake">
+Assuming `WHERE column = NULL` finds rows with an empty value. It doesn't - SQL's `NULL` means
+"unknown/absent," and `=` never evaluates to true against it, not even for another `NULL`. A row with
+a genuinely empty `assignee_id` will NOT match `WHERE assignee_id = NULL`; you need
+`WHERE assignee_id IS NULL` instead. This one trips up almost everyone the first time.
+</Callout>
+
+{/* IMAGE: interior of a public library with wood shelving, a labeled Dewey Decimal call-number sign on the left wall listing ranges like 550, 580, 590, 610, a "DEWEY DECIMAL CLASSIFICATION" reference poster mounted on a central shelf end-panel, a face-out rotating book display rack in the foreground, and long uniform shelf rows receding into the background */}
+<HotspotImage
+  src="/notes/sql-and-databases-for-testers/reading-data/select-and-where.jpg"
+  alt="A library interior with a labeled call-number sign, a Dewey classification poster, a face-out display rack, and long shelf rows in the background"
+  credit="Library book stacks — Gwyneth Perry, Wikimedia Commons, CC0 1.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Library_book_stacks.jpg"
+  pins={[
+    { x: 6, y: 45, label: "The labeled call-number sign - naming the exact range you want", desc: "This sign lists ranges like 550, 580, 610 by name. It's what WHERE is: a condition that names exactly which rows qualify, so you walk straight to the matching range instead of scanning every shelf in the room." },
+    { x: 41, y: 50, label: "The classification poster - the reference for what you can filter by", desc: "This poster is the map of categories a request can be filtered against. In a table, that's the column list - you can only WHERE on a column the table actually defines." },
+    { x: 47, y: 82, label: "The face-out display rack - the returned result set", desc: "Only specific, individually chosen books sit face-out here, pulled from the full collection. That's what a SELECT ... WHERE result is: the exact matching rows, pulled out and handed back, nothing else." },
+    { x: 68, y: 48, label: "The long uniform shelf rows behind it - every row, unfiltered", desc: "This is the whole table before any WHERE is applied - every book, every shelf, no narrowing. Without a WHERE condition, this is what you get back: everything." },
+  ]}
+/>
+
+<FlowAnimation
+  title="A SELECT with a WHERE, step by step - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "The full bugs table has every row - high and low severity, open and closed, mixed together", desc: "Nothing has been narrowed yet. This is what FROM bugs alone hands you." },
+    { label: "SELECT names which columns come back", desc: "title and severity, say - not every column the table has, unless you explicitly ask for all of them." },
+    { label: "WHERE checks each row, one at a time: severity = 'high' AND status = 'open'", desc: "Every row is tested independently against both conditions. A row's neighbors don't matter at all." },
+    { label: "Rows that fail either condition are dropped before anything is returned", desc: "A high-severity bug that's already closed fails the second condition and never makes it into the result." },
+    { label: "Verdict: only the exact matching rows come back", desc: "Not the whole table, not an approximation - precisely the rows where both conditions were true." },
+  ]}
+/>
+
+The whole idea, reduced to one line: `SELECT` decides what you see per row, `WHERE` decides which rows
+you see at all.
+
+<CodePlayground
+  language="python"
+  title="Run it - a real SQLite database, SELECT and WHERE (Python)"
+  code={`import sqlite3
+
+conn = sqlite3.connect(":memory:")
+cur = conn.cursor()
+
+cur.execute("""
+CREATE TABLE bugs (
+    id INTEGER PRIMARY KEY,
+    title TEXT,
+    severity TEXT,
+    status TEXT,
+    assignee_id INTEGER,
+    reported_date TEXT
+)
+""")
+
+bugs = [
+    (1, "Login fails on Safari", "high", "open", 1, "2026-07-01"),
+    (2, "Typo on footer", "low", "closed", 2, "2026-07-02"),
+    (3, "Checkout 500 error", "high", "open", 1, "2026-07-05"),
+    (4, "Search returns stale results", "medium", "open", 3, "2026-07-03"),
+    (5, "Password reset email delayed", "high", "closed", 2, "2026-07-04"),
+    (6, "Dark mode contrast issue", "low", "open", 3, "2026-07-06"),
+]
+cur.executemany("INSERT INTO bugs VALUES (?,?,?,?,?,?)", bugs)
+conn.commit()
+
+print("--- WHERE severity = 'high' only ---")
+for row in cur.execute("SELECT title, severity, status FROM bugs WHERE severity = 'high'"):
+    print(" ", row)
+
+print()
+print("--- WHERE severity = 'high' AND status = 'open' - narrower ---")
+for row in cur.execute(
+    "SELECT title, severity FROM bugs WHERE severity = 'high' AND status = 'open'"
+):
+    print(" ", row)
+
+print()
+print("--- The NULL trap: assignee_id = NULL matches nothing, ever ---")
+rows = cur.execute("SELECT title FROM bugs WHERE assignee_id = NULL").fetchall()
+print("  rows found with '= NULL':", len(rows))
+rows = cur.execute("SELECT title FROM bugs WHERE assignee_id IS NULL").fetchall()
+print("  rows found with 'IS NULL':", len(rows), "(correctly zero here - nobody is unassigned)")
+
+conn.close()`}
+/>
+
+Same two queries, in Java - the shared code runner here has no live JDBC/SQLite driver on its
+classpath (unlike your own machine, where `sqlite-jdbc` works fine locally), so this mirrors the exact
+same `WHERE` logic in plain Java collections instead, over the same rows, verified by hand to match the
+real SQLite output above:
+
+<CodePlayground
+  language="java"
+  title="Run it - the same SELECT/WHERE logic, without a live JDBC driver on the shared runner (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    record Bug(int id, String title, String severity, String status, Integer assigneeId, String reportedDate) {}
+
+    public static void main(String[] args) {
+        List<Bug> bugs = List.of(
+            new Bug(1, "Login fails on Safari", "high", "open", 1, "2026-07-01"),
+            new Bug(2, "Typo on footer", "low", "closed", 2, "2026-07-02"),
+            new Bug(3, "Checkout 500 error", "high", "open", 1, "2026-07-05"),
+            new Bug(4, "Search returns stale results", "medium", "open", 3, "2026-07-03"),
+            new Bug(5, "Password reset email delayed", "high", "closed", 2, "2026-07-04"),
+            new Bug(6, "Dark mode contrast issue", "low", "open", 3, "2026-07-06")
+        );
+
+        System.out.println("--- WHERE severity = 'high' only ---");
+        for (Bug b : bugs) {
+            if (b.severity().equals("high")) {
+                System.out.println("  " + b.title() + " | " + b.severity() + " | " + b.status());
+            }
+        }
+
+        System.out.println();
+        System.out.println("--- WHERE severity = 'high' AND status = 'open' - narrower ---");
+        for (Bug b : bugs) {
+            if (b.severity().equals("high") && b.status().equals("open")) {
+                System.out.println("  " + b.title() + " | " + b.severity());
+            }
+        }
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: write a WHERE and watch the row count change">
+<StepChecklist
+  steps={[
+    { text: "Open any dataset you can query - a DB client against a real table, or just the Python playground above", detail: "Write a SELECT naming only the 2-3 columns you actually need, not SELECT *." },
+    { text: "Add a single WHERE condition and run it - note the row count", detail: "Pick something you already believe is true so you can sanity-check the count." },
+    { text: "Add a second condition with AND and rerun", detail: "Confirm the row count went DOWN (or stayed the same) - AND can only narrow, never widen." },
+    { text: "For each row that disappeared between the two runs, explain WHY using only that row's own column values", detail: "Not a guess - point at the specific value that failed the second condition." },
+  ]}
+/>
+You've now confirmed, directly, that WHERE evaluates each row independently against every condition -
+not something you have to take on faith from documentation.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A WHERE clause you expect to match something returns zero rows, even though the app's UI clearly shows matching data.",
+      fix: "Check for an exact-match mismatch: many databases compare strings exactly, including case - `'High'` is not `'high'`. Run a quick `SELECT DISTINCT` on that column to see the real stored spellings, rather than trusting whatever casing the UI happens to render.",
+    },
+    {
+      symptom: "A query with multiple WHERE conditions returns far more or fewer rows than expected.",
+      fix: "Check operator precedence: `WHERE a OR b AND c` groups the AND first, not left-to-right - it means `a OR (b AND c)`, which usually isn't what was intended. Add explicit parentheses around each intended group.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The exact stored value and casing a WHERE clause needs** — check it against the real table (`SELECT DISTINCT column`), not what the UI happens to render on screen.
+- **Row counts before and after adding each condition** — add WHERE conditions one at a time to isolate exactly which one is dropping rows you expected to keep.
+- **[[sql-and-databases-for-testers/databases-in-plain-words/tables-rows-and-columns]]** — the column shape that makes a WHERE clause answerable at all.
+- **[[sql-and-databases-for-testers/reading-data/sorting-and-limits]]** — the next note, where a matched result set gets ranked and cut down further.
+</WhereToCheck>
+
+<WorkedExample title="a WHERE clause that silently matched zero rows">
+1. A tester runs `SELECT * FROM bugs WHERE severity = 'High'`, expecting several rows back. It returns
+   zero. But the app's UI clearly shows several bugs labeled "High" severity, right there on screen.
+2. First guess: maybe those bugs were deleted, or the count in the UI is stale. Both are worth
+   checking, but there's a faster, more direct one first.
+3. Running `SELECT DISTINCT severity FROM bugs` directly shows the real stored values: `high`, `low`,
+   `medium` - all lowercase. The UI capitalizes severities for display, but the raw stored value never
+   was.
+4. Finding: `WHERE` does an exact string match against the RAW stored value, not whatever the UI
+   renders it as. The fix is matching the database's actual casing (`WHERE severity = 'high'`), not
+   guessing from the screen.
+</WorkedExample>
+
+<Quiz
+  question="A tester runs `SELECT * FROM bugs WHERE assignee_id = NULL`, expecting to find every unassigned bug. The UI shows several bugs with no assignee, but the query returns zero rows. What's happening?"
+  options={[
+    "The bugs table is corrupted and needs to be rebuilt",
+    "NULL means 'unknown/absent' in SQL, and `= NULL` never evaluates to true for any row, including genuinely empty ones - the query needs `IS NULL` instead, which is the specific, correct way to test for absence",
+    "The condition needs to be reversed, as in `NULL = assignee_id`",
+    "Every bug secretly has a real assignee_id and the UI is displaying incorrect information"
+  ]}
+  answer={1}
+  explain="This note is explicit that SQL's NULL represents 'unknown/absent,' and the `=` operator is defined to never return true when either side is NULL - not even NULL compared to NULL. That's exactly why SQL has a dedicated `IS NULL` / `IS NOT NULL` operator: to test for absence directly, since `=` structurally can't do it. Reversing the operand order (option three) doesn't change anything about how `=` handles NULL. The table isn't corrupted (option one) - this is completely expected SQL behavior, just an easy first-time trap. And nothing here suggests the UI is wrong (option four) - the rows genuinely have NULL assignee_id, `= NULL` is just the wrong tool to find them."
+/>
+
+<Flashcards
+  cards={[
+    { front: "SELECT vs WHERE, in one line", back: "SELECT picks which columns come back; WHERE picks which rows qualify, checked one row at a time." },
+    { front: "AND vs OR", back: "AND narrows - every condition must be true. OR widens - at least one condition being true is enough." },
+    { front: "Why WHERE severity = 'High' can return zero rows even when the UI shows matches", back: "WHERE does an exact string match against the raw stored value, not whatever casing the UI happens to render it in." },
+    { front: "IS NULL vs = NULL", back: "SQL's NULL means unknown/absent, and `=` never evaluates to true against it. Use IS NULL / IS NOT NULL to actually test for absence." },
+    { front: "The call-number sign analogy", back: "A labeled range that sends you straight to the matching section, instead of scanning every shelf - that's what a WHERE condition does to a table." },
+  ]}
+/>
+
+<Challenge>
+Pick any dataset you can query (or reuse the playground above). Write one SELECT naming only 2-3
+specific columns. Run it with a single WHERE condition and note the row count. Add a second condition
+with AND and note exactly how the count changed. Write down whether the change matched what you
+expected, and why, using the actual column values of any row that dropped out.
+</Challenge>
+
+<AskCommunity prompt="My WHERE clause `severity = 'High'` returns zero rows even though the app's UI shows several bugs at that severity. How do I check whether this is a casing/exact-match issue versus something else entirely?">
+Useful replies usually point at running a quick `SELECT DISTINCT` on that exact column first - seeing
+the real stored spellings directly settles a casing mismatch in one query, faster than guessing from
+what the UI renders.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.w3schools.com/sql/sql_select.asp", title: "W3Schools — SQL SELECT Statement", kind: "read" },
+    { href: "https://www.w3schools.com/sql/sql_where.asp", title: "W3Schools — SQL WHERE Clause", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=uBVS-6piuH4", title: "Analytics with Adam — MASTER the WHERE Clause in SQL", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=uBVS-6piuH4" title="Analytics with Adam — MASTER the WHERE Clause in SQL" minutes={4} />
+
+<Takeaways
+  points={[
+    "SELECT names the columns you want back; FROM names the table; WHERE narrows to matching rows, evaluated one row at a time.",
+    "AND requires every condition to be true; OR requires only one. Combine carefully - precedence can group them in surprising ways without parentheses.",
+    "WHERE does exact matching against the actual stored value, not whatever the UI displays - casing and whitespace matter.",
+    "NULL means unknown/absent and never equals anything with `=` - use IS NULL / IS NOT NULL to test for it.",
+    "Confirm a WHERE clause does what you think by adding conditions one at a time and watching the row count change.",
+  ]}
+/>
+
+<Complete xp={10} />
