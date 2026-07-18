@@ -2206,10 +2206,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "load-vs-stress-vs-soak",
         title: "Load vs stress vs soak",
         topics: [
-          { slug: "types-of-perf-testing", title: "Types of performance testing", planned: true },
-          { slug: "goals", title: "Goals", planned: true },
-          { slug: "recovery", title: "Recovery", planned: true },
-          { slug: "scalability", title: "Scalability", planned: true },
+          { slug: "types-of-perf-testing", title: "Types of performance testing" },
+          { slug: "goals", title: "Goals" },
+          { slug: "recovery", title: "Recovery" },
+          { slug: "scalability", title: "Scalability" },
         ],
       },
       {
