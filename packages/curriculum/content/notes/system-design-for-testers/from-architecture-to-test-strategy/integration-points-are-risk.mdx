@@ -1,0 +1,349 @@
+---
+title: "Integration points = risk"
+summary: "Bugs cluster where two systems meet: each side passes its own tests against its own assumptions, and the mismatch lives in the seam between them. Treat every integration point - API calls, webhooks, third-party services, shared formats - as a first-class thing to test, not a gap between things."
+tags: ["system-design-for-testers", "from-architecture-to-test-strategy", "track-c"]
+updated: "2026-07-18"
+related:
+  - "system-design-for-testers/where-bugs-live-by-layer/api-and-integration-bug-families"
+  - "system-design-for-testers/architecture-styles/third-party-services-and-webhooks"
+  - "system-design-for-testers/from-architecture-to-test-strategy/what-to-test-at-which-layer"
+---
+
+<Hook>
+In September 1999, NASA's $327 million Mars Climate Orbiter burned up in the Martian atmosphere.
+The navigation software worked. The thruster software worked. But one team's code produced values
+in pound-force seconds and the other team's code read them as newton-seconds - and nobody tested
+the handoff. Two working systems, one untested seam, one very expensive fireball. Every app you
+will ever test is full of these seams, and they fail for exactly the same reason: each side was
+built, and tested, against its own private idea of what the other side meant.
+</Hook>
+
+<Callout type="analogy">
+Look at where two train cars meet. Each car is a complete, inspected, working machine on its own -
+wheels, brakes, frame, all certified. The coupler between them is different: it's not part of
+either car's solo inspection, it only exists when BOTH cars show up, and it's where trains
+actually break apart. The knuckle has to match the other knuckle's exact shape, the air hoses have
+to be connected by hand, and the valve has to be opened - three separate agreements, any of which
+can silently fail even when both cars are perfect. Systems are trains: the cars get all the
+testing attention, but the couplers are where the risk lives.
+</Callout>
+
+<Term define="An integration point is any seam where one system's output becomes another system's input: your frontend calling your backend API, one microservice calling another, your app calling a third-party service (payments, email, maps), a webhook arriving from outside, two systems sharing a file format or a database. Each side of the seam is owned, built, and unit-tested by someone who controls only their half - so the seam itself is tested by NOBODY unless someone deliberately tests it. That's why integration points carry disproportionate risk: the bug isn't in either codebase, it's in the mismatch between two codebases' assumptions - units, field names, formats, timing, error behavior.">Integration point</Term>
+
+## Why the seams break when both sides work
+
+- **Each side tests against its own assumption, not against the other side.** Team B's unit tests
+  feed Team B's code with test data Team B invented - which naturally encodes Team B's beliefs.
+  If that belief is wrong ("total is in dollars"), the tests pass AND the bug ships. Green
+  checkmarks on both sides prove each half works alone; they prove nothing about the handshake.
+- **The classic mismatches are boring, tiny, and devastating.** Units (cents vs dollars, the Mars
+  Orbiter's pounds vs newtons), field names (`customer_id` vs `customerId`), formats
+  (`2026-07-18` vs `18/07/2026`), encodings, null vs empty string vs missing key, pagination
+  assumptions, timezone handling. None of these need clever logic to break - just two teams who
+  never compared notes.
+- **Error behavior is a second, sneakier contract.** Both sides may agree perfectly on the happy
+  path and still disagree about failure: what happens on timeout, on a 500, on a retry that
+  delivers the same webhook twice, on a rate limit? The happy-path contract gets discussed in
+  meetings; the failure contract usually gets discovered in production.
+- **Third-party seams add a twist: the other side changes without asking you.** A payment
+  provider deprecates a field, an email API tightens rate limits, a maps service changes response
+  shape in "v2". Your code didn't change, your tests didn't change, and your integration broke
+  anyway. A seam to code you don't control needs re-verification on THEIR schedule, not just yours.
+- **Mocks drift.** Integration tests that talk to a hand-written or recorded fake of the other
+  side quietly become tests of your ASSUMPTION about the other side. The mock passed a year ago
+  because it matched the real service a year ago. The real service moved; the mock didn't; your
+  suite is now green and wrong at the same time.
+- **This is why testers count seams when sizing risk.** A feature touching zero integration
+  points is one team's logic - test its rules and move on. A feature touching three seams
+  (frontend to API, API to payment provider, provider webhook back) deserves triple suspicion at
+  exactly those three places, whatever the individual components' test coverage says.
+
+<Callout type="tip">
+When you get a new feature to test, draw a quick line for every place data crosses an ownership
+boundary - a different team, a different service, a different company. Each line is a question
+factory: What units? What format? What happens on timeout? What happens twice? Who told whom, and
+where is that written down? You'll routinely find that the answer to the last question is
+"a Slack thread from March" - and that's not a document, that's a future incident.
+</Callout>
+
+<Callout type="mistake">
+Assuming "both services are well-tested" means "the integration is tested." Unit coverage on the
+two sides is exactly like the two train cars' individual inspections: necessary, and completely
+silent about whether the coupler between them is actually latched. If nobody has run a test where
+side A's REAL output is fed to side B, the seam is untested - whatever the coverage dashboards say.
+</Callout>
+
+{/* IMAGE: close-up of the coupling between two cars of the Alberni Pacific Railway - a rusty knuckle coupler joining two green-framed cars, grey air-brake hoses hanging and connected below it, a yellow-handled angle cock valve, and metal walkway tread plates bridging the gap above */}
+<HotspotImage
+  src="/notes/system-design-for-testers/from-architecture-to-test-strategy/integration-points-are-risk.jpg"
+  alt="Close-up of the coupling between two railway cars: knuckle coupler, connected air hoses, a yellow valve handle, and tread plates bridging the gap"
+  credit="Couplers of train of Alberni Pacific Railway — Hideyuki KAMON, Wikimedia Commons, CC BY-SA 2.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Couplers_of_train_of_Alberni_Pacific_Railway.jpg"
+  pins={[
+    { x: 45, y: 57, label: "The knuckle coupler — the data contract", desc: "Two steel knuckles that only lock if their shapes match EXACTLY - one standard, agreed by both sides, decades ago. This is your API contract: field names, types, units. If one side's shape drifts even slightly, the connection doesn't hold, no matter how good each car is." },
+    { x: 48, y: 82, label: "The air-brake hoses — the second, separate agreement", desc: "Cars can be mechanically coupled while the brake line is NOT connected - a train that moves but can't stop together. Seams have layered contracts like this: the request can succeed while error handling, auth, or the webhook back-channel was never hooked up. Test each layer of the handshake, not just 'they're connected'." },
+    { x: 62, y: 62, label: "The yellow angle cock — configuration at the boundary", desc: "A hand-operated valve: if it's closed, everything is connected and NOTHING flows. Integrations fail this way constantly - correct code on both sides, and a config flag, API key, or firewall rule at the seam quietly set wrong. 'It's connected' and 'it's flowing' are different checks." },
+    { x: 45, y: 22, label: "The tread plates — the smooth surface hiding the seam", desc: "From above, a passenger sees a flat walkway and no gap at all. That's the UI's job: hide the seams. Which is exactly why you can't test integrations from the UI alone - the surface is DESIGNED to look fine right up until the moment it isn't." },
+    { x: 90, y: 35, label: "The other car — someone else's machine", desc: "Different car, possibly different builder, different maintenance schedule. Your integration partner - another team or another company - upgrades, deprecates, and reconfigures on THEIR timetable. A seam to code you don't control needs re-checking when THEY change, not only when you do." },
+  ]}
+/>
+
+<FlowAnimation
+  title="How a green test suite ships a broken integration - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Team A ships the Orders service; docs say totals are in cents. Unit tests: green", desc: "get_order() returns total_cents: 4999. Every test Team A wrote feeds and checks their own service. All pass, honestly." },
+    { label: "Team B ships the Invoice service, coded from a meeting memory: 'the order total'", desc: "They assumed dollars. Their unit tests feed build_invoice() with test data THEY invented - which encodes the dollar assumption. All green here too." },
+    { label: "First real integration: the invoice reads $4999.00 for a $49.99 order", desc: "The bug is in neither codebase. It lives in the seam: one side speaks cents, the other hears dollars - the exact Mars Climate Orbiter failure, at e-commerce scale." },
+    { label: "The fix: a contract test at the seam, using side A's REAL output as side B's input", desc: "One test that couples the actual halves (or a contract both sides verify against) catches the mismatch on day one - before a customer's card statement does." },
+  ]}
+/>
+
+Here is that whole story as runnable code - two services, both unit suites green, one broken seam.
+The same demo in both languages, same verdict:
+
+<CodePlayground
+  language="python"
+  title="Run it - both teams' tests pass, and the integration is still wrong (Python)"
+  code={`# Team A owns the Orders service. Their docs say: total is in CENTS.
+def get_order(order_id):
+    return {"id": order_id, "total_cents": 4999, "currency": "USD"}
+
+
+# Team A's own unit tests - GREEN
+def test_order_service():
+    order = get_order(1)
+    assert order["total_cents"] == 4999
+    assert order["currency"] == "USD"
+    return "pass"
+
+
+# Team B owns the Invoice service. They coded against a spec from an
+# old meeting: "the order total" - and assumed DOLLARS.
+def build_invoice(order):
+    amount = order["total_cents"]        # right field name...
+    return f"INVOICE #{order['id']}: \${amount:.2f}"   # ...treated as dollars
+
+
+# Team B's own unit tests - ALSO GREEN (fed with their own assumption)
+def test_invoice_service():
+    fake_order = {"id": 1, "total_cents": 49.99}   # B's test data bakes in B's belief
+    assert build_invoice(fake_order) == "INVOICE #1: \$49.99"
+    return "pass"
+
+
+print("Team A's unit suite:", test_order_service())
+print("Team B's unit suite:", test_invoice_service())
+print()
+
+# Now the two services actually MEET for the first time:
+real_order = get_order(1)
+invoice = build_invoice(real_order)
+print("Integrated result:  ", invoice)
+print("Customer expected:   INVOICE #1: \$49.99")
+print()
+print("Both teams' tests are green. The bug lives in NEITHER service -")
+print("it lives in the seam: one side speaks cents, the other hears dollars.")
+print()
+
+# The check that would have caught it: a test AT the integration point,
+# using Team A's REAL output as Team B's input.
+expected = real_order["total_cents"] / 100
+shown = float(invoice.split("\$")[1])
+verdict = "SEAM OK" if shown == expected else "SEAM BROKEN"
+print(f"Contract check at the seam: invoice shows \${shown:.2f},")
+print(f"order actually means \${expected:.2f}  ->  {verdict}")`}
+/>
+
+The same two teams and the same seam in Java - identical green suites, identical broken handoff:
+
+<CodePlayground
+  language="java"
+  title="Run it - both teams' tests pass, and the integration is still wrong (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    // Team A owns the Orders service. Their docs say: total is in CENTS.
+    static Map<String, Object> getOrder(int orderId) {
+        Map<String, Object> order = new HashMap<>();
+        order.put("id", orderId);
+        order.put("total_cents", 4999);
+        order.put("currency", "USD");
+        return order;
+    }
+
+    // Team A's own unit tests - GREEN
+    static String testOrderService() {
+        Map<String, Object> order = getOrder(1);
+        if (!order.get("total_cents").equals(4999)) return "FAIL";
+        if (!order.get("currency").equals("USD")) return "FAIL";
+        return "pass";
+    }
+
+    // Team B owns the Invoice service. They coded against a spec from an
+    // old meeting: "the order total" - and assumed DOLLARS.
+    static String buildInvoice(Map<String, Object> order) {
+        double amount = ((Number) order.get("total_cents")).doubleValue(); // right field...
+        return String.format("INVOICE #%s: \$%.2f", order.get("id"), amount); // ...as dollars
+    }
+
+    // Team B's own unit tests - ALSO GREEN (fed with their own assumption)
+    static String testInvoiceService() {
+        Map<String, Object> fakeOrder = new HashMap<>();
+        fakeOrder.put("id", 1);
+        fakeOrder.put("total_cents", 49.99); // B's test data bakes in B's belief
+        if (!buildInvoice(fakeOrder).equals("INVOICE #1: \$49.99")) return "FAIL";
+        return "pass";
+    }
+
+    public static void main(String[] args) {
+        System.out.println("Team A's unit suite: " + testOrderService());
+        System.out.println("Team B's unit suite: " + testInvoiceService());
+        System.out.println();
+
+        // Now the two services actually MEET for the first time:
+        Map<String, Object> realOrder = getOrder(1);
+        String invoice = buildInvoice(realOrder);
+        System.out.println("Integrated result:   " + invoice);
+        System.out.println("Customer expected:   INVOICE #1: \$49.99");
+        System.out.println();
+        System.out.println("Both teams' tests are green. The bug lives in NEITHER service -");
+        System.out.println("it lives in the seam: one side speaks cents, the other hears dollars.");
+        System.out.println();
+
+        // The check that would have caught it: a test AT the integration point,
+        // using Team A's REAL output as Team B's input.
+        double expected = ((Number) realOrder.get("total_cents")).intValue() / 100.0;
+        double shown = Double.parseDouble(invoice.split("\\\\\$")[1]);
+        String verdict = shown == expected ? "SEAM OK" : "SEAM BROKEN";
+        System.out.printf("Contract check at the seam: invoice shows \$%.2f,%n", shown);
+        System.out.printf("order actually means \$%.2f  ->  %s%n", expected, verdict);
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: map every seam in one feature">
+<StepChecklist
+  steps={[
+    { text: "Pick one feature you know and list every place data crosses an ownership boundary", detail: "Frontend to API, service to service, app to any third party (payments, email, analytics), any webhook coming back in, any shared file or queue. Different team, different service, or different company = a seam." },
+    { text: "For each seam, write down the contract AS EACH SIDE BELIEVES IT", detail: "Units, field names, formats, required vs optional fields. If you can't find where the contract is written down, that absence is itself a finding worth raising." },
+    { text: "Ask the failure questions nobody asked: timeout? 500? duplicate delivery? rate limit?", detail: "The happy path was discussed in a meeting. The failure contract usually wasn't - and it's where production incidents come from." },
+    { text: "Check what the existing integration tests actually talk to", detail: "Real counterpart, or a mock? If a mock: when was it last compared against the real service's current responses? A mock nobody has refreshed is a screenshot of last year's contract." },
+  ]}
+/>
+That list of seams, beliefs, and unasked failure questions is a genuine test plan - and usually a
+shorter path to serious bugs than any amount of extra clicking inside one well-tested component.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "Integration works in the test environment, fails in production.",
+      fix: "Compare the SEAM configuration between environments, not the code: API keys, endpoint URLs, webhook registrations, firewall rules, feature flags on either side. The angle-cock problem - everything connected, one valve closed - is overwhelmingly an environment-config difference, which is why 'works in staging' proves less about a seam than it does about one team's own code.",
+    },
+    {
+      symptom: "A third-party integration that worked for months suddenly starts failing with no deploy on your side.",
+      fix: "Check the partner's changelog, status page, and deprecation emails FIRST - their side changes on their schedule. Capture a real current response and diff it against what your code (and your mocks) expect: renamed fields, tightened rate limits, and retired API versions announce themselves in changelogs that nobody on the consuming side reads until the incident review.",
+    },
+    {
+      symptom: "Two teams each prove 'it's not our bug' with passing tests, while the feature stays broken.",
+      fix: "Both are probably right - and the seam is guilty. Reproduce with side A's REAL output fed directly into side B (a captured response replayed against B, or one direct call bridging both). The mismatch - a unit, a field name, a format, null handling - appears in minutes once you stop testing halves and test the handoff itself.",
+    },
+    {
+      symptom: "A webhook-driven flow duplicates records or randomly misses events.",
+      fix: "You're seeing the failure contract nobody wrote: webhook providers retry on timeout (deliveries arrive TWICE) and give up after enough failures (deliveries stop arriving). Test the seam with a duplicate delivery and with your endpoint responding slowly - if the handler isn't idempotent and the retry window isn't understood, this bug family is guaranteed, not possible.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The network tab, at the seam itself** — capture the REAL request and response crossing the boundary and read the actual field names, units, and formats, instead of trusting either side's documentation.
+- **The other side's changelog and status page** — for third-party seams, their deprecation schedule is your regression schedule; check it when an integration breaks without a deploy on your side.
+- **Environment config at the boundary** — API keys, webhook registrations, endpoint URLs, and flags per environment; 'connected but not flowing' almost always lives here.
+- **The mocks and fixtures your integration tests use** — diff them against a freshly captured real response; every difference is either a drifted mock or an undocumented change, and both are findings.
+- **[[system-design-for-testers/where-bugs-live-by-layer/api-and-integration-bug-families]]** — the catalog of what specifically breaks at this layer: contract drift, auth, timeouts, retries, and their symptoms.
+</WhereToCheck>
+
+<WorkedExample title="counting seams turns a 'simple' checkout feature into the right test plan">
+1. A team adds "Pay with QuickPay" to checkout. The developer estimates it as small: "their SDK
+   does everything." The tester draws the seams instead: frontend to our API, our API to
+   QuickPay's charge endpoint, QuickPay's webhook back to our order service. Three boundaries,
+   two owned by another company.
+2. Seam questions, seam by seam. Charges: what unit does QuickPay expect? (Documentation says
+   minor units - cents. Our order totals are stored in dollars as decimals. Someone must convert -
+   who?) Webhooks: QuickPay retries failed deliveries up to 5 times - is our handler idempotent?
+   Failure: what does our API do if QuickPay times out mid-charge?
+3. Findings before a single UI click: the conversion happens in OUR code, and for zero-decimal
+   currencies (Japanese yen has no cents) multiplying by 100 silently charges 100x - a real bug,
+   caught by asking the units question at the seam. And the webhook handler creates an order row
+   per delivery - so QuickPay's retry policy would duplicate orders under exactly the network
+   conditions that trigger retries.
+4. Both bugs fixed before launch. Neither would have appeared in a happy-path staging demo: the
+   demo currency was USD, and staging's fast network never made QuickPay retry. Both would have
+   appeared in production, as a support fire, within weeks.
+5. The team's takeaway, written into their definition of done: "features are sized by seam count,
+   not screen count - and every seam ships with its units, failure behavior, and retry behavior
+   tested." The tester didn't click more than anyone else; they just tested the couplers instead
+   of only the cars.
+</WorkedExample>
+
+<Quiz
+  question="Team A's order service and Team B's invoice service both have thorough, passing unit tests. Which statement about their integration is most accurate?"
+  options={[
+    "The integration is covered, because every function on both sides is tested",
+    "The integration is risky only if one of the two services has low test coverage",
+    "The integration is untested until something feeds side A's real output into side B - both suites only verify each side's own assumptions about the contract",
+    "The integration cannot break as long as both services are deployed to the same environment"
+  ]}
+  answer={2}
+  explain="Each team's unit tests feed their own code with test data they invented - data that naturally encodes their own beliefs about the contract. If Team B believes totals arrive in dollars, their tests bake in dollars, pass forever, and prove nothing about Team A's actual cents. High coverage on both sides changes nothing about this (option B), and sharing an environment doesn't align two teams' assumptions (option D). The seam becomes tested only when side A's REAL output meets side B's real input - via an integration test, a contract test both sides verify against, or a captured-response replay. That's option C, and it's the whole reason integration points deserve tester suspicion out of proportion to their size."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What is an integration point?", back: "Any seam where one system's output becomes another's input: frontend to API, service to service, app to third party, webhooks, shared formats or databases. Each side is owned and tested by someone who controls only their half." },
+    { front: "Why do seams break when both sides pass their tests?", back: "Each side's tests feed its own code with data that encodes its own assumptions. Wrong assumption = green tests AND a shipped bug. The mismatch lives between the codebases, where neither suite looks." },
+    { front: "The classic seam mismatches", back: "Units (cents vs dollars, pounds vs newtons), field names, date formats, encodings, null vs empty vs missing, pagination, timezones. Tiny, boring, and responsible for spectacular failures - including a $327M Mars orbiter." },
+    { front: "The two contracts every seam has", back: "The happy-path contract (shapes, units, fields - usually discussed) and the failure contract (timeout, 500, duplicate delivery, rate limit - usually discovered in production). Test both." },
+    { front: "Why third-party seams need re-verification on a schedule", back: "The other side changes without asking you: deprecated fields, new API versions, tightened limits. Your code and tests stay unchanged while the integration breaks - their changelog is your regression trigger." },
+    { front: "Why mocks quietly stop protecting you", back: "A mock is a snapshot of the other side's behavior at the moment it was written. The real service moves on; the mock doesn't; your integration tests become green tests of an outdated assumption." },
+    { front: "How testers use seams to size risk", back: "Count the ownership boundaries a feature's data crosses. Zero seams = one team's logic. Three seams = three places deserving concentrated suspicion, regardless of each component's coverage." },
+  ]}
+/>
+
+<Challenge>
+Take the app you test and pick its most important third-party integration - payments, email,
+login, anything owned by another company. Without asking anyone, try to answer four questions
+from the app's docs, code, or dashboards: What units/formats cross this seam? Where is the
+contract written down? What happens on a timeout? What happens if the same webhook arrives twice?
+Every question you CAN'T answer from written sources is a real risk you've just discovered - and
+asking it out loud will make you look like the most senior tester in the room.
+</Challenge>
+
+<AskCommunity prompt="Our app integrates with `[third-party service]` and I want to test the integration properly, not just the happy path. I've listed the seams: `[frontend to API, API to provider, webhook back]`. What failure cases (timeouts, retries, duplicate webhooks, contract drift) have bitten your teams at seams like these, and how do you test them without hammering the provider's real API?">
+Seam war stories are the community's richest vein - almost every production incident anyone shares
+started at an integration point, and the failure patterns repeat across wildly different products.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://martinfowler.com/bliki/ContractTest.html", title: "Martin Fowler — Contract Test (why mocks drift and what to do about it)", kind: "read" },
+    { href: "https://docs.pact.io/", title: "Pact docs — Introduction to contract testing", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=rHgOA_D_DRs", title: "Automation Step by Step — What is Contract Testing", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=rHgOA_D_DRs" title="Automation Step by Step — What is Contract Testing" minutes={4} />
+
+<Takeaways
+  points={[
+    "Bugs cluster at integration points because each side is built and tested against its own private assumption - the mismatch lives in the seam, where neither side's tests look.",
+    "Green unit suites on both sides prove the cars work; they say nothing about the coupler. The seam is untested until side A's real output meets side B's real input.",
+    "The killer mismatches are tiny and boring: units, field names, formats, null handling - the Mars Climate Orbiter died of a unit conversion, not an algorithm.",
+    "Every seam has two contracts: the happy path (usually discussed) and the failure behavior - timeouts, retries, duplicate deliveries (usually discovered in production). Test the second one on purpose.",
+    "Third-party seams break on the OTHER side's schedule - their changelogs and deprecations are your regression triggers, and stale mocks are green tests of dead contracts.",
+    "Size features by seam count, not screen count: every ownership boundary the data crosses is a concentrated risk deserving its own tests.",
+  ]}
+/>
+
+<Complete xp={10} />
