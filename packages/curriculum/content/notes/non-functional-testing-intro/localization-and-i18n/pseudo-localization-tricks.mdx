@@ -1,0 +1,187 @@
+---
+title: "Pseudo-localization tricks"
+summary: "Generate pseudo-localized strings - accented characters, bracket markers, and deliberate expansion - to reveal internationalization defects like hard-coded text, truncation, and encoding gaps before real translation exists."
+tags: ["non-functional-testing-intro", "localization-and-i18n", "track-c"]
+updated: "2026-07-20"
+related:
+  - "non-functional-testing-intro/localization-and-i18n/i18n-vs-l10n-in-plain-words"
+  - "non-functional-testing-intro/localization-and-i18n/text-expansion-truncation-and-rtl"
+  - "non-functional-testing-intro/localization-and-i18n/dates-currencies-and-formats"
+---
+
+<Hook>
+Real translations arrive late, cost money, and depend on people outside engineering. A team that waits
+for them to test internationalization finds every layout, encoding, and hard-coded-string defect during
+the least convenient week of the release. There is a cheaper way to fail early.
+</Hook>
+
+<Callout type="analogy">
+A broadcast engineer does not wait for the evening program to test a signal chain. A synthetic color-bar
+test card runs through the same pipeline first: it is not real content, but its known bars, edges, and
+near-black patches expose sync, color, and clipping problems immediately. Pseudo-localization plays a
+synthetic "test card" string through the product before a single real translation exists.
+</Callout>
+
+<Term define="Pseudo-localization is an automated pseudo-translation of source strings - adding accented characters, wrapping text in bracket markers, and expanding length - applied before real translation exists so that hard-coded text, truncation, and encoding defects surface early and cheaply, without depending on a translator.">Pseudo-localization</Term>
+
+## Engineer the defect, do not wait for the translator
+
+A pseudo-localization tool walks every extracted string and returns an altered but still-readable
+version: vowels gain diacritics, the whole string grows by roughly 30-50 percent, and bracket markers
+wrap the start and end so a tester can spot truncation at a glance. Run the product against this
+generated pseudo-locale exactly like a real locale switch. Anything that still renders in plain English
+was never extracted into a translatable resource. Anything whose brackets get clipped will truncate
+again under a real, longer translation.
+
+<Callout type="tip">
+Treat a visible, unaccented word as the highest-priority finding. It means the string was never
+externalized, so no translator will ever see it - the localization vendor cannot fix what engineering
+still owns.
+</Callout>
+
+<Callout type="mistake">
+Do not treat a passing pseudo-localization pass as proof the product is translation-ready. It proves the
+mechanism - extraction, encoding, and flexible layout - works. Terminology accuracy, tone, and cultural
+fit still require a native-speaker review pass with real content.
+</Callout>
+
+{/* IMAGE: the SMPTE color bar test pattern with a full bar row, a castellated calibration row, and black, white, and near-black reference patches */}
+<HotspotImage
+  src="/notes/non-functional-testing-intro/localization-and-i18n/pseudo-localization-tricks.jpg"
+  alt="The SMPTE color bar test pattern with a full-height bar row, a castellated calibration row, and a bottom row of black, white, and near-black reference patches"
+  credit="SMPTE Color Bars — Denelson83, Wikimedia Commons, Public domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:SMPTE_Color_Bars.svg"
+  pins={[
+    { x: 50, y: 25, label: "A synthetic full-range signal", desc: "Like a pseudo-locale string, this pattern is not real content - it is engineered to make every value visible at once, before a real broadcast or translation exists." },
+    { x: 64, y: 71, label: "High-contrast calibration block", desc: "Alternating blocks pinpoint an exact boundary, the same job bracket markers do around a pseudo-localized string." },
+    { x: 80, y: 90, label: "Near-black registration patches", desc: "Fine reference patches catch subtle errors a casual glance would miss - just as accented characters catch silent encoding or font-fallback defects." },
+    { x: 27, y: 90, label: "Full white clipping block", desc: "An extreme reference value exposes clipping, the same way a deliberately expanded pseudo-localized string exposes truncation and layout overflow." },
+  ]}
+/>
+
+<FlowAnimation title="A pseudo-localization pass" intervalMs={1600} nodes={[
+  { label: "Generate a pseudo-locale from source strings", desc: "Automated tooling accents characters, adds bracket markers, and expands length without waiting on translators." },
+  { label: "Run the product against the pseudo-locale", desc: "Every screen, dialog, error, and notification the source locale reaches should also render pseudo-localized text." },
+  { label: "Inspect layout, encoding, and hard-coded text", desc: "Clipped bracket markers, mangled accents, and unchanged English reveal defects immediately." },
+  { label: "Fix engineering gaps before real translation arrives", desc: "Real localization then adapts content instead of also fighting rigid containers and missing extraction." },
+]}/>
+
+<CodePlayground language="python" title="A pseudo-localization string transformer (Python)" code={`def pseudo_localize(text):
+    accents = {
+        "a": "å", "e": "é", "i": "î", "o": "ö", "u": "ü",
+        "A": "Å", "E": "É", "I": "Î", "O": "Ö", "U": "Ü",
+    }
+    accented = "".join(accents.get(ch, ch) for ch in text)
+    padded = accented + " " + accented[: max(1, len(accented) // 3)]
+    return "[!! " + padded + " !!]"
+
+samples = ["Save", "Checkout complete", "Add to cart"]
+checks = {}
+for s in samples:
+    out = pseudo_localize(s)
+    checks[s + "_has_brackets"] = out.startswith("[!!") and out.endswith("!!]")
+    checks[s + "_is_longer"] = len(out) > len(s)
+    checks[s + "_has_accent"] = any(ord(c) > 127 for c in out)
+    print(s + " -> " + out)
+
+result = "PASS" if all(checks.values()) else "FAIL"
+assert result == "PASS", "pseudo-localization transform rejected"
+print("RESULT=" + result)`}/>
+
+<CodePlayground language="java" title="A pseudo-localization string transformer (Java)" code={`import java.util.LinkedHashMap;
+import java.util.Map;
+
+public class Main {
+    static String pseudoLocalize(String text) {
+        String src = "aeiouAEIOU";
+        String dst = "åéîöüÅÉÎÖÜ";
+        StringBuilder accented = new StringBuilder();
+        for (char ch : text.toCharArray()) {
+            int idx = src.indexOf(ch);
+            accented.append(idx >= 0 ? dst.charAt(idx) : ch);
+        }
+        String accentedStr = accented.toString();
+        String extra = accentedStr.substring(0, Math.max(1, accentedStr.length() / 3));
+        String padded = accentedStr + " " + extra;
+        return "[!! " + padded + " !!]";
+    }
+
+    static boolean hasNonAscii(String s) {
+        for (char c : s.toCharArray()) if (c > 127) return true;
+        return false;
+    }
+
+    public static void main(String[] args) {
+        String[] samples = { "Save", "Checkout complete", "Add to cart" };
+        Map<String, Boolean> checks = new LinkedHashMap<>();
+        for (String s : samples) {
+            String out = pseudoLocalize(s);
+            checks.put(s + "_has_brackets", out.startsWith("[!!") && out.endsWith("!!]"));
+            checks.put(s + "_is_longer", out.length() > s.length());
+            checks.put(s + "_has_accent", hasNonAscii(out));
+            System.out.println(s + " -> " + out);
+        }
+        boolean ok = true;
+        for (var e : checks.entrySet()) ok &= e.getValue();
+        String result = ok ? "PASS" : "FAIL";
+        if (!result.equals("PASS")) throw new AssertionError("pseudo-localization transform rejected");
+        System.out.println("RESULT=" + result);
+    }
+}`}/>
+
+<FirstTime title="Run a first pseudo-localization pass">
+<StepChecklist steps={[
+  { text: "Generate or enable a pseudo-locale", detail: "Use a build tool, resource-bundle generator, or the sample transformer to accent, expand, and bracket every extracted string." },
+  { text: "Switch the running product to that pseudo-locale", detail: "Visit navigation, forms, empty states, errors, toasts, and emails - not only the happy path." },
+  { text: "Flag unaccented, unbracketed text", detail: "Plain English inside a pseudo-localized screen is a hard-coded string that no translator will ever reach." },
+  { text: "Flag clipped brackets and broken accents", detail: "A missing closing marker or mangled character is a truncation or encoding defect, independent of any real translation." },
+]}/>
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "A button still reads plain English under the pseudo-locale.", fix: "Trace the string to its source; it was never externalized into a translatable resource, so route it to engineering, not the localization vendor." },
+  { symptom: "The trailing `!!]` marker is clipped off a pseudo-localized label.", fix: "The container is fixed-width; remove the constraint or use an approved flexible layout pattern, then rerun the pseudo-locale pass." },
+  { symptom: "Accented characters render as boxes or question marks.", fix: "Check encoding end to end - source files, database columns, HTTP headers, and fonts - since pseudo-localization only surfaces the defect, it does not explain which layer caused it." },
+]}/>
+
+<WhereToCheck>
+- Extracted message catalogs versus every string actually rendered under the pseudo-locale.
+- Fixed-width containers, truncation, and ellipsis behavior on expanded pseudo-localized text.
+- Encoding at the source file, database, transport, and font-rendering layers.
+- [[non-functional-testing-intro/localization-and-i18n/text-expansion-truncation-and-rtl]] for the deeper layout and direction checks a pseudo-locale pass first flags.
+</WhereToCheck>
+
+<WorkedExample title="the vanishing bracket marker">
+1. QA enables an English-based pseudo-locale before any real translation is ready.
+2. A settings dialog title renders "Preferen" - the expansion and trailing "!!]" marker are missing.
+3. The tester records the string key, the expected pseudo-localized form, and the clipped rendered result.
+4. Engineering removes a fixed-width container; the same key is retested and every other dialog title is swept for the identical pattern.
+</WorkedExample>
+
+<Quiz question="What is the main purpose of pseudo-localization?" options={[
+  "Provide accurate translations ready for release", "Reveal internationalization defects before real translations exist", "Replace native-speaker linguistic review", "Measure server response time under load"
+]} answer={1} explain="Pseudo-localization is engineered, not accurate, text. It stresses extraction, encoding, and flexible layout early so real translation work does not also have to fight engineering gaps." />
+
+<Flashcards cards={[
+  { front: "Pseudo-localization", back: "Automated accenting, bracketing, and expansion of source strings to test internationalization before real translation exists." },
+  { front: "Unaccented text under a pseudo-locale", back: "A hard-coded string that was never externalized - an engineering defect, not a translation gap." },
+  { front: "Clipped bracket marker", back: "Evidence of a fixed-width container that will also truncate a real, longer translation." },
+]}/>
+
+<Challenge>Generate a pseudo-localized version of five strings from one screen, run the screen, and classify every finding as extraction, layout, or encoding.</Challenge>
+<AskCommunity prompt="What is the strangest defect a pseudo-localization pass has caught in your product before a single real translation existed?" />
+
+<Resources links={[
+  { href: "https://learn.microsoft.com/en-us/globalization/methodology/pseudolocalization", title: "Microsoft — Pseudo-Localization", kind: "read" },
+  { href: "https://developer.android.com/guide/topics/resources/pseudolocales", title: "Android Developers — Pseudolocales", kind: "read" },
+  { href: "https://www.youtube.com/watch?v=Wvx89P-rguQ", title: "Android Testing Tip: Pseudo-Localization Explained", kind: "watch" },
+]}/>
+<Video href="https://www.youtube.com/watch?v=Wvx89P-rguQ" title="Android Testing Tip: Pseudo-Localization Explained" minutes={3} />
+
+<Takeaways points={[
+  "Pseudo-localization generates engineered, readable-but-altered strings before real translation exists.",
+  "An unaccented string under a pseudo-locale is a hard-coded-text defect, not a translation gap.",
+  "A clipped bracket marker predicts truncation that a real, longer translation will also hit.",
+  "A clean pseudo-localization pass proves the mechanism works; it does not replace native-speaker review.",
+]}/>
+<Complete xp={10} />
