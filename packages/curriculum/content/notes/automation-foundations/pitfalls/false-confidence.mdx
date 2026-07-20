@@ -1,0 +1,141 @@
+---
+title: "False confidence"
+summary: "A green suite proves only the assertions it executed in the environment and data it observed; confidence becomes false when teams silently generalize that evidence to untested risks."
+tags: ["automation-foundations", "pitfalls", "track-d"]
+updated: "2026-07-18"
+related:
+  - "automation-foundations/pitfalls/flaky-tests"
+  - "automation-foundations/pitfalls/over-automation"
+  - "automation-foundations/the-automation-pyramid/balancing-the-suite"
+---
+
+<Hook>
+Ten thousand checks are green. The release corrupts prices in one unsupported locale because every test
+used USD and asserted only that the page loaded. Green was accurate about those checks and misleading
+about the claim attached to them. The danger was not test failure; it was inference failure.
+</Hook>
+
+<Callout type="analogy">
+The ship in the image can clearly see one iceberg, but the photograph says nothing about hazards outside
+the frame or below the water. A test suite is a set of lit observations, not a force field. Navigation
+requires charts, soundings, weather, lookouts, and explicit uncertainty around what has not been seen.
+</Callout>
+
+<Term define="False confidence is an unjustified belief about product quality created by overgeneralizing limited test evidence. It arises from missing or weak assertions, narrow data/environments, mocked-away integrations, duplicated coverage, unobserved negative paths, stale tests, ignored flake, and dashboards that report execution quantity without stating which risks and claims were actually evaluated.">False confidence</Term>
+
+## Turn green into a bounded claim
+
+Every result should answer: which behavior, data, environment, browser/platform, dependency mode, and
+oracle ran? Playwright projects can vary configurations; Selenium Grid can vary browser/platform; Cypress
+can control app/network state. None automatically chooses representative combinations or asserts the
+right business invariant. A response status of 200 does not prove the total, permissions, side effect,
+or customer-visible content.
+
+Use a risk-to-evidence map. For each important risk, name the cheapest check, its oracle, required real
+integration, representative data, and blind spots. Seed defects or make rejecting mutations to prove the
+oracle can go red. Review escaped defects against the map; add evidence where inference failed rather
+than adding unrelated test count.
+
+<Callout type="tip">Write dashboard labels as claims: "12 checkout invariants passed on Chrome/Edge,
+USD/EUR, staging build abc" is less comforting and far more useful than "1,842 tests passed."</Callout>
+
+<Callout type="mistake">Asserting only absence of errors or element visibility. A receipt can be visible
+with the wrong total. Assert the business invariant and, where necessary, the durable side effect.</Callout>
+
+<HotspotImage src="/notes/automation-foundations/pitfalls/false-confidence.jpg" alt="Historic ship at sea near a large iceberg"
+  credit="Ship at sea near iceberg — Harris & Ewing Collection/Library of Congress, Wikimedia Commons, public domain" creditHref="https://commons.wikimedia.org/wiki/File:Ship_at_sea_near_iceberg_LOC_hec.01902.jpg"
+  pins={[
+    { x: 19, y: 67, label: "Visible iceberg", desc: "Known risks with explicit assertions are inside the evidence frame." },
+    { x: 38, y: 78, label: "Waterline", desc: "Important state can exist below the UI: database writes, permissions, queues, and rounding." },
+    { x: 84, y: 69, label: "Ship", desc: "A green route through one dataset and environment does not describe the whole sea." },
+  ]}/>
+
+<FlowAnimation title="Bound a green claim" intervalMs={1600} nodes={[
+  { label: "State risk", desc: "Example: discount rounding corrupts a charged total." },
+  { label: "Name oracle", desc: "Assert displayed total, charged amount, currency, and persisted order invariant." },
+  { label: "Name evidence frame", desc: "Data partitions, browser/platform, environment, and real versus mocked dependencies." },
+  { label: "Prove rejection", desc: "Seed a wrong total; the check must fail before green earns confidence." },
+]}/>
+
+<CodePlayground language="python" title="Detect a weak green oracle (Python)" code={`orders = [
+    {"id": "A", "status": 200, "shown": 1080, "charged": 1080},
+    {"id": "B", "status": 200, "shown": 950, "charged": 1050},
+]
+weak_passes = sum(o["status"] == 200 for o in orders)
+strong_failures = [o["id"] for o in orders if not (o["status"] == 200 and o["shown"] == o["charged"])]
+assert weak_passes == 2 and strong_failures == ["B"], "confidence oracle rejected"
+print("weak-passes:", weak_passes)
+print("strong-failures:", ",".join(strong_failures))
+print("verdict:", "FALSE-CONFIDENCE" if strong_failures else "SUPPORTED")`}/>
+
+<CodePlayground language="java" title="Detect a weak green oracle (Java)" code={`import java.util.*;
+public class Main {
+    record Order(String id,int status,int shown,int charged) {}
+    public static void main(String[] args) {
+        var orders=List.of(new Order("A",200,1080,1080),new Order("B",200,950,1050));
+        long weakPasses=orders.stream().filter(o->o.status()==200).count();
+        var strongFailures=orders.stream().filter(o->!(o.status()==200&&o.shown()==o.charged())).map(Order::id).toList();
+        if(weakPasses!=2||!strongFailures.equals(List.of("B"))) throw new AssertionError("confidence oracle rejected");
+        System.out.println("weak-passes: "+weakPasses);
+        System.out.println("strong-failures: "+String.join(",",strongFailures));
+        System.out.println("verdict: "+(!strongFailures.isEmpty()?"FALSE-CONFIDENCE":"SUPPORTED"));
+    }
+}`}/>
+
+<FirstTime title="Audit one green dashboard claim"><StepChecklist steps={[
+  { text: "Choose one release claim", detail: "For example, discounts charge the shown amount." },
+  { text: "Trace actual assertions", detail: "Identify data, environments, browsers, and mocked boundaries." },
+  { text: "Seed a plausible defect", detail: "Change charged total while preserving status and visible receipt." },
+  { text: "Rewrite the dashboard label", detail: "State exactly what evidence passed and what remains outside frame." },
+]}/></FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "All API tests pass but customers see wrong totals.", fix: "Inspect whether tests assert only status/schema; add business invariants across response, persisted order, and charge boundary." },
+  { symptom: "Coverage is high but one locale repeatedly escapes.", fix: "Map data partitions and production use; add representative locale/currency cases instead of more default-locale paths." },
+]}/>
+
+<WhereToCheck>
+- Assertion bodies, not test names, for the real claim.
+- Data partitions, browser/platform projects, environment revision, and mocked integrations.
+- Escaped defects and whether any existing oracle could have rejected them.
+</WhereToCheck>
+
+<WorkedExample title="The 200 OK checkout suite">
+Fifty tests assert checkout returns 200 and a receipt is visible. A mutation makes the payment service
+charge cents as dollars while preserving both facts; all fifty remain green. One invariant comparing
+cart total, displayed receipt, charged amount, currency, and stored order rejects it. The suite did not
+need fifty-one paths first—it needed one honest oracle.
+</WorkedExample>
+
+<Quiz question="What can a green suite legitimately claim?" options={["The product has no important bugs", "Users will be satisfied", "The executed assertions passed in their observed data and environments", "Untested browsers behave identically"]} answer={2} explain="Anything broader requires additional evidence; green is bounded by execution and oracle scope." />
+
+<Flashcards cards={[
+  { front: "Evidence frame", back: "The behavior, data, environment, browser/platform, dependencies, and oracle actually observed." },
+  { front: "Rejecting mutation", back: "A plausible defect deliberately introduced to prove the oracle can go red." },
+  { front: "Risk-to-evidence map", back: "A mapping from important risks to checks, oracles, data, integrations, and blind spots." },
+]}/>
+
+<Challenge>Change order B's charged value to 950. Both oracles must reject the stale expectation of a
+failure. Then add a different plausible defect—wrong currency or unauthorized access—and extend the invariant.</Challenge>
+
+<AskCommunity prompt="Our dashboard says 99% pass rate. How can we communicate confidence without sounding negative?">
+Strong replies replace vague certainty with bounded claims, risk coverage, first-attempt reliability,
+known blind spots, environment/version labels, and changes since the last release.
+</AskCommunity>
+
+<Resources links={[
+  { href: "https://www.selenium.dev/documentation/test_practices/overview/", title: "Selenium — Scope and cost of browser automation", kind: "read" },
+  { href: "https://playwright.dev/docs/test-projects", title: "Playwright — Projects and configuration coverage", kind: "read" },
+  { href: "https://docs.cypress.io/app/core-concepts/best-practices", title: "Cypress — Assertions, state, and layered coverage", kind: "read" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=90auAVyZswc" title="Building Quality Gates in DevOps CI/CD Pipelines | Testing Pyramid, Smoke Tests, Rollback Strategies" minutes={31} />
+
+<Takeaways points={[
+  "Green is a bounded statement about executed assertions, data, and environments.",
+  "Weak oracles can make large suites confidently wrong.",
+  "Map important risks to evidence and state blind spots explicitly.",
+  "Use plausible rejecting mutations to prove that an oracle can detect the defect it claims to cover.",
+]}/>
+
+<Complete xp={10} />
