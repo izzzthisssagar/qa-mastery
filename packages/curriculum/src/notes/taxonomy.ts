@@ -2666,10 +2666,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "manual-qa-questions",
         title: "Manual QA questions",
         topics: [
-          { slug: "classic-questions-and-answers", title: "Classic questions & answers", planned: true },
-          { slug: "test-design-exercises", title: "Test-design exercises", planned: true },
-          { slug: "test-this-pen-scenarios", title: "Test this pen scenarios", planned: true },
-          { slug: "talking-through-bugs", title: "Talking through bugs", planned: true },
+          { slug: "classic-questions-and-answers", title: "Classic questions & answers" },
+          { slug: "test-design-exercises", title: "Test-design exercises" },
+          { slug: "test-this-pen-scenarios", title: "Test this pen scenarios" },
+          { slug: "talking-through-bugs", title: "Talking through bugs" },
         ],
       },
       {
