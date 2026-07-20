@@ -1,0 +1,328 @@
+---
+title: "Percentiles vs averages"
+summary: "The average blends every fast request and every slow catastrophe into one flattering number nobody actually experienced. A percentile reads the distribution directly - p95 tells you what the slowest 5% of real requests felt, which is where user complaints live."
+tags: ["performance-testing", "metrics", "track-e"]
+updated: "2026-07-20"
+related:
+  - "performance-testing/metrics/latency-and-throughput"
+  - "performance-testing/metrics/error-rate"
+  - "non-functional-testing-intro/performance/key-metrics"
+---
+
+<Hook>
+A load test report reads: "average response time 226 ms - comfortably under our 250 ms target."
+The release ships. Within a day, a support queue fills with users describing a checkout that
+"just hangs." Nobody lied on the report - the average really was 226 ms. But one number in thirty
+was 900 ms, another 610 ms, a handful more crept past 300 - and the arithmetic mean smoothed every
+one of those real, felt delays into a single comfortable figure that not one single user actually
+experienced.
+</Hook>
+
+<Callout type="analogy">
+Thirty runners finish a road race. The average finish time sounds like a tidy summary of "how the
+race went" - except almost nobody ran that exact time. Twenty-four of the thirty runners were
+FASTER than the average; a handful of stragglers near the back, one who stopped to retie a shoe,
+one who walked the last mile with cramp, dragged the number upward until it no longer describes a
+typical runner OR the back of the pack particularly well. A percentile asks a sharper, more honest
+question: line every runner up from fastest to slowest, and tell me the time of the runner sitting
+at the 95th position from the front. That is p95 - not an average that no one ran, but the actual
+finish time of a real, specific, identifiable runner near the back of the field. If a race
+organizer wants to know "will most people be happy with how long this took," the average is a
+guess; the 95th-place runner's actual watch is the answer.
+</Callout>
+
+<Term define="A percentile is the value below which a given percentage of observations fall - p95 is the value that 95% of measurements were at or under, meaning the slowest 5% exceeded it. The average (arithmetic mean) sums every value and divides by the count, which lets a small number of extreme outliers pull the result away from what most individual measurements actually looked like - especially for response-time data, which is typically right-skewed (a long tail of rare, slow requests rather than a symmetric bell curve). Performance SLOs are set on percentiles (commonly p50, p95, p99) specifically because they describe the experience of a stated fraction of real users, while an average describes no particular user at all.">Percentile</Term>
+
+## Why the tail matters more than the middle
+
+- **Response times are not a bell curve.** Most requests cluster near a fast floor set by network
+  and code path; a long tail stretches out from cache misses, garbage collection pauses, lock
+  contention, and slow downstream calls. The mean is dragged toward that tail; the median (p50)
+  mostly ignores it.
+- **p50 (median) is the typical experience.** Half of all requests were faster, half slower. It is
+  a decent single number for "what does a normal request feel like," but it says nothing about the
+  bad cases.
+- **p95 and p99 describe the bad cases directly.** p95 means 1 in 20 requests was slower than this
+  number; p99 means 1 in 100 was. At real production volume, "1 in 100" is not rare - at a million
+  requests a day it is ten thousand bad experiences, every single day.
+- **The average can look fine while the tail is on fire, or the reverse.** A distribution with many
+  fast requests and a short, extreme tail can post a low mean while p99 is genuinely alarming - the
+  mean literally cannot see what happens to a rare-but-real slice of users.
+- **SLOs belong on percentiles, never on the average.** "p95 `<800ms`" is a target that means
+  something to 95% of real requests. "Average `<800ms`" can be satisfied while a meaningful chunk
+  of users wait far longer, because a fast majority can always outvote a slow minority in an
+  average.
+
+<Callout type="tip">
+Report a percentile TRIO, not one number: p50 (typical), p95 (the edge most users still tolerate),
+and p99 (the worst regularly-occurring case). Three numbers cost almost nothing extra to compute
+and tell a release manager three different, useful stories - "typical is fine, the edge is
+acceptable, the worst case is what we should watch" - that a single average can never separate.
+</Callout>
+
+<Callout type="mistake">
+Presenting "average response time" as the headline metric in any performance report. An average is
+not wrong, exactly - it is just answering a question nobody asked ("what if every request's time
+got blended together") instead of the one that matters ("what did real users, including the
+unlucky ones, actually experience"). The tell that a report has this problem: it states one number
+with no percentile, no distribution shape, and no count of how many requests were measured. Ask for
+p95 and p99 before trusting any release decision built on an average alone.
+</Callout>
+
+{/* IMAGE: a marathon finish line arch reading REYKJAVIKUR MARATHON ISLANDSBANKI spanning a city street, with two separate digital race clocks mounted on the arch displaying different times (3:23:38 on the left, 2:34:06 on the right), a runner in a red shirt mid-stride crossing with both arms raised in celebration, spectators and sponsor banners lining barriers on both sides, a race volunteer in a high-visibility vest standing in the foreground holding a finish-line tape */}
+<HotspotImage
+  src="/notes/performance-testing/metrics/percentiles-vs-averages.jpg"
+  alt="A marathon finish line arch with two digital race clocks showing different times, a runner crossing with arms raised, spectators along barriers, and a volunteer in a high-visibility vest holding finish tape in the foreground"
+  credit="Reykjavik Marathon Finish Line — Mlc, Wikimedia Commons, CC BY-SA 3.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Reykjavik_Marathon_Finish_Line.jpg"
+  pins={[
+    { x: 17, y: 39, label: "One clock, one runner's time - not a distribution", desc: "This clock shows 3:23:38 for whoever is crossing under it right now. A single reading like this is exactly what an average collapses everything down to - one number, one moment, no sense of the hundreds of OTHER runners' times around it." },
+    { x: 52, y: 41, label: "A second clock, a different number, same instant", desc: "Two clocks on the same arch reading different times is a reminder that 'the' finish time depends entirely on which runner - and which position in the field - you are asking about. A percentile is built by asking this question of every single finisher, not just one." },
+    { x: 53, y: 66, label: "This runner becomes one data point among thousands", desc: "Arms raised, a great personal result - but for a race-wide percentile calculation, this finish time is just one value that gets sorted alongside every other runner's, then ranked to find where the 50th, 95th, and 99th positions fall." },
+    { x: 6, y: 84, label: "The tape catches every finisher, fast and slow alike", desc: "A finish-line volunteer's job does not stop once the leaders are through - the tape (and the timing system behind it) has to capture the runner who finishes last just as reliably as the winner. A percentile calculation must do the same: include the slow tail, never quietly discard it as an outlier." },
+  ]}
+/>
+
+<FlowAnimation
+  title="From one race to a percentile - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Collect every finish time, not a sample", desc: "30 runners, 30 times recorded - fast, typical, and slow alike. A percentile needs the whole field, the same way a performance test needs every request's latency, not a hand-picked few." },
+    { label: "Sort the times from fastest to slowest", desc: "Line every value up in order. This single step is what an average skips entirely - the mean only ever sums and divides, it never looks at where any individual value SITS relative to the others." },
+    { label: "Read off the position, not the sum", desc: "p50 is the value at the middle position. p95 is the value at the 95th-of-100 position (interpolated for other field sizes). Each percentile is naming a real, specific measurement - not blending anything." },
+    { label: "Set the SLO on the percentile, verify against it", desc: "'p95 under 250s' is a target 95% of real runners could meet. Checking that target against the AVERAGE instead can pass a race where the back of the field had a miserable day - which is exactly the gap a percentile closes." },
+  ]}
+/>
+
+Thirty runners, one race - watch the average look comfortable while p95 tells the real story:
+
+<CodePlayground
+  language="python"
+  title="Run it - average vs percentiles on one race (Python)"
+  code={`finish_times_s = [
+    142, 145, 148, 150, 151, 153, 155, 156, 158, 160,
+    162, 163, 165, 167, 170, 172, 175, 178, 182, 186,
+    191, 197, 205, 215, 230, 255, 310, 420, 610, 900,
+]  # 30 runners' finish times, fastest first - a realistic right-skewed race
+
+
+def mean(values):
+    return sum(values) / len(values)
+
+
+def percentile(values, p):
+    """Nearest-rank percentile - sort, then pick the value at rank ceil(p/100 * n)."""
+    ordered = sorted(values)
+    n = len(ordered)
+    rank = max(1, round(p / 100 * n + 0.5))
+    rank = min(rank, n)
+    return ordered[rank - 1]
+
+
+avg = mean(finish_times_s)
+p50 = percentile(finish_times_s, 50)
+p95 = percentile(finish_times_s, 95)
+p99 = percentile(finish_times_s, 99)
+
+print("=== 30 runners finish a race - times in seconds, fastest first ===")
+print(finish_times_s)
+print()
+print(f"Average finish time: {avg:.1f}s")
+print(f"p50 (median):        {p50}s")
+print(f"p95:                 {p95}s")
+print(f"p99 (worst runner):  {p99}s")
+print()
+
+faster_than_avg = sum(1 for t in finish_times_s if t < avg)
+print(f"{faster_than_avg} of {len(finish_times_s)} runners finished FASTER than the average - "
+      f"the slow tail drags the average away from what a typical runner experienced.")
+print()
+
+SLO_S = 250  # "the race feels fine if p95 stays under 250s"
+verdict = "PASS" if p95 <= SLO_S else "FAIL"
+print(f"=== SLO check: p95 must stay under {SLO_S}s ===")
+print(f"Average says: {avg:.1f}s - looks comfortably under {SLO_S}s. Ship it?")
+print(f"p95 says: {p95}s vs {SLO_S}s -> {verdict}")
+print("The average was lying by omission: it never told you 5% of runners had a genuinely bad day.")`}
+/>
+
+The same race, the same sort, the same verdict flip in Java:
+
+<CodePlayground
+  language="java"
+  title="Run it - average vs percentiles on one race (Java)"
+  code={`import java.util.Arrays;
+
+public class Main {
+    // 30 runners' finish times, fastest first - a realistic right-skewed race
+    static final int[] FINISH_TIMES_S = {
+        142, 145, 148, 150, 151, 153, 155, 156, 158, 160,
+        162, 163, 165, 167, 170, 172, 175, 178, 182, 186,
+        191, 197, 205, 215, 230, 255, 310, 420, 610, 900
+    };
+
+    static double mean(int[] values) {
+        long sum = 0;
+        for (int v : values) sum += v;
+        return (double) sum / values.length;
+    }
+
+    // Nearest-rank percentile - sort, then pick the value at rank ceil(p/100 * n).
+    static int percentile(int[] values, double p) {
+        int[] ordered = values.clone();
+        Arrays.sort(ordered);
+        int n = ordered.length;
+        int rank = (int) Math.round(p / 100 * n + 0.5);
+        rank = Math.max(1, Math.min(rank, n));
+        return ordered[rank - 1];
+    }
+
+    public static void main(String[] args) {
+        double avg = mean(FINISH_TIMES_S);
+        int p50 = percentile(FINISH_TIMES_S, 50);
+        int p95 = percentile(FINISH_TIMES_S, 95);
+        int p99 = percentile(FINISH_TIMES_S, 99);
+
+        System.out.println("=== 30 runners finish a race - times in seconds, fastest first ===");
+        System.out.println(Arrays.toString(FINISH_TIMES_S));
+        System.out.println();
+        System.out.printf("Average finish time: %.1fs%n", avg);
+        System.out.println("p50 (median):        " + p50 + "s");
+        System.out.println("p95:                 " + p95 + "s");
+        System.out.println("p99 (worst runner):  " + p99 + "s");
+        System.out.println();
+
+        int fasterThanAvg = 0;
+        for (int t : FINISH_TIMES_S) if (t < avg) fasterThanAvg++;
+        System.out.println(fasterThanAvg + " of " + FINISH_TIMES_S.length + " runners finished FASTER than the average - "
+                + "the slow tail drags the average away from what a typical runner experienced.");
+        System.out.println();
+
+        int sloS = 250; // "the race feels fine if p95 stays under 250s"
+        String verdict = p95 <= sloS ? "PASS" : "FAIL";
+        System.out.println("=== SLO check: p95 must stay under " + sloS + "s ===");
+        System.out.printf("Average says: %.1fs - looks comfortably under %ds. Ship it?%n", avg, sloS);
+        System.out.println("p95 says: " + p95 + "s vs " + sloS + "s -> " + verdict);
+        System.out.println("The average was lying by omission: it never told you 5% of runners had a genuinely bad day.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: find the gap between average and p95 in real data">
+<StepChecklist
+  steps={[
+    { text: "Pull raw response times for one flow's load test run, not the summary", detail: "Most tools expose a CSV or raw metric stream, not just the dashboard's headline average. You need every value to compute percentiles honestly." },
+    { text: "Compute (or read off the tool) p50, p95, and p99", detail: "Most load-test tools already report these - k6, JMeter, and Gatling all do. If yours only shows an average, that is itself a tooling gap worth flagging." },
+    { text: "Compare the average to p95 side by side", detail: "A small gap means a tight distribution - averages are relatively trustworthy here. A large gap means a long tail - the average is actively hiding a real problem." },
+    { text: "Write the SLO on the percentile, not the average", detail: "'p95 under 800ms' instead of 'average under 800ms'. Reword any existing goal that names an average - it is quietly letting a slow minority hide behind a fast majority." },
+  ]}
+/>
+You can now tell, from real numbers, whether your system's average was ever trustworthy - and
+you have converted at least one goal from a number that hides users to one that protects them.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "The average response time looks great, but users keep reporting the app 'sometimes hangs.'",
+      fix: "Pull p95 and p99 for the same time window. A gap between the average and the tail percentiles is almost always the explanation - a fast majority is masking a real, recurring slow minority. Once you can name 'p99 is 4.2 seconds while the average is 300ms,' the complaint stops being anecdotal.",
+    },
+    {
+      symptom: "p95 and p99 look identical, or nearly so - the whole tail seems oddly flat.",
+      fix: "Check whether something is CAPPING measured latency - a client-side timeout, a load balancer cutting connections at a fixed limit, or a monitoring tool truncating outliers. A truly flat tail at real production scale is unusual; a suspiciously flat one is often an artifact of measurement, not of the system actually behaving that well.",
+    },
+    {
+      symptom: "Different tools report different p95 values for the same test run.",
+      fix: "Percentile calculation methods differ (nearest-rank vs linear interpolation vs t-digest approximations used by some monitoring systems at scale), and so does the WINDOW being measured (per-minute vs whole-run). Confirm both tools are computing over the same window with the same method before treating a discrepancy as a real regression.",
+    },
+    {
+      symptom: "A report states percentiles with no mention of how many requests they were computed from.",
+      fix: "A p99 computed from 40 requests is a near-guess (fewer than one data point actually represents the 99th percentile); a p99 from 400,000 requests is a solid finding. Always attach the sample size - percentiles from small samples deserve much less confidence than the same number from a high-volume run.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Your load-test tool's percentile output directly** — k6, JMeter, and Gatling all compute p50/p95/p99 natively; use it instead of re-deriving from a summary average.
+- **APM/monitoring dashboards, filtered to the SAME time window as the load test** — production percentiles under real traffic are the ground truth a synthetic test is trying to predict.
+- **The raw request count behind any percentile you're quoting** — a percentile from too few samples is closer to a guess than a measurement.
+- **[[performance-testing/metrics/error-rate]]** — a request that errored out fast can look like a GOOD latency data point unless errors are excluded or tracked separately; read the two metrics together.
+</WhereToCheck>
+
+<WorkedExample title="the average that passed and the p95 that should not have">
+1. A load test on a search endpoint reports: average response time 240 ms, target `<300ms`. Green
+   across the board. The release ships on schedule.
+2. A week later, a customer success lead flags a recurring complaint: "search feels broken maybe
+   1 in 20 times, then it's fine again." Nobody can reproduce it on demand, so it gets deprioritized
+   as "can't repro."
+3. A tester revisits the original load-test's raw data (not the dashboard summary) and computes
+   percentiles properly: p50 is 190 ms (search genuinely feels fast most of the time), but p95 is
+   2.1 seconds and p99 is 4.8 seconds. The "1 in 20" complaint lines up almost exactly with p95.
+4. Root cause: a cache miss path that only triggers for less common search terms, hitting a slow
+   fallback query. It never shows up in a quick manual test (common terms always hit cache) and it
+   barely moves the average (it is rare) - but it is a real, frequent, describable experience for a
+   meaningful slice of real searches.
+5. The fix targets the fallback query specifically. Re-tested: average barely changes (220 ms -
+   it was never the problem), but p95 drops to 340 ms and p99 to 510 ms. The team updates every
+   future SLO for this endpoint to be written on p95, never average, and the "random slowness"
+   ticket closes for good.
+</WorkedExample>
+
+<Quiz
+  question="A load test shows average response time 210 ms (target: under 300 ms - PASS) and p95 response time 1,850 ms. The team wants to ship. What is the most defensible next step?"
+  options={[
+    "Ship it - the stated target (average under 300 ms) was met",
+    "Ignore p95 - it always looks worse than the average and is not a reliable signal",
+    "Treat the average as insufficient evidence, check what fraction of real users the p95 SLO threshold would represent, and get an explicit decision on whether that tail is acceptable before shipping",
+    "Automatically block the release - any large gap between average and p95 means the code is broken"
+  ]}
+  answer={2}
+  explain="A large average/p95 gap is a real signal, not noise (option B is wrong) and not automatically a blocking bug either (option D overreaches - some tail is normal and acceptable depending on the product). The honest move is neither blind ship nor blind block: name what p95 of 1,850 ms actually means for real traffic (at expected volume, how many real requests would land in that slow tail?), and get an explicit, informed decision on whether that is acceptable - the same 'draft and confirm' move that turns a vague situation into a real, owned verdict. Shipping purely because the average target passed (option A) is exactly the mistake that let a real, describable user complaint through in the first place."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Percentile", back: "The value below which a stated percentage of measurements fall. p95 = 95% of values were at or under this number; the slowest 5% exceeded it." },
+    { front: "Why response times are right-skewed, not a bell curve", back: "A fast floor set by network/code path, plus a long tail from cache misses, GC pauses, lock contention, and slow downstream calls - most values cluster low, a few stretch far high." },
+    { front: "p50 vs p95 vs p99", back: "p50 (median) = the typical request. p95 = the edge most users still tolerate (1 in 20 was worse). p99 = the regularly-occurring worst case (1 in 100 was worse) - at real volume, not rare at all." },
+    { front: "Why averages mislead on latency specifically", back: "A small number of extreme slow outliers can pull the mean noticeably upward (or a short tail can leave it looking fine) while describing no actual request that most users experienced." },
+    { front: "Where SLOs belong", back: "On a percentile (commonly p95 or p99), never on the average - a percentile describes a stated fraction of real requests; an average can hide a slow minority behind a fast majority." },
+    { front: "The sample-size caveat", back: "A percentile computed from very few requests is close to a guess. Always report (or ask for) the request count behind any quoted percentile." },
+  ]}
+/>
+
+<Challenge>
+Pull the raw response-time data from any load test you have access to (or run a small one).
+Compute the average, p50, p95, and p99 yourself - by hand or with a script - and write down the gap
+between the average and p95 in one sentence. Then answer: if your team's current SLO is written on
+the average, rewrite it as a percentile-based target, and state how many real users (at your
+product's expected daily volume) would fall in the tail your new target defines.
+</Challenge>
+
+<AskCommunity prompt="For my `[flow name]`, the average response time is `[X ms]` but p95 is `[Y ms]` - a `[gap size]` gap. Is this gap typical for `[type of flow/endpoint]`, or a sign of a specific problem class (cache misses, GC pauses, a slow downstream dependency) I should hunt for first?">
+Naming both numbers together, instead of asking generically "is my latency okay," tends to surface
+testers who have chased exactly this shape of gap before - and often the specific root cause
+(cache, GC, a slow dependency) they found behind a similar average/p95 spread.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://aerospike.com/blog/what-is-p99-latency/", title: "Aerospike — What Is P99 Latency? Understanding the 99th Percentile", kind: "read" },
+    { href: "https://www.elastic.co/blog/averages-can-dangerous-use-percentile", title: "Elastic — Averages Can Be Dangerous: Use Percentile", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=lJ4NEMNBeS4", title: "Mastering Latency Metrics: P90, P95, P99 — System Design", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=lJ4NEMNBeS4" title="Mastering Latency Metrics: P90, P95, P99 — System Design" minutes={7} />
+
+<Takeaways
+  points={[
+    "The average blends every fast request and every slow outlier into one number that no individual request actually experienced.",
+    "Response times are typically right-skewed - a fast floor plus a long tail from cache misses, GC pauses, and slow dependencies - which is exactly what an average cannot see.",
+    "p50 shows the typical request; p95 and p99 show the tail where real complaints live, and at production volume '1 in 100' is not rare.",
+    "SLOs belong on a percentile, never on the average - a percentile names a stated fraction of real users, an average names nobody in particular.",
+    "Always attach the sample size behind a quoted percentile - a p99 from a handful of requests is closer to a guess than a finding.",
+  ]}
+/>
+
+<Complete xp={10} />

@@ -2216,10 +2216,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "metrics",
         title: "Metrics",
         topics: [
-          { slug: "latency-and-throughput", title: "Latency & throughput", planned: true },
-          { slug: "percentiles-vs-averages", title: "Percentiles vs averages", planned: true },
-          { slug: "error-rate", title: "Error rate", planned: true },
-          { slug: "resource-use", title: "Resource use", planned: true },
+          { slug: "latency-and-throughput", title: "Latency & throughput" },
+          { slug: "percentiles-vs-averages", title: "Percentiles vs averages" },
+          { slug: "error-rate", title: "Error rate" },
+          { slug: "resource-use", title: "Resource use" },
         ],
       },
       {
