@@ -2629,10 +2629,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "the-qa-resume",
         title: "The QA résumé",
         topics: [
-          { slug: "structure-that-works", title: "Structure that works", planned: true },
-          { slug: "skills-and-keywords-ats", title: "Skills & keywords (ATS)", planned: true },
-          { slug: "numbers-and-impact", title: "Numbers & impact", planned: true },
-          { slug: "common-mistakes", title: "Common mistakes", planned: true },
+          { slug: "structure-that-works", title: "Structure that works" },
+          { slug: "skills-and-keywords-ats", title: "Skills & keywords (ATS)" },
+          { slug: "numbers-and-impact", title: "Numbers & impact" },
+          { slug: "common-mistakes", title: "Common mistakes" },
         ],
       },
       {
