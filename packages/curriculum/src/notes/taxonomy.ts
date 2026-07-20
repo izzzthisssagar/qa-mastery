@@ -2602,10 +2602,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "show-your-work",
         title: "Show your work",
         topics: [
-          { slug: "packaging-buggyshop-and-buggyapi-work", title: "Packaging BuggyShop / BuggyAPI work", planned: true },
-          { slug: "architecture-diagrams", title: "Architecture diagrams", planned: true },
-          { slug: "demo-gifs-and-reports", title: "Demo GIFs & reports", planned: true },
-          { slug: "what-recruiters-actually-open", title: "What recruiters actually open", planned: true },
+          { slug: "packaging-buggyshop-and-buggyapi-work", title: "Packaging BuggyShop / BuggyAPI work" },
+          { slug: "architecture-diagrams", title: "Architecture diagrams" },
+          { slug: "demo-gifs-and-reports", title: "Demo GIFs & reports" },
+          { slug: "what-recruiters-actually-open", title: "What recruiters actually open" },
         ],
       },
       {
