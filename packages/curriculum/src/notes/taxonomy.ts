@@ -2414,7 +2414,7 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "gestures-interrupts-networks",
         title: "Gestures, interrupts, networks",
         topics: [
-          { slug: "touch-gestures", title: "Touch gestures", planned: true },
+          { slug: "touch-gestures", title: "Touch gestures" },
           { slug: "interrupts", title: "Interrupts", planned: true },
           { slug: "network-conditions", title: "Network conditions", planned: true },
           { slug: "orientation", title: "Orientation", planned: true },
