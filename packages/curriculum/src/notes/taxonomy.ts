@@ -2275,8 +2275,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         topics: [
           { slug: "idor-bola-by-hand", title: "IDOR / BOLA by hand" },
           { slug: "privilege-escalation", title: "Privilege escalation" },
-          { slug: "forced-browsing", title: "Forced browsing", planned: true },
-          { slug: "function-level-checks-bfla", title: "Function-level checks (BFLA)", planned: true },
+          { slug: "forced-browsing", title: "Forced browsing" },
+          { slug: "function-level-checks-bfla", title: "Function-level checks (BFLA)" },
         ],
       },
       {
@@ -2284,9 +2284,9 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         title: "Tools & reporting",
         topics: [
           { slug: "burp-suite-basics", title: "Burp Suite basics" },
-          { slug: "owasp-zap", title: "OWASP ZAP", planned: true },
-          { slug: "writing-a-security-finding-devs-act-on", title: "Writing a security finding devs act on", planned: true },
-          { slug: "responsible-disclosure", title: "Responsible disclosure", planned: true },
+          { slug: "owasp-zap", title: "OWASP ZAP" },
+          { slug: "writing-a-security-finding-devs-act-on", title: "Writing a security finding devs act on" },
+          { slug: "responsible-disclosure", title: "Responsible disclosure" },
         ],
       },
     ],

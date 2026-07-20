@@ -1,0 +1,428 @@
+---
+title: "Forced browsing"
+summary: "Forced browsing is requesting an endpoint directly - by guessing, enumerating, or reading it from a script bundle - that the UI never links to at all. Different from IDOR: the target itself, not just its id, was never handed to you."
+tags: ["security-testing-web", "authorization-and-access", "track-c"]
+updated: "2026-07-20"
+related:
+  - "security-testing-web/authorization-and-access/idor-bola-by-hand"
+  - "security-testing-web/authorization-and-access/privilege-escalation"
+  - "security-testing-web/authorization-and-access/function-level-checks-bfla"
+  - "security-testing-web/owasp-top-10-properly/broken-access-control"
+---
+
+<Hook>
+A tester, authorized to test this platform's own BuggyShop sandbox with a tester-owned account, is
+poking through the site's JavaScript bundle out of habit - not attacking anything, just reading what
+shipped to the browser. Buried in a chunk of client-side routing code sits a path that never appears
+anywhere in the rendered navigation, never shows up as a link on any page, and was never clicked to get
+there: `/admin/reports`. Nothing led the tester to it. No menu item, no breadcrumb, no button. Out of
+curiosity, they type it directly into the address bar while logged in as their ordinary customer account.
+The page loads. A full report dashboard renders, no redirect, no 403, nothing. The tester never swapped an
+id, never impersonated anyone, never touched a form field that pointed at someone else's data - they
+requested a URL the application simply never handed them, and the server answered anyway. That gap, an
+endpoint that is live and fully functional but reachable only by directly guessing or discovering its
+path rather than by following any link the UI ever provided, is forced browsing.
+</Hook>
+
+<Callout type="analogy">
+Picture a large convention center during a trade show, its visitor map printed clearly at every entrance:
+numbered halls, food court, restrooms, the show floor - a complete, official path for anyone attending.
+Tucked along one corridor, unremarkable among a dozen identical wall panels, is a plain door with a small
+printed sign reading "STAFF ONLY." It never appears on the visitor map. No arrow points to it, no
+directory lists it, no employee ever tells a visitor it exists. It is, in every practical sense, not part
+of the show. And yet the door is not welded shut - it is just a door, with a handle like any other, and if
+a visitor walks straight up to it and turns that handle, nothing about the door itself stops them. The
+sign warns; it does not lock. Whether that visitor ever reaches the door was never actually decided by the
+printed map at the entrance - the map only decided whether an ordinary attendee was ever TOLD the door was
+there. What decides whether they get through it, once they walk straight up and try the handle anyway, is
+an entirely separate question: is there an actual lock, checked at the door itself, or only the absence of
+a sign pointing toward it in the first place.
+</Callout>
+
+<Term define="Forced browsing (also called forceful browsing or unlinked-endpoint discovery) is the technique of reaching a fully live, functional endpoint by requesting its exact path directly - guessed, enumerated from a wordlist, read out of a JavaScript bundle or API spec, or found in a sitemap - rather than by following any link, button, or menu item the application's own UI ever presented. The endpoint is not broken and does not require exploiting any input; it simply was never wired into the normal navigation a typical user would follow, and the application incorrectly treats 'no link points here' as if it were a real access control. It differs from IDOR/BOLA in exactly one respect that matters for testing: IDOR is about swapping an id on a resource you can ALREADY reach through a normal link (an order detail page you're already on, with a different order number); forced browsing is about reaching the endpoint or resource ITSELF for the first time, with no link ever handed to you at all - an admin dashboard, an internal API version, an export job's status page. Testing it means discovering candidate paths (script bundles, sitemaps, API documentation, common naming patterns like `/admin`, `/internal`, `/v2`) and requesting them directly, while authenticated as a tester-owned account that was never granted a link to them, to confirm whether the server enforces any check at all beyond 'is this URL well-formed.'">Forced browsing</Term>
+
+## Reaching what was never linked, on this platform's own sandbox
+
+- **The gap is about discovery, not id-swapping.** A tester who already sees `/orders/{id}` on their own
+  order confirmation page and changes the id is testing IDOR/BOLA - they can already reach the endpoint
+  shape, they're just testing which specific object it returns. Forced browsing is different: the tester
+  never had a link to the endpoint AT ALL. `/admin/reports` and `/api/internal/v2/users` were not visible
+  anywhere in the rendered UI for a tester-owned customer account.
+- **Where candidate paths actually come from.** Client-side JavaScript bundles shipped to every visitor's
+  browser (readable in DevTools, no interception needed), sitemap.xml, robots.txt disallow lists (which
+  often reveal exactly the paths an operator wanted hidden from search engines, not from a curious tester),
+  API documentation or OpenAPI specs, and predictable naming patterns testers already expect - `/admin`,
+  `/internal`, `/api/v1` next to a live `/api/v2`, `/backup`, `/export`.
+  Every path candidate is requested only against this platform's own sandbox, using a tester-owned
+  account - never a real third-party target.
+- **A live 200 with real content is the finding; a 404 or a generic error is not.** Requesting a guessed
+  path and getting a 404 means the path does not exist - nothing to report. Getting a 200 that returns a
+  real, functioning admin dashboard, an internal API's actual JSON payload, or an export file's real
+  contents, while authenticated as an account that was never given any link to it, is the confirmed gap.
+- **Authentication being required does not make this safe.** An endpoint that returns 401 to a logged-out
+  request but 200 to ANY logged-in tester-owned account - regardless of that account's role - still has no
+  actual authorization check on it. It only checks "are you someone," never "are you someone who was
+  supposed to reach THIS."
+- **The fix to name is a server-side authorization check on the endpoint itself, never obscurity.** Renaming
+  `/admin/reports` to `/admin/x7f2-reports` does not fix anything - it only raises the cost of guessing. The
+  actual control is a check, on every request to that path, that the authenticated identity's role or grant
+  is actually permitted to reach it - independent of whether a link to it exists anywhere in the UI.
+
+<Callout type="tip">
+Before touching any address bar, open the rendered page's DevTools Network and Sources panels and read what
+actually shipped to the browser. Client-side routers commonly bundle every route definition - including
+ones never rendered as a visible link for the current role - directly into the JavaScript sent to every
+visitor, admin panels included. A tester who reads the bundle first often finds candidate forced-browsing
+paths without guessing a single one; the application already handed over its own map of unlinked doors, it
+just never told the UI to draw an arrow toward them.
+</Callout>
+
+<Callout type="mistake">
+A tester finds `/admin/reports` unlinked anywhere in the UI, requests it directly while authenticated as a
+tester-owned customer account, and gets a full `200 OK` with real report data. They report it as "hidden
+admin page found" and move on without checking whether a LOGGED-OUT request reaches the same page. If an
+unauthenticated request also returns `200`, the actual, more severe finding is a missing authentication
+check entirely - not merely a missing role check. If only a request with SOME valid session (any
+tester-owned account, any role) succeeds, the finding is a missing role-level authorization check - the
+endpoint correctly requires identity but never asks whether THIS identity is allowed here. These are
+different mechanisms with different severities, and conflating "unlinked" with "unauthenticated" in the
+report sends a developer investigating the wrong gap first.
+</Callout>
+
+{/* IMAGE: a plain dark "STAFF ONLY" sign mounted above a door handle on an otherwise blank convention-center-style door panel, with the "SHUEISHA GAMES" brand name printed below the sign text */}
+<HotspotImage
+  src="/notes/security-testing-web/authorization-and-access/forced-browsing.jpg"
+  alt="A dark grey door with a printed 'STAFF ONLY' sign mounted above the door handle, and a small 'SHUEISHA GAMES' brand name printed at the bottom of the sign, photographed at a games industry trade show booth"
+  credit="Staff only door at Shueisha Games booth, Taipei Game Show 2024 - Solomon203, Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Staff_only_door_at_Shueisha_Games_booth_20240128.jpg"
+  pins={[
+    { x: 52, y: 34, label: "A printed warning, not a technical control", desc: "The sign tells a visitor this door is not part of the show - but printed text on a wall does nothing to stop the handle from turning. An unlinked endpoint works the same way: the absence of a menu link warns nobody in particular and blocks nothing on its own." },
+    { x: 52, y: 46, label: "Which venue, not who is allowed", desc: "The small brand name at the bottom only identifies whose door this is - never who may open it. A known, live path like `/admin/reports` tells you exactly where you are on the server; it says nothing about whether the requester is actually permitted there." },
+    { x: 27, y: 73, label: "The one thing that actually decides it", desc: "Whatever mechanism is behind this handle - locked or not - is the real boundary, exactly the way a server-side authorization check on the request itself is the only thing that actually decides forced browsing, independent of whether a link ever pointed here." },
+    { x: 83, y: 12, label: "Indistinguishable from every other panel", desc: "From a few steps back, this door looks identical to any other panel on the wall - nothing about its construction marks it as sensitive. An unlinked API endpoint returns the same response shape as any linked one once you actually reach it; only the missing link made it feel hidden." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Testing one unlinked endpoint by hand, safely - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Read what actually shipped, not just what renders", desc: "Check the JavaScript bundle, sitemap, robots.txt, and API docs for this platform's own sandbox for path candidates that never appear as a visible link for a tester-owned account's role." },
+    { label: "Request the candidate path directly while logged out", desc: "Confirm the baseline first: does a fully unauthenticated request reach it? A 200 here means the gap is missing authentication entirely, a more severe and different finding." },
+    { label: "Request it again, authenticated as a tester-owned account with the WRONG role", desc: "If logged-out fails but this succeeds, the endpoint checks identity but never checks whether this specific identity is authorized for this specific path." },
+    { label: "Report the exact mechanism missing, never just 'hidden page found'", desc: "Name whether it was authentication or role-authorization that was missing, with both requests and both responses as evidence." },
+  ]}
+/>
+
+Here is the same mechanism in runnable form - a tester-owned customer account probing two paths that
+were never part of its own rendered navigation, once against a server that only checks authentication and
+once against one that checks per-path authorization too.
+
+<CodePlayground
+  language="python"
+  title="Run it - a forced-browsing / unlinked-endpoint simulator (Python)"
+  code={`# Forced-browsing simulator - run only against a LOCAL, in-memory, synthetic
+# sandbox. This is detection/prevention teaching code, never a real attack: a
+# tester-owned customer account requests two paths that were never part of
+# its own rendered navigation, and we compare an insecure server (checks only
+# "is this session valid") against a secure one (checks per-path role too).
+
+ROUTES = {
+    "/products":               {"requires_role": "any",     "linked_for": ["customer", "admin"]},
+    "/cart":                   {"requires_role": "any",      "linked_for": ["customer", "admin"]},
+    "/admin/reports":          {"requires_role": "admin",    "linked_for": ["admin"]},
+    "/api/internal/v2/users":  {"requires_role": "admin",    "linked_for": []},  # never linked, anywhere
+}
+
+# Tester-owned accounts only, on this platform's own sandbox.
+SESSIONS = {
+    "sess-cust-001":  {"user": "test_dana",  "role": "customer"},
+    "sess-admin-002": {"user": "test_priya", "role": "admin"},
+}
+
+def site_nav_for(role):
+    # What the rendered UI actually links to for this role - the "visitor map."
+    return sorted(path for path, meta in ROUTES.items() if role in meta["linked_for"])
+
+def handle_request_INSECURE(session_token, path):
+    # VULNERABLE ON PURPOSE, FOR TEACHING: checks that a session is valid at
+    # all, but never checks whether THIS identity's role is allowed on THIS
+    # specific path. "Never linked" was doing all the work, and it does none.
+    if session_token not in SESSIONS:
+        return "401 Unauthorized"
+    if path not in ROUTES:
+        return "404 Not Found"
+    return "200 OK -> route served, no role check performed"
+
+def handle_request_SECURE(session_token, path):
+    # SAFE: authenticates, then checks the path's own required role against
+    # the requester's actual role - regardless of whether any link ever
+    # pointed a browser at this path.
+    identity = SESSIONS.get(session_token)
+    if identity is None:
+        return "401 Unauthorized"
+    route = ROUTES.get(path)
+    if route is None:
+        return "404 Not Found"
+    if route["requires_role"] != "any" and identity["role"] != route["requires_role"]:
+        return "403 Forbidden - role '" + identity["role"] + "' not authorized for this path"
+    return "200 OK -> route served, role check passed"
+
+def run():
+    cust_nav = site_nav_for("customer")
+    print("What the UI actually links to for a tester-owned CUSTOMER account:")
+    print("  " + str(cust_nav))
+    print()
+    print("Note what is absent from that list: /admin/reports and /api/internal/v2/users")
+    print("were never rendered as links for this role - yet both are live routes.")
+    print()
+
+    probes = ["/admin/reports", "/api/internal/v2/users"]
+
+    print("-- Insecure server (authenticated, no per-path role check) --")
+    for path in probes:
+        print("  customer requests " + path + " directly (never linked, never clicked):")
+        print("    " + handle_request_INSECURE("sess-cust-001", path))
+    print()
+
+    print("-- Secure server (authenticated AND per-path role check) --")
+    for path in probes:
+        print("  customer requests " + path + " directly (never linked, never clicked):")
+        print("    " + handle_request_SECURE("sess-cust-001", path))
+    print()
+
+    print("The admin account, which the path IS linked for, still gets the same result either way:")
+    print("  " + handle_request_SECURE("sess-admin-002", "/admin/reports"))
+    print()
+    print("Whether a link exists never changed what the server actually allowed - only the")
+    print("per-path role check in handle_request_SECURE did.")
+
+run()`}
+/>
+
+The identical scenario in Java - same routes, same nav, same two servers, same result:
+
+<CodePlayground
+  language="java"
+  title="Run it - a forced-browsing / unlinked-endpoint simulator (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    // Forced-browsing simulator - teaching code only, mirrors the Python
+    // sibling demo exactly. No real network calls - everything is a
+    // hardcoded, local simulation of a tester-owned account requesting paths
+    // that were never part of its own rendered navigation.
+
+    static class Route {
+        String requiresRole;
+        List<String> linkedFor;
+        Route(String requiresRole, List<String> linkedFor) {
+            this.requiresRole = requiresRole; this.linkedFor = linkedFor;
+        }
+    }
+    static class Identity {
+        String user, role;
+        Identity(String user, String role) { this.user = user; this.role = role; }
+    }
+
+    static final Map<String, Route> ROUTES = new LinkedHashMap<>();
+    static final Map<String, Identity> SESSIONS = new LinkedHashMap<>();
+
+    static {
+        ROUTES.put("/products", new Route("any", Arrays.asList("customer", "admin")));
+        ROUTES.put("/cart", new Route("any", Arrays.asList("customer", "admin")));
+        ROUTES.put("/admin/reports", new Route("admin", Arrays.asList("admin")));
+        ROUTES.put("/api/internal/v2/users", new Route("admin", Collections.emptyList()));
+
+        SESSIONS.put("sess-cust-001", new Identity("test_dana", "customer"));
+        SESSIONS.put("sess-admin-002", new Identity("test_priya", "admin"));
+    }
+
+    static List<String> siteNavFor(String role) {
+        // What the rendered UI actually links to for this role - the "visitor map."
+        List<String> nav = new ArrayList<>();
+        for (Map.Entry<String, Route> e : ROUTES.entrySet()) {
+            if (e.getValue().linkedFor.contains(role)) nav.add(e.getKey());
+        }
+        Collections.sort(nav);
+        return nav;
+    }
+
+    static String handleRequestInsecure(String sessionToken, String path) {
+        // VULNERABLE ON PURPOSE, FOR TEACHING: checks the session is valid,
+        // never checks whether this role is allowed on this specific path.
+        if (!SESSIONS.containsKey(sessionToken)) return "401 Unauthorized";
+        if (!ROUTES.containsKey(path)) return "404 Not Found";
+        return "200 OK -> route served, no role check performed";
+    }
+
+    static String handleRequestSecure(String sessionToken, String path) {
+        // SAFE: authenticates, then checks the path's own required role
+        // against the requester's actual role.
+        Identity identity = SESSIONS.get(sessionToken);
+        if (identity == null) return "401 Unauthorized";
+        Route route = ROUTES.get(path);
+        if (route == null) return "404 Not Found";
+        if (!route.requiresRole.equals("any") && !route.requiresRole.equals(identity.role)) {
+            return "403 Forbidden - role '" + identity.role + "' not authorized for this path";
+        }
+        return "200 OK -> route served, role check passed";
+    }
+
+    public static void main(String[] args) {
+        List<String> custNav = siteNavFor("customer");
+        System.out.println("What the UI actually links to for a tester-owned CUSTOMER account:");
+        System.out.println("  " + custNav);
+        System.out.println();
+        System.out.println("Note what is absent from that list: /admin/reports and /api/internal/v2/users");
+        System.out.println("were never rendered as links for this role - yet both are live routes.");
+        System.out.println();
+
+        List<String> probes = Arrays.asList("/admin/reports", "/api/internal/v2/users");
+
+        System.out.println("-- Insecure server (authenticated, no per-path role check) --");
+        for (String path : probes) {
+            System.out.println("  customer requests " + path + " directly (never linked, never clicked):");
+            System.out.println("    " + handleRequestInsecure("sess-cust-001", path));
+        }
+        System.out.println();
+
+        System.out.println("-- Secure server (authenticated AND per-path role check) --");
+        for (String path : probes) {
+            System.out.println("  customer requests " + path + " directly (never linked, never clicked):");
+            System.out.println("    " + handleRequestSecure("sess-cust-001", path));
+        }
+        System.out.println();
+
+        System.out.println("The admin account, which the path IS linked for, still gets the same result either way:");
+        System.out.println("  " + handleRequestSecure("sess-admin-002", "/admin/reports"));
+        System.out.println();
+        System.out.println("Whether a link exists never changed what the server actually allowed - only the");
+        System.out.println("per-path role check in handleRequestSecure did.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: discover and confirm one forced-browsing gap in a tester-owned sandbox">
+<StepChecklist
+  steps={[
+    { text: "Get written authorization and use a tester-owned account", detail: "This platform's own BuggyShop/BuggyAPI sandbox, with a test account you own. Never a real third-party site." },
+    { text: "Find one path never rendered as a link for your account's role", detail: "Read the JavaScript bundle, sitemap, or API docs for a candidate path your account's own navigation never shows." },
+    { text: "Request it logged out, then again authenticated with your tester account", detail: "Record both responses. A logged-out 200 is a missing-authentication finding; an authenticated-only 200 is a missing-role-check finding - these are different." },
+    { text: "Write the finding naming the exact mechanism missing", detail: "State the path, both requests, both responses, and whether authentication or role-authorization was the actual gap - never just 'hidden page found.'" },
+  ]}
+/>
+You can now tell the difference between a page that merely has no visible link and an endpoint that
+actually enforces who may reach it - and you can prove which specific check is missing instead of just
+reporting that something felt hidden.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A finding gets closed because 'that page isn't linked anywhere, so it's not really exposed.'",
+      fix: "A missing link is not a security control. If the endpoint returns real data to a direct request, it is exposed - the fix is a server-side check on the endpoint, not relying on obscurity to keep it hidden.",
+    },
+    {
+      symptom: "A tester reports every unlinked path they find as the same severity.",
+      fix: "Separate the two possible mechanisms first: does an unauthenticated request also succeed (missing authentication, usually higher severity), or only an authenticated-but-wrong-role request (missing role-level authorization)? Report them as the distinct findings they are.",
+    },
+    {
+      symptom: "A developer 'fixes' the finding by renaming the path to something harder to guess.",
+      fix: "That raises the cost of guessing, not the actual control. Confirm the fix by requesting the OLD path again post-change, and separately confirming the new path still requires an actual authorization check, not just obscurity.",
+    },
+    {
+      symptom: "A tester only checks the JavaScript bundle once and assumes no more unlinked paths exist.",
+      fix: "Bundles change across releases and features ship in stages. Re-check sitemap, robots.txt, and API docs periodically, and treat a clean sweep today as no guarantee for the next deploy.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Every path candidate source separately** - JavaScript bundles, sitemap.xml, robots.txt, API docs -
+  each surfaces different unlinked paths; checking only one misses the others.
+- **Logged-out AND authenticated-wrong-role, as two separate requests** - never assume which mechanism is
+  missing without testing both.
+- **[[security-testing-web/authorization-and-access/idor-bola-by-hand]]** - the sibling finding for
+  reaching an object you already have a link to, just with the wrong id; forced browsing is about the link
+  itself never existing.
+- **[[security-testing-web/authorization-and-access/function-level-checks-bfla]]** - once an endpoint IS
+  reached, BFLA asks whether this specific action on it is allowed for this role; forced browsing only gets
+  you to the door, BFLA is about what you can do once you're through it.
+- **[[security-testing-web/owasp-top-10-properly/broken-access-control]]** - the OWASP category forced
+  browsing findings map to, with the missing-check pattern worked through at the category level.
+</WhereToCheck>
+
+<WorkedExample title="confirming one forced-browsing finding in the BuggyShop sandbox">
+1. A tester, authorized to test the platform's own BuggyShop sandbox with a tester-owned customer account,
+   opens DevTools Sources while browsing normally and finds a client-side route definition for
+   `/admin/reports` that never renders as a link anywhere in the customer-facing navigation.
+2. Logged out entirely, they request `/admin/reports` directly. The server returns a `302` redirect to the
+   login page - authentication is required. That rules out the more severe "no authentication at all"
+   version of this finding.
+3. Logged back in as their tester-owned customer account - a real, valid, but non-admin session - they
+   request the same path again. It returns a full `200 OK` with real report data rendered.
+4. The finding is filed precisely: `/admin/reports` requires authentication but performs no role check,
+   letting any authenticated tester-owned account reach admin-only report data regardless of role. Both
+   requests and both responses are attached as evidence, with an explicit note that the path having no
+   visible link was never the actual protection.
+</WorkedExample>
+
+<Quiz
+  question="A tester finds an endpoint with no link anywhere in the UI. Logged out, the request redirects to login. Logged in with an ordinary tester-owned customer account, the same request returns 200 with real admin data. What is the correct finding?"
+  options={[
+    "No finding - the endpoint requires login, so it is already secure",
+    "Missing authentication - the endpoint should not require login at all",
+    "Missing role-level authorization - the endpoint correctly requires identity but never checks whether THIS identity's role is allowed here",
+    "The finding cannot be confirmed until the id in the URL is also swapped"
+  ]}
+  answer={2}
+  explain="Requiring login is not the same as authorizing what a logged-in identity may reach - the endpoint correctly rejects unauthenticated requests (ruling out option B) but still returns real admin data to ANY authenticated tester-owned account regardless of role, which is a missing role-level authorization check, not a safe design (ruling out option A). This scenario has no object id to swap at all - the gap is reaching the endpoint itself, not which object it returns (ruling out option D)."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Forced browsing", back: "Requesting a fully live, functional endpoint directly - by guessing, enumerating, or reading it from a bundle - that was never linked from the application's own UI for the requester's role." },
+    { front: "Forced browsing vs IDOR/BOLA", back: "IDOR/BOLA swaps an id on a resource you can already reach through a normal link. Forced browsing reaches the endpoint or resource itself for the first time, with no link ever handed to you at all." },
+    { front: "Where candidate unlinked paths come from", back: "JavaScript bundles shipped to the browser, sitemap.xml, robots.txt, API documentation, and predictable naming patterns like /admin, /internal, or a newer API version sitting next to an older linked one." },
+    { front: "The two possible missing mechanisms", back: "A logged-out request that still succeeds means missing authentication. A request that only succeeds once authenticated, regardless of role, means missing role-level authorization. Test both separately." },
+    { front: "Why obscurity is not the fix", back: "Renaming an unlinked path to something harder to guess only raises the cost of guessing - the actual control is a server-side check on every request to the endpoint, independent of whether any link ever pointed there." },
+    { front: "What confirms the finding", back: "A live response containing real data or functionality, returned to a request the application's own UI never linked to for that account's role - not merely the absence of a visible link." },
+  ]}
+/>
+
+<Challenge>
+In this platform's own BuggyShop or BuggyAPI sandbox, using a tester-owned account, find one path that
+never appears as a link anywhere in your account's rendered navigation - check the JavaScript bundle,
+sitemap, or API docs for a candidate. Request it once fully logged out and once authenticated with your
+tester-owned account, recording both responses. Write the finding naming which exact mechanism is missing
+- authentication, role-level authorization, or neither - with both requests and responses as evidence, and
+note explicitly whether the absence of a UI link made any real difference to what the server allowed.
+</Challenge>
+<AskCommunity prompt="I've started treating 'reading the JavaScript bundle for route definitions' as step one before I ever guess a single path by hand - it usually hands over a more complete map of what's actually live than any wordlist would. For people who test web apps regularly: what's the least obvious place you've found a genuinely unlinked, live endpoint - not an admin panel, but something stranger like an internal export job status page or a staging-only route left in a production bundle?">
+Curious about real examples that came from somewhere other than an admin panel or a guessed
+/admin path - export jobs, internal tooling routes, staging endpoints that shipped into a production
+bundle by accident - and what tipped people off to check that specific place.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://owasp.org/www-community/attacks/Forced_browsing", title: "OWASP - Forced browsing", kind: "read" },
+    { href: "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html", title: "OWASP - Authorization Cheat Sheet", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=qJ8mtm_G40E" title="Rana Khalil - Broken Access Control: Unprotected admin functionality" minutes={3} />
+
+<Takeaways
+  points={[
+    "Forced browsing is reaching a live, functional endpoint by requesting its path directly - never by following a link the UI ever provided.",
+    "It differs from IDOR/BOLA: IDOR swaps an id on a resource you already have a link to; forced browsing reaches the resource itself for the first time.",
+    "Candidate paths come from JavaScript bundles, sitemaps, robots.txt, API docs, and predictable naming patterns, not just guessing blindly.",
+    "Test logged-out and authenticated-wrong-role separately - they reveal two different missing mechanisms with two different severities.",
+    "The fix to recommend is always a server-side authorization check on the endpoint itself - renaming or hiding a path is obscurity, not a control.",
+    "Test only systems you own or are explicitly, in writing, authorized to test, with tester-owned accounts and synthetic data.",
+  ]}
+/>
+
+<Complete xp={10} />
