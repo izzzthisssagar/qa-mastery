@@ -2488,10 +2488,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "test-management-tools",
         title: "Test management tools",
         topics: [
-          { slug: "jira-and-boards-deeper", title: "JIRA & boards, deeper", planned: true },
-          { slug: "testrail-xray-zephyr", title: "TestRail / Xray / Zephyr", planned: true },
-          { slug: "organizing-suites-and-runs", title: "Organizing suites & runs", planned: true },
-          { slug: "linking-bugs-to-cases", title: "Linking bugs to cases", planned: true },
+          { slug: "jira-and-boards-deeper", title: "JIRA & boards, deeper" },
+          { slug: "testrail-xray-zephyr", title: "TestRail / Xray / Zephyr" },
+          { slug: "organizing-suites-and-runs", title: "Organizing suites & runs" },
+          { slug: "linking-bugs-to-cases", title: "Linking bugs to cases" },
         ],
       },
       {
