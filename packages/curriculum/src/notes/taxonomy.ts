@@ -2545,10 +2545,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "ai-as-your-testing-copilot",
         title: "AI as your testing copilot",
         topics: [
-          { slug: "llms-for-test-ideas-and-cases", title: "LLMs for test ideas & cases", planned: true },
-          { slug: "prompting-for-qa-work", title: "Prompting for QA work", planned: true },
-          { slug: "generating-test-data-with-ai", title: "Generating test data with AI", planned: true },
-          { slug: "reviewing-ai-output-critically", title: "Reviewing AI output critically", planned: true },
+          { slug: "llms-for-test-ideas-and-cases", title: "LLMs for test ideas & cases" },
+          { slug: "prompting-for-qa-work", title: "Prompting for QA work" },
+          { slug: "generating-test-data-with-ai", title: "Generating test data with AI" },
+          { slug: "reviewing-ai-output-critically", title: "Reviewing AI output critically" },
         ],
       },
       {
