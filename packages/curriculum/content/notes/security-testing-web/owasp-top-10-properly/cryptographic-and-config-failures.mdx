@@ -1,0 +1,343 @@
+---
+title: "Cryptographic & config failures"
+summary: "Cryptographic failures (A02:2021) expose data via weak encryption - no TLS, MD5 hashes, secrets in code. Security misconfiguration (A05:2021) is protection left off: debug mode on, default creds, missing headers. Both are safeguards that should be on by default but are not."
+tags: ["security-testing-web", "owasp-top-10-properly", "track-c"]
+updated: "2026-07-18"
+related:
+  - "security-testing-web/owasp-top-10-properly/the-2021-list-and-how-to-use-it"
+  - "security-testing-web/owasp-top-10-properly/broken-access-control"
+  - "non-functional-testing-intro/security/common-risks"
+---
+
+<Hook>
+A padlock only protects anything in one specific state: closed, with the shackle driven home. An open
+padlock is not a weaker lock - it is a paperweight. It can be the finest hardened-steel lock ever
+milled, and if it is hanging open on the hasp it stops precisely nobody. This is the whole shape of
+two OWASP categories that travel together. Cryptographic failures are the lock that was never really
+engaged around your sensitive data: no TLS so the connection is a postcard anyone on the wire can
+read, passwords "hashed" with MD5 that crack in seconds, a secret key sitting in plaintext in the
+source. Security misconfiguration is the lock left in its factory state: debug mode blaring stack
+traces, the default admin password still admin, the server cheerfully listing every file in a
+directory. Neither is an exotic exploit. Both are protection that was supposed to be on by default -
+and simply is not. A tester who checks whether the lock is actually closed catches an enormous share
+of real-world breaches.
+</Hook>
+
+<Callout type="analogy">
+Hold the open padlock in your mind and both categories fall out of it. The lock exists to keep
+something valuable sealed - that is CRYPTOGRAPHY around sensitive data: encryption in transit (TLS),
+encryption at rest, strong salted password hashing. When the shackle is open, the valuables are just
+sitting in the open air: a login sent over plain HTTP is a postcard, an MD5 password store is a
+diary with a toy clasp. Now look at how the lock got left open: nobody changed it from how it shipped -
+that is MISCONFIGURATION. Factory-default combination still set (default admin/admin), the instruction
+card taped to the door (verbose debug errors), the gate propped open for convenience (directory
+listing, unnecessary services). A tester does not need to pick the lock; they just walk up and check
+whether it is actually closed - HTTPS enforced, defaults changed, errors generic, headers present.
+</Callout>
+
+<Term define="Cryptographic failures (A02:2021, renamed from 2017's Sensitive Data Exposure) is the category for sensitive data exposed through missing, weak, or misused cryptography: no or improperly enforced TLS, outdated or broken algorithms (MD5, SHA-1, DES), unsalted or fast password hashing, hard-coded or exposed keys, and insufficient randomness. The focus is the root cause (bad or absent crypto), not just the symptom (exposed data). Security misconfiguration (A05:2021) is the category for insecure settings anywhere in the stack: default credentials and accounts left enabled, unnecessary features or ports open, verbose error messages and debug modes in production, missing security headers (HSTS, CSP, X-Content-Type-Options), directory listing enabled, and out-of-date default configs. Both are failures of protection that should be on by default. A tester detects them by checking the deployment's actual settings - only ever on systems they own or are explicitly authorized in writing to test.">Cryptographic failures (A02:2021) and security misconfiguration (A05:2021)</Term>
+
+## What to check, for each of the two categories
+
+- **A02 - is the transport actually encrypted?** Every page, not just the login, must be served over
+  TLS, with HTTP redirected to HTTPS and HSTS set. The test: request the site over plain `http://`
+  and watch whether sensitive pages load in the clear or are forced to HTTPS. A login form that posts
+  over HTTP is a classic finding - the credentials cross the wire as a postcard.
+- **A02 - how are passwords stored?** Passwords must be hashed with a strong, deliberately slow,
+  salted algorithm (bcrypt, scrypt, Argon2). MD5, SHA-1, or any fast unsalted hash is a cryptographic
+  failure - such hashes fall to rainbow tables and GPUs almost instantly. You usually infer this from
+  design docs, a code review, or a breach post-mortem rather than from the outside.
+- **A02 - where are the secrets and keys?** Hard-coded API keys, encryption keys, or passwords in
+  source, config files, or client bundles are exposed cryptographic material. The test: grep the
+  repo and the shipped client bundle for keys and credentials; anything sensitive that reaches the
+  client or version control is a finding.
+- **A05 - are defaults still in place?** Default admin accounts and passwords, sample apps, and
+  management consoles left enabled are the most common misconfiguration. The test: try documented
+  default credentials on admin panels and consoles (within authorization) and confirm they were
+  changed or disabled.
+- **A05 - do errors and debug modes leak internals?** A production app in debug mode returns stack
+  traces, framework versions, file paths, and SQL fragments - a free map for an attacker. The test:
+  trigger an error (a bad input, a missing page) and read the response; a hardened app shows a generic
+  page, a misconfigured one shows its guts.
+- **A05 - are the security headers present?** Missing HSTS, Content-Security-Policy, and
+  X-Content-Type-Options leave the browser without instructions to defend the user. The test: inspect
+  the response headers on real pages and note which protective headers are absent. Directory listing,
+  open ports, and unnecessary services belong to the same walk-the-config check.
+
+<Callout type="tip">
+Make a tiny hardening checklist your default first pass on any deployment you are authorized to test,
+because these findings are cheap to check and common to hit. Six quick looks: (1) does the site force
+HTTPS everywhere; (2) are protective headers present; (3) does an error page stay generic; (4) are
+default credentials changed; (5) is directory listing off; (6) do any secrets appear in the client
+bundle or repo. The playground below encodes exactly this audit so you can see the shape of a
+pass/fail sweep - then run the real checks against a system you own.
+</Callout>
+
+<Callout type="mistake">
+"We use HTTPS, so the data is encrypted" - said about an app that hashes passwords with MD5 and keeps
+the API key in a committed config file. TLS protects data in transit; it does nothing for data at
+rest, weak password hashing, or exposed secrets. Cryptographic failure is not one lock but several
+around different states of the data - the wire, the disk, the credential store, the key material - and
+having one closed says nothing about the others. Likewise "it passed pen-test last year" does not
+cover a config that drifted: a debug flag flipped on during an incident and never flipped back is a
+brand-new A05 finding. Check each lock, on the current deployment.
+</Callout>
+
+{/* IMAGE: A metal laminated padlock lying on white paper with its shackle sprung fully open, unlocked */}
+<HotspotImage
+  src="/notes/security-testing-web/owasp-top-10-properly/cryptographic-and-config-failures.jpg"
+  alt="A laminated steel padlock lying on white paper with its shackle sprung open, in the unlocked state"
+  credit="Padlock unlocked - Flickr user, Wikimedia Commons, CC BY-SA 2.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Padlock_unlocked_(4141457002).jpg"
+  pins={[
+    { x: 33, y: 28, label: "The open shackle - protection present but not engaged", desc: "This is the heart of both categories. The lock is not weak; it is simply not doing its job. TLS available but not enforced, a hardening setting that exists but is off, an alarm never armed. An open safeguard stops nobody - a tester's whole task here is checking whether the shackle is actually closed." },
+    { x: 60, y: 60, label: "The lock body - the mechanism you can misconfigure", desc: "The mechanism is fine; how it is set is the risk. Default combination still set (default admin/admin), unnecessary features enabled, debug mode on. Security misconfiguration (A05) is the lock left in its factory state - walk the settings and confirm each was changed from the shipped default." },
+    { x: 50, y: 82, label: "The keyway and interior - the exposed sensitive data", desc: "What the lock was meant to protect. Cryptographic failures (A02) leave this in the open: a login over plain HTTP is a postcard, an MD5 password store cracks in seconds, a key hard-coded in source is a secret written on the lock. Check every state of the data - wire, disk, and credential store." },
+    { x: 78, y: 18, label: "The white paper - data lying in the clear", desc: "Nothing between the valuables and anyone looking. That is sensitive data with no effective encryption: unencrypted at rest, sent without TLS, or logged in plaintext. Cryptographic failure is exactly this - the protection that was supposed to wrap the data was missing or ineffective." },
+    { x: 15, y: 55, label: "No pick required - you just check if it is closed", desc: "These are not exotic exploits. You do not defeat the lock; you notice it is open. Force plain HTTP, trigger an error page, try a default credential, read the response headers, grep for secrets. The everyday tester's audit catches an enormous share of real breaches without a single clever attack." },
+  ]}
+/>
+
+<FlowAnimation
+  title="A hardening pass over one deployment - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Confirm authorization, then check the transport (A02)", desc: "On a system you own or are permitted in writing to test, request it over plain http:// and try a sensitive page. Does everything force HTTPS with HSTS, or does a login form happily post credentials over an unencrypted connection? The wire is the first lock." },
+    { label: "Trigger an error and read what comes back (A05)", desc: "Send a malformed input or hit a missing route. A hardened app returns a generic error page; a misconfigured one dumps a stack trace, framework version, file paths, and maybe a SQL fragment - a free internal map. Verbose errors in production are a classic A05 finding." },
+    { label: "Try the defaults and read the headers (A05)", desc: "Attempt documented default credentials on any admin console (within scope), and inspect the response headers of real pages for HSTS, CSP, and X-Content-Type-Options. Default creds that still work, and missing protective headers, are both misconfiguration findings." },
+    { label: "Look for exposed secrets and weak crypto (A02)", desc: "Grep the repo and the shipped client bundle for API keys, passwords, and private keys; check how passwords are hashed. A key in a committed config file or an MD5 password store is a cryptographic failure. Record each finding with its category and minimal proof, and stop." },
+  ]}
+/>
+
+Here is that audit as runnable code: one deployment's settings checked against secure baselines, each
+failure tagged A02 (crypto) or A05 (config) with its fix.
+
+<CodePlayground
+  language="python"
+  title="Run it - a hardening audit tagging crypto (A02) and config (A05) failures (Python)"
+  code={`# A hardening audit: check one app's settings against secure baselines.
+# A02 = Cryptographic Failures (is sensitive data actually protected?).
+# A05 = Security Misconfiguration (are defaults and settings locked down?).
+config = {
+    "transport":              "http",   # should be https / TLS everywhere
+    "password_storage":       "md5",    # should be a strong salted hash (bcrypt/argon2)
+    "at_rest_encryption":     False,     # sensitive data unencrypted at rest
+    "debug_mode":             True,      # verbose errors exposed in production
+    "default_admin_password": True,      # factory admin/admin never changed
+    "directory_listing":      True,      # server lists files in the webroot
+    "security_headers":       False,     # HSTS / CSP / no-sniff not sent
+}
+
+# (setting, category, is_ok, fix-if-failing)
+CHECKS = [
+    ("transport",              "A02", config["transport"] == "https",  "serve every page over TLS; redirect HTTP to HTTPS"),
+    ("password_storage",       "A02", config["password_storage"] in ("bcrypt", "argon2"), "hash passwords with a strong salted algorithm, never MD5/SHA-1"),
+    ("at_rest_encryption",     "A02", config["at_rest_encryption"] is True, "encrypt sensitive data at rest and manage keys outside the code"),
+    ("debug_mode",             "A05", config["debug_mode"] is False, "disable debug and return generic error pages in production"),
+    ("default_admin_password", "A05", config["default_admin_password"] is False, "change every default credential before go-live"),
+    ("directory_listing",      "A05", config["directory_listing"] is False, "turn off directory listing in the web server"),
+    ("security_headers",       "A05", config["security_headers"] is True, "send HSTS, CSP, and X-Content-Type-Options headers"),
+]
+
+def audit():
+    print("Hardening audit for one deployment:")
+    print()
+    fails = 0
+    for setting, category, ok, fix in CHECKS:
+        status = "PASS" if ok else "FAIL"
+        if not ok:
+            fails += 1
+        print("  [" + status + "] " + category + "  " + setting)
+        if not ok:
+            print("          fix: " + fix)
+    print()
+    crypto = sum(1 for s, c, ok, f in CHECKS if c == "A02" and not ok)
+    misconf = sum(1 for s, c, ok, f in CHECKS if c == "A05" and not ok)
+    print(str(fails) + " failures: " + str(crypto) + " cryptographic (A02), " + str(misconf) + " misconfiguration (A05).")
+    print("Both categories are about protection that should be on by default but is not.")
+
+audit()`}
+/>
+
+The same audit in Java - same settings in, same tagged failures out:
+
+<CodePlayground
+  language="java"
+  title="Run it - a hardening audit tagging crypto (A02) and config (A05) failures (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    // A hardening audit: check one app's settings against secure baselines.
+    // A02 = Cryptographic Failures (is sensitive data actually protected?).
+    // A05 = Security Misconfiguration (are defaults and settings locked down?).
+    public static void main(String[] args) {
+        Map<String, Object> config = new LinkedHashMap<>();
+        config.put("transport", "http");                 // should be https / TLS everywhere
+        config.put("password_storage", "md5");           // should be a strong salted hash (bcrypt/argon2)
+        config.put("at_rest_encryption", false);         // sensitive data unencrypted at rest
+        config.put("debug_mode", true);                  // verbose errors exposed in production
+        config.put("default_admin_password", true);      // factory admin/admin never changed
+        config.put("directory_listing", true);           // server lists files in the webroot
+        config.put("security_headers", false);           // HSTS / CSP / no-sniff not sent
+
+        String transport = (String) config.get("transport");
+        String pw = (String) config.get("password_storage");
+        // {setting, category, ok, fix-if-failing}
+        Object[][] checks = {
+            {"transport",              "A02", transport.equals("https"),                     "serve every page over TLS; redirect HTTP to HTTPS"},
+            {"password_storage",       "A02", pw.equals("bcrypt") || pw.equals("argon2"),    "hash passwords with a strong salted algorithm, never MD5/SHA-1"},
+            {"at_rest_encryption",     "A02", config.get("at_rest_encryption").equals(true),  "encrypt sensitive data at rest and manage keys outside the code"},
+            {"debug_mode",             "A05", config.get("debug_mode").equals(false),         "disable debug and return generic error pages in production"},
+            {"default_admin_password", "A05", config.get("default_admin_password").equals(false), "change every default credential before go-live"},
+            {"directory_listing",      "A05", config.get("directory_listing").equals(false),  "turn off directory listing in the web server"},
+            {"security_headers",       "A05", config.get("security_headers").equals(true),     "send HSTS, CSP, and X-Content-Type-Options headers"},
+        };
+
+        System.out.println("Hardening audit for one deployment:");
+        System.out.println();
+        int fails = 0, crypto = 0, misconf = 0;
+        for (Object[] c : checks) {
+            String setting = (String) c[0], category = (String) c[1], fix = (String) c[3];
+            boolean ok = (Boolean) c[2];
+            String status = ok ? "PASS" : "FAIL";
+            if (!ok) {
+                fails++;
+                if (category.equals("A02")) crypto++; else misconf++;
+            }
+            System.out.println("  [" + status + "] " + category + "  " + setting);
+            if (!ok) System.out.println("          fix: " + fix);
+        }
+        System.out.println();
+        System.out.println(fails + " failures: " + crypto + " cryptographic (A02), " + misconf + " misconfiguration (A05).");
+        System.out.println("Both categories are about protection that should be on by default but is not.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: run a hardening audit on a deployment you control">
+<StepChecklist
+  steps={[
+    { text: "Confirm you own or are explicitly authorized in writing to test the target", detail: "These checks touch transport, error handling, and credentials - only run them against a system you own or have written permission to test, in scope. Reading response headers on your own site is safe; probing someone else's without permission is not." },
+    { text: "Check the transport: force plain HTTP and inspect the headers", detail: "Request the site over http:// and see whether it redirects to HTTPS with HSTS. Then read the response headers of real pages for HSTS, Content-Security-Policy, and X-Content-Type-Options. Missing enforcement or headers are A02/A05 findings." },
+    { text: "Trigger an error and try one default credential", detail: "Send a malformed input or hit a missing route and read the response - a stack trace or framework banner is an A05 leak. On any admin console in scope, try a documented default credential and confirm it was changed. Capture minimal proof." },
+    { text: "Grep your own repo and client bundle for secrets", detail: "Search the source and the shipped client build for API keys, passwords, and private keys. Anything sensitive in version control or reaching the browser is an A02 exposure. Record each finding with its category (A02:2021 or A05:2021) and its fix." },
+  ]}
+/>
+You have now run the audit that catches a huge share of real breaches: not by picking locks, but by
+checking, one by one, whether each safeguard that should be on by default actually is.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A login or sensitive page loads over plain HTTP, or only the login is HTTPS.",
+      fix: "Cryptographic failure (A02:2021): credentials and session data cross the wire in the clear, readable by anyone on the network path. Enforce TLS on every page, redirect all HTTP to HTTPS, and set HSTS so browsers refuse the downgrade. As a tester, prove it by loading a sensitive page over http:// and showing it is not forced to HTTPS, and report it as A02:2021 with the affected URLs.",
+    },
+    {
+      symptom: "Passwords are stored with MD5, SHA-1, or an unsalted fast hash.",
+      fix: "Also A02:2021: fast, unsalted hashes fall to rainbow tables and GPU cracking almost instantly, so a database leak becomes a credential leak. Passwords need a slow, salted algorithm (bcrypt, scrypt, or Argon2). This is usually found in design review, code review, or a breach analysis rather than from outside; when you see it, report it as A02:2021 with the recommendation to migrate the hashing scheme.",
+    },
+    {
+      symptom: "An error page shows a stack trace, framework version, or file paths.",
+      fix: "Security misconfiguration (A05:2021): production is running in debug or verbose-error mode, handing attackers an internal map - technology, versions, code structure, sometimes SQL. Disable debug in production and return generic error pages, logging the detail server-side only. Trigger a controlled error, capture the leaked internals as proof, and file it as A05:2021.",
+    },
+    {
+      symptom: "Default credentials still work, or protective headers are missing.",
+      fix: "Both are A05:2021. Default admin accounts and sample apps left enabled are a direct path in; missing HSTS, CSP, and X-Content-Type-Options leave the browser undefended. Change or disable every default before go-live, remove unnecessary features and consoles, and send the standard security headers. Test by trying documented defaults (in scope) and reading response headers, and report each gap as A05:2021.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Every page's scheme and redirect behaviour** - not just the login. Confirm HTTP redirects to HTTPS everywhere and HSTS is set; a single sensitive page over plain HTTP is an A02 finding.
+- **Response headers on real pages** - HSTS, Content-Security-Policy, X-Content-Type-Options, and cache/permissions headers. Missing protective headers are A05 misconfiguration.
+- **Error and not-found responses** - deliberately trigger them and read what leaks; stack traces, versions, and paths mean debug or verbose errors are on in production (A05).
+- **Admin consoles, default accounts, and sample apps** - try documented defaults within scope and confirm they were changed or removed; leftover defaults are A05.
+- **The repo, CI logs, and shipped client bundle** - grep for API keys, passwords, and private keys; anything sensitive in version control or reaching the client is an A02 exposure. See [[non-functional-testing-intro/security/common-risks]] and the OWASP Cheat Sheet Series for the secure baselines.
+</WhereToCheck>
+
+<WorkedExample title="one hardening pass, two categories, four findings">
+1. A tester has written authorization to assess a staging deployment they do not own the code for, in
+   an agreed scope covering transport, configuration, and error handling. Permission and scope are
+   confirmed first.
+2. They request the site over `http://` and load the account page. It serves over plain HTTP without
+   redirecting, and there is no HSTS header. Finding one: A02:2021 Cryptographic Failures - sensitive
+   pages available unencrypted.
+3. They submit a deliberately malformed value to a form. The response is a full stack trace naming the
+   framework, its version, and a server file path. Finding two: A05:2021 Security Misconfiguration -
+   debug/verbose errors enabled in a production-like environment.
+4. They read the response headers on several real pages: no Content-Security-Policy, no
+   X-Content-Type-Options. Finding three: A05:2021 - missing security headers. On the admin console,
+   a documented default credential still authenticates. Finding four: A05:2021 - default credentials
+   unchanged. Each is captured with minimal proof; the tester does not pivot into the data behind the
+   admin login.
+5. The four findings are filed with their categories, evidence, and fixes, and prioritized on the app:
+   the plain-HTTP account page and the working default admin credential are high impact and go to the
+   top, regardless of A02 versus A05 list order. The audit found real risk with no exploit - only
+   checks of whether each lock was closed.
+</WorkedExample>
+
+<Quiz
+  question="On a site you are authorized to test, the login form posts over HTTPS, but you notice the account page loads over plain http:// and an error triggers a full stack trace. How do you categorize these?"
+  options={[
+    "Both are the same finding, since HTTPS is used somewhere on the site",
+    "The plain-HTTP page is A02:2021 Cryptographic Failures and the stack trace is A05:2021 Security Misconfiguration - two separate findings, each reported with proof and a fix",
+    "Neither matters because the login itself is HTTPS",
+    "Only the stack trace matters; transport is fine as long as login is encrypted"
+  ]}
+  answer={1}
+  explain="These are two distinct categories. A sensitive page served over plain HTTP exposes data in transit - a cryptographic failure (A02:2021) - and TLS on the login alone does not cover the rest of the session. A stack trace in a production-like environment is verbose-error/debug misconfiguration (A05:2021), leaking internal structure. Using HTTPS 'somewhere' (options A, C, D) does not resolve either: encryption must cover every sensitive page, and error handling is a separate control. Report each with its category, minimal proof, and fix, then prioritize by application impact."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Cryptographic failures (A02:2021)", back: "Sensitive data exposed via missing, weak, or misused cryptography: no/weak TLS, outdated algorithms (MD5, SHA-1), unsalted fast password hashing, hard-coded or exposed keys, poor randomness. Renamed from 2017's Sensitive Data Exposure to name the root cause." },
+    { front: "Security misconfiguration (A05:2021)", back: "Insecure settings anywhere in the stack: default credentials, unnecessary features/ports enabled, debug mode and verbose errors in production, missing security headers, directory listing on, outdated default configs." },
+    { front: "Why they travel together", back: "Both are protection that should be ON by default but is not - the open padlock. One leaves sensitive data unwrapped (crypto), the other leaves the system in its careless factory state (config). Neither needs an exotic exploit; you just check whether the lock is closed." },
+    { front: "How to test transport (A02)", back: "Request the site over plain http:// and load sensitive pages; confirm every page forces HTTPS with HSTS. A login or account page available over HTTP, or HTTPS only on the login, is a finding." },
+    { front: "How to test config (A05)", back: "Trigger errors and read for stack traces/versions (debug on), try documented default credentials on consoles (in scope), inspect response headers for HSTS/CSP/X-Content-Type-Options, and check for directory listing and stray services." },
+    { front: "Password storage rule", back: "Hash with a slow, salted algorithm - bcrypt, scrypt, or Argon2. MD5, SHA-1, or any fast unsalted hash is A02: a DB leak becomes an instant credential leak via rainbow tables and GPUs." },
+    { front: "Common myth to reject", back: "'We use HTTPS, so we are encrypted.' TLS protects data in transit only - it says nothing about at-rest encryption, weak password hashing, or secrets committed to the repo. Check each lock separately, on the current deployment." },
+  ]}
+/>
+
+<Challenge>
+On a site you own or are explicitly authorized in writing to test, run a six-point hardening audit and
+write it up. For each point, record PASS or FAIL with evidence: (1) is HTTPS forced on every page with
+HSTS; (2) are Content-Security-Policy and X-Content-Type-Options present; (3) does an error page stay
+generic rather than leaking a stack trace; (4) are default credentials on any console changed; (5) is
+directory listing disabled; (6) do any secrets appear in the repo or shipped client bundle. Tag each
+failure A02:2021 (cryptographic) or A05:2021 (misconfiguration), attach minimal proof, and give the
+fix. Do not pivot past a demonstrated issue into real data. You will have run the exact audit that,
+without a single exploit, catches a large share of real breaches.
+</Challenge>
+
+<AskCommunity prompt="I have started every assessment with a hardening pass - forcing plain HTTP, reading response headers, triggering an error page, and grepping the client bundle for secrets - tagging findings A02:2021 (`crypto`) or A05:2021 (`config`). For folks who do this regularly: how do you keep the config checklist current as stacks change, and how do you catch configuration drift (a debug flag flipped on and never reverted) between full assessments?">
+Keeping the hardening checklist current as frameworks and headers evolve, and catching the debug flag
+that got flipped during an incident and never flipped back, are the two things that make config
+testing reliable over time rather than a one-off - hearing how experienced testers handle drift is the
+fastest way to make this a standing safety net.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://owasp.org/Top10/2021/A02_2021-Cryptographic_Failures/", title: "OWASP A02:2021 Cryptographic Failures - the official category page", kind: "read" },
+    { href: "https://owasp.org/Top10/2021/A05_2021-Security_Misconfiguration/", title: "OWASP A05:2021 Security Misconfiguration - the official category page", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=0NGEKNGKM4g", title: "Hello InfoSec - OWASP A02 Cryptographic Failures explained in depth", kind: "watch" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=0NGEKNGKM4g" title="Hello InfoSec - OWASP Top-10 A02 Cryptographic Failures: The Encryption Exploit" minutes={43} />
+
+<Takeaways
+  points={[
+    "Cryptographic failures (A02:2021) expose sensitive data through missing, weak, or misused cryptography: no/weak TLS, MD5 or SHA-1 password hashing, hard-coded keys, poor randomness - the lock never engaged around the data.",
+    "Security misconfiguration (A05:2021) is protection left in its factory state: default credentials, debug mode and verbose errors in production, missing security headers, directory listing, unnecessary services.",
+    "Both are safeguards that should be on by default but are not - you rarely need an exploit, only a check of whether each lock is actually closed.",
+    "Test crypto by forcing plain HTTP on sensitive pages and reviewing password storage and secrets; test config by triggering errors, trying default credentials, and reading response headers.",
+    "'We use HTTPS' is not 'we are secure': TLS covers transit only, not data at rest, weak hashing, or committed secrets - check each control separately on the current deployment.",
+    "Only run these checks on systems you own or are explicitly authorized in writing to test; capture minimal proof, tag each finding A02:2021 or A05:2021, and prioritize by application impact.",
+  ]}
+/>
+
+<Complete xp={10} />

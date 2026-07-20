@@ -2243,10 +2243,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "owasp-top-10-properly",
         title: "OWASP Top 10, properly",
         topics: [
-          { slug: "the-2021-list-and-how-to-use-it", title: "The 2021 list & how to use it", planned: true },
-          { slug: "broken-access-control", title: "Broken access control", planned: true },
-          { slug: "cryptographic-and-config-failures", title: "Cryptographic & config failures", planned: true },
-          { slug: "mapping-findings-to-the-list", title: "Mapping findings to the list", planned: true },
+          { slug: "the-2021-list-and-how-to-use-it", title: "The 2021 list & how to use it" },
+          { slug: "broken-access-control", title: "Broken access control" },
+          { slug: "cryptographic-and-config-failures", title: "Cryptographic & config failures" },
+          { slug: "mapping-findings-to-the-list", title: "Mapping findings to the list" },
         ],
       },
       {
