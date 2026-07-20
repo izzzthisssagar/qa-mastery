@@ -2713,10 +2713,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "landing-well",
         title: "Landing well",
         topics: [
-          { slug: "onboarding-as-a-qa", title: "Onboarding as a QA", planned: true },
-          { slug: "learning-the-product-fast", title: "Learning the product fast", planned: true },
-          { slug: "your-first-bug-report-at-work", title: "Your first bug report at work", planned: true },
-          { slug: "building-trust", title: "Building trust", planned: true },
+          { slug: "onboarding-as-a-qa", title: "Onboarding as a QA" },
+          { slug: "learning-the-product-fast", title: "Learning the product fast" },
+          { slug: "your-first-bug-report-at-work", title: "Your first bug report at work" },
+          { slug: "building-trust", title: "Building trust" },
         ],
       },
       {
