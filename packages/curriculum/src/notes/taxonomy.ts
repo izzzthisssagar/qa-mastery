@@ -2367,10 +2367,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "manual-a11y-testing",
         title: "Manual a11y testing",
         topics: [
-          { slug: "keyboard-only-navigation", title: "Keyboard-only navigation", planned: true },
-          { slug: "screen-readers-nvda-voiceover", title: "Screen readers (NVDA / VoiceOver)", planned: true },
-          { slug: "focus-order-and-visible-focus", title: "Focus order & visible focus", planned: true },
-          { slug: "contrast-and-zoom-reflow", title: "Contrast & zoom / reflow", planned: true },
+          { slug: "keyboard-only-navigation", title: "Keyboard-only navigation" },
+          { slug: "screen-readers-nvda-voiceover", title: "Screen readers (NVDA / VoiceOver)" },
+          { slug: "focus-order-and-visible-focus", title: "Focus order & visible focus" },
+          { slug: "contrast-and-zoom-reflow", title: "Contrast & zoom / reflow" },
         ],
       },
       {
