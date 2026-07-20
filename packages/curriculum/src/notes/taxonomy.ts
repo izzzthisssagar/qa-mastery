@@ -2639,10 +2639,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "applying-smart",
         title: "Applying smart",
         topics: [
-          { slug: "reading-job-posts", title: "Reading job posts", planned: true },
-          { slug: "tailoring-per-role", title: "Tailoring per role", planned: true },
-          { slug: "cover-letters-short", title: "Cover letters, short", planned: true },
-          { slug: "tracking-applications", title: "Tracking applications", planned: true },
+          { slug: "reading-job-posts", title: "Reading job posts" },
+          { slug: "tailoring-per-role", title: "Tailoring per role" },
+          { slug: "cover-letters-short", title: "Cover letters, short" },
+          { slug: "tracking-applications", title: "Tracking applications" },
         ],
       },
       {
