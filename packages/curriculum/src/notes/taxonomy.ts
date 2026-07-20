@@ -2592,10 +2592,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "the-3-repo-portfolio",
         title: "The 3-repo portfolio",
         topics: [
-          { slug: "repo-1-documented-manual-project", title: "Repo 1: documented manual project", planned: true },
-          { slug: "repo-2-ui-automation-suite", title: "Repo 2: UI automation suite", planned: true },
-          { slug: "repo-3-api-suite-and-ci", title: "Repo 3: API suite + CI", planned: true },
-          { slug: "readmes-that-sell", title: "READMEs that sell", planned: true },
+          { slug: "repo-1-documented-manual-project", title: "Repo 1: documented manual project" },
+          { slug: "repo-2-ui-automation-suite", title: "Repo 2: UI automation suite" },
+          { slug: "repo-3-api-suite-and-ci", title: "Repo 3: API suite + CI" },
+          { slug: "readmes-that-sell", title: "READMEs that sell" },
         ],
       },
       {
