@@ -2461,10 +2461,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "tester-in-a-sprint",
         title: "Tester in a sprint",
         topics: [
-          { slug: "definition-of-done", title: "Definition of done", planned: true },
-          { slug: "in-sprint-testing", title: "In-sprint testing", planned: true },
-          { slug: "acceptance-criteria", title: "Acceptance criteria", planned: true },
-          { slug: "collaboration", title: "Collaboration", planned: true },
+          { slug: "definition-of-done", title: "Definition of done" },
+          { slug: "in-sprint-testing", title: "In-sprint testing" },
+          { slug: "acceptance-criteria", title: "Acceptance criteria" },
+          { slug: "collaboration", title: "Collaboration" },
         ],
       },
       {
