@@ -2357,10 +2357,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "why-accessibility-matters",
         title: "Why accessibility matters",
         topics: [
-          { slug: "disabilities-and-assistive-tech", title: "Disabilities & assistive tech", planned: true },
-          { slug: "the-business-and-legal-case-ada-eaa", title: "The business & legal case (ADA/EAA)", planned: true },
-          { slug: "wcag-2-2-a-aa-aaa", title: "WCAG 2.2 A / AA / AAA", planned: true },
-          { slug: "pour-principles", title: "POUR principles", planned: true },
+          { slug: "disabilities-and-assistive-tech", title: "Disabilities & assistive tech" },
+          { slug: "the-business-and-legal-case-ada-eaa", title: "The business & legal case (ADA/EAA)" },
+          { slug: "wcag-2-2-a-aa-aaa", title: "WCAG 2.2 A / AA / AAA" },
+          { slug: "pour-principles", title: "POUR principles" },
         ],
       },
       {
