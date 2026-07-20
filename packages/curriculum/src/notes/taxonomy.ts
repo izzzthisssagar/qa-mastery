@@ -2451,10 +2451,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "scrum-and-kanban",
         title: "Scrum & Kanban",
         topics: [
-          { slug: "scrum-roles-and-ceremonies", title: "Scrum roles & ceremonies", planned: true },
-          { slug: "kanban", title: "Kanban", planned: true },
-          { slug: "backlog-and-stories", title: "Backlog & stories", planned: true },
-          { slug: "estimation", title: "Estimation", planned: true },
+          { slug: "scrum-roles-and-ceremonies", title: "Scrum roles & ceremonies" },
+          { slug: "kanban", title: "Kanban" },
+          { slug: "backlog-and-stories", title: "Backlog & stories" },
+          { slug: "estimation", title: "Estimation" },
         ],
       },
       {
