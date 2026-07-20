@@ -1,0 +1,332 @@
+---
+title: "Reading results"
+summary: "Reading a load-test report means reading throughput and latency over time, the full percentile breakdown, and where error-rate spikes line up with load level - then telling apart a load generator that ran out of capacity from a server that genuinely did."
+tags: ["performance-testing", "tools-intro", "track-e"]
+updated: "2026-07-20"
+related:
+  - "performance-testing/tools-intro/k6"
+  - "performance-testing/tools-intro/designing-a-test"
+  - "performance-testing/metrics/percentiles-vs-averages"
+---
+
+<Hook>
+A report lands with one line highlighted in the summary: "throughput plateaued at 500 rps." The
+team reads that as "the server maxes out at 500 rps" and starts planning a database upgrade. A
+tester who actually opens the full time-series graph notices the load generator's own CPU was
+pinned at 100% the entire time achieved throughput sat flat - the SERVER never got the chance to
+struggle, because the machine generating load ran out of capacity first. The database was never the
+problem. The one-line summary told a true fact and a false story at the same time.
+</Hook>
+
+<Callout type="analogy">
+Charles Richter, examining a fresh sheet peeled off a seismograph drum. He doesn't glance at one
+number and move on - he reads the whole trace, start to finish, the way it actually unfolded over
+time, because a single peak in isolation can mean almost anything. Three separate pickups recorded
+the same stretch of ground simultaneously: if only ONE stylus jumped while the other two stayed
+flat, that's a loose pen or a truck passing outside - noise in one instrument, not a real event. If
+all three agree, at the same moment, that's the ground itself moving - a real signal, confirmed by
+agreement across independent sensors. A load-test report deserves exactly that same reading: the
+full throughput-and-latency trace over time, not one headline number, and a deliberate check for
+whether a spike shows up in every signal that should see it (achieved throughput, latency, AND error
+rate together) or in just one - which is usually the tell for where the problem actually lives.
+</Callout>
+
+<Term define="Reading a load-test report means examining throughput and latency plotted over the full duration of the run (not just an end-of-run average), the percentile breakdown at each load level, and where error-rate spikes occur relative to offered load. A critical distinction is between a client-side bottleneck (the load generator itself runs out of CPU, memory, network, or file descriptors and cannot push more traffic, regardless of what the server could handle) and a server-side bottleneck (the system under test is genuinely struggling, visible as latency and/or error rate rising while the generator successfully keeps delivering load). Confusing the two leads to fixing the wrong side of the test.">Reading load-test results</Term>
+
+## What a report is actually showing you
+
+- **Look at metrics over time, not just the end-of-run summary.** A flat average can hide a system
+  that was fine for the first four minutes and falling over for the last one. The time-series view
+  is where a throughput ceiling or a slow-building failure actually becomes visible.
+- **Read the percentile breakdown, not just one number.** p50, p90, p95, p99, and max at each load
+  level tell a very different story than a single averaged response time - a healthy median next to
+  a terrible p99 usually means a subset of requests (one slow query path, one starved connection
+  pool) rather than a system-wide problem.
+- **Correlate error-rate spikes with load level, precisely.** Does the error rate jump exactly when
+  load crosses a specific rps, every time? That's a capacity signature. Does it appear at random
+  points regardless of load? That points toward something unrelated to volume - a timeout, a flaky
+  dependency, a scheduled job competing for resources.
+- **Separate a client-side ceiling from a server-side one.** If ACHIEVED throughput stops climbing
+  while OFFERED load keeps rising, and latency/error rate on completed requests stay flat, the load
+  generator itself is maxed out - the server never saw the extra traffic. If achieved throughput
+  keeps tracking offered load and latency/errors climb anyway, that's the server genuinely
+  struggling.
+
+<Callout type="tip">
+Always check the load generator's OWN resource usage (CPU, memory, network) alongside the server's.
+A calm-looking server and a pinned-at-100%-CPU load generator is not a healthy system under test -
+it's a test that never actually delivered the load it claims to have offered.
+</Callout>
+
+<Callout type="mistake">
+Reporting a single averaged number - "average response time was 220ms" - as if it describes the
+whole run. An average blends the fast requests that make up most of the traffic with the rare slow
+ones that actually hurt users, hiding exactly the tail behavior a percentile breakdown would reveal.
+Report the distribution, or at minimum a percentile, not a single blended average.
+</Callout>
+
+{/* IMAGE: black and white photo of Charles Richter examining a seismograph paper record he holds in his hands, standing beside a large rotating drum recorder with three separate stylus pickups tracing continuous wave patterns onto paper wound around the drum */}
+<HotspotImage
+  src="/notes/performance-testing/tools-intro/reading-results.jpg"
+  alt="Charles Richter examining a seismograph paper trace in his hands, standing beside a rotating drum recorder with three stylus pickups"
+  credit="Charles Richter analyzing a seismograph log — Gil Cooper, Los Angeles Times, Wikimedia Commons, CC BY 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Charles_Richter_analyzing_a_seismograph_log.jpg"
+  pins={[
+    { x: 74, y: 18, label: "Reading closely, not skimming", desc: "This is the deliberate act the whole note is named for - actually studying the record instead of accepting whatever the one-line summary claims it says." },
+    { x: 53, y: 70, label: "The full trace, not a single number", desc: "Every fine-grained wiggle in this sheet is data over time - the equivalent of a throughput/latency graph across the whole run, not an end-of-run average." },
+    { x: 13, y: 49, label: "Three independent pickups, recording at once", desc: "One stylus jumping alone is noise in that one instrument. All three agreeing, at the same moment, is a real event - exactly the check for whether a spike shows up in every signal or just one." },
+    { x: 31, y: 60, label: "The unbroken record, wound around the drum", desc: "Continuous over time, not sampled once at the end. A load-test report read the same way shows exactly where a spike started, not just that one existed somewhere." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Reading a report properly - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Open the time-series view first", desc: "Throughput and latency over the full run, not the end-of-run summary line - a flat average can hide a failing final minute." },
+    { label: "Check the percentile breakdown at each load level", desc: "p50 next to p99 tells you whether a problem is system-wide or hitting a narrow subset of requests." },
+    { label: "Line up error-rate spikes against load level", desc: "A spike that appears at the same rps every time is a capacity signature; one that appears randomly points elsewhere." },
+    { label: "Check achieved throughput against offered load", desc: "If achieved throughput flatlines while offered load keeps rising, look at the GENERATOR's own resource usage next." },
+    { label: "Only then, name the bottleneck", desc: "Client-side (generator maxed out) and server-side (system under test genuinely struggling) look similar in a headline number and very different once you check both signals." },
+  ]}
+/>
+
+A results-report analyzer that runs the exact check above - comparing achieved throughput against
+offered load, alongside latency and errors, to tell the two bottleneck types apart:
+
+<CodePlayground
+  language="python"
+  title="Run it - results-report analyzer (Python)"
+  code={`def classify(rows):
+    first = rows[0]
+    last = rows[-1]
+    first_offered, first_achieved, first_err, first_lat = first[1], first[2], first[3], first[4]
+    last_offered, last_achieved, last_err, last_lat = last[1], last[2], last[3], last[4]
+
+    gap_ratio = (last_offered - last_achieved) / last_offered
+    lat_growth = last_lat / first_lat
+    err_growth = last_err - first_err
+
+    if gap_ratio > 0.3 and lat_growth < 1.3 and err_growth < 0.02:
+        return ("CLIENT-SIDE bottleneck", "achieved throughput fell far behind offered load, yet completed-request "
+                "latency and error rate barely moved -> the load generator itself ran out of capacity, not the server under test")
+    elif lat_growth >= 1.3 or err_growth >= 0.02:
+        return ("SERVER-SIDE bottleneck", "achieved throughput kept pace with offered load, but latency and/or error "
+                "rate rose sharply -> the server under test is the real bottleneck")
+    else:
+        return ("HEALTHY", "throughput, latency, and error rate all stayed within expected range")
+
+
+def show(label, rows):
+    print(f"=== {label} ===")
+    print(" time  offered  achieved  errors   p95")
+    for t, offered, achieved, err, lat in rows:
+        print(f" {t:4d}s  {offered:6d}   {achieved:7d}   {err:5.1%}  {lat:5d}ms")
+    verdict, reason = classify(rows)
+    print(f" VERDICT: {verdict}")
+    print(f" REASON: {reason}")
+    print()
+
+
+# time_s, offered_rps, achieved_rps, error_rate, p95_latency_ms
+client_side_report = [
+    (0,   200, 200, 0.001, 110),
+    (60,  400, 400, 0.001, 115),
+    (120, 800, 480, 0.001, 118),
+    (180, 1600, 490, 0.001, 120),
+]
+
+server_side_report = [
+    (0,   200, 200, 0.001, 110),
+    (60,  400, 399, 0.002, 140),
+    (120, 800, 795, 0.02,  480),
+    (180, 1200, 1180, 0.12, 2200),
+]
+
+show("Report A - offered load keeps climbing, achieved throughput does not", client_side_report)
+show("Report B - achieved throughput tracks offered load closely", server_side_report)
+
+print("Lesson: the SAME symptom - 'throughput stopped climbing' - has two different causes. Compare achieved")
+print("throughput against OFFERED load, not just the raw rps number: a generator that cannot push more traffic")
+print("looks calm (flat latency, flat errors) because the server never actually saw the extra load. A server")
+print("that is genuinely struggling shows it in latency and errors climbing WHILE it keeps receiving the load.")`}
+/>
+
+The identical analysis in Java - same two reports, same verdicts:
+
+<CodePlayground
+  language="java"
+  title="Run it - results-report analyzer (Java)"
+  code={`import java.util.List;
+
+public class Main {
+
+    record Row(int t, int offered, int achieved, double err, int lat) {}
+
+    static String[] classify(List<Row> rows) {
+        Row first = rows.get(0);
+        Row last = rows.get(rows.size() - 1);
+
+        double gapRatio = (last.offered() - last.achieved()) / (double) last.offered();
+        double latGrowth = last.lat() / (double) first.lat();
+        double errGrowth = last.err() - first.err();
+
+        if (gapRatio > 0.3 && latGrowth < 1.3 && errGrowth < 0.02) {
+            return new String[]{"CLIENT-SIDE bottleneck",
+                    "achieved throughput fell far behind offered load, yet completed-request latency and error rate barely moved -> the load generator itself ran out of capacity, not the server under test"};
+        } else if (latGrowth >= 1.3 || errGrowth >= 0.02) {
+            return new String[]{"SERVER-SIDE bottleneck",
+                    "achieved throughput kept pace with offered load, but latency and/or error rate rose sharply -> the server under test is the real bottleneck"};
+        } else {
+            return new String[]{"HEALTHY", "throughput, latency, and error rate all stayed within expected range"};
+        }
+    }
+
+    static void show(String label, List<Row> rows) {
+        System.out.println("=== " + label + " ===");
+        System.out.println(" time  offered  achieved  errors   p95");
+        for (Row r : rows) {
+            System.out.printf(" %4ds  %6d   %7d   %4.1f%%  %5dms%n", r.t(), r.offered(), r.achieved(), r.err() * 100, r.lat());
+        }
+        String[] verdict = classify(rows);
+        System.out.println(" VERDICT: " + verdict[0]);
+        System.out.println(" REASON: " + verdict[1]);
+        System.out.println();
+    }
+
+    public static void main(String[] args) {
+        List<Row> clientSideReport = List.of(
+                new Row(0, 200, 200, 0.001, 110),
+                new Row(60, 400, 400, 0.001, 115),
+                new Row(120, 800, 480, 0.001, 118),
+                new Row(180, 1600, 490, 0.001, 120)
+        );
+
+        List<Row> serverSideReport = List.of(
+                new Row(0, 200, 200, 0.001, 110),
+                new Row(60, 400, 399, 0.002, 140),
+                new Row(120, 800, 795, 0.02, 480),
+                new Row(180, 1200, 1180, 0.12, 2200)
+        );
+
+        show("Report A - offered load keeps climbing, achieved throughput does not", clientSideReport);
+        show("Report B - achieved throughput tracks offered load closely", serverSideReport);
+
+        System.out.println("Lesson: the SAME symptom - 'throughput stopped climbing' - has two different causes. Compare achieved");
+        System.out.println("throughput against OFFERED load, not just the raw rps number: a generator that cannot push more traffic");
+        System.out.println("looks calm (flat latency, flat errors) because the server never actually saw the extra load. A server");
+        System.out.println("that is genuinely struggling shows it in latency and errors climbing WHILE it keeps receiving the load.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: read one report the deliberate way">
+<StepChecklist
+  steps={[
+    { text: "Open the time-series view before the summary", detail: "Look for where a metric changes shape, not just what it averages to across the whole run." },
+    { text: "Find the percentile breakdown at peak load", detail: "Compare p50 to p95/p99 - a big gap points at a subset of requests, not the whole system." },
+    { text: "Line up any error-rate spike against the load-level graph", detail: "Same rps every time it happens is a capacity signature; scattered timing points elsewhere." },
+    { text: "Check the load generator's own CPU/memory for the run", detail: "Rule out a client-side ceiling before concluding the server is the bottleneck." },
+  ]}
+/>
+You now have a reading process that catches the difference between "the server struggled" and "the
+generator ran out of breath" - instead of trusting whichever story the one-line summary tells first.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "Throughput plateaus and everyone assumes the server hit its ceiling.",
+      fix: "Check the load generator's own CPU, memory, and network usage during that exact window. A pinned generator produces the identical 'throughput stopped climbing' symptom as a genuinely maxed-out server.",
+    },
+    {
+      symptom: "An average response time looks fine but users still report slowness.",
+      fix: "Pull the percentile breakdown. A healthy average next to a terrible p99 means a meaningful slice of real users are hitting the slow tail the average is hiding.",
+    },
+    {
+      symptom: "An error-rate spike appears once and nobody can explain why load 'caused' it.",
+      fix: "Check whether the spike actually lines up with a load-level increase at all - a spike with no load correlation is more likely a scheduled job, a flaky dependency, or a timeout unrelated to volume.",
+    },
+    {
+      symptom: "Two 'identical' test runs produce very different-looking reports.",
+      fix: "Compare the full time-series shape, not just end summaries - a shorter or noisier steady-state window between runs can produce very different-looking numbers from the same underlying system.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The time-series throughput/latency graph** — where a problem actually started, not just that one existed somewhere in the run.
+- **The load generator's own resource metrics** (CPU, memory, network, open connections) — the first place to rule out a client-side ceiling.
+- **[[performance-testing/tools-intro/designing-a-test]]** — a report is only as trustworthy as the scenario shape and data that produced it.
+- **[[performance-testing/metrics/percentiles-vs-averages]]** — why the percentile breakdown this note leans on matters more than a single averaged number.
+</WhereToCheck>
+
+<WorkedExample title="the 'database bottleneck' that was really an exhausted load generator">
+1. A report shows achieved throughput flatlining at 500 rps while the test was configured to offer
+   up to 2,000 rps. p95 latency and error rate on completed requests both stay low and flat the
+   whole time.
+2. The team concludes the database is the bottleneck at 500 rps and schedules an upgrade.
+3. A tester checks the load generator's own CPU graph for that run: pinned at 100% from the moment
+   offered load crossed 500 rps - the single machine running the test physically could not construct
+   and send more requests than that.
+4. The real fix is running the test from multiple distributed load-generator instances. The database
+   was never tested past 500 rps in the first place - the report's flat latency and errors were the
+   tell, once someone checked the generator instead of only the server.
+</WorkedExample>
+
+<Quiz
+  question="A load-test report shows achieved throughput flatlining well below the offered load, while p95 latency and error rate on completed requests both stay low and flat for the entire run. What does this pattern most likely indicate?"
+  options={[
+    "The server under test has hit its real capacity ceiling",
+    "The load generator itself ran out of capacity to send more requests - a client-side bottleneck, not a server-side one",
+    "The test's think-time was set too high",
+    "The percentile breakdown must be miscalculated"
+  ]}
+  answer={1}
+  explain="A genuinely struggling server shows it in the requests it DOES complete - rising latency and/or rising error rate as load increases. Here, completed requests stay fast and clean the entire time; only the volume of requests actually reaching the server stalls. That combination - flat achieved throughput below target, alongside flat latency and errors - is the signature of the load generator itself running out of capacity (CPU, network, file descriptors) before the server ever felt the extra load."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Time-series view vs end-of-run summary", back: "The time-series view shows WHEN a problem started; a single end-of-run average can hide it entirely." },
+    { front: "Percentile breakdown", back: "p50/p90/p95/p99/max at each load level - reveals whether an issue is system-wide or hitting a narrow slice of requests." },
+    { front: "Error-rate spike correlated with load", back: "A spike appearing at the same load level every time is a capacity signature; a scattered one points elsewhere (timeouts, flaky dependencies)." },
+    { front: "Client-side bottleneck", back: "The load generator itself runs out of capacity - achieved throughput flatlines while offered load rises, but completed-request latency/errors stay flat." },
+    { front: "Server-side bottleneck", back: "Achieved throughput keeps tracking offered load, but latency and/or error rate rise sharply - the system under test is genuinely struggling." },
+    { front: "Why check the generator's own resources", back: "A calm-looking server next to a maxed-out load generator means the server was never actually tested at the claimed load level." },
+  ]}
+/>
+
+<Challenge>
+Take the results-report analyzer above and construct a THIRD report - an array of `(t, offered,
+achieved, err, lat)` tuples - that should classify as HEALTHY (achieved throughput tracks offered
+load closely, and latency/error growth both stay small). Run it and confirm the verdict matches
+before checking whether your numbers actually produced HEALTHY.
+</Challenge>
+
+<AskCommunity prompt="I have a load-test report where `[metric]` behaves in `[way]` and I'm trying to tell whether it's a real server-side bottleneck or my load generator running out of capacity. What did you check on the generator side before concluding it was the server?">
+Asking specifically what to check on the GENERATOR side, not just "is my server slow," surfaces the
+exact resource graphs (generator CPU, open file descriptors, network saturation) experienced testers
+learned to check the hard way, after blaming a server that was never actually under real load.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://grafana.com/docs/k6/latest/results-output/end-of-test/", title: "Grafana k6 — End-of-test Summary", kind: "read" },
+    { href: "https://jmeter.apache.org/usermanual/generating-dashboard.html", title: "Apache JMeter — Generating a Dashboard Report", kind: "read" },
+    { href: "https://www.youtube.com/watch?v=atzO7GqDAd8", title: "How to Prepare and Analyze Load Test Report - Step by step", kind: "watch" },
+  ]}
+/>
+<Video href="https://www.youtube.com/watch?v=atzO7GqDAd8" title="How to Prepare and Analyze Load Test Report - Step by step" minutes={22} />
+
+<Takeaways
+  points={[
+    "Read the time-series view before the end-of-run summary - a flat average can hide a failing final minute.",
+    "A percentile breakdown reveals tail behavior an averaged number actively hides.",
+    "Line up error-rate spikes against load level precisely - a consistent correlation is a capacity signature, a scattered one points elsewhere.",
+    "A client-side bottleneck (generator maxed out) and a server-side one can produce a nearly identical headline symptom - check the generator's own resources to tell them apart.",
+    "A load-test report is only as trustworthy as the deliberate reading behind it - the same discipline as studying a full trace instead of one number.",
+  ]}
+/>
+
+<Complete xp={10} />
