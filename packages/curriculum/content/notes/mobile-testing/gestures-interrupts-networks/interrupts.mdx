@@ -1,0 +1,209 @@
+---
+title: "Interrupts"
+summary: "Why phone calls, notifications, low-battery warnings, and other OS-level alerts arriving mid-flow are a distinct test category, and how to check whether an app actually resumes instead of just not crashing."
+tags: ["mobile-testing", "gestures-interrupts-networks", "track-c"]
+updated: "2026-07-20"
+related:
+  - "mobile-testing/gestures-interrupts-networks/touch-gestures"
+  - "mobile-testing/gestures-interrupts-networks/network-conditions"
+  - "mobile-testing/gestures-interrupts-networks/orientation"
+  - "mobile-testing/mobile-specifics/app-lifecycle"
+---
+
+<Hook>
+A user is halfway through filling out a checkout form when a call comes in. They answer it, talk for thirty
+seconds, hang up, and tap back into the app. On a desktop this scenario doesn't exist — nothing else on the
+machine gets to seize the whole screen away from a browser tab mid-keystroke. On a phone it happens
+constantly, and the app has no say in the matter. It just has to survive it.
+</Hook>
+
+<Callout type="analogy">
+Think of a stage actor mid-monologue when the fire alarm goes off. The alarm doesn't ask permission and
+doesn't care what scene it is — everyone evacuates immediately, mid-sentence if necessary. A well-rehearsed
+production has a plan for exactly this: where each actor was standing, what line they were on, and how to
+pick the scene back up once everyone files back in. A production with no such plan either fakes its way
+through an obviously broken restart or simply cannot recover at all. The interruption itself is not the
+failure. Having no plan for it is.
+</Callout>
+
+<Term define="An interrupt is any OS-level event outside the app's control — an incoming call, a push notification, a low-battery warning, a system alert, another app's share sheet — that takes the screen away from the app mid-flow. Testing an interrupt means checking not just that the app avoids crashing, but that it resumes with the user's in-progress state intact once control returns.">An interrupt</Term>
+
+## Not every interrupt behaves the same way
+
+Interrupts fall into two different categories, and conflating them is where testing plans go wrong. Some
+interrupts take the app fully into the background — an incoming phone call, tapping a push notification
+that opens a different app, a share sheet handed off to another process. For these, the app's current
+activity or view controller is genuinely paused, and anything not explicitly saved before that pause can be
+gone when the app returns. Other interrupts stay layered on top of the app without ever backgrounding it —
+a low-battery warning banner, an in-app permission dialog, an SMS preview banner that slides down and back
+up. These don't need state persistence to survive, but they do need to not block input, not crash the
+underlying view, and not leave a stray overlay behind after they dismiss.
+
+The distinction matters because the fix for each failure mode is completely different. A background-type
+interrupt that loses data needs the app to persist state before losing focus and restore it on return. A
+foreground-type interrupt that crashes or freezes needs the underlying screen to keep running correctly
+underneath a transient overlay it never asked for and cannot dismiss on its own schedule.
+
+## Testing an interrupt means testing the resume, not the interruption
+
+It is easy to test that an app does not crash when an interrupt fires — that is the easy half. The harder,
+more valuable half is verifying exactly what state comes back. A shopping cart that empties itself after a
+call is a real bug even though the app never crashed. A video that resumes from the beginning instead of
+where it was paused is a real bug. A form that comes back blank after a low-battery dialog dismissed itself
+is a real bug. None of these show up if the test only checks "did the app survive," which is why interrupt
+testing has to specify, in advance, exactly which piece of state should still be there afterward — not just
+that something is still on the screen.
+
+<Callout type="tip">
+Write the expected resume state down before you trigger the interrupt: which field, which scroll position,
+which item in the cart. "The app should recover" is not testable. "The username field should still contain
+what was typed and the submit button should still be disabled until both fields are filled" is.
+</Callout>
+
+<Callout type="mistake">
+Do not test interrupts only by manually backgrounding the app with the home button. A real incoming call,
+a real low-battery warning, and a manual home-button press exercise different OS code paths, and a bug that
+only shows up on a genuine phone call will pass every home-button-based test cleanly.
+</Callout>
+
+{/* IMAGE: close-up of a vintage black rotary telephone with numbered dial, handset lifted off the cradle, a second worn handset dangling loose beside it, on display at a museum counter */}
+<HotspotImage
+  src="/notes/mobile-testing/gestures-interrupts-networks/interrupts.jpg"
+  alt="A vintage black rotary telephone on a museum display counter, its handset lifted off the cradle with a second worn handset dangling loose beside it"
+  credit="Old-fashioned telephone — pelican, Wikimedia Commons, CC BY-SA 2.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Old-fashioned_telephone_(2147350197).jpg"
+  pins={[
+    { x: 33, y: 24, label: "Handset already lifted off the cradle", desc: "The call has already arrived and is already being handled — the same instant an OS hands your app's screen to an incoming-call UI before your app gets any say in it." },
+    { x: 50, y: 58, label: "Rotary dial with numbered finger holes", desc: "Each number is a distinct, deliberate input, and dialing takes real time — like the seconds an OS spends showing its own incoming-call screen before your app can possibly resume." },
+    { x: 87, y: 36, label: "A second handset dangling loose off the counter", desc: "Still connected, technically still working, but nobody is holding on to make sure it actually functions — what an untested resume path looks like from the outside." },
+    { x: 47, y: 81, label: "Decades-old worn housing", desc: "This exact interruption — a ringing phone — is nothing new. Testing whether an app survives it is the part teams skip when they only test the happy path." },
+  ]}
+/>
+
+<FlowAnimation title="Verifying one interrupt scenario" intervalMs={1600} nodes={[
+  { label: "Put the app into a specific, non-trivial state", desc: "A partially filled form, an item mid-add-to-cart, a video at a specific timestamp — not an empty screen." },
+  { label: "Trigger a real interrupt, not a proxy for one", desc: "An actual incoming call or real low-battery condition, not just a manual home-button press." },
+  { label: "Return to the app and check the exact expected state", desc: "Compare against what was written down before the interrupt, field by field, not just 'it looks fine.'" },
+  { label: "Repeat for both interrupt categories", desc: "Background-type interrupts test state persistence; foreground-type interrupts test that the underlying screen kept working underneath the overlay." },
+]}/>
+
+<CodePlayground language="python" title="An interrupt-resume checker (Python)" code={`events = [
+    {"name": "incoming_call", "backgrounds_app": True, "state_saved": True},
+    {"name": "sms_preview_banner", "backgrounds_app": False, "state_saved": True},
+    {"name": "low_battery_warning", "backgrounds_app": False, "state_saved": True},
+    {"name": "os_update_alert", "backgrounds_app": True, "state_saved": False},
+    {"name": "share_sheet_handoff", "backgrounds_app": True, "state_saved": True},
+]
+
+def outcome(event):
+    if not event["backgrounds_app"]:
+        return "SURVIVED_FOREGROUND"
+    return "RESUMED" if event["state_saved"] else "STATE_LOST"
+
+lost_count = 0
+for e in events:
+    result = outcome(e)
+    if result == "STATE_LOST":
+        lost_count += 1
+    print(e["name"] + "=" + result)
+
+print("TOTAL_INTERRUPTS=" + str(len(events)))
+print("STATE_LOST_COUNT=" + str(lost_count))
+result = "PASS" if lost_count == 1 else "FAIL"
+assert result == "PASS", "expected exactly 1 state-loss case in this fixture"
+print("RESULT=" + result)`}/>
+
+<CodePlayground language="java" title="An interrupt-resume checker (Java)" code={`import java.util.LinkedHashMap;
+import java.util.Map;
+
+public class Main {
+    static String outcome(boolean backgroundsApp, boolean stateSaved) {
+        if (!backgroundsApp) return "SURVIVED_FOREGROUND";
+        return stateSaved ? "RESUMED" : "STATE_LOST";
+    }
+
+    public static void main(String[] args) {
+        String[] names = {"incoming_call", "sms_preview_banner", "low_battery_warning", "os_update_alert", "share_sheet_handoff"};
+        boolean[] backgroundsApp = {true, false, false, true, true};
+        boolean[] stateSaved = {true, true, true, false, true};
+
+        int lostCount = 0;
+        for (int i = 0; i < names.length; i++) {
+            String result = outcome(backgroundsApp[i], stateSaved[i]);
+            if (result.equals("STATE_LOST")) lostCount++;
+            System.out.println(names[i] + "=" + result);
+        }
+
+        System.out.println("TOTAL_INTERRUPTS=" + names.length);
+        System.out.println("STATE_LOST_COUNT=" + lostCount);
+        String result = lostCount == 1 ? "PASS" : "FAIL";
+        if (!result.equals("PASS")) throw new AssertionError("expected exactly 1 state-loss case in this fixture");
+        System.out.println("RESULT=" + result);
+    }
+}`}/>
+
+<FirstTime title="Audit one screen for interrupt survival">
+<StepChecklist steps={[
+  { text: "Put the screen into a specific, non-trivial state", detail: "A partially filled form, a mid-checkout cart, a video at a known timestamp — write down exactly what should still be true after the interrupt." },
+  { text: "Trigger a real background-type interrupt", detail: "An actual incoming call (or an emulator command that simulates one), not just a home-button press." },
+  { text: "Compare the resumed state against what you wrote down", detail: "Field by field, not a glance — a wiped form and a form that silently reset one field are both real bugs." },
+  { text: "Repeat with a foreground-type interrupt", detail: "A low-battery banner or permission dialog — confirm the screen underneath keeps working and no stray overlay is left behind after it dismisses." },
+]}/>
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "A shopping cart or form is empty after an incoming call.", fix: "The screen never persisted its state before losing focus. Save the relevant state as soon as the app is notified it is backgrounding, not only when the user explicitly saves." },
+  { symptom: "A video restarts from zero after a low-battery warning.", fix: "The player's position was likely tied to a UI component that got torn down rather than to state that survives the overlay; store playback position independently of the view." },
+  { symptom: "The app crashes only on a real incoming call, never in manual tests.", fix: "The home-button path and the telephony interrupt path are different code routes on the OS; you must test with an actual (or emulator-simulated) call, not a proxy for one." },
+  { symptom: "A permission dialog leaves a frozen or unresponsive screen after it closes.", fix: "The underlying screen likely paused input handling for the dialog and never resumed it; check that the dismiss callback re-enables interaction." },
+]}/>
+
+<WhereToCheck>
+- The design spec or ticket for exactly which state should survive each type of interrupt.
+- Android's documentation on process lifecycle and activity state saving; Apple's app-state and background-execution guides.
+- Emulator/simulator commands that trigger genuine interrupts (a simulated call, a simulated low-battery state) rather than manual home-button proxies.
+- [[mobile-testing/mobile-specifics/app-lifecycle]] for the underlying foreground/background/killed states an interrupt can push an app through.
+- [[mobile-testing/gestures-interrupts-networks/orientation]] for another event, unrelated to interrupts, that also demands state to survive a screen teardown.
+- [[mobile-testing/gestures-interrupts-networks/touch-gestures]] for what happens when an interrupt arrives in the middle of an in-progress gesture rather than a static screen.
+</WhereToCheck>
+
+<WorkedExample title="a cart that survives a call but not a low-battery warning">
+1. QA fills a shopping cart with three items, then simulates an incoming call and answers it.
+2. Returning to the app, the cart still has all three items — the background-type interrupt is handled correctly.
+3. QA repeats the same setup, but this time triggers a simulated low-battery warning instead, which never
+   backgrounds the app.
+4. The cart is unexpectedly empty. The team finds the low-battery overlay was implemented by tearing down
+   and rebuilding the entire screen instead of layering on top of it, silently resetting in-memory state
+   that a true background-type interrupt would never have touched.
+</WorkedExample>
+
+<Quiz question="An app correctly restores a shopping cart after an incoming call, but a low-battery warning banner leaves the cart empty. What does this most likely indicate?" options={[
+  "The app has no bugs, since low-battery warnings are not real interrupts",
+  "The low-battery overlay was implemented by rebuilding the underlying screen instead of layering on top of it, wiping state a true background event would not have touched",
+  "The incoming call test was invalid and should be ignored",
+  "Shopping cart state should never be expected to survive any interrupt"
+]} answer={1} explain="A foreground-type interrupt like a low-battery banner should never require state persistence, because the app is never actually backgrounded. Losing state there points to the overlay tearing down the screen instead of layering on top of it." />
+
+<Flashcards cards={[
+  { front: "The two interrupt categories", back: "Background-type (incoming call, notification tap, share sheet) genuinely pauses the app and needs saved state to resume. Foreground-type (low-battery banner, permission dialog) never backgrounds the app and instead needs the underlying screen to keep working underneath it." },
+  { front: "Why 'did it crash' is not enough", back: "An app can avoid crashing and still silently lose the exact state — a cart, a form field, a scroll position — that the interrupt test was meant to verify survives." },
+  { front: "Why manual home-button testing is not a substitute", back: "A real incoming call or genuine low-battery condition can exercise different OS code paths than a manual home-button press, so a bug can pass every home-button test and still fail on a real interrupt." },
+]}/>
+
+<Challenge>Pick one screen with meaningful in-progress state (a form, a cart, a video). Write down exactly what should still be true after an interrupt, then trigger one background-type and one foreground-type interrupt and check both against what you wrote down.</Challenge>
+<AskCommunity prompt="What's an interrupt bug you found where the app didn't crash but silently lost or corrupted state the user had already entered?" />
+
+<Resources links={[
+  { href: "https://developer.android.com/guide/components/activities/process-lifecycle", title: "Android Developers — Processes and App Lifecycle", kind: "read" },
+  { href: "https://developer.apple.com/documentation/uikit/app_and_environment/managing_your_app_s_life_cycle", title: "Apple Developer — Managing Your App's Life Cycle", kind: "read" },
+  { href: "https://www.youtube.com/watch?v=tnfkfCUfIEk", title: "How to Perform Interruption Testing in Mobile Applications", kind: "watch" },
+]}/>
+<Video href="https://www.youtube.com/watch?v=tnfkfCUfIEk" title="How to Perform Interruption Testing in Mobile Applications" minutes={8} />
+
+<Takeaways points={[
+  "An interrupt is any OS-level event that takes the screen away from the app without the app's consent.",
+  "Background-type interrupts (calls, notification taps) need saved state to resume correctly; foreground-type interrupts (low-battery banners, permission dialogs) need the underlying screen to keep working without ever losing focus.",
+  "Testing an interrupt means verifying the exact expected resume state, written down in advance — not just confirming the app didn't crash.",
+  "A real incoming call or genuine low-battery condition can expose bugs that a manual home-button press never touches.",
+]}/>
+<Complete xp={10} />

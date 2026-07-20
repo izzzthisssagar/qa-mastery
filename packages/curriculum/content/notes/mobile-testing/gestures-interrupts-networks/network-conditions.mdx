@@ -1,0 +1,221 @@
+---
+title: "Network conditions"
+summary: "Why an app that works perfectly on office WiFi can fail on a real cellular network — spinners that never resolve, silent failures, and duplicate submits — and how to deliberately reproduce slow, lossy, and mid-request-dropped connections instead of hoping for a bad signal."
+tags: ["mobile-testing", "gestures-interrupts-networks", "track-c"]
+updated: "2026-07-21"
+related:
+  - "mobile-testing/gestures-interrupts-networks/touch-gestures"
+  - "mobile-testing/gestures-interrupts-networks/interrupts"
+  - "mobile-testing/gestures-interrupts-networks/orientation"
+  - "mobile-testing/device-and-os-matrix/device-farms"
+---
+
+<Hook>
+A checkout screen ships, and it works flawlessly in the office: fast WiFi, five bars, zero packet loss.
+Three weeks later a support ticket arrives from someone on a train who tapped "Pay" once, watched a spinner
+for eleven seconds, tapped it again out of frustration, and got charged twice. Nothing about the code was
+wrong on a fast, stable connection. Almost everything about it was wrong on the connection real users
+actually have.
+</Hook>
+
+<Callout type="analogy">
+Think of a phone call through a mountain tunnel. The connection doesn't cleanly hang up when it gets bad —
+it degrades first: words clip, a sentence arrives half-garbled, there's a long silence that might mean
+"still talking" or might mean "call dropped three seconds ago and neither of us noticed yet." A good caller
+handles this by confirming what was heard before continuing, and by not just repeating the entire
+conversation from the start the moment the tunnel ends. A mobile app's network layer faces the exact same
+ambiguity on every single request — and most of them are never tested against it.
+</Callout>
+
+<Term define="Network condition testing is deliberately degrading or interrupting a mobile app's connection — throttled bandwidth, added latency, packet loss, a full connectivity drop mid-request, or a live handoff between WiFi and cellular — to verify how requests, retries, and the UI respond to conditions a fast, stable office network never reproduces.">Network condition testing</Term>
+
+## What breaks under a slow or lossy connection
+
+The most common failure is not an error message — it's the absence of one. A request stalls, the loading
+spinner keeps spinning because nothing set a timeout, and the user has no way to know whether to wait
+another second or force-quit the app. A close cousin is the silent failure: the request fails, but the UI
+doesn't change to reflect that, so a cart addition or a saved draft looks like it succeeded when nothing
+was actually persisted. Both bugs are invisible on a fast connection because the request never takes long
+enough to expose them.
+
+The failure with real financial consequences is the duplicate submit. A slow response looks identical to a
+lost one from the user's side, so a frustrated tap on "Pay" or "Submit" fires a second request while the
+first is still in flight. If that request isn't idempotent — if the server has no way to recognize "this is
+a retry of the same attempt" rather than "this is a new attempt" — the result is a double charge, a
+duplicate order, or two copies of the same comment. This is a design flaw in the request, not a timing
+fluke, and it only ever appears once the network is slow enough for the user to get impatient.
+
+## Simulating the conditions testers actually need
+
+Real-world testing means reproducing an actual degraded connection, not describing one in a ticket. Chrome
+DevTools' network throttling presets (Slow 3G, offline, and custom profiles) cover any hybrid or WebView
+content. For native code, Android Studio's emulator exposes network speed and latency profiles in its
+extended controls, and iOS's Network Link Conditioner (part of Apple's additional developer tools) applies
+system-wide bandwidth caps, latency, and packet loss to a real device or the Simulator. Cloud device farms
+extend the same idea to real hardware on demand.
+
+The scenario worth the most testing time is not a steady "slow" connection — it's the transition. Killing
+the connection exactly while a request is in flight (not before it starts, not after it finishes) is the
+single most bug-revealing moment, because it's the one case a developer is least likely to have deliberately
+coded for. A WiFi-to-cellular handoff mid-download is the same idea from a different angle: the OS silently
+swaps the network interface out from under an open connection, and the app either recovers cleanly or it
+doesn't.
+
+<Callout type="tip">
+Test the transition moment itself, not just the two steady states on either side of it. Pull the connection
+exactly while a request is mid-flight — not a second before, not a second after — because that's the exact
+window most retry logic is never deliberately written for.
+</Callout>
+
+<Callout type="mistake">
+Do not consider "it works on 4G" sufficient network testing. Most real failures happen during a connection
+that's actively degrading or switching — a train entering a tunnel, a phone moving from WiFi to cellular as
+someone walks out a door — not while sitting still on one consistent, named network tier for the whole
+session.
+</Callout>
+
+{/* IMAGE: portrait photo of a long queue of cars stopped on a frosty highway shoulder, thick white exhaust steam rising from tailpipes into the cold morning air, one car door open partway down the line, a clear empty lane with distant moving headlights visible on the far side of the road */}
+<HotspotImage
+  src="/notes/mobile-testing/gestures-interrupts-networks/network-conditions.jpg"
+  alt="A long queue of cars stopped on a frosty highway shoulder, thick white exhaust steam rising into the cold morning air, with a clear road and moving headlights visible in the distance"
+  credit="Traffic jam, Randers E45 — Kim Hansen (Slaunger), Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Traffic_jam_Randers_E45_2017-01-17-6920.jpg"
+  pins={[
+    { x: 71, y: 15, label: "Exhaust rising from stalled, idling engines", desc: "Every car is burning fuel while going nowhere — the same waste as a client retrying a stalled request without ever backing off or giving up." },
+    { x: 75, y: 57, label: "A long line of cars stopped bumper to bumper", desc: "Each vehicle is blocked by the one directly ahead of it, exactly like a backlog of queued requests piling up behind one that never completes." },
+    { x: 50, y: 52, label: "A car door left open mid-queue", desc: "Neither fully stopped nor moving — the visual equivalent of a request abandoned mid-flight, never cleanly retried and never cleanly cancelled." },
+    { x: 6, y: 40, label: "A clear lane on the far side, moving freely", desc: "The same road under different conditions — the fast, uncongested network a test plan has to deliberately leave behind to find these bugs." },
+  ]}
+/>
+
+<FlowAnimation title="Verifying one request under a degraded connection" intervalMs={1600} nodes={[
+  { label: "Put the app mid-request on a healthy connection", desc: "A checkout submit, an upload, a search — something with a visible loading state and a real server round trip." },
+  { label: "Kill or throttle the connection mid-flight", desc: "Use a real throttling tool or airplane mode timed to the exact moment the request is in progress, not before or after." },
+  { label: "Check what the UI shows while nothing resolves", desc: "A spinner with no timeout and no way out is a bug even if the request eventually succeeds once connectivity returns." },
+  { label: "Reconnect and check for duplicates or silent data loss", desc: "Retried requests need a way to recognize a prior attempt; anything that quietly discarded input needs to say so." },
+]}/>
+
+<CodePlayground language="python" title="A request-safety-under-drop checker (Python)" code={`requests = [
+    {"name": "checkout_submit", "mid_request_drop": True, "has_timeout": True, "idempotent_retry": True},
+    {"name": "profile_photo_upload", "mid_request_drop": True, "has_timeout": False, "idempotent_retry": False},
+    {"name": "search_query", "mid_request_drop": False, "has_timeout": True, "idempotent_retry": True},
+    {"name": "payment_charge", "mid_request_drop": True, "has_timeout": True, "idempotent_retry": False},
+    {"name": "feed_refresh", "mid_request_drop": False, "has_timeout": True, "idempotent_retry": True},
+]
+
+def classify(r):
+    if not r["mid_request_drop"]:
+        return "NORMAL"
+    if not r["has_timeout"]:
+        return "HANGS_FOREVER"
+    if not r["idempotent_retry"]:
+        return "DUPLICATE_RISK"
+    return "SAFE_RETRY"
+
+unsafe_count = 0
+for r in requests:
+    outcome = classify(r)
+    if outcome in ("HANGS_FOREVER", "DUPLICATE_RISK"):
+        unsafe_count += 1
+    print(r["name"] + "=" + outcome)
+
+print("TOTAL_REQUESTS=" + str(len(requests)))
+print("UNSAFE_COUNT=" + str(unsafe_count))
+result = "PASS" if unsafe_count == 2 else "FAIL"
+assert result == "PASS", "expected exactly 2 unsafe requests in this fixture"
+print("RESULT=" + result)`}/>
+
+<CodePlayground language="java" title="A request-safety-under-drop checker (Java)" code={`public class Main {
+    static String classify(boolean midRequestDrop, boolean hasTimeout, boolean idempotentRetry) {
+        if (!midRequestDrop) return "NORMAL";
+        if (!hasTimeout) return "HANGS_FOREVER";
+        if (!idempotentRetry) return "DUPLICATE_RISK";
+        return "SAFE_RETRY";
+    }
+
+    public static void main(String[] args) {
+        String[] names = {"checkout_submit", "profile_photo_upload", "search_query", "payment_charge", "feed_refresh"};
+        boolean[] midRequestDrop = {true, true, false, true, false};
+        boolean[] hasTimeout = {true, false, true, true, true};
+        boolean[] idempotentRetry = {true, false, true, false, true};
+
+        int unsafeCount = 0;
+        for (int i = 0; i < names.length; i++) {
+            String outcome = classify(midRequestDrop[i], hasTimeout[i], idempotentRetry[i]);
+            if (outcome.equals("HANGS_FOREVER") || outcome.equals("DUPLICATE_RISK")) unsafeCount++;
+            System.out.println(names[i] + "=" + outcome);
+        }
+
+        System.out.println("TOTAL_REQUESTS=" + names.length);
+        System.out.println("UNSAFE_COUNT=" + unsafeCount);
+        String result = unsafeCount == 2 ? "PASS" : "FAIL";
+        if (!result.equals("PASS")) throw new AssertionError("expected exactly 2 unsafe requests in this fixture");
+        System.out.println("RESULT=" + result);
+    }
+}`}/>
+
+<FirstTime title="Audit one network-dependent screen">
+<StepChecklist steps={[
+  { text: "Pick a screen with a real server round trip", detail: "A submit button, an upload, a search — something with a visible loading state, not a screen that only reads local data." },
+  { text: "Throttle the connection to a slow, realistic profile first", detail: "Chrome DevTools Slow 3G, an Android emulator network profile, or iOS Network Link Conditioner — not just full speed or fully offline." },
+  { text: "Drop the connection exactly mid-request", detail: "Time it to the request actually being in flight, which exposes retry and timeout bugs a before-or-after drop never will." },
+  { text: "Reconnect and check for a timeout, a duplicate, or silent data loss", detail: "Confirm the UI shows a real error or retry state, not an endless spinner, and that no action fired twice." },
+]}/>
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "A loading spinner spins forever after a dropped connection.", fix: "No client-side timeout was set on the request; add one with a visible error or retry state once it fires." },
+  { symptom: "The same order or charge appears twice after one slow submit.", fix: "The retry (or the user's frustrated second tap) was not idempotent; add a client-generated request ID the server can use to recognize and ignore a duplicate attempt." },
+  { symptom: "The UI shows success even though the request never actually reached the server.", fix: "The success state is likely set optimistically before confirmation; gate it on the actual server response instead." },
+  { symptom: "The app crashes or freezes specifically during a WiFi-to-cellular handoff.", fix: "An in-flight request tied to the old network interface was never re-established on the new one; ensure the networking layer retries against the current interface instead of assuming the original connection persists." },
+]}/>
+
+<WhereToCheck>
+- The design spec or ticket for what error state and retry behavior each network-dependent action is supposed to show.
+- Chrome DevTools' network throttling panel for any WebView or hybrid content.
+- Android Studio's emulator extended controls and iOS's Network Link Conditioner for native network profiles, latency, and packet loss.
+- [[mobile-testing/gestures-interrupts-networks/interrupts]] for the same "does state survive" question applied to OS-level interruptions instead of network drops.
+- [[mobile-testing/gestures-interrupts-networks/orientation]] for another mid-flow event — a rotation — that can also land in the middle of an open request.
+- [[mobile-testing/device-and-os-matrix/device-farms]] for cloud device farms that can apply the same network-shaping profiles to real hardware on demand.
+</WhereToCheck>
+
+<WorkedExample title="a checkout button that charged a card twice">
+1. QA throttles a checkout screen to a slow 3G profile and submits a payment.
+2. The spinner runs for nine seconds with no visible timeout or cancel option, so the tester taps "Pay" a
+   second time, mimicking exactly what an impatient real user would do.
+3. Both requests reach the server. The first was still being processed when the second arrived, and the
+   backend has no way to recognize them as the same attempt, so it processes both.
+4. The team adds a client-generated idempotency key sent with the payment request; the server now
+   recognizes a repeat key within a short window and returns the original result instead of charging again.
+</WorkedExample>
+
+<Quiz question="A checkout screen charges a customer twice after they tap 'Pay' once, wait through a long spinner, then tap it again. What is the most likely root cause?" options={[
+  "The customer's bank processed the payment incorrectly",
+  "The payment request has no timeout and is not idempotent, so the second tap fires a request the server cannot recognize as a duplicate of the first",
+  "Slow 3G networks always cause duplicate charges and cannot be fixed",
+  "The bug only matters on fast networks and can be deprioritized"
+]} answer={1} explain="A slow response looks identical to a lost one, so a frustrated second tap is a near-certainty on a bad connection. Without a client-generated identifier the server can use to recognize a repeat attempt, that second tap becomes a second real charge." />
+
+<Flashcards cards={[
+  { front: "Why a spinner with no timeout is a real bug", back: "A request that hangs forever gives the user no signal to distinguish 'still loading' from 'permanently stuck,' and it's invisible on any fast connection where the request never takes long enough to expose it." },
+  { front: "Why idempotency matters more on bad networks", back: "A slow response and a lost one look identical to the user, so a frustrated repeat tap is common under real network conditions — the server needs a way to recognize and ignore that repeat instead of processing it as new." },
+  { front: "Why the transition moment matters most", back: "Dropping a connection exactly mid-request exposes retry and recovery bugs that a drop timed before or after the request never will, because that in-flight window is the one developers are least likely to have deliberately coded for." },
+]}/>
+
+<Challenge>Pick one screen with a real network request (a submit, an upload, a search). Throttle the connection to a slow profile, then kill it exactly while the request is in flight. Write down what the UI shows, whether a retry ever fires, and whether that retry could ever produce a duplicate.</Challenge>
+<AskCommunity prompt="What's a bug you found that only showed up when you killed the connection exactly mid-request, not before it started or after it finished?" />
+
+<Resources links={[
+  { href: "https://developer.chrome.com/docs/devtools/network/reference#throttling", title: "Chrome DevTools — Network Features Reference: Throttling", kind: "read" },
+  { href: "https://www.browserstack.com/guide/how-to-simulate-slow-network-conditions", title: "BrowserStack — How to Simulate Slow Network Conditions on iOS & Android", kind: "read" },
+  { href: "https://www.youtube.com/watch?v=RFWZ__miwiA", title: "How to Simulate Slow Internet Speed to Test Your Application", kind: "watch" },
+]}/>
+<Video href="https://www.youtube.com/watch?v=RFWZ__miwiA" title="How to Simulate Slow Internet Speed to Test Your Application" minutes={5} />
+
+<Takeaways points={[
+  "The most common network bugs are invisible on a fast connection: a spinner with no timeout, a silent failure, or a duplicate submit from a frustrated retry.",
+  "Testing network conditions means deliberately throttling, dropping, or handing off a connection with real tools, not just assuming a fast office network is representative.",
+  "The most bug-revealing moment is a connection dropped exactly mid-request, which exposes retry and recovery logic no steady 'slow' or 'offline' state ever does.",
+  "A request retried after a drop needs a way for the server to recognize it as a repeat, or a slow connection turns directly into a duplicate charge or order.",
+]}/>
+<Complete xp={10} />

@@ -1,0 +1,212 @@
+---
+title: "Orientation"
+summary: "Why rotating a phone from portrait to landscape is a full layout re-flow and a state-preservation test at once, and what breaks when the rotation lands mid-animation or mid-network-request instead of on a settled screen."
+tags: ["mobile-testing", "gestures-interrupts-networks", "track-c"]
+updated: "2026-07-21"
+related:
+  - "mobile-testing/gestures-interrupts-networks/touch-gestures"
+  - "mobile-testing/gestures-interrupts-networks/interrupts"
+  - "mobile-testing/gestures-interrupts-networks/network-conditions"
+  - "mobile-testing/device-and-os-matrix/fragmentation"
+---
+
+<Hook>
+A user fills out half a form, turns their phone sideways to see the keyboard better, and the screen comes
+back blank. Nothing crashed. No error appeared. The rotation itself, an event most test plans never name as
+a test case at all, quietly destroyed everything they had typed. On a desktop this scenario simply cannot
+happen — the monitor doesn't physically turn. On a phone, it happens every time someone rotates the device,
+which is constantly.
+</Hook>
+
+<Callout type="analogy">
+A carpenter's spirit level doesn't measure "level" once and remember it — the bubble has to keep responding
+correctly no matter how the level is tilted, and it has to settle on the true answer every single time, not
+just the first time or the convenient time. A level that reported the correct tilt only when held perfectly
+still, and lost its reading the instant it moved, would be useless for the one job it exists to do. A
+phone's orientation sensor is asked for exactly that same continuous correctness, and a screen rotation is
+the one moment that actually puts it to the test.
+</Callout>
+
+<Term define="Orientation testing is verifying what happens when a device rotates between portrait and landscape — that the layout re-flows correctly for the new dimensions, that in-progress state (a form's input, a video's playback position, a scroll position) survives the transition, and that a rotation arriving mid-animation or mid-network-request doesn't corrupt either one.">Orientation testing</Term>
+
+## A rotation is two tests wearing one trigger
+
+The layout half is the obvious one: does the screen re-flow sensibly into the new dimensions, with nothing
+clipped, overlapping, or stretched past readability. This is a real-time layout problem, no different in
+kind from testing any other screen size, and it's the half most teams already check.
+
+The state half is the one that gets skipped, and it's the more damaging bug when it's missed. On both
+Android and iOS, a rotation can force the screen's underlying view to be torn down and rebuilt rather than
+merely resized — which means anything held only in that view's memory and not deliberately saved somewhere
+that survives the rebuild is gone the instant the new layout appears. A half-filled form, a video's exact
+playback position, a scroll position partway down a long list — none of these are guaranteed to survive a
+rotation unless a developer explicitly wrote code to preserve them across it. A screen that "just resizes"
+correctly, but silently drops every field on the way, still looks fine to a tester who only checks the
+layout half.
+
+## What breaks when the rotation lands badly timed
+
+The bugs that only appear under real conditions — not a screen that was already sitting still when it
+rotated — are timing bugs. A rotation that fires in the middle of a running animation can leave that
+animation half-finished, restarted from its first frame with no memory of where it was, or racing against
+the new layout being built underneath it. A rotation that fires while a network request is in flight is
+worse: if the response handler references the screen that existed before rotation, and that screen has since
+been torn down, the response can arrive with nowhere valid to land, silently discarding the data or crashing
+depending on how defensively the code was written.
+
+A distinct and separate edge case is the screen that intentionally locks its own orientation — a full-screen
+video player, a game, a barcode scanner. These shouldn't rotate at all, and testing them means confirming
+the lock actually holds under every method a user has of rotating the device, not just the most obvious one.
+A lock that holds against a physical device turn but not against an accessibility rotation gesture is only
+half a lock.
+
+<Callout type="tip">
+Rotate mid-action, not just at rest. Start a network request or an animation, then rotate the device before
+either finishes, and check the result against what a settled-screen rotation produces. The two should behave
+identically; when they don't, the difference is the bug.
+</Callout>
+
+<Callout type="mistake">
+Do not test orientation only by confirming the layout looks correct after the rotation settles. A screen can
+re-flow its layout flawlessly and still have silently wiped a form field, reset a video to zero, or lost a
+scroll position — a bug invisible to anyone who only checks how the screen looks, not what state it's still
+holding.
+</Callout>
+
+{/* IMAGE: extreme macro close-up of a bright green spirit-level bubble vial mounted in an aluminum level, the bubble sitting off-center between two etched calibration lines, two flathead mounting screws visible on either side, blurred wood floor in the background */}
+<HotspotImage
+  src="/notes/mobile-testing/gestures-interrupts-networks/orientation.jpg"
+  alt="Extreme macro close-up of a bright green spirit-level bubble vial mounted in an aluminum level, the bubble sitting off-center between two etched calibration lines with mounting screws visible on either side"
+  credit="Spirit level bubble — Santeri Viinamäki, Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Spirit_level_bubble_20170625.jpg"
+  pins={[
+    { x: 52, y: 55, label: "The bubble itself, not yet settled between the lines", desc: "Caught mid-read, neither fully left nor right — the same ambiguous instant a rotation sensor reports while a device is still mid-turn, before the OS commits to portrait or landscape." },
+    { x: 40, y: 47, label: "An etched calibration line on the vial", desc: "The exact threshold the bubble has to cross before the level calls it level — just like the tilt angle a phone's OS requires before it commits to a new orientation instead of correcting back." },
+    { x: 29, y: 39, label: "A screw pinning the vial's housing to the frame", desc: "Fixed in place regardless of how the level tilts — the same way certain UI elements (a video's controls, a fixed toolbar) are expected to stay anchored through a rotation instead of drifting with everything else." },
+    { x: 71, y: 60, label: "The second mounting screw, holding the opposite end", desc: "Two fixed points bracket the one moving part — a layout built the same way, with a few deliberately fixed anchors, survives a rotation more predictably than one where everything reflows at once." },
+  ]}
+/>
+
+<FlowAnimation title="Verifying one screen across a rotation" intervalMs={1600} nodes={[
+  { label: "Put the screen into a specific, non-trivial state", desc: "A partially filled form, a video at a known timestamp, a scroll position partway down a list — not an empty screen." },
+  { label: "Rotate the device, including mid-action", desc: "Once at rest, and again while an animation or network request is still running." },
+  { label: "Check the layout re-flowed correctly", desc: "Nothing clipped, overlapping, or unreadable in the new dimensions." },
+  { label: "Check the exact state you wrote down is still there", desc: "Field by field and frame by frame, not a glance — a form that silently reset one field is still a real bug." },
+]}/>
+
+<CodePlayground language="python" title="A rotation-survival checker (Python)" code={`screens = [
+    {"name": "signup_form", "locked": False, "state_restored": True},
+    {"name": "video_player_fullscreen", "locked": True, "state_restored": True},
+    {"name": "camera_capture", "locked": False, "state_restored": False},
+    {"name": "product_gallery", "locked": False, "state_restored": True},
+    {"name": "map_view", "locked": False, "state_restored": False},
+]
+
+def classify(s):
+    if s["locked"]:
+        return "LOCKED_NO_ROTATION"
+    return "SURVIVES_ROTATION" if s["state_restored"] else "STATE_LOST"
+
+lost_count = 0
+for s in screens:
+    outcome = classify(s)
+    if outcome == "STATE_LOST":
+        lost_count += 1
+    print(s["name"] + "=" + outcome)
+
+print("TOTAL_SCREENS=" + str(len(screens)))
+print("STATE_LOST_COUNT=" + str(lost_count))
+result = "PASS" if lost_count == 2 else "FAIL"
+assert result == "PASS", "expected exactly 2 state-loss cases in this fixture"
+print("RESULT=" + result)`}/>
+
+<CodePlayground language="java" title="A rotation-survival checker (Java)" code={`public class Main {
+    static String classify(boolean locked, boolean stateRestored) {
+        if (locked) return "LOCKED_NO_ROTATION";
+        return stateRestored ? "SURVIVES_ROTATION" : "STATE_LOST";
+    }
+
+    public static void main(String[] args) {
+        String[] names = {"signup_form", "video_player_fullscreen", "camera_capture", "product_gallery", "map_view"};
+        boolean[] locked = {false, true, false, false, false};
+        boolean[] stateRestored = {true, true, false, true, false};
+
+        int lostCount = 0;
+        for (int i = 0; i < names.length; i++) {
+            String outcome = classify(locked[i], stateRestored[i]);
+            if (outcome.equals("STATE_LOST")) lostCount++;
+            System.out.println(names[i] + "=" + outcome);
+        }
+
+        System.out.println("TOTAL_SCREENS=" + names.length);
+        System.out.println("STATE_LOST_COUNT=" + lostCount);
+        String result = lostCount == 2 ? "PASS" : "FAIL";
+        if (!result.equals("PASS")) throw new AssertionError("expected exactly 2 state-loss cases in this fixture");
+        System.out.println("RESULT=" + result);
+    }
+}`}/>
+
+<FirstTime title="Audit one screen across a rotation">
+<StepChecklist steps={[
+  { text: "Put the screen into a specific, non-trivial state", detail: "A partially filled form, a video at a known timestamp, a scroll position — write down exactly what should still be true after rotating." },
+  { text: "Rotate at rest first, then check the layout", detail: "Nothing clipped, overlapping, or unreadable in the new orientation." },
+  { text: "Check the state you wrote down field by field", detail: "A layout that re-flows perfectly can still have silently wiped a field or reset a video position." },
+  { text: "Rotate again mid-animation and mid-network-request", detail: "Start an action, then rotate before it finishes, and confirm the result matches a settled-screen rotation." },
+]}/>
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "A form is empty after rotating the device.", fix: "The screen's view was torn down and rebuilt on rotation without saving the in-progress input first; persist form state independently of the view lifecycle and restore it on rebuild." },
+  { symptom: "A video restarts from zero after rotating to fullscreen.", fix: "Playback position was tied to the view being replaced rather than to state that survives it; store the timestamp separately and seek to it after the new view is built." },
+  { symptom: "The app crashes only when rotated while a network request is in flight.", fix: "The response handler holds a reference to the pre-rotation screen, which no longer exists; check that in-flight callbacks bind to the current screen state, not a stale reference to the one before rotation." },
+  { symptom: "A screen that's supposed to stay locked in one orientation rotates anyway under an accessibility rotation gesture.", fix: "The orientation lock only intercepts the physical device-turn signal; it needs to also override the platform's alternate rotation input paths, not just the sensor-based one." },
+]}/>
+
+<WhereToCheck>
+- The design spec or ticket for which fields, positions, or playback state must survive a rotation on each screen.
+- Android's guidance on handling configuration changes and retaining state (`onSaveInstanceState` and view-model-backed state); Apple's guidance on adapting to size-class and orientation changes.
+- [[mobile-testing/gestures-interrupts-networks/interrupts]] for the same state-survival question applied to OS-level interruptions instead of a rotation.
+- [[mobile-testing/gestures-interrupts-networks/network-conditions]] for what happens when a request in flight is caught by a rotation instead of a dropped connection.
+- [[mobile-testing/device-and-os-matrix/fragmentation]] for why a rotation that behaves correctly on one screen size or OEM skin may not hold on another.
+</WhereToCheck>
+
+<WorkedExample title="a video that forgot where it was">
+1. QA plays a video to the 90-second mark in portrait, then rotates the device to fullscreen landscape.
+2. The layout re-flows correctly to fill the wider screen, and at first glance the test looks like a pass.
+3. Looking closer, the video has silently restarted from 0:00 instead of resuming at 1:30 — a bug the
+   layout check alone never would have caught.
+4. The team finds the player's timestamp was being read from the view being destroyed during rotation
+   rather than from a value stored independently of it, and fixes the player to seek back to the saved
+   timestamp once the new view is built.
+</WorkedExample>
+
+<Quiz question="A screen re-flows its layout correctly after a rotation, with nothing clipped or overlapping. Is that sufficient to consider the rotation test passed?" options={[
+  "Yes, a correct layout after rotation is the only thing orientation testing needs to check",
+  "No — the screen's in-progress state (form input, scroll position, video playback position) must also be checked field by field, since a view can be torn down and rebuilt on rotation even when the resulting layout looks fine",
+  "No, because rotation should never be tested on any screen with a form",
+  "Yes, as long as the app does not crash during the rotation"
+]} answer={1} explain="A rotation can force the underlying view to be rebuilt, which silently loses any state not explicitly saved — even when the resulting layout looks completely correct. Layout correctness and state preservation are two separate things a rotation test has to check." />
+
+<Flashcards cards={[
+  { front: "Why a rotation is two tests, not one", back: "The layout has to re-flow correctly for the new dimensions, and separately, any in-progress state has to survive the view potentially being torn down and rebuilt — a layout can pass while state silently fails." },
+  { front: "Why mid-action rotation matters", back: "A rotation that lands mid-animation or mid-network-request can race against a view being rebuilt, corrupting the animation or leaving a response with nowhere valid to land — bugs invisible when rotation only happens on a settled screen." },
+  { front: "Orientation-lock testing", back: "A screen meant to stay in one orientation (video, game, scanner) needs its lock tested against every rotation input path a user has — a physical device turn and any platform-level rotation gesture — not just the obvious one." },
+]}/>
+
+<Challenge>Pick one screen with meaningful in-progress state (a form, a video, a scrollable list). Rotate it once at rest and write down whether every piece of that state survived. Then start an action on it and rotate mid-way through, and compare the result to the settled-screen rotation.</Challenge>
+<AskCommunity prompt="What's an orientation bug you found where the layout looked completely correct after rotating, but some piece of state had silently been lost or reset?" />
+
+<Resources links={[
+  { href: "https://www.browserstack.com/guide/test-mobile-apps-in-landscape-and-portrait-modes", title: "BrowserStack — Test Mobile Apps in Landscape and Portrait Modes", kind: "read" },
+  { href: "https://developer.apple.com/documentation/uikit/uideviceorientation", title: "Apple Developer — UIDeviceOrientation", kind: "read" },
+  { href: "https://www.youtube.com/watch?v=FyAfG5awD_4", title: "Screen Orientation and Mobile App Testing (Mobile Testing - Part 12)", kind: "watch" },
+]}/>
+<Video href="https://www.youtube.com/watch?v=FyAfG5awD_4" title="Screen Orientation and Mobile App Testing (Mobile Testing - Part 12)" minutes={6} />
+
+<Takeaways points={[
+  "A screen rotation is a layout re-flow test and a state-preservation test at once — a screen can pass the first while silently failing the second.",
+  "Rotation can force a view to be torn down and rebuilt, so any in-progress form input, video position, or scroll position not explicitly saved is at risk of being lost.",
+  "Rotating mid-animation or mid-network-request exposes timing bugs a settled-screen rotation never will.",
+  "A screen that locks its own orientation needs that lock tested against every rotation input path a user has, not just a physical device turn.",
+]}/>
+<Complete xp={10} />
