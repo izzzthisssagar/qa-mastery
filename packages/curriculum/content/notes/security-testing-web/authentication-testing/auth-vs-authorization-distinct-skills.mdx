@@ -1,0 +1,411 @@
+---
+title: "Auth vs authorization (distinct skills)"
+summary: "Authentication proves WHO you are; authorization decides WHAT you are allowed to do once identified. They are different mechanisms, tested in a fixed order, and confusing them sends the wrong fix to the wrong layer of the system."
+tags: ["security-testing-web", "authentication-testing", "track-c"]
+updated: "2026-07-20"
+related:
+  - "security-testing-web/authentication-testing/session-and-cookie-attacks"
+  - "security-testing-web/authentication-testing/mfa-bypass-patterns"
+  - "security-testing-web/owasp-top-10-properly/broken-access-control"
+---
+
+<Hook>
+A tester logs into a store account with valid, tester-owned credentials - authentication succeeds, no
+error anywhere. Then, poking at the URL for their own order, they change one digit in the order id and
+land on a stranger's order: name, address, card's last four digits, all of it. The bug report gets titled
+"login is broken." It is not. Login worked exactly as designed - the tester really is who they claim to
+be. What failed is a completely different question that nobody asked: now that we know who you are,
+should you be allowed to see THIS particular order? Authentication and authorization sound like one idea
+with two names. They are not. They are two separate mechanisms, checked at two separate moments, and a bug
+in one almost never gets fixed by touching the other.
+</Hook>
+
+<Callout type="analogy">
+Look at biometric border control at an airport. The automated e-gate under the "Biometric border control"
+sign asks exactly one question: is the face in front of the camera the same person named on this passport?
+That is authentication, and it is the ENTIRE job of that gate - it does not know or care which flight you
+are booked on, which lounge you belong in, or which zone of the terminal you are permitted to enter next.
+A separate "Police Aux Frontieres" booth staffed by a human officer asks the identical question a different
+way, for travelers the automated gate cannot handle - still only identity, still authentication. Walk
+through either checkpoint and you reach a barrier that swings open once, for one confirmed person, then
+locks again - proof of identity, converted into one single pass through one single point. What happens on
+the OTHER side of that barrier - which gate you may stand at, whether you can walk back through security
+without a boarding pass, whether the "No toilets after the border crossing" sign applies to you - is
+governed by an entirely separate set of rules, checked at entirely separate points, that never re-ask "who
+are you" at all. They ask a different question: now that we know who you are, what are you allowed to do
+here?
+</Callout>
+
+<Term define="Authentication is the mechanism that establishes WHO a user is - verifying a claimed identity against credentials, a session token, or a biometric, and producing a confirmed identity or an outright rejection. Authorization is the separate mechanism that decides WHAT that already-confirmed identity is permitted to do - checking role, ownership, or scope against the specific resource or action being requested. The two run in a fixed order (authentication first, authorization second) because authorization has nothing to check against until an identity exists, and conflating them is a common, costly source of mislabeled bug reports: a missing ownership check gets filed as a login bug, or a genuine authentication gap gets waved away because 'the user is logged in fine.' This note treats the two as a conceptual foundation - the deeper mechanics of exploiting a broken authorization boundary (IDOR, BOLA, privilege escalation, forced browsing, function-level access) are their own later chapter, not repeated here.">Authentication vs authorization</Term>
+
+## Two questions, two mechanisms, one common confusion
+
+- **Authentication asks "who are you," and stops there.** It checks a password against a stored hash, a
+  session token against a session store, a biometric against an enrolled template. Its only two possible
+  outcomes are a confirmed identity or a rejection - it has no concept of what that identity should be
+  allowed to do next.
+- **Authorization asks "what are you allowed to do," and only runs once an identity already exists.** It
+  checks the confirmed identity's role, group membership, or ownership of the specific resource against the
+  specific action being attempted - view this invoice, delete that comment, access the admin panel.
+- **The order is fixed, not stylistic.** A system must authenticate before it can authorize, because
+  authorization has no subject to reason about until someone has been identified. Skipping straight to "is
+  this action allowed" without first confirming identity is not authorization running early - it is
+  authentication being skipped entirely.
+- **The two failure modes look and sound different once you know to listen for it.** An authentication gap
+  lets someone in who should never have gotten past the front door at all - an expired token still accepted,
+  a login form with no real credential check. An authorization gap lets someone who legitimately got past the
+  front door reach a room that specific person was never given a key to - a properly logged-in customer
+  reaching another customer's invoice.
+- **Mislabeling one as the other sends the fix to the wrong layer.** "Fixing" an authorization gap by making
+  login stricter does nothing - the attacker in that scenario already has a completely valid, legitimate
+  account. Fixing an authentication gap by adding more permission checks does nothing either - the problem
+  was never about what an identified user could reach, it was that identity was never properly confirmed in
+  the first place.
+
+<Callout type="tip">
+When a finding feels ambiguous, ask one diagnostic question before writing anything down: could a request
+with NO valid credentials at all reach this response? If yes, that is an authentication gap - the front
+door itself is unlocked. If the request needed a real, valid, tester-owned login to reach it, and the
+problem is that THIS logged-in user reached someone else's data or a higher-privileged action, that is an
+authorization gap - the front door works, a specific inner door does not. Answering that one question
+before you touch the report keeps the fix aimed at the right layer.
+</Callout>
+
+<Callout type="mistake">
+A tester finds that a low-privilege, tester-owned account can view another user's invoice by editing the
+id in the URL, and reports it as "authentication is broken - a user shouldn't be able to see this data."
+The developer, confused, spends a day auditing the login form and session-token validation, finds nothing
+wrong with either, and closes the report as not reproducible. The mechanism that actually failed was never
+authentication at all - the user really was who they claimed to be, every single time. The missing piece
+was an ownership check on the invoice endpoint: does the invoice id in this request belong to the
+authenticated user making it? Naming the correct mechanism in the report - "missing ownership check,
+authorization gap" instead of "authentication is broken" - sends a developer straight to the endpoint that
+actually needs a fix instead of a login flow that was never broken.
+</Callout>
+
+{/* IMAGE: an airport biometric border control area with automated e-gates, waist-high turnstile barriers, and manned Police Aux Frontieres booths visible in the background */}
+<HotspotImage
+  src="/notes/security-testing-web/authentication-testing/auth-vs-authorization-distinct-skills.jpg"
+  alt="An airport biometric border control zone with automated e-gates in the foreground, waist-high turnstile barriers, and manned passport-control booths in the background"
+  credit="France Marseille Provence Airport border control - Okki / Bonus bon, Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:France_Marseille_Provence_Airport_border_control.jpg"
+  pins={[
+    { x: 15, y: 15, label: "Authentication, automated", desc: "The biometric e-gate asks exactly one question - does this face match this passport? Nothing about which flight, lounge, or zone the traveler may reach next is decided here." },
+    { x: 75, y: 15, label: "Authentication, the manned path", desc: "A human officer at the Police Aux Frontieres booth checks the identical thing a different way. Two different mechanisms for the SAME question - identity - not two different questions." },
+    { x: 45, y: 55, label: "One confirmed pass, then it locks again", desc: "The barrier swings open once, for one confirmed identity, then re-locks. Authentication converts a confirmed identity into a single, momentary pass - it does not stay open as a standing grant." },
+    { x: 90, y: 60, label: "A separate rulebook starts here", desc: "What a traveler may do beyond this point - which gate, which zone, whether they can walk back through - is governed by rules that never re-ask who this person is. That is authorization: a different question, checked at a different point." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Testing the two mechanisms separately - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Confirm authentication with a tester-owned account", desc: "Log in with real, valid, tester-owned credentials and confirm identity is actually established - a live session, a valid token." },
+    { label: "Attack authentication on its own terms", desc: "Try an expired token, a malformed session, or no credentials at all against the SAME endpoint. Does the front door hold, independent of anything else?" },
+    { label: "Now hold identity constant and test authorization", desc: "Stay logged in as the same tester-owned account. Attempt to reach a resource or action that belongs to a different account or a higher role." },
+    { label: "Name the mechanism that actually failed", desc: "If an unauthenticated request got through, that is authentication. If only a legitimately authenticated request reached someone else's data, that is authorization. Report the one that actually broke." },
+  ]}
+/>
+
+Here is that fixed order in runnable form - a small pipeline that always authenticates first, then
+authorizes, and shows exactly what each of the four possible outcomes looks like, including the common
+bug where the authorization step gets skipped entirely.
+
+<CodePlayground
+  language="python"
+  title="Run it - an auth-vs-authorization check-order simulator (Python)"
+  code={`# Auth (WHO you are) vs Authorization (WHAT you can do) - a check-order simulator.
+# Demonstrates why these are two separate checks, run in a fixed order, and what
+# goes wrong when the second one is skipped. No real network calls or
+# credentials - everything is a hardcoded, local simulation.
+
+USERS = {
+    "sess-alice-001": {"user": "alice", "role": "customer"},
+    "sess-bob-002": {"user": "bob", "role": "customer"},
+    "sess-carol-003": {"user": "carol", "role": "admin"},
+}
+
+# Resource ownership: invoice_id -> owning username
+INVOICES = {
+    "INV-100": "alice",
+    "INV-101": "bob",
+    "INV-102": "alice",
+}
+
+def authenticate(session_token):
+    # WHO are you? Prove identity from a session token. No token, or an
+    # unrecognized one, means authentication fails outright - authorization
+    # is never even reached.
+    return USERS.get(session_token)
+
+def authorize(identity, action, resource):
+    # WHAT are you allowed to do, now that identity is already established?
+    # Ownership rule: a customer may view their own invoice only.
+    # Role rule: an admin may view any invoice.
+    if action != "view_invoice":
+        return False
+    if identity["role"] == "admin":
+        return True
+    owner = INVOICES.get(resource)
+    return owner == identity["user"]
+
+def handle_request(session_token, action, resource, skip_authz=False):
+    # The correct, fixed order: authenticate first, authorize second.
+    identity = authenticate(session_token)
+    if identity is None:
+        return "401 Unauthorized - no valid identity, authorization never runs"
+
+    if skip_authz:
+        # The common bug this note warns about: treating "authenticated" as
+        # if it already answers "allowed." It does not - two different checks.
+        return "200 OK (BUG: authorization check was skipped - any authenticated user reached " + resource + ")"
+
+    if authorize(identity, action, resource):
+        return "200 OK - " + identity["user"] + " authenticated AND authorized for " + resource
+    return "403 Forbidden - " + identity["user"] + " authenticated but NOT authorized for " + resource
+
+REQUESTS = [
+    ("sess-alice-001", "view_invoice", "INV-100", False),
+    ("sess-alice-001", "view_invoice", "INV-101", False),
+    ("bad-token-xyz", "view_invoice", "INV-100", False),
+    ("sess-carol-003", "view_invoice", "INV-101", False),
+    ("sess-bob-002", "view_invoice", "INV-100", True),
+]
+
+def run():
+    print("Simulating requests through a fixed two-step pipeline: authenticate, then authorize.")
+    print()
+    for token, action, resource, skip in REQUESTS:
+        result = handle_request(token, action, resource, skip_authz=skip)
+        suffix = " [authz skipped]" if skip else ""
+        print("  token=" + token + " action=" + action + " resource=" + resource + suffix)
+        print("    -> " + result)
+    print()
+    print("Authentication answers WHO you are; authorization answers WHAT you may do.")
+    print("Skipping the second check - even for an already-authenticated user - is a distinct bug class.")
+
+run()`}
+/>
+
+The identical pipeline in Java - same requests in, same four outcomes out:
+
+<CodePlayground
+  language="java"
+  title="Run it - an auth-vs-authorization check-order simulator (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    // Auth (WHO you are) vs Authorization (WHAT you can do) - a check-order
+    // simulator. Demonstrates why these are two separate checks, run in a
+    // fixed order, and what goes wrong when the second one is skipped. No
+    // real network calls or credentials - everything is a hardcoded, local
+    // simulation.
+
+    static class Identity {
+        String user, role;
+        Identity(String user, String role) { this.user = user; this.role = role; }
+    }
+
+    static final Map<String, Identity> USERS = new LinkedHashMap<>();
+    static final Map<String, String> INVOICES = new LinkedHashMap<>();
+
+    static {
+        USERS.put("sess-alice-001", new Identity("alice", "customer"));
+        USERS.put("sess-bob-002", new Identity("bob", "customer"));
+        USERS.put("sess-carol-003", new Identity("carol", "admin"));
+
+        INVOICES.put("INV-100", "alice");
+        INVOICES.put("INV-101", "bob");
+        INVOICES.put("INV-102", "alice");
+    }
+
+    static Identity authenticate(String sessionToken) {
+        // WHO are you? Prove identity from a session token. No token, or an
+        // unrecognized one, means authentication fails outright -
+        // authorization is never even reached.
+        return USERS.get(sessionToken);
+    }
+
+    static boolean authorize(Identity identity, String action, String resource) {
+        // WHAT are you allowed to do, now that identity is already
+        // established? Ownership rule: a customer may view their own
+        // invoice only. Role rule: an admin may view any invoice.
+        if (!action.equals("view_invoice")) return false;
+        if (identity.role.equals("admin")) return true;
+        String owner = INVOICES.get(resource);
+        return identity.user.equals(owner);
+    }
+
+    static String handleRequest(String sessionToken, String action, String resource, boolean skipAuthz) {
+        // The correct, fixed order: authenticate first, authorize second.
+        Identity identity = authenticate(sessionToken);
+        if (identity == null) {
+            return "401 Unauthorized - no valid identity, authorization never runs";
+        }
+
+        if (skipAuthz) {
+            // The common bug this note warns about: treating "authenticated"
+            // as if it already answers "allowed." It does not - two
+            // different checks.
+            return "200 OK (BUG: authorization check was skipped - any authenticated user reached " + resource + ")";
+        }
+
+        if (authorize(identity, action, resource)) {
+            return "200 OK - " + identity.user + " authenticated AND authorized for " + resource;
+        }
+        return "403 Forbidden - " + identity.user + " authenticated but NOT authorized for " + resource;
+    }
+
+    static Object[] req(String token, String action, String resource, boolean skip) {
+        return new Object[]{token, action, resource, skip};
+    }
+
+    public static void main(String[] args) {
+        List<Object[]> requests = Arrays.asList(
+            req("sess-alice-001", "view_invoice", "INV-100", false),
+            req("sess-alice-001", "view_invoice", "INV-101", false),
+            req("bad-token-xyz", "view_invoice", "INV-100", false),
+            req("sess-carol-003", "view_invoice", "INV-101", false),
+            req("sess-bob-002", "view_invoice", "INV-100", true)
+        );
+
+        System.out.println("Simulating requests through a fixed two-step pipeline: authenticate, then authorize.");
+        System.out.println();
+        for (Object[] r : requests) {
+            String token = (String) r[0], action = (String) r[1], resource = (String) r[2];
+            boolean skip = (Boolean) r[3];
+            String result = handleRequest(token, action, resource, skip);
+            String suffix = skip ? " [authz skipped]" : "";
+            System.out.println("  token=" + token + " action=" + action + " resource=" + resource + suffix);
+            System.out.println("    -> " + result);
+        }
+        System.out.println();
+        System.out.println("Authentication answers WHO you are; authorization answers WHAT you may do.");
+        System.out.println("Skipping the second check - even for an already-authenticated user - is a distinct bug class.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: separate one authentication finding from one authorization finding">
+<StepChecklist
+  steps={[
+    { text: "Get written authorization and use a tester-owned account", detail: "This platform's own BuggyShop/BuggyAPI sandbox or a named local target, with a test account you own and synthetic data only." },
+    { text: "Test authentication on its own: try to reach a protected endpoint with no valid credential", detail: "No token, an expired token, or a malformed one. If it still lets you through, that is a pure authentication gap." },
+    { text: "Test authorization on its own: stay logged in as your own account and reach for someone else's resource", detail: "Change an id, a username, or a role parameter while keeping your own valid session. If you reach it, that is a pure authorization gap." },
+    { text: "Write each finding naming the correct mechanism", detail: "Say plainly which question failed - WHO you are, or WHAT you were allowed to do - so the fix lands on the right layer of the system." },
+  ]}
+/>
+You can now tell, from behavior rather than a guess, whether a given finding is a broken front door
+(authentication) or an unlocked inner room behind a working front door (authorization) - and you can write
+that distinction into a report a developer can act on immediately.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A 401 error gets fixed by removing the login requirement from the endpoint entirely.",
+      fix: "That treats a symptom of a possible session or token bug as a reason to delete authentication altogether. Find out WHY a legitimate, valid credential was rejected first - a token-validation bug is not solved by requiring no token at all.",
+    },
+    {
+      symptom: "A bug report says 'authentication is broken' but the tester was fully logged in with a valid, tester-owned account the whole time.",
+      fix: "Re-read the finding for the actual mechanism. If the account was genuinely authenticated and the problem is what that account could reach, rename and re-file it as an authorization finding - a missing ownership, role, or scope check.",
+    },
+    {
+      symptom: "A developer 'fixes' an IDOR-style finding by adding a stricter login form (longer password, extra CAPTCHA).",
+      fix: "That change affects authentication, not the missing per-request ownership check that actually caused the leak. The fix belongs on the endpoint that returns the resource, not on the login page.",
+    },
+    {
+      symptom: "Two testers disagree on whether a finding is an authentication or an authorization bug.",
+      fix: "Ask the diagnostic question directly: could a request with NO valid credentials at all reach this response? If yes, authentication. If it required a real, valid, tester-owned login and the issue is what THAT identity could reach, authorization.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Whether a request needed any valid credential at all to reach the response** - the single diagnostic
+  question that separates the two mechanisms in almost every ambiguous case.
+- **Session and token validity independent of what the token is later used for** - expiry, signature,
+  revocation - all authentication concerns, checked before any authorization logic should run.
+- **Ownership, role, and scope checks on the specific resource or action requested** - authorization
+  concerns, checked only after identity is already confirmed.
+- **[[security-testing-web/authentication-testing/session-and-cookie-attacks]]** - the mechanics of the
+  session token itself that authentication in this note treats as a black box; that note opens it up.
+- **[[security-testing-web/owasp-top-10-properly/broken-access-control]]** - the OWASP category most
+  authorization findings map to, with the ownership-check pattern worked through in depth.
+</WhereToCheck>
+
+<WorkedExample title="separating one authentication bug from one authorization bug on the same BuggyShop feature">
+1. A tester, authorized to test the platform's own BuggyShop sandbox with two tester-owned accounts, logs
+   in as account A and successfully views their own order history - authentication is working as expected.
+2. Testing authentication directly, they capture the session token, log out, then replay the exact same
+   captured token in a fresh request. It is still accepted as a live session after logout - a genuine
+   authentication-layer finding: session invalidation on logout is missing.
+3. Separately, staying logged in as account A with a fresh, valid session, they change the order id in the
+   URL from their own order to a sequential neighbor. Account A's fully valid, currently-authenticated
+   session is used to view account B's order - a genuine authorization-layer finding: no ownership check
+   confirms the requested order id belongs to the requesting identity.
+4. Two findings are filed, not one, each naming its actual mechanism: "session not invalidated on logout
+   (authentication)" and "missing ownership check on the order endpoint (authorization)." Each points a
+   developer at the one component that actually needs to change.
+</WorkedExample>
+
+<Quiz
+  question="A tester, logged in with a fully valid tester-owned session, changes an order id in the URL and views a different customer's order. Which mechanism actually failed?"
+  options={[
+    "Authentication - the login system let an unverified user in",
+    "Authorization - the session is genuinely valid, but no check confirmed this order belongs to the requesting identity",
+    "Both mechanisms failed identically and the distinction does not matter for the fix",
+    "Neither - this is expected behavior for any logged-in user"
+  ]}
+  answer={1}
+  explain="The session was fully valid and the tester really was who they claimed to be, so authentication worked correctly (ruling out option A). What was missing is a check that the specific resource being requested actually belongs to, or is otherwise permitted for, the authenticated identity - that is authorization, a separate mechanism from proving identity. The distinction matters directly for the fix (ruling out option C): the fix belongs on the resource endpoint's ownership check, not on the login flow. Letting one customer read another customer's private order is a real bug, not expected behavior (ruling out option D)."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Authentication", back: "The mechanism that establishes WHO a user is - verifying a claimed identity against credentials, a token, or a biometric. Outcome: a confirmed identity, or a rejection." },
+    { front: "Authorization", back: "The mechanism that decides WHAT an already-confirmed identity is allowed to do - checking role, ownership, or scope against a specific resource or action. Only runs once identity already exists." },
+    { front: "Why the order is fixed", back: "Authorization has no subject to reason about until an identity is established. Authenticate first, authorize second - never the reverse." },
+    { front: "The one diagnostic question", back: "Could a request with NO valid credentials at all reach this response? Yes means authentication gap. A valid, tester-owned login reaching someone else's data or a higher-privileged action means authorization gap." },
+    { front: "Why mislabeling matters", back: "An authorization gap 'fixed' by stricter login checks changes nothing - the attacker already has a fully valid account. An authentication gap 'fixed' by more permission checks changes nothing either - identity was never confirmed in the first place." },
+    { front: "This note's scope", back: "A conceptual foundation distinguishing the two mechanisms. Exploiting a broken authorization boundary in depth - IDOR, BOLA, privilege escalation, forced browsing - is covered later in its own chapter." },
+  ]}
+/>
+
+<Challenge>
+In this platform's own BuggyShop or BuggyAPI sandbox, using a tester-owned account (or two, where a test
+requires it), find one plausible authentication-layer finding and one plausible authorization-layer finding
+- or construct realistic ones if the sandbox does not currently expose both. For each, write the exact
+evidence that names the mechanism: for the authentication finding, show that a request with no valid, or an
+invalid, credential reached a protected response; for the authorization finding, show that a fully valid,
+tester-owned session reached a resource or action it was never granted access to. File them as two separate
+findings, each naming its correct mechanism and pointing at the layer that actually needs a fix.
+</Challenge>
+<AskCommunity prompt="I've started asking one diagnostic question before writing up any access-related finding: could a request with no valid credentials at all have reached this response? If yes it's authentication, if it needed a real, valid, tester-owned login and the problem is what that identity could reach, it's authorization. For people who triage security findings regularly: what's the trickiest real case you've hit where a finding genuinely straddled both mechanisms, and how did you decide which one to name as primary?">
+Cases that seem to sit right on the boundary - like an API key that is valid but scoped to the wrong
+tenant - are exactly where I keep getting stuck deciding whether to call it an authentication or an
+authorization finding, so hearing concrete examples from people who triage this regularly would help a lot.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html", title: "OWASP - Authentication Cheat Sheet", kind: "read" },
+    { href: "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html", title: "OWASP - Authorization Cheat Sheet", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=7ijBiXddB7w" title="xplodivity - Authentication vs Authorization Explained" minutes={4} />
+
+<Takeaways
+  points={[
+    "Authentication proves WHO a user is; authorization decides WHAT that already-confirmed identity may do. Two mechanisms, not one idea with two names.",
+    "The order is fixed: authenticate first, authorize second - authorization has nothing to check against until identity already exists.",
+    "Ask one diagnostic question to separate them: could a request with no valid credentials at all reach this response?",
+    "Mislabeling one as the other sends a fix to the wrong layer - a stricter login form does not fix a missing ownership check, and more permission checks do not fix a broken session validator.",
+    "This note is the conceptual foundation - the deeper mechanics of broken authorization (IDOR, BOLA, privilege escalation, forced browsing) belong to their own later chapter.",
+    "Test only systems you own or are explicitly, in writing, authorized to test, with tester-owned accounts and synthetic data.",
+  ]}
+/>
+
+<Complete xp={10} />

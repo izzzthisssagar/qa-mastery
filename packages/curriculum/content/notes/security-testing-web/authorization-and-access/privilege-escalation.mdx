@@ -1,0 +1,443 @@
+---
+title: "Privilege escalation"
+summary: "Vertical escalation is a lower-privileged account reaching admin-only functionality; horizontal escalation is one account acting as a different account of the same privilege level. Both come from trusting a client-supplied role instead of enforcing it server-side."
+tags: ["security-testing-web", "authorization-and-access", "track-c"]
+updated: "2026-07-20"
+related:
+  - "security-testing-web/authorization-and-access/idor-bola-by-hand"
+  - "security-testing-web/authorization-and-access/forced-browsing"
+  - "security-testing-web/authorization-and-access/function-level-checks-bfla"
+  - "security-testing-web/owasp-top-10-properly/broken-access-control"
+---
+
+<Hook>
+A tester, logged into a regular, tester-owned member account with no admin link anywhere in the
+navigation, opens the browser devtools out of habit and notices a hidden form field on the account-
+settings page: `role=member`. On a whim, they edit it to `role=admin` and resubmit. The next page load
+shows an admin dashboard - user lists, other customers' data, a delete-account button that should never
+have been reachable from this account. Nothing about login changed; the same session, the same password,
+the same identity the whole time. What changed is what the server was willing to believe about that
+identity, because it trusted a value the client was always free to edit. That is privilege escalation: a
+lower-privileged account reaching functionality reserved for a higher role (vertical), or one account
+acting as a different account of the same role without authorization (horizontal) - and in both cases the
+actual defect is a server that asked the client what it was allowed to do instead of deciding for itself.
+</Hook>
+
+<Callout type="analogy">
+Picture a corporate office building with a single badge system controlling every door. A regular
+employee's badge opens the front entrance, the break room, and their own department floor - nothing more,
+by design, because the access-control panel behind each door checks that specific badge's specific,
+centrally-recorded permission level before it ever unlocks. Now picture two very different ways that
+system fails. In the first, an employee finds an executive's badge left on a desk, and the server-room door
+- normally reserved for a handful of named people - opens for it, because the door only ever checks
+"is this A valid badge" and never "is this badge specifically permitted for THIS door." That is vertical
+escalation: a lower-privileged credential reaching a higher-privileged door. In the second, two employees
+of the identical rank swap badges as a joke, and building access logs now show one of them entering rooms
+the other was actually standing in - the system never noticed because it trusts whichever badge is
+presented as proof of who is walking through, with no separate check that the presenter is really that
+person. That is horizontal escalation: same privilege level, wrong identity, because the badge is trusted
+to speak for itself instead of the reader checking against a record the badge holder cannot edit.
+</Callout>
+
+<Term define="Privilege escalation is testing whether an authenticated identity can reach functionality or data beyond what its own role or account should permit. Vertical escalation is a lower-privileged account (a regular user) reaching functionality reserved for a higher-privileged role (an admin) - a permission boundary crossed upward. Horizontal escalation is one account acting as, or reaching the data of, a DIFFERENT account at the SAME privilege level without authorization - an identity boundary crossed sideways, not a permission-level boundary. Both share a single root cause worth testing for directly: a server that derives the effective role or identity for a request from something the client supplied and can edit - a hidden form field, a request parameter, a JWT claim the client controls - rather than from a server-side record the client cannot touch. Testing it means requesting functionality that has no visible UI link at all (a hidden or unlinked admin endpoint reached directly by URL) and separately attempting to alter a role or identity value the client can see and edit, then confirming server-side enforcement decides the outcome either way, on tester-owned accounts only. The fix to name in every finding is a server-side role and identity check performed on every request, from a source the client cannot influence, never a client-supplied value trusted at face value.">Privilege escalation</Term>
+
+## Testing both directions, on tester-owned accounts
+
+- **Test vertical escalation by requesting admin functionality directly, by URL, with a regular account.**
+  Absence of a UI link proves nothing about access control - request the endpoint the admin UI would call
+  (`/admin/users`, `/api/admin/export`) directly, authenticated as a lower-privileged tester-owned account,
+  and see whether the server actually gates it.
+- **Look for any value the client can see or edit that might carry a role.** A hidden form field named
+  `role` or `is_admin`, a request parameter, a JWT claim visible after decoding the token (JWTs are signed,
+  not encrypted - their payload is readable, and an unverified or weakly verified signature lets it be
+  edited). Try changing it and resending the request.
+- **Test horizontal escalation by attempting to act as a different tester-owned account of the same role.**
+  A user id, username, or account reference the client supplies alongside an action - not the authenticated
+  session - is the thing to try altering: does the server perform the action against the value you supplied,
+  or does it ignore that and use only the authenticated session's own identity?
+- **Confirm the outcome is genuinely server-enforced, not just UI-hidden.** A 403 or a redirect proves a
+  check exists; a 200 with the higher-privileged or other account's real data proves the check is missing.
+  A UI that simply does not render the button is not evidence either way until the underlying request is
+  tried directly.
+- **Test every relevant endpoint the higher role or other account can reach, not just the first one.** A
+  fixed admin dashboard link does not mean every admin API route enforces the same check.
+
+<Callout type="tip">
+When a role or identity value is visible anywhere the client can see it - a hidden field, a query
+parameter, a decoded JWT payload - treat that as a hypothesis to test, not a control to respect. The only
+way to know whether it is enforced is to change it and observe the server's actual response. A value the
+UI never shows you editing is still worth trying if you can construct the request by hand; the UI's
+restraint is not the server's.
+</Callout>
+
+<Callout type="mistake">
+A tester finds no visible link to the admin dashboard anywhere in a regular account's navigation and
+concludes the feature is "not accessible" from that role, closing the investigation without ever
+requesting the underlying URL directly. Six months later a different tester requests
+`/admin/dashboard` directly, authenticated as the same regular, tester-owned account, and it loads fully -
+the endpoint was never actually protected; only the link was hidden. Absence of a UI path is not evidence
+of an access control decision at all. The only way to confirm functionality is genuinely restricted is to
+request it directly, by URL or API call, with the lower-privileged account, and observe the server's real
+response - a 403 or equivalent denial, not just a missing button.
+</Callout>
+
+{/* IMAGE: a driver's hand holding a blank access card up to a vehicle-window-height reader at a gated entrance, with a white long-range RFID reader mounted on a fence post, a yellow warning beacon, and a dark indicator panel with a green light, seen through the car's windshield */}
+<HotspotImage
+  src="/notes/security-testing-web/authorization-and-access/privilege-escalation.jpg"
+  alt="A driver inside a car holds a blank white access card up near the windshield toward a gated entrance, with a white long-range RFID reader and a yellow warning beacon mounted on a fence post, and a dark indicator panel visible on the post below the reader"
+  credit="Long Range Card Reader PERCo SAAT-I801M - Mirrorsnake, Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Long_Range_Card_Reader_PERCo_SAAT-I801M.jpg"
+  pins={[
+    { x: 33, y: 70, label: "The credential presented", desc: "A blank card held up to be read - nothing about the card itself, or how confidently it is presented, tells the system anything. It is only ever a claim, submitted for the reader to check." },
+    { x: 69, y: 16, label: "The decision happens at the reader, not the hand", desc: "The white reader unit mounted on the post is where the actual authorization decision is made - against a permission record it holds itself, never against anything the presenter asserts or how the card looks." },
+    { x: 76, y: 43, label: "Granted or denied, decided server-side", desc: "The indicator panel only shows an outcome after the reader's own check runs. Nothing the driver does from inside the car - which card, how it is held, what is claimed - can force that outcome directly." },
+    { x: 80, y: 21, label: "A status signal is not a permission", desc: "The amber beacon signals the barrier is in motion - a different fact entirely from whether this specific credential was authorized. Conflating 'something is happening' with 'this was allowed' is exactly the gap privilege escalation testing looks for." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Testing both escalation directions, safely - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Request higher-privileged functionality directly, by URL", desc: "Authenticated as a lower-privileged, tester-owned account, request the endpoint an admin UI would call - even with no visible link. Record the exact response." },
+    { label: "Find and edit any client-visible role or identity value", desc: "A hidden form field, a request parameter, a decoded JWT claim. Change it to claim a higher role or a different account, and resend the request." },
+    { label: "Attempt to act as a different same-privilege account", desc: "Alter a user id or username the client supplies alongside an action, while staying authenticated as your own tester-owned session." },
+    { label: "Confirm server enforcement, not UI silence", desc: "A 403 or equivalent denial is evidence the check exists. A 200 with real higher-privileged data, or another account's real data, is the finding - report the endpoint and the exact value that mattered." },
+  ]}
+/>
+
+Here is both directions in runnable form - a server that trusts a client-supplied role field and a
+client-supplied "act as" field, compared against one that only ever trusts the server-stored session,
+against the identical set of requests.
+
+<CodePlayground
+  language="python"
+  title="Run it - a privilege escalation (vertical + horizontal) simulator (Python)"
+  code={`# Privilege escalation simulator (vertical + horizontal) - run only against a
+# LOCAL, in-memory, synthetic sandbox. This is detection/prevention teaching
+# code, never a real attack: it compares a server that trusts a client-
+# supplied role/identity field (a hidden form field or JWT claim the client
+# can edit) against one that only ever trusts the server-stored role and
+# server-stored session identity.
+
+# Server-side truth: role and identity are stored here, never in the request.
+SESSIONS = {
+    "sess-dave": {"user": "test_dave", "role": "member"},
+    "sess-erin": {"user": "test_erin", "role": "member"},
+    "sess-carol": {"user": "test_carol", "role": "admin"},
+}
+
+def authorize_action_SECURE(identity, action, act_as_user):
+    # SAFE: role comes only from the server-stored session identity. Any
+    # client-supplied role or "act as" field is ignored outright.
+    if action == "admin_dashboard":
+        return identity["role"] == "admin"
+    if action == "view_own_orders":
+        # Horizontal check: you may only ever act as yourself, never as
+        # whichever user id a client-supplied field happens to name.
+        return act_as_user in (None, identity["user"])
+    return False
+
+def handle_request_INSECURE(session_token, action, client_claimed_role, act_as_user):
+    # VULNERABLE ON PURPOSE, FOR TEACHING: trusts a client-supplied role
+    # field/JWT claim for vertical checks, and a client-supplied "act as"
+    # field for horizontal checks, instead of the server-stored session.
+    identity = SESSIONS.get(session_token)
+    if identity is None:
+        return "401 Unauthorized"
+    effective_role = client_claimed_role or identity["role"]
+    if action == "admin_dashboard":
+        if effective_role == "admin":
+            return "200 OK - admin dashboard reached, effective_role=" + effective_role
+        return "403 Forbidden"
+    if action == "view_own_orders":
+        effective_user = act_as_user or identity["user"]
+        return "200 OK - orders returned for " + effective_user
+
+def handle_request_SECURE(session_token, action, client_claimed_role, act_as_user):
+    # SAFE: role and identity always come from the server-stored session,
+    # regardless of anything the client sends alongside the request.
+    identity = SESSIONS.get(session_token)
+    if identity is None:
+        return "401 Unauthorized"
+    if not authorize_action_SECURE(identity, action, act_as_user):
+        return "403 Forbidden - server-enforced check denied " + identity["user"]
+    if action == "admin_dashboard":
+        return "200 OK - admin dashboard reached, server role=" + identity["role"]
+    if action == "view_own_orders":
+        return "200 OK - orders returned for " + identity["user"]
+
+SCENARIOS = [
+    # (session, action, client_claimed_role, act_as_user, description)
+    ("sess-dave", "admin_dashboard", None, None, "vertical: dave (member) requests admin dashboard honestly"),
+    ("sess-dave", "admin_dashboard", "admin", None, "vertical: dave (member) forges role='admin' via a client-editable field, no UI link ever shown for it"),
+    ("sess-carol", "admin_dashboard", None, None, "vertical: carol (admin) requests admin dashboard honestly"),
+    ("sess-dave", "view_own_orders", None, "test_erin", "horizontal: dave (member) sets act_as='test_erin', same privilege level as himself"),
+]
+
+def run():
+    print("Vertical escalation: a lower-privileged account reaching admin-only function.")
+    print("Horizontal escalation: one account acting as a different account of the SAME role.")
+    print()
+
+    print("-- Insecure server (trusts client-supplied role / act-as field) --")
+    for token, action, role_claim, act_as, desc in SCENARIOS:
+        print("  " + desc + ":")
+        print("    " + handle_request_INSECURE(token, action, role_claim, act_as))
+    print()
+
+    print("-- Secure server (role and identity always server-enforced) --")
+    for token, action, role_claim, act_as, desc in SCENARIOS:
+        print("  " + desc + ":")
+        print("    " + handle_request_SECURE(token, action, role_claim, act_as))
+    print()
+
+    print("Neither escalation depends on the admin dashboard having a visible UI link for dave -")
+    print("only the server-side check decides. The insecure server honors a client-editable role")
+    print("claim and a client-editable 'act as' field; the secure server ignores both entirely.")
+
+run()`}
+/>
+
+The identical scenarios in Java - same accounts, same requests, same two implementations:
+
+<CodePlayground
+  language="java"
+  title="Run it - a privilege escalation (vertical + horizontal) simulator (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    // Privilege escalation simulator (vertical + horizontal) - teaching code
+    // only, mirrors the Python sibling demo exactly. No real network calls -
+    // a server that trusts a client-supplied role/identity field (a hidden
+    // form field or JWT claim the client can edit) versus one that only ever
+    // trusts the server-stored session role and identity.
+
+    static class Identity {
+        String user, role;
+        Identity(String u, String r) { user = u; role = r; }
+    }
+
+    static final Map<String, Identity> SESSIONS = new LinkedHashMap<>();
+    static {
+        SESSIONS.put("sess-dave", new Identity("test_dave", "member"));
+        SESSIONS.put("sess-erin", new Identity("test_erin", "member"));
+        SESSIONS.put("sess-carol", new Identity("test_carol", "admin"));
+    }
+
+    static boolean authorizeActionSecure(Identity identity, String action, String actAsUser) {
+        // SAFE: role comes only from the server-stored session identity. Any
+        // client-supplied role or "act as" field is ignored outright.
+        if (action.equals("admin_dashboard")) return identity.role.equals("admin");
+        if (action.equals("view_own_orders")) {
+            // Horizontal check: you may only ever act as yourself, never as
+            // whichever user id a client-supplied field happens to name.
+            return actAsUser == null || actAsUser.equals(identity.user);
+        }
+        return false;
+    }
+
+    static String handleRequestInsecure(String sessionToken, String action, String clientClaimedRole, String actAsUser) {
+        // VULNERABLE ON PURPOSE, FOR TEACHING: trusts a client-supplied role
+        // field/JWT claim for vertical checks, and a client-supplied "act as"
+        // field for horizontal checks, instead of the server-stored session.
+        Identity identity = SESSIONS.get(sessionToken);
+        if (identity == null) return "401 Unauthorized";
+        String effectiveRole = (clientClaimedRole != null) ? clientClaimedRole : identity.role;
+        if (action.equals("admin_dashboard")) {
+            if (effectiveRole.equals("admin")) {
+                return "200 OK - admin dashboard reached, effective_role=" + effectiveRole;
+            }
+            return "403 Forbidden";
+        }
+        if (action.equals("view_own_orders")) {
+            String effectiveUser = (actAsUser != null) ? actAsUser : identity.user;
+            return "200 OK - orders returned for " + effectiveUser;
+        }
+        return "400 Bad Request";
+    }
+
+    static String handleRequestSecure(String sessionToken, String action, String clientClaimedRole, String actAsUser) {
+        // SAFE: role and identity always come from the server-stored session,
+        // regardless of anything the client sends alongside the request.
+        Identity identity = SESSIONS.get(sessionToken);
+        if (identity == null) return "401 Unauthorized";
+        if (!authorizeActionSecure(identity, action, actAsUser)) {
+            return "403 Forbidden - server-enforced check denied " + identity.user;
+        }
+        if (action.equals("admin_dashboard")) {
+            return "200 OK - admin dashboard reached, server role=" + identity.role;
+        }
+        if (action.equals("view_own_orders")) {
+            return "200 OK - orders returned for " + identity.user;
+        }
+        return "400 Bad Request";
+    }
+
+    static Object[] scenario(String token, String action, String roleClaim, String actAs, String desc) {
+        return new Object[]{token, action, roleClaim, actAs, desc};
+    }
+
+    public static void main(String[] args) {
+        List<Object[]> scenarios = Arrays.asList(
+            scenario("sess-dave", "admin_dashboard", null, null, "vertical: dave (member) requests admin dashboard honestly"),
+            scenario("sess-dave", "admin_dashboard", "admin", null, "vertical: dave (member) forges role='admin' via a client-editable field, no UI link ever shown for it"),
+            scenario("sess-carol", "admin_dashboard", null, null, "vertical: carol (admin) requests admin dashboard honestly"),
+            scenario("sess-dave", "view_own_orders", null, "test_erin", "horizontal: dave (member) sets act_as='test_erin', same privilege level as himself")
+        );
+
+        System.out.println("Vertical escalation: a lower-privileged account reaching admin-only function.");
+        System.out.println("Horizontal escalation: one account acting as a different account of the SAME role.");
+        System.out.println();
+
+        System.out.println("-- Insecure server (trusts client-supplied role / act-as field) --");
+        for (Object[] s : scenarios) {
+            System.out.println("  " + s[4] + ":");
+            System.out.println("    " + handleRequestInsecure((String) s[0], (String) s[1], (String) s[2], (String) s[3]));
+        }
+        System.out.println();
+
+        System.out.println("-- Secure server (role and identity always server-enforced) --");
+        for (Object[] s : scenarios) {
+            System.out.println("  " + s[4] + ":");
+            System.out.println("    " + handleRequestSecure((String) s[0], (String) s[1], (String) s[2], (String) s[3]));
+        }
+        System.out.println();
+
+        System.out.println("Neither escalation depends on the admin dashboard having a visible UI link for dave -");
+        System.out.println("only the server-side check decides. The insecure server honors a client-editable role");
+        System.out.println("claim and a client-editable 'act as' field; the secure server ignores both entirely.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: prove one vertical and one horizontal escalation attempt, safely">
+<StepChecklist
+  steps={[
+    { text: "Get written authorization and set up tester-owned accounts of different roles", detail: "This platform's own BuggyShop/BuggyAPI sandbox, with at least one regular account and one admin (or higher-role) account you own." },
+    { text: "Request one higher-privileged endpoint directly, with the lower-privileged account", detail: "By URL or direct API call, even with no visible UI link. Record the exact request and response." },
+    { text: "Find and edit one client-visible role or identity value", detail: "A hidden field, a parameter, or a decoded JWT claim. Change it and resend, recording the response for both the unmodified and modified requests." },
+    { text: "Write the finding naming which layer was missing", detail: "State whether the server enforced the check server-side or trusted the client-supplied value, and recommend the fix at the exact endpoint that needs it." },
+  ]}
+/>
+You can now test both directions of privilege escalation deliberately - reaching for higher-privileged
+functionality directly by URL, and attempting to act as a different account of the same role - instead of
+trusting that a missing UI link means a boundary is actually enforced.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "No UI link to admin functionality exists for a regular account, and the tester marks the boundary as enforced without requesting the endpoint directly.",
+      fix: "A missing link is a UI decision, not an access-control decision. Request the underlying endpoint directly, by URL or API call, with the lower-privileged account, and only trust the server's actual response.",
+    },
+    {
+      symptom: "A JWT looks unreadable, so a tester assumes its claims (including a role claim) cannot be tampered with.",
+      fix: "A JWT's payload is base64-encoded, not encrypted - decode and read it directly. If the server does not properly verify the signature, or if the role is re-derived from the claim rather than a server-side record, editing that claim and re-signing (or, in weaker cases, not needing to) is a real escalation path to test.",
+    },
+    {
+      symptom: "A tester confirms vertical escalation but never checks horizontal escalation on the same feature, assuming a role check covers both.",
+      fix: "The two are separate checks. A role check can be entirely correct (only members reach member features) while an ownership/identity check is still missing (any member can act as any other member). Test both explicitly.",
+    },
+    {
+      symptom: "A developer 'fixes' a privilege escalation finding by removing the hidden field or obfuscating the JWT claim name instead of adding a server-side check.",
+      fix: "Renaming or hiding the field changes what is easy to find, not what is enforced. Confirm the fix by testing again with a differently named or newly discovered client-editable value - the server must ignore all of them, not just the one that was reported.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Every endpoint the higher role or the other account can reach, tested directly by URL** - not just the
+  ones a UI happens to link to from the lower-privileged account's view.
+- **Any role, permission, or user-identity value visible to the client** - hidden form fields, query
+  parameters, decoded JWT claims, and cookies - each is a hypothesis to test, not a control to trust.
+  See [[security-testing-web/authentication-testing/session-and-cookie-attacks]] for the session-token
+  layer this often rides alongside.
+- **[[security-testing-web/authorization-and-access/idor-bola-by-hand]]** - the sibling finding where the
+  gap is a missing ownership check on a specific object rather than a missing role or identity check; the
+  two frequently coexist on the same endpoint.
+- **[[security-testing-web/authorization-and-access/function-level-checks-bfla]]** - BFLA generalizes
+  vertical escalation testing to every HTTP verb on every endpoint systematically, not just the one action
+  a tester happens to try first.
+- **[[security-testing-web/owasp-top-10-properly/broken-access-control]]** - the OWASP category privilege
+  escalation findings map to, with the server-side enforcement pattern worked through at the category
+  level.
+</WhereToCheck>
+
+<WorkedExample title="confirming one vertical and one horizontal escalation in the BuggyShop sandbox">
+1. A tester, authorized to test the platform's own BuggyShop sandbox, logs in with a regular tester-owned
+   account and confirms no admin link appears anywhere in the navigation.
+2. They request `/admin/dashboard` directly by URL anyway, still authenticated as the regular account. The
+   page loads fully - real customer data, a working "suspend account" control - confirming a vertical
+   escalation: the endpoint itself never checked the account's role.
+3. Separately, on a different feature, they notice a hidden field named `user_id` accompanying an
+   "update saved address" request. Staying logged in as their own regular account, they change the field
+   to a second tester-owned account's user id and submit. The second account's address is updated - a
+   horizontal escalation: the endpoint trusted the client-supplied id instead of using the authenticated
+   session's own identity.
+4. Two findings are filed separately: the admin dashboard missing a server-side role check (vertical), and
+   the address-update endpoint missing a server-side identity check that ignores the client-supplied
+   `user_id` (horizontal) - each naming the exact endpoint, the exact value that mattered, and the
+   recommendation to enforce it server-side.
+</WorkedExample>
+
+<Quiz
+  question="A regular, tester-owned account has no visible link to an admin dashboard anywhere in its UI. What is the correct next testing step?"
+  options={[
+    "Conclude the boundary is enforced, since no link is exposed to that role",
+    "Request the admin dashboard's underlying endpoint directly, by URL, while authenticated as the regular account, and observe the server's actual response",
+    "Report it as safe by design without further testing",
+    "Only test it if the application is known to use JWTs"
+  ]}
+  answer={1}
+  explain="A missing UI link is a decision about what is shown, not proof of what is actually enforced server-side (ruling out options A and C). The only way to confirm the boundary is real is to request the underlying endpoint directly and see whether the server itself denies it - a 403 or equivalent is evidence of enforcement, a 200 with real admin data is the finding. This applies regardless of the token or session mechanism in use, not only JWT-based systems (ruling out option D)."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Vertical privilege escalation", back: "A lower-privileged account (e.g. regular user) reaching functionality or data reserved for a higher-privileged role (e.g. admin) - a permission boundary crossed upward." },
+    { front: "Horizontal privilege escalation", back: "One account acting as, or reaching the data of, a different account at the SAME privilege level without authorization - an identity boundary crossed sideways, not a permission-level boundary." },
+    { front: "The shared root cause", back: "A server that derives the effective role or identity for a request from something the client supplied and can edit - a hidden field, a parameter, a JWT claim - rather than from a server-side record the client cannot touch." },
+    { front: "Why a missing UI link proves nothing", back: "Absence of a link is a UI decision, not an access-control decision. Confirm by requesting the underlying endpoint directly and observing the server's actual response." },
+    { front: "JWT claims are readable, not just protected", back: "A JWT's payload is base64-encoded, not encrypted - decode and read any claim directly. Whether editing it matters depends entirely on whether the server verifies the signature and re-checks the role server-side." },
+    { front: "The actual fix to recommend", back: "A server-side role and identity check performed on every request, from a source the client cannot influence - never a client-supplied value trusted at face value, and never link-hiding alone." },
+  ]}
+/>
+
+<Challenge>
+In this platform's own BuggyShop or BuggyAPI sandbox, using tester-owned accounts of at least two
+different roles, attempt one vertical escalation (request a higher-privileged endpoint directly, by URL,
+with the lower-privileged account) and one horizontal escalation (find a client-visible role, permission,
+or user-identity value and attempt to alter it while staying authenticated as your own account). For each,
+record the exact request, the exact response, and whether the server actually enforced the boundary. Write
+both findings separately, naming the specific value that mattered and recommending a server-side check as
+the fix.
+</Challenge>
+<AskCommunity prompt="I've been testing privilege escalation two ways - requesting higher-privileged endpoints directly by URL even with no UI link, and separately hunting for any client-visible role or user-identity value (hidden fields, JWT claims) to try editing. For people who test APIs and role-based systems regularly: what's the least obvious place you've found a client-trusted role or identity value - not a form field or an obvious claim name, but something buried in a header, a cookie, or a nested request body? How do you keep the search for it systematic rather than just guessing field names?">
+Looking for real examples of client-trusted role or identity values that weren't an obvious `role` field or
+JWT claim - something in a custom header, a nested JSON body, or a cookie - and how people keep the search
+methodical instead of guessing field names one at a time.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html", title: "OWASP - Authorization Cheat Sheet", kind: "read" },
+    { href: "https://portswigger.net/web-security/access-control", title: "PortSwigger Web Security Academy - Access control vulnerabilities", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=k7bpc9CANtM" title="PortSwigger - Privilege escalation" minutes={6} />
+
+<Takeaways
+  points={[
+    "Vertical escalation is a lower-privileged account reaching higher-privileged functionality; horizontal escalation is one account acting as a different account of the same privilege level.",
+    "Both share one root cause worth testing directly: a server trusting a client-supplied role or identity value instead of enforcing it from a server-side record.",
+    "A missing UI link proves nothing - request the underlying endpoint directly and confirm the server's actual response.",
+    "JWT claims are readable by anyone (base64, not encrypted); whether editing one matters depends entirely on server-side signature verification and re-checking.",
+    "Confirm impact with a real 200 and real higher-privileged or other-account data, not just the presence of an editable field.",
+    "The fix to recommend is always a server-side role and identity check on every request, never link-hiding or trusting the client alone.",
+    "Test only systems you own or are explicitly, in writing, authorized to test, with tester-owned accounts and synthetic data.",
+  ]}
+/>
+
+<Complete xp={10} />

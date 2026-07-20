@@ -1,0 +1,477 @@
+---
+title: "Session & cookie attacks"
+summary: "Session fixation, hijacking via a leaked token, missing Secure/HttpOnly/SameSite flags, and sessions never invalidated on logout are four distinct, real failures - each cookie flag protects against one specific thing, never the whole category."
+tags: ["security-testing-web", "authentication-testing", "track-c"]
+updated: "2026-07-20"
+related:
+  - "security-testing-web/authentication-testing/auth-vs-authorization-distinct-skills"
+  - "security-testing-web/authentication-testing/mfa-bypass-patterns"
+  - "security-testing-web/injection-and-client-side/xss-reflected-stored-dom"
+---
+
+<Hook>
+A tester logs into a store account, opens DevTools, and copies the exact value of the session cookie into a
+second, completely separate browser with no login performed at all. That second browser is now logged in as
+the same account - no password, no token exchange, nothing but a copied string. This is not a clever attack;
+it is how session cookies are DESIGNED to work: whoever presents the token is treated as the identified
+user. The real testing question is never "can a copied cookie log someone in" - of course it can, that is
+the whole mechanism. The real questions are: could that cookie have been copied in the first place, does it
+keep working after the legitimate user logs out, and does it change at the one moment it matters most - the
+instant a session goes from anonymous to authenticated?
+</Hook>
+
+<Callout type="analogy">
+Picture a registration desk at a large event, where a staff member ties a paper wristband onto an
+attendee's wrist right after checking their ID against a printed list. From that moment on, every other
+staff member at every other station treats the wristband itself as proof of who this person is - nobody
+re-checks the ID again, they just look at the wrist. That is exactly what a session cookie is: a bearer
+credential, issued once after identity is confirmed, then trusted on its own for every request that follows.
+Now look at what can go wrong around that one piece of paper, none of which involves forging it. If the
+SAME wristband was already tied on - loosely, ahead of time, before the ID check even happened - and nobody
+swapped it for a fresh one at that exact moment, then whoever tied it on early is now wearing proof of an
+identity that was only confirmed afterward. If the wristband slips off and someone else finds it and puts
+it on, staff still treat THEM as the original attendee - the band carries no identity information of its
+own, it is just a token everyone has agreed to trust. And if the attendee leaves for the day, hands back
+their badge, and the system still lists that wristband as active, anyone who picked it up off the ground
+gets treated as a currently-present guest, for as long as nobody bothers to check.
+</Callout>
+
+<Term define="Session and cookie attacks target the mechanics of how a server recognizes a returning, already-authenticated user, rather than the initial login check itself. Session fixation is when an attacker gets a victim to authenticate while using a session identifier the attacker already knows - usually because the server never rotates the identifier at the exact moment privilege changes from anonymous to authenticated - so the attacker's pre-known token becomes a live, authenticated session the moment the victim logs in. Session hijacking via a leaked token is simpler: the token itself is exposed through some other channel entirely (network capture, a referrer header, a log file, a shared computer) and whoever holds it is treated as the identified user, because a session cookie is a bearer credential with no identity check of its own. Missing cookie flags are three separate, narrow protections, each covering exactly one thing: Secure stops the cookie from ever being sent over a plaintext HTTP connection where it could be sniffed on the network; HttpOnly stops JavaScript from reading the cookie's value via document.cookie; SameSite restricts the browser from attaching the cookie to most cross-site requests, mitigating (not eliminating) CSRF. None of the three stops an already-leaked or already-fixated token from being reused, and none of them is a substitute for the other two. Session-not-invalidated-on-logout is a lifecycle bug: the token a user explicitly signed out of is still accepted by the server as a live, authenticated session if it is replayed later.">Session and cookie attacks</Term>
+
+## How a session actually works, mechanically
+
+A login succeeds, and the server issues a session identifier - either an opaque reference to server-side
+state, or a signed token carrying that state directly. That identifier is handed to the browser, almost
+always via a `Set-Cookie` response header, and the browser attaches it automatically to every subsequent
+request to that origin. From that point forward, the server does not re-check the original password on
+every request - it trusts the session identifier as a stand-in for "this is the same authenticated user who
+logged in earlier." That trust is the entire point of the mechanism, and it is also exactly what each of
+the four attacks below abuses or breaks.
+
+## Four real ways sessions get attacked
+
+- **Session fixation** - an attacker obtains or plants a session identifier before the victim ever logs in
+  (a link with the id embedded, a shared kiosk that was never fully reset), then waits. If the server
+  upgrades that same identifier to an authenticated session at login instead of issuing a brand-new one, the
+  attacker's already-known identifier is now a live, authenticated session too.
+- **Hijacking via a leaked token** - the identifier itself leaks through a channel that has nothing to do
+  with fixation: an unencrypted connection, a referrer header carrying it to a third-party domain, an
+  overly verbose log file, a shared or public computer. Because the token is a bearer credential, whoever
+  holds it is treated as the identified user - no additional proof is asked for.
+- **Missing Secure, HttpOnly, or SameSite** - three separate, narrow gaps, each removing exactly one
+  protection: without Secure, the cookie can be sent over plaintext HTTP and captured on the network;
+  without HttpOnly, any script running on the page (including an injected one) can read the cookie's value
+  directly; without SameSite, the browser will attach the cookie to a wider range of cross-site requests,
+  weakening (though this flag alone was never a complete fix for) CSRF defenses.
+- **Session not invalidated on logout** - the user-facing logout button redirects to a login screen, but
+  the actual session identifier is never marked invalid server-side. Anyone who captured that token before
+  logout - a network observer, a shared device, a browser history replay - can keep using it as if the user
+  never logged out at all.
+
+<Callout type="tip">
+Test logout by capturing the exact session token before you click it, then replaying the original
+authenticated request with that captured token AFTER logging out - not by checking whether the page visibly
+redirected to a login screen. A redirect is a client-side navigation; it proves nothing about whether the
+server-side session was actually invalidated. Only a replayed request that still succeeds, or one that now
+fails, tells you the truth about the token's real lifecycle.
+</Callout>
+
+<Callout type="mistake">
+A developer states that HTTPS alone makes session hijacking a non-issue, since "the connection is
+encrypted." HTTPS encrypts data in transit between browser and server - it does nothing at all about a
+cookie missing HttpOnly being read directly by an injected script already running in the page, nothing about
+a token that was never rotated at login and was already known to an attacker beforehand (fixation), and
+nothing about a session that stays valid indefinitely after the user explicitly logged out. Transport
+encryption and session-lifecycle security are different concerns; confirming one is fine says nothing about
+the other three.
+</Callout>
+
+{/* IMAGE: a staff member at an event registration desk tying a numbered paper wristband onto an attendee's wrist, with an ID card on the table and a second person already wearing a similar wristband in the background */}
+<HotspotImage
+  src="/notes/security-testing-web/authentication-testing/session-and-cookie-attacks.jpg"
+  alt="A staff member tying a paper wristband onto an attendee's wrist at a registration desk, with an ID document on the table and another person already wearing a wristband in the background"
+  credit="US Navy 110630-F-ET173-030, patient registration wristband - U.S. Air Force photo by Staff Sgt. Alesia Goosic, Wikimedia Commons, Public domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:US_Navy_110630-F-ET173-030_Hospital_Corpsman_1st_Class_Mark_Marin_marks_a_patient%27s_wristband_with_services_that_will_be_provided_at_the_Los_Angele.jpg"
+  pins={[
+    { x: 48, y: 80, label: "Issuance - the one moment identity is checked", desc: "The wristband is tied on right after the ID is checked against the list. This is the login boundary: the one moment a session token should be freshly issued, never reused from before." },
+    { x: 52, y: 58, label: "The ID card - checked once, then set aside", desc: "Identity was verified here, against this document, at this moment. The wristband itself carries no identity data - exactly like a session cookie, which is just an opaque reference, not proof on its own." },
+    { x: 65, y: 55, label: "Already wearing one - the bearer-token problem", desc: "Anyone wearing this band gets treated as identified, with no ID re-check. A session cookie works identically: whoever presents it is trusted, regardless of how they obtained it." },
+    { x: 20, y: 65, label: "The record this token is bound to", desc: "Paperwork ties the wristband's number to a specific, currently-present guest. If that binding is never cleared when the guest leaves, the same band still reads as 'active' - a session never invalidated on logout." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Testing session and cookie mechanics - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Capture the session token right after login", desc: "Note its exact value, and note whether it is the SAME value the browser was already holding before login (fixation check)." },
+    { label: "Replay the captured token from a second, separate context", desc: "A different browser or device, tester-owned. If it is accepted as a live session, that confirms the bearer nature - expected by design, but worth confirming explicitly." },
+    { label: "Log out, then replay the original captured token again", desc: "If the SAME request that worked before logout still succeeds afterward, the session was never actually invalidated server-side." },
+    { label: "Inspect the exact Set-Cookie flags", desc: "Secure, HttpOnly, and SameSite each cover one specific, narrow thing. Confirm what is actually present - never assume from the app's general security posture." },
+  ]}
+/>
+
+Here is that same testing sequence in runnable form - a cookie-flag auditor that states precisely what
+each flag does and does not cover, plus a small session-store simulator that shows fixation and
+logout-invalidation side by side, safe and unsafe.
+
+<CodePlayground
+  language="python"
+  title="Run it - a session-cookie-flag auditor and lifecycle simulator (Python)"
+  code={`# Session & cookie attack-surface auditor.
+# Part 1 parses Set-Cookie flags and states precisely what each one protects
+# against - and does NOT protect against - without overstating any of them.
+# Part 2/3 simulate a tiny in-memory session store to check two real
+# lifecycle bugs: session fixation (same ID reused across the login
+# boundary) and missing invalidation on logout. All hardcoded/local - no
+# real network calls, no real credentials.
+
+def audit_cookie_flags(set_cookie_header):
+    parts = [p.strip() for p in set_cookie_header.split(";")]
+    flags = {p.split("=")[0].lower() for p in parts[1:]} if len(parts) > 1 else set()
+    samesite = "None"
+    for p in parts[1:]:
+        if p.lower().startswith("samesite"):
+            samesite = p.split("=")[1] if "=" in p else "Strict"
+
+    report = []
+    report.append("Secure: " + str("secure" in flags))
+    report.append("  -> protects against: this cookie being sent over a plaintext HTTP connection where it could be sniffed on the network.")
+    report.append("  -> does NOT protect against: theft via XSS, session fixation, or a missing logout invalidation.")
+    report.append("HttpOnly: " + str("httponly" in flags))
+    report.append("  -> protects against: JavaScript (document.cookie) reading this cookie's value.")
+    report.append("  -> does NOT protect against: the session being reused if the token leaks another way (referrer, logs, network capture).")
+    report.append("SameSite: " + samesite)
+    report.append("  -> protects against: the browser attaching this cookie to most cross-site requests (a CSRF mitigation).")
+    report.append("  -> does NOT protect against: XSS on the same site, or a token an attacker already knows by other means.")
+    return report
+
+
+class SessionStore:
+    # A tiny in-memory session store used only to demonstrate two lifecycle
+    # bugs - never a real session backend.
+    def __init__(self):
+        self.sessions = {}  # token -> {"user": ..., "authenticated": bool, "valid": bool}
+
+    def issue_pre_login_token(self, token):
+        self.sessions[token] = {"user": None, "authenticated": False, "valid": True}
+
+    def login(self, token, user, rotate):
+        if token not in self.sessions or not self.sessions[token]["valid"]:
+            return None
+        if rotate:
+            # Correct behavior: issue a brand-new token on privilege change,
+            # so a pre-login token an attacker planted never becomes a live
+            # authenticated session (defeats session fixation).
+            new_token = token + "-rotated"
+            self.sessions[new_token] = {"user": user, "authenticated": True, "valid": True}
+            self.sessions[token]["valid"] = False
+            return new_token
+        else:
+            # The buggy path: the same pre-login token just gets upgraded in
+            # place - if an attacker already knew that token, they are now
+            # logged in as this user too (session fixation).
+            self.sessions[token]["user"] = user
+            self.sessions[token]["authenticated"] = True
+            return token
+
+    def logout(self, token):
+        if token in self.sessions:
+            self.sessions[token]["valid"] = False
+
+    def is_live(self, token):
+        s = self.sessions.get(token)
+        return bool(s and s["valid"] and s["authenticated"])
+
+
+def run():
+    print("Part 1 - auditing a sample Set-Cookie header:")
+    sample = "session_id=fake_test_session_abc123; Secure; SameSite=Lax"
+    print("  " + sample)
+    for line in audit_cookie_flags(sample):
+        print("  " + line)
+    print()
+
+    print("Part 2 - session fixation: does login rotate the token?")
+    fixed_token = "attacker-planted-token"
+
+    store = SessionStore()
+    store.issue_pre_login_token(fixed_token)
+    result_token = store.login(fixed_token, "alice", False)
+    print("  Login WITHOUT rotation: token stays '" + result_token + "', now live=" + str(store.is_live(result_token)))
+    print("    -> VULNERABLE: an attacker who planted this token before login is now logged in as alice too.")
+
+    store2 = SessionStore()
+    store2.issue_pre_login_token(fixed_token)
+    result_token2 = store2.login(fixed_token, "alice", True)
+    print("  Login WITH rotation: old token live=" + str(store2.is_live(fixed_token)) + ", new token '" + result_token2 + "' live=" + str(store2.is_live(result_token2)))
+    print("    -> SAFE: the pre-login token an attacker might know never becomes an authenticated session.")
+    print()
+
+    print("Part 3 - logout invalidation:")
+    store3 = SessionStore()
+    store3.issue_pre_login_token("tok-1")
+    live_token = store3.login("tok-1", "bob", True)
+    print("  Before logout, live=" + str(store3.is_live(live_token)))
+    store3.logout(live_token)
+    print("  After logout,  live=" + str(store3.is_live(live_token)))
+    print("    -> a session token that still reads live=True after logout can still be reused by anyone holding it.")
+
+run()`}
+/>
+
+The same auditor and lifecycle simulator in Java - identical header, identical scenarios, identical
+conclusions:
+
+<CodePlayground
+  language="java"
+  title="Run it - a session-cookie-flag auditor and lifecycle simulator (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    // Session & cookie attack-surface auditor.
+    // Part 1 parses Set-Cookie flags and states precisely what each one
+    // protects against - and does NOT protect against - without overstating
+    // any of them. Part 2/3 simulate a tiny in-memory session store to check
+    // two real lifecycle bugs: session fixation (same ID reused across the
+    // login boundary) and missing invalidation on logout. All hardcoded/
+    // local - no real network calls, no real credentials.
+
+    // Python's str(bool) prints "True"/"False"; match that exactly so both
+    // language outputs are identical, not just equivalent.
+    static String b(boolean v) { return v ? "True" : "False"; }
+
+    static List<String> auditCookieFlags(String setCookieHeader) {
+        String[] parts = setCookieHeader.split(";");
+        Set<String> flags = new HashSet<>();
+        for (int i = 1; i < parts.length; i++) flags.add(parts[i].trim().split("=")[0].toLowerCase());
+        String samesite = "None";
+        for (int i = 1; i < parts.length; i++) {
+            String p = parts[i].trim();
+            if (p.toLowerCase().startsWith("samesite")) {
+                samesite = p.contains("=") ? p.split("=")[1] : "Strict";
+            }
+        }
+
+        List<String> report = new ArrayList<>();
+        report.add("Secure: " + b(flags.contains("secure")));
+        report.add("  -> protects against: this cookie being sent over a plaintext HTTP connection where it could be sniffed on the network.");
+        report.add("  -> does NOT protect against: theft via XSS, session fixation, or a missing logout invalidation.");
+        report.add("HttpOnly: " + b(flags.contains("httponly")));
+        report.add("  -> protects against: JavaScript (document.cookie) reading this cookie's value.");
+        report.add("  -> does NOT protect against: the session being reused if the token leaks another way (referrer, logs, network capture).");
+        report.add("SameSite: " + samesite);
+        report.add("  -> protects against: the browser attaching this cookie to most cross-site requests (a CSRF mitigation).");
+        report.add("  -> does NOT protect against: XSS on the same site, or a token an attacker already knows by other means.");
+        return report;
+    }
+
+    static class SessionStore {
+        // A tiny in-memory session store used only to demonstrate two
+        // lifecycle bugs - never a real session backend.
+        static class Sess { String user; boolean authenticated; boolean valid; }
+        Map<String, Sess> sessions = new LinkedHashMap<>();
+
+        void issuePreLoginToken(String token) {
+            Sess s = new Sess();
+            s.user = null; s.authenticated = false; s.valid = true;
+            sessions.put(token, s);
+        }
+
+        String login(String token, String user, boolean rotate) {
+            Sess s = sessions.get(token);
+            if (s == null || !s.valid) return null;
+            if (rotate) {
+                // Correct behavior: issue a brand-new token on privilege
+                // change, so a pre-login token an attacker planted never
+                // becomes a live authenticated session (defeats session
+                // fixation).
+                String newToken = token + "-rotated";
+                Sess ns = new Sess();
+                ns.user = user; ns.authenticated = true; ns.valid = true;
+                sessions.put(newToken, ns);
+                s.valid = false;
+                return newToken;
+            } else {
+                // The buggy path: the same pre-login token just gets
+                // upgraded in place - if an attacker already knew that
+                // token, they are now logged in as this user too (session
+                // fixation).
+                s.user = user;
+                s.authenticated = true;
+                return token;
+            }
+        }
+
+        void logout(String token) {
+            Sess s = sessions.get(token);
+            if (s != null) s.valid = false;
+        }
+
+        boolean isLive(String token) {
+            Sess s = sessions.get(token);
+            return s != null && s.valid && s.authenticated;
+        }
+    }
+
+    public static void main(String[] args) {
+        System.out.println("Part 1 - auditing a sample Set-Cookie header:");
+        String sample = "session_id=fake_test_session_abc123; Secure; SameSite=Lax";
+        System.out.println("  " + sample);
+        for (String line : auditCookieFlags(sample)) System.out.println("  " + line);
+        System.out.println();
+
+        System.out.println("Part 2 - session fixation: does login rotate the token?");
+        String fixedToken = "attacker-planted-token";
+
+        SessionStore store = new SessionStore();
+        store.issuePreLoginToken(fixedToken);
+        String resultToken = store.login(fixedToken, "alice", false);
+        System.out.println("  Login WITHOUT rotation: token stays '" + resultToken + "', now live=" + b(store.isLive(resultToken)));
+        System.out.println("    -> VULNERABLE: an attacker who planted this token before login is now logged in as alice too.");
+
+        SessionStore store2 = new SessionStore();
+        store2.issuePreLoginToken(fixedToken);
+        String resultToken2 = store2.login(fixedToken, "alice", true);
+        System.out.println("  Login WITH rotation: old token live=" + b(store2.isLive(fixedToken)) + ", new token '" + resultToken2 + "' live=" + b(store2.isLive(resultToken2)));
+        System.out.println("    -> SAFE: the pre-login token an attacker might know never becomes an authenticated session.");
+        System.out.println();
+
+        System.out.println("Part 3 - logout invalidation:");
+        SessionStore store3 = new SessionStore();
+        store3.issuePreLoginToken("tok-1");
+        String liveToken = store3.login("tok-1", "bob", true);
+        System.out.println("  Before logout, live=" + b(store3.isLive(liveToken)));
+        store3.logout(liveToken);
+        System.out.println("  After logout,  live=" + b(store3.isLive(liveToken)));
+        System.out.println("    -> a session token that still reads live=True after logout can still be reused by anyone holding it.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: test one session lifecycle end to end, in an authorized sandbox">
+<StepChecklist
+  steps={[
+    { text: "Get written authorization and use a tester-owned account", detail: "This platform's own BuggyShop/BuggyAPI sandbox or a named local target, with a test account you own." },
+    { text: "Capture the session token before and immediately after login", detail: "Confirm whether the identifier actually changes at that exact boundary, or stays the same (a fixation risk)." },
+    { text: "Log out, then replay the pre-logout token on the same authenticated request", detail: "A visible redirect to a login screen proves nothing on its own - only a replayed request tells you if the server-side session is truly dead." },
+    { text: "Read the exact Set-Cookie flags off the response", detail: "Note Secure, HttpOnly, and SameSite as three separate facts, and state precisely what each one does and does not cover in your findings." },
+  ]}
+/>
+You can now test a session's real lifecycle - fixation at login, reuse after logout, and the exact,
+narrow scope of each cookie flag - instead of taking a redirect screen or a Secure padlock icon as proof of
+anything more than what they actually guarantee.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "The session identifier is byte-for-byte identical before and after a successful login.",
+      fix: "That is a session-fixation risk. Confirm the server issues a brand-new identifier at the exact moment privilege changes from anonymous to authenticated, and invalidates the old one.",
+    },
+    {
+      symptom: "A captured token, replayed after the user explicitly logged out, still returns a successful, authenticated response.",
+      fix: "The logout action is only a client-side redirect, not a server-side invalidation. Confirm the session store or token revocation list is actually updated at logout, not just the browser's visible screen.",
+    },
+    {
+      symptom: "A developer says Secure or HTTPS alone rules out session hijacking.",
+      fix: "Secure only stops the cookie from being sent over plaintext HTTP - it says nothing about HttpOnly, SameSite, fixation, or logout invalidation. Check all four independently before calling the session mechanism safe.",
+    },
+    {
+      symptom: "SameSite is set to Lax or Strict, and the team treats CSRF as fully solved.",
+      fix: "SameSite meaningfully reduces cross-site request forgery but was never a complete, standalone fix - test state-changing requests directly rather than assuming the flag alone closes the category.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The exact session identifier value, at the moment before and after login** - unchanged means a
+  fixation risk worth confirming further.
+- **A captured, valid token replayed after an explicit logout** - the single test that actually proves or
+  disproves server-side invalidation, independent of what the UI shows.
+- **Every Set-Cookie flag on the response, read individually** - Secure, HttpOnly, and SameSite each cover
+  one specific thing; note what is present and what its actual, narrow scope is.
+- **[[security-testing-web/injection-and-client-side/xss-reflected-stored-dom]]** - covers exactly what
+  HttpOnly does and does not stop once a script is already running on the page; read together with this
+  note's cookie-flag breakdown.
+- **[[security-testing-web/authentication-testing/auth-vs-authorization-distinct-skills]]** - this note
+  treats "the session is valid" as a black box; that note separates proving identity from what an
+  identified session is then allowed to do.
+</WhereToCheck>
+
+<WorkedExample title="proving a fixation risk and a logout-invalidation bug on the same BuggyShop session">
+1. A tester, authorized to test the platform's own BuggyShop sandbox with a tester-owned account, notes
+   the session cookie's value while still logged out, before submitting any credentials.
+2. They log in with valid, tester-owned credentials and immediately check the session cookie's value again.
+   It is identical to the pre-login value - the server never rotated the identifier at the login boundary,
+   a genuine session-fixation risk: anyone who knew that pre-login value would now share a live session
+   with this account.
+3. Continuing on the same live session, they save the exact authenticated request and headers, then click
+   logout. The UI redirects to a login page as expected.
+4. They replay the exact saved request, using the same session cookie value captured before logout. It
+   still returns the authenticated account page. The session was never invalidated server-side - a second,
+   independent finding from the fixation risk, filed separately with its own reproduction steps.
+5. Both findings are written up naming their precise mechanism - "session identifier not rotated at login
+   (fixation risk)" and "session not invalidated server-side on logout" - so a developer can fix the token
+   issuance logic and the logout handler as two distinct, targeted changes.
+</WorkedExample>
+
+<Quiz
+  question="A cookie has the Secure flag set but not HttpOnly. What does that combination actually guarantee?"
+  options={[
+    "The cookie is completely safe from theft under any circumstances",
+    "The cookie will never be sent over plaintext HTTP, but any script running on the page - including an injected one - can still read its value directly",
+    "The cookie is protected from being read by JavaScript, but may be sent over plaintext HTTP",
+    "Secure and HttpOnly cover the identical protection, so having one is redundant with the other"
+  ]}
+  answer={1}
+  explain="Secure and HttpOnly are two separate, narrow protections. Secure stops the cookie from ever being transmitted over an unencrypted HTTP connection - that part is guaranteed here. HttpOnly is what stops JavaScript (document.cookie) from reading the cookie's value, and since it is absent in this combination, any script running on the page can still read it directly. Option A overstates what any single flag guarantees; option C reverses which flag does which job; option D is wrong because the two flags protect against entirely different things and neither substitutes for the other."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Session fixation", back: "An attacker plants or obtains a session identifier before the victim logs in. If the server upgrades that same identifier to an authenticated session instead of rotating it, the attacker's known token becomes live too." },
+    { front: "Session hijacking via a leaked token", back: "The session identifier leaks through some other channel entirely (network capture, referrer, logs, a shared device). Because a session cookie is a bearer credential, whoever holds it is treated as the identified user." },
+    { front: "Secure flag - actual scope", back: "Stops the cookie from being sent over a plaintext HTTP connection. Says nothing about XSS reads, fixation, or logout invalidation." },
+    { front: "HttpOnly flag - actual scope", back: "Stops JavaScript (document.cookie) from reading the cookie's value. Does not stop an injected script from acting using the session, and does not stop reuse if the token leaks another way." },
+    { front: "SameSite flag - actual scope", back: "Restricts the browser from attaching the cookie to most cross-site requests - a meaningful CSRF mitigation, never a complete standalone fix for the category." },
+    { front: "Session not invalidated on logout", back: "The user-facing logout redirects, but the server-side session identifier is never marked invalid - a captured pre-logout token can still be replayed successfully afterward." },
+    { front: "How to actually test logout invalidation", back: "Capture the token and a valid authenticated request before logout, then replay that exact request after logout. A redirect on screen proves nothing about the server-side state." },
+  ]}
+/>
+
+<Challenge>
+In this platform's own BuggyShop sandbox, using a tester-owned account, test all four attack surfaces from
+this note in one pass: capture the session token before and after login and check whether it changes
+(fixation), capture a valid authenticated request and replay it after logout (invalidation), and read every
+Set-Cookie flag off the login response, stating precisely what each one you find actually protects against
+and what it does not. Write up any finding that reproduces, naming its exact mechanism rather than a general
+"cookies are insecure" label.
+</Challenge>
+<AskCommunity prompt="I've started testing session invalidation by capturing a valid authenticated request and replaying it after logout, rather than trusting a redirect on screen, and I try to state exactly what Secure, HttpOnly, and SameSite each protect against instead of treating any one of them as a general fix. For people who test session handling regularly: what is the trickiest logout-invalidation bug you have found, and how do you explain to a developer why SameSite alone does not fully close out CSRF?">
+Getting a clean, reliable way to prove a session token is truly dead after logout - beyond just replaying
+one captured request - and finding a way to explain SameSite's real, partial scope without it sounding like
+I am dismissing a genuinely useful mitigation, are both things I would like to get sharper at.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html", title: "OWASP - Session Management Cheat Sheet", kind: "read" },
+    { href: "https://owasp.org/www-community/attacks/Session_hijacking_attack", title: "OWASP - Session Hijacking Attack", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=GhrvZ5nUWNg" title="Valentin Despa - Difference between cookies, session and tokens" minutes={12} />
+
+<Takeaways
+  points={[
+    "A session cookie is a bearer credential - whoever presents it is treated as the identified user, which is the mechanism, not a bug on its own.",
+    "Session fixation, hijacking via a leaked token, missing cookie flags, and missing logout invalidation are four distinct, separately testable failures.",
+    "Secure, HttpOnly, and SameSite each protect against exactly one specific thing - state what each one actually covers, never treat any one as a general fix.",
+    "Test logout invalidation by replaying a captured, valid request after logout - a redirect on screen proves nothing about server-side state.",
+    "A session identifier that stays identical across the login boundary is a fixation risk; the fix is rotating it at the exact moment privilege changes.",
+    "Test only systems you own or are explicitly, in writing, authorized to test, with tester-owned accounts and synthetic data.",
+  ]}
+/>
+
+<Complete xp={10} />

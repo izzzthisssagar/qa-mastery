@@ -2263,18 +2263,18 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "authentication-testing",
         title: "Authentication testing",
         topics: [
-          { slug: "auth-vs-authorization-distinct-skills", title: "Auth vs authorization (distinct skills)", planned: true },
-          { slug: "session-and-cookie-attacks", title: "Session & cookie attacks", planned: true },
-          { slug: "password-and-reset-flows", title: "Password & reset flows", planned: true },
-          { slug: "mfa-bypass-patterns", title: "MFA bypass patterns", planned: true },
+          { slug: "auth-vs-authorization-distinct-skills", title: "Auth vs authorization (distinct skills)" },
+          { slug: "session-and-cookie-attacks", title: "Session & cookie attacks" },
+          { slug: "password-and-reset-flows", title: "Password & reset flows" },
+          { slug: "mfa-bypass-patterns", title: "MFA bypass patterns" },
         ],
       },
       {
         slug: "authorization-and-access",
         title: "Authorization & access",
         topics: [
-          { slug: "idor-bola-by-hand", title: "IDOR / BOLA by hand", planned: true },
-          { slug: "privilege-escalation", title: "Privilege escalation", planned: true },
+          { slug: "idor-bola-by-hand", title: "IDOR / BOLA by hand" },
+          { slug: "privilege-escalation", title: "Privilege escalation" },
           { slug: "forced-browsing", title: "Forced browsing", planned: true },
           { slug: "function-level-checks-bfla", title: "Function-level checks (BFLA)", planned: true },
         ],
@@ -2283,7 +2283,7 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "tools-and-reporting",
         title: "Tools & reporting",
         topics: [
-          { slug: "burp-suite-basics", title: "Burp Suite basics", planned: true },
+          { slug: "burp-suite-basics", title: "Burp Suite basics" },
           { slug: "owasp-zap", title: "OWASP ZAP", planned: true },
           { slug: "writing-a-security-finding-devs-act-on", title: "Writing a security finding devs act on", planned: true },
           { slug: "responsible-disclosure", title: "Responsible disclosure", planned: true },

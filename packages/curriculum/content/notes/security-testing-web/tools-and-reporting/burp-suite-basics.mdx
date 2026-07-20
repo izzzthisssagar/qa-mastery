@@ -1,0 +1,421 @@
+---
+title: "Burp Suite basics"
+summary: "Burp Suite Community Edition's three core tools for manual testing - Proxy to intercept and modify traffic, Repeater to hand-edit and resend one request, and Target/Scope to make sure only the authorized target is ever touched - plus the CA certificate setup that makes HTTPS interception possible."
+tags: ["security-testing-web", "tools-and-reporting", "track-c"]
+updated: "2026-07-20"
+related:
+  - "security-testing-web/tools-and-reporting/owasp-zap"
+  - "security-testing-web/tools-and-reporting/writing-a-security-finding-devs-act-on"
+  - "security-testing-web/tools-and-reporting/responsible-disclosure"
+  - "security-testing-web/owasp-top-10-properly/mapping-findings-to-the-list"
+---
+
+<Hook>
+A browser sends a request, and Burp Suite sits in the middle and simply... stops it. The request is
+frozen mid-flight, editable, right there in a window, before it ever reaches the server. That pause is
+the entire idea of Burp: a manual tester does not read traffic after the fact in a log file, they catch
+it mid-transit and decide, by hand, what happens next. Before any of that is useful, though, one setting
+has to be right first - Burp has to be told, explicitly, which one target it is allowed to touch. Get the
+tool running without that step done first, and the very same "freeze and edit" power that makes Repeater
+so useful is pointed at every tab in the browser, not just the one a tester is authorized to test.
+</Hook>
+
+<Callout type="analogy">
+Picture a regional mail-sorting facility with one long conveyor belt carrying envelopes past an
+inspection station. Most envelopes just ride the belt straight through, untouched, exactly as fast as if
+no inspector were there at all - the vast majority of traffic passes through in its normal shape. Every
+now and then, though, the inspector reaches out, lifts one specific envelope clean off the belt, and sets
+it on a side table. There, at the side table, they can open it, read the contents, jot a note, reseal it,
+and put a fresh copy back on the belt to continue on its way. Nothing else on the belt is disturbed while
+that happens - not the envelope in front of it, not the envelope behind it, and certainly not a parcel
+that rolled in from a completely different loading dock across the building. Before the inspector is even
+allowed to touch the belt, though, a supervisor has already posted a sign at the intake gate: "Only mail
+originating from Dock 7 may be pulled for inspection. Everything else rides through untouched, always." A
+mail handler who starts pulling envelopes before reading that sign has no way of knowing whether the
+envelope in their hands is the one they were authorized to open, or somebody else's private letter that
+happened to be on the same belt.
+</Callout>
+
+<Term define="Burp Suite is an intercepting proxy used for manual web security testing, built around three tools a tester uses together: Proxy, which sits between the browser and the server and can pause, inspect, and edit any request or response in transit; Repeater, which takes one captured request, lets a tester hand-edit it field by field, and resends it as many times as needed to probe how the server responds; and Target/Scope, which restricts which hosts Burp is actually allowed to intercept and act on. The free Community Edition ships all three. Scope is not a convenience setting - it is the control that keeps a tester's intercepting proxy from silently capturing or modifying traffic to unrelated sites open in other browser tabs, other applications on the same machine, or background requests the tester never intended to touch. Because Burp's Proxy sits inline on HTTPS traffic, seeing that traffic in cleartext requires installing Burp's own CA certificate as trusted in the browser first - without it, the browser correctly rejects Burp's re-signed certificates as untrusted, and interception silently fails. All of this is used only against systems a tester owns or is explicitly, in writing, authorized to test - this platform's own BuggyShop/BuggyAPI sandbox or a local practice target - never a real third-party site reached through the same browser.">Burp Suite basics</Term>
+
+## Getting traffic into Burp at all
+
+- **Point the browser at Burp's proxy listener.** Burp listens locally, by default on `127.0.0.1:8080`.
+  Configuring the browser (directly, or through a dedicated proxy-switcher extension) to send its traffic
+  through that address is what makes any of the rest of this possible - without it, Burp sees nothing.
+- **Install Burp's CA certificate before expecting to see HTTPS traffic.** Burp intercepts HTTPS by
+  re-signing each site's certificate with its own CA on the fly. A browser that does not trust that CA
+  will refuse the connection outright or throw certificate warnings on every single site. The certificate
+  is downloaded once from `http://burp` while the browser's traffic is already proxied through Burp, then
+  imported into the browser's (or OS's) trusted root store.
+- **Set scope before touching Intercept.** Target > Scope takes a URL or host pattern for the one
+  authorized target and restricts Burp's Proxy, Repeater, and every other tool to it. This is the step
+  that turns "a proxy that can see and edit anything passing through it" into "a proxy that only acts on
+  the one thing a tester is authorized to test."
+
+## The Proxy-to-Repeater workflow
+
+- **Browse the target normally with Intercept on, and watch requests arrive.** Every request the browser
+  makes to the in-scope target pauses in Burp's Proxy tab before it reaches the server - a login POST, a
+  search query, a parameter in a URL.
+- **Send the one interesting request to Repeater, not every request.** A specific field looks worth
+  probing - a price, a role parameter, a search term. Right-click that one captured request and send it to
+  Repeater; everything else keeps flowing normally.
+- **Hand-edit the request in Repeater and resend it, repeatedly.** Repeater holds that one request open in
+  an editable pane. Change a value, click Send, read the response, change it again, click Send again - each
+  send is independent and the original request is never lost, so a tester can compare five variations side
+  by side without recapturing anything.
+- **Repeater never leaves the one request it was given.** It does not crawl, it does not scan, it does not
+  reach out to any other endpoint on its own - it only ever resends the exact request (with a tester's
+  edits) that was sent to it. That is precisely what makes it the right tool for probing a single field by
+  hand, a smaller and more deliberate step than an automated scan.
+
+<Callout type="tip">
+Turn Intercept off once traffic is flowing normally and a tester only wants to review or resend specific
+requests through the Proxy's HTTP history instead of pausing every single one. Intercept "on" freezes
+every in-scope request until a tester manually forwards it - useful for catching one specific action
+mid-flight, but it turns ordinary browsing into a click-through chore if left on for a whole session.
+HTTP history keeps a complete passive record of everything that passed through, which a tester can browse
+and send to Repeater at leisure, without freezing the browser on every click.
+</Callout>
+
+<Callout type="mistake">
+Installing Burp, pointing the browser at its proxy port, and immediately clicking around a target
+site with Intercept on - without ever opening Target > Scope. Every open tab, every background request
+from a browser extension, every unrelated site the tester happens to check in the same browser session is
+now flowing through the same intercepting proxy, captured in the same history, potentially editable in
+the same Repeater. Scope is not bureaucratic overhead sitting between a tester and the interesting part of
+the tool; it is the setting that keeps "a proxy that can see and edit anything" pointed at only the one
+target a tester has explicit, written authorization to test. Configure scope to the authorized host first,
+every time, before Intercept ever goes on.
+</Callout>
+
+{/* IMAGE: a 1950s black-and-white photograph of two USMC mail clerks sorting a large table piled with individual parcels, letters, and bundled mail by hand, San Francisco */}
+<HotspotImage
+  src="/notes/security-testing-web/tools-and-reporting/burp-suite-basics.jpg"
+  alt="Two mail clerks in 1951 sorting a large table piled with individual parcels, letters, and bundled mail by hand in San Francisco"
+  credit="Mail on Sorting Table in San Francisco - USMC Archives from Quantico, Wikimedia Commons, CC BY 2.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:%22Mail_on_Sorting_Table_in_San_Francisco%22_(9522135231).jpg"
+  pins={[
+    { x: 30, y: 45, label: "One piece, lifted out by hand", desc: "A clerk holds a single item apart from the pile to look at it closely. That is Repeater's whole job: pull one captured request out of the flow and work on it alone, without disturbing anything else on the table." },
+    { x: 68, y: 62, label: "The rest of the pile, untouched", desc: "Everything else on the table sits exactly as it arrived while one item is being handled. Traffic outside Burp's configured scope should sit just as untouched - never captured, never edited, never even logged." },
+    { x: 15, y: 20, label: "Every item still moves through, eventually", desc: "The mail keeps flowing through the facility whether or not any given piece gets pulled for a closer look. Proxy with Intercept off works the same way: traffic passes through normally, recorded in history, until a tester chooses one request to act on." },
+    { x: 80, y: 25, label: "A sorting facility, not a search party", desc: "This table only ever handles mail that arrived through this facility's own intake. A tester's proxy should be exactly this disciplined - scoped to the one authorized target, never reaching for traffic that arrived from somewhere else." },
+  ]}
+/>
+
+<FlowAnimation
+  title="From capture to a hand-edited resend - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Set Target > Scope to the authorized host, first", desc: "Before Intercept ever goes on, restrict Burp to the one target a tester is explicitly, in writing, authorized to test." },
+    { label: "Trust Burp's CA and turn Intercept on", desc: "Install Burp's CA certificate so HTTPS traffic can be seen in cleartext, then browse the in-scope target normally and watch requests pause in Proxy." },
+    { label: "Send one interesting captured request to Repeater", desc: "A specific field looks worth probing. Right-click that one request and send it to Repeater - everything else keeps flowing." },
+    { label: "Hand-edit and resend, compare responses", desc: "Change a value, send, read the response; change it again, send again. Each variation is independent and the original is never lost." },
+  ]}
+/>
+
+Here is the scope check in runnable form - a mock intercepting proxy that only captures traffic to an
+authorized-domain allowlist and lets everything else pass through untouched, with a Repeater step that
+refuses to act on anything outside that scope.
+
+<CodePlayground
+  language="python"
+  title="Run it - a scope-checking mock proxy and Repeater (Python)"
+  code={`# Scope-checker for a mock intercepting proxy - run only against a LOCAL,
+# in-memory, synthetic set of requests. This is teaching code for the
+# Proxy -> Scope -> Repeater workflow, never a real network tool: no socket,
+# no real HTTP call is made anywhere in this script.
+from dataclasses import dataclass, replace
+
+@dataclass
+class CapturedRequest:
+    method: str
+    host: str
+    path: str
+    body: str
+
+# The authorized target, set in Burp's Target > Scope BEFORE any traffic is
+# touched. This platform's own BuggyShop sandbox domain, for illustration.
+AUTHORIZED_SCOPE = ["buggyshop.authorized-sandbox.test"]
+
+def in_scope(host):
+    # Mirrors Burp's scope include-list check: exact host match against the
+    # authorized allowlist. Everything else - another tab, another site,
+    # an ad or tracker domain - is out of scope and must never be touched.
+    return host in AUTHORIZED_SCOPE
+
+def proxy_intercept(requests):
+    # A mock intercepting proxy sitting between "browser" and "server".
+    # In-scope requests are captured for inspection; out-of-scope traffic
+    # passes through completely untouched - never logged, never modified.
+    captured, passed_through = [], []
+    for req in requests:
+        if in_scope(req.host):
+            captured.append(req)
+        else:
+            passed_through.append(req)
+    return captured, passed_through
+
+def send_to_repeater(req, edited_body):
+    # The Proxy -> Repeater workflow: take ONE captured, in-scope request,
+    # hand-edit a single field, and resend it. Repeater never touches
+    # anything outside the one request you sent it.
+    if not in_scope(req.host):
+        raise ValueError("Refusing to Repeater a request outside authorized scope: " + req.host)
+    return replace(req, body=edited_body)
+
+TRAFFIC = [
+    CapturedRequest("GET", "buggyshop.authorized-sandbox.test", "/cart", ""),
+    CapturedRequest("POST", "buggyshop.authorized-sandbox.test", "/cart/apply-coupon", "code=WELCOME10"),
+    CapturedRequest("GET", "totally-unrelated-news-site.test", "/article/42", ""),
+    CapturedRequest("POST", "some-other-open-tab-bank.test", "/transfer", "amount=500"),
+]
+
+def run():
+    print("Setting Target > Scope to the authorized sandbox FIRST, before touching any traffic:")
+    print("  [" + ", ".join(AUTHORIZED_SCOPE) + "]")
+    print()
+
+    captured, passed_through = proxy_intercept(TRAFFIC)
+
+    print("Captured for inspection (in scope):")
+    for r in captured:
+        print("  " + r.method + " " + r.host + r.path)
+    print()
+
+    print("Passed through UNTOUCHED (out of scope - other tabs, other sites):")
+    for r in passed_through:
+        print("  " + r.method + " " + r.host + r.path)
+    print()
+
+    interesting = captured[1]
+    print("Sending one interesting captured request to Repeater:")
+    print("  " + interesting.method + " " + interesting.host + interesting.path + "  body=" + interesting.body)
+    edited = send_to_repeater(interesting, "code=WELCOME10; code=FREESHIP99")
+    print("Hand-edited in Repeater and resent:")
+    print("  " + edited.method + " " + edited.host + edited.path + "  body=" + edited.body)
+    print()
+
+    print("Attempting to Repeater a request that was never in scope:")
+    try:
+        send_to_repeater(passed_through[0], "irrelevant")
+    except ValueError as e:
+        print("  BLOCKED: " + str(e))
+
+run()`}
+/>
+
+The identical scenario in Java - the same requests in, the same scope decisions and Repeater behavior out:
+
+<CodePlayground
+  language="java"
+  title="Run it - a scope-checking mock proxy and Repeater (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    // Scope-checker for a mock intercepting proxy - teaching code only.
+    // The Python sibling of this demo runs the identical scenario; this Java
+    // version mirrors it exactly. No socket, no real HTTP call is made
+    // anywhere in this script.
+
+    static class CapturedRequest {
+        String method, host, path, body;
+        CapturedRequest(String method, String host, String path, String body) {
+            this.method = method; this.host = host; this.path = path; this.body = body;
+        }
+        CapturedRequest withBody(String newBody) {
+            return new CapturedRequest(method, host, path, newBody);
+        }
+    }
+
+    // The authorized target, set in Burp's Target > Scope BEFORE any traffic
+    // is touched. This platform's own BuggyShop sandbox domain, for illustration.
+    static final List<String> AUTHORIZED_SCOPE = Arrays.asList("buggyshop.authorized-sandbox.test");
+
+    static boolean inScope(String host) {
+        // Mirrors Burp's scope include-list check: exact host match against
+        // the authorized allowlist. Everything else - another tab, another
+        // site, an ad or tracker domain - is out of scope and must never be touched.
+        return AUTHORIZED_SCOPE.contains(host);
+    }
+
+    static CapturedRequest sendToRepeater(CapturedRequest req, String editedBody) {
+        // The Proxy -> Repeater workflow: take ONE captured, in-scope
+        // request, hand-edit a single field, and resend it. Repeater never
+        // touches anything outside the one request you sent it.
+        if (!inScope(req.host)) {
+            throw new IllegalArgumentException("Refusing to Repeater a request outside authorized scope: " + req.host);
+        }
+        return req.withBody(editedBody);
+    }
+
+    public static void main(String[] args) {
+        List<CapturedRequest> traffic = Arrays.asList(
+            new CapturedRequest("GET", "buggyshop.authorized-sandbox.test", "/cart", ""),
+            new CapturedRequest("POST", "buggyshop.authorized-sandbox.test", "/cart/apply-coupon", "code=WELCOME10"),
+            new CapturedRequest("GET", "totally-unrelated-news-site.test", "/article/42", ""),
+            new CapturedRequest("POST", "some-other-open-tab-bank.test", "/transfer", "amount=500")
+        );
+
+        System.out.println("Setting Target > Scope to the authorized sandbox FIRST, before touching any traffic:");
+        System.out.println("  " + AUTHORIZED_SCOPE);
+        System.out.println();
+
+        List<CapturedRequest> captured = new ArrayList<>();
+        List<CapturedRequest> passedThrough = new ArrayList<>();
+        for (CapturedRequest r : traffic) {
+            if (inScope(r.host)) captured.add(r); else passedThrough.add(r);
+        }
+
+        System.out.println("Captured for inspection (in scope):");
+        for (CapturedRequest r : captured) {
+            System.out.println("  " + r.method + " " + r.host + r.path);
+        }
+        System.out.println();
+
+        System.out.println("Passed through UNTOUCHED (out of scope - other tabs, other sites):");
+        for (CapturedRequest r : passedThrough) {
+            System.out.println("  " + r.method + " " + r.host + r.path);
+        }
+        System.out.println();
+
+        CapturedRequest interesting = captured.get(1);
+        System.out.println("Sending one interesting captured request to Repeater:");
+        System.out.println("  " + interesting.method + " " + interesting.host + interesting.path + "  body=" + interesting.body);
+        CapturedRequest edited = sendToRepeater(interesting, "code=WELCOME10; code=FREESHIP99");
+        System.out.println("Hand-edited in Repeater and resent:");
+        System.out.println("  " + edited.method + " " + edited.host + edited.path + "  body=" + edited.body);
+        System.out.println();
+
+        System.out.println("Attempting to Repeater a request that was never in scope:");
+        try {
+            sendToRepeater(passedThrough.get(0), "irrelevant");
+        } catch (IllegalArgumentException e) {
+            System.out.println("  BLOCKED: " + e.getMessage());
+        }
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: capture one request and hand-edit it in the authorized sandbox">
+<StepChecklist
+  steps={[
+    { text: "Get written authorization and use a tester-owned account", detail: "This platform's own BuggyShop/BuggyAPI sandbox, with a test account you own. Never a real third-party site opened in the same proxied browser." },
+    { text: "Configure the browser proxy and install Burp's CA certificate", detail: "Point the browser at Burp's listener, then visit http://burp through that proxy to download and trust the CA - required before HTTPS traffic becomes readable." },
+    { text: "Set Target > Scope to the authorized host before turning Intercept on", detail: "Restrict Burp to the one target you are authorized to test. Do this before any traffic is captured, not after." },
+    { text: "Send one captured request to Repeater and hand-edit it", detail: "Browse the target normally, pick one interesting request, send it to Repeater, change one field, and resend. Compare the response to the original." },
+  ]}
+/>
+You can now get traffic flowing through Burp safely, scoped to only the target you are authorized to
+test, and you can pull one specific request out of that flow to probe it by hand in Repeater.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "The browser shows certificate warnings or refuses to load any HTTPS site once the proxy is on.",
+      fix: "Burp's CA certificate has not been installed as trusted yet. Visit http://burp through the already-proxied browser, download the CA certificate, and import it into the browser's or OS's trusted root store.",
+    },
+    {
+      symptom: "Intercept is on but nothing ever shows up in Burp.",
+      fix: "Check that the browser's proxy settings actually point at Burp's listener address and port, and that Burp's proxy listener is running (Proxy > Options). A proxy-switcher extension left on a different profile is a common cause.",
+    },
+    {
+      symptom: "Requests to sites the tester never meant to touch start showing up in Proxy history.",
+      fix: "Target > Scope was never configured, or is set too broadly. Restrict scope to the exact authorized host and enable \"Only show in-scope items\" so unrelated traffic stops appearing at all.",
+    },
+    {
+      symptom: "A resend in Repeater produces a completely different response than the original captured request, for no apparent reason.",
+      fix: "Check for a session token, CSRF token, or timestamp that changed between capture and resend - many applications reject a replayed request whose token has since expired or rotated. Recapture a fresh request rather than reusing a stale one.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Target > Scope, before Intercept ever goes on** - the single setting that keeps an intercepting proxy
+  from silently capturing or modifying traffic to anything outside the authorized target.
+- **Proxy > HTTP history for anything captured while scope was misconfigured** - review and delete
+  accidental captures of out-of-scope traffic rather than leaving them sitting in the project file.
+- **The exact request and response Repeater sent and received, saved verbatim** - this is the evidence a
+  finding is built from later.
+- **[[security-testing-web/tools-and-reporting/owasp-zap]]** - the automated spider-and-scanner alternative
+  that complements this same manual Proxy/Repeater workflow, with the identical scope discipline required
+  first.
+- **[[security-testing-web/tools-and-reporting/writing-a-security-finding-devs-act-on]]** - what to do with
+  the exact request/response evidence Repeater produces once a probe confirms something worth reporting.
+- **[[security-testing-web/owasp-top-10-properly/mapping-findings-to-the-list]]** - for mapping whatever a
+  Repeater session confirms to the correct OWASP Top 10 category before writing it up.
+</WhereToCheck>
+
+<WorkedExample title="probing a coupon field by hand in the BuggyShop sandbox">
+1. A tester, authorized to test the platform's own BuggyShop sandbox with a tester-owned account, sets
+   Target > Scope to the sandbox's exact host before turning Intercept on.
+2. Browsing the cart page normally with Intercept on, they apply a test coupon code. The POST request to
+   `/cart/apply-coupon` pauses in Burp. They forward it normally and let the page finish loading.
+3. Reviewing Proxy > HTTP history afterward, that same request looks worth a closer look. They right-click
+   it and send it to Repeater.
+4. In Repeater, they hand-edit the `code` field to a second, different coupon value appended to the first,
+   and click Send. The response shows both discounts applied - stacking that should not be possible. They
+   resend once more with only the second value alone to confirm it is not itself the issue, isolating the
+   stacking behavior as the actual, reproducible finding before writing it up.
+</WorkedExample>
+
+<Quiz
+  question="A tester installs Burp, configures the browser proxy, and immediately starts browsing with Intercept on, without ever opening Target > Scope. What is the main risk?"
+  options={[
+    "Repeater will run slower without a configured scope",
+    "Burp's intercepting proxy will capture and potentially allow editing of traffic to every site open in the browser, not just the authorized target",
+    "The CA certificate will fail to install without scope configured first",
+    "There is no real risk - scope only affects report formatting"
+  ]}
+  answer={1}
+  explain="Target > Scope is what restricts Burp's Proxy, Repeater, and other tools to the one authorized host. Without it, an intercepting proxy sees and can act on every request the browser makes, including unrelated tabs and sites the tester has no authorization to touch - which is a serious authorization boundary problem, not a cosmetic one. It has no effect on Repeater's speed or the CA certificate installation itself (ruling out A and C)."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Burp Suite's three core manual-testing tools", back: "Proxy (intercept and edit traffic in transit), Repeater (hand-edit and resend one captured request repeatedly), and Target/Scope (restrict every tool to the authorized host)." },
+    { front: "Why install Burp's CA certificate", back: "Burp re-signs HTTPS certificates on the fly to intercept encrypted traffic. A browser that does not trust Burp's CA will reject those re-signed certificates and interception silently fails." },
+    { front: "Why scope comes first, not last", back: "Scope restricts which traffic Burp's Proxy and Repeater can capture or act on. Configuring it after browsing has already started means unrelated traffic may already have been captured or edited." },
+    { front: "What Repeater actually does", back: "Holds one captured request in an editable pane so a tester can change a value and resend it as many times as needed, comparing responses, without ever recapturing or reaching beyond that one request." },
+    { front: "Intercept on vs Proxy HTTP history", back: "Intercept on pauses every in-scope request until manually forwarded - useful for catching one action mid-flight. HTTP history passively records everything for later review without freezing browsing." },
+    { front: "The authorization rule for Burp use", back: "Only test systems you own or are explicitly, in writing, authorized to test - this platform's own BuggyShop/BuggyAPI sandbox or a named local target - never a real third-party site reached through the same proxied browser." },
+  ]}
+/>
+
+<Challenge>
+In this platform's own BuggyShop sandbox, using a tester-owned account, configure Burp's browser proxy and
+install its CA certificate, then set Target > Scope to the sandbox's exact host before turning Intercept
+on. Browse the sandbox normally, capture one request that touches a field you find interesting (a
+quantity, a coupon code, a search term), send it to Repeater, and hand-edit it through at least two
+variations. Write down the exact request and response for each variation, and note whether anything about
+the pattern would be worth reporting.
+</Challenge>
+<AskCommunity prompt="I've been getting into the habit of setting Target > Scope in Burp before I ever turn Intercept on, rather than configuring it after I've already started poking around. For people who use Burp regularly: what's a scope-configuration mistake that actually bit you - traffic captured that shouldn't have been, or a target that turned out broader than you intended - and what made you catch it?">
+Comparing real scope-configuration near-misses - traffic accidentally captured from the wrong tab, a scope
+pattern that turned out broader than intended - seems like exactly the kind of hands-on detail that
+separates "I've used Burp" from "I actually trust my own scope discipline."
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://portswigger.net/burp/documentation/desktop/getting-started", title: "PortSwigger - Getting started with Burp Suite", kind: "read" },
+    { href: "https://portswigger.net/burp/documentation/desktop/tools/proxy", title: "PortSwigger - Burp Proxy documentation", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=Uo8IsQCMFvE" title="PortSwigger - Burp Suite: Getting started with Repeater" minutes={6} />
+
+<Takeaways
+  points={[
+    "Burp's three core manual-testing tools are Proxy (intercept and edit in transit), Repeater (hand-edit and resend one request), and Target/Scope (restrict every tool to the authorized host).",
+    "HTTPS interception requires installing Burp's own CA certificate as trusted first, or the browser correctly rejects its re-signed certificates.",
+    "Scope must be configured before Intercept goes on - it is the setting that keeps an intercepting proxy pointed at only the authorized target.",
+    "Repeater holds one captured request open for repeated hand-editing and resending, never reaching beyond the one request it was given.",
+    "Intercept on freezes every in-scope request for manual forwarding; HTTP history passively records everything for later review instead.",
+    "Test only systems you own or are explicitly, in writing, authorized to test, with tester-owned accounts and synthetic data.",
+  ]}
+/>
+
+<Complete xp={10} />

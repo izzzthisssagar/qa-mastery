@@ -1,0 +1,494 @@
+---
+title: "MFA bypass patterns"
+summary: "MFA fails less often at the OTP prompt itself and more often at its edges: an auth path that never asks for it, a session that is already privileged before it completes, an OTP limiter with a race in it, or a backup code that works more than once."
+tags: ["security-testing-web", "authentication-testing", "track-c"]
+updated: "2026-07-20"
+related:
+  - "security-testing-web/authentication-testing/auth-vs-authorization-distinct-skills"
+  - "security-testing-web/authentication-testing/session-and-cookie-attacks"
+  - "security-testing-web/authentication-testing/password-and-reset-flows"
+  - "security-testing-web/owasp-top-10-properly/mapping-findings-to-the-list"
+---
+
+<Hook>
+A tester, authorized to test this platform's own BuggyShop sandbox with a tester-owned account, confirms
+the main login form genuinely enforces MFA - a correct password alone gets rejected, an OTP is required
+every time, exactly as expected. Then, almost as an afterthought, they try the "forgot password" flow on
+the same account. A correct answer to the reset flow logs them straight into the account's settings page -
+no OTP prompt anywhere. The login form was never the weak point. MFA bypass patterns are rarely about
+defeating the six-digit code itself; they are about finding the ONE path into the account that nobody
+remembered to wire the second factor into.
+</Hook>
+
+<Callout type="analogy">
+Picture a Minuteman missile launch control panel: two separate key switches, spaced deliberately far apart
+so no single person can reach both at once, each requiring its own operator's key turned at the same
+moment as the other. The design does not trust one person, or one key, no matter how senior that person
+is or how legitimate that key looks. Now imagine someone discovers a maintenance hatch on the side of the
+silo that was wired straight to the launch mechanism years ago for testing, and nobody ever removed it -
+one key, one operator, no simultaneous second turn required. The two-key panel out front can be perfectly
+engineered and still mean nothing, because the actual launch never has to go through it. MFA works the
+same way: a perfectly implemented OTP prompt on the login form protects exactly the login form, and
+nothing else, unless every other path that can produce the same privileged access enforces the identical
+requirement.
+</Callout>
+
+<Term define="MFA bypass patterns are the common, real-world ways multi-factor authentication fails in practice - almost never by an attacker mathematically defeating a correctly implemented OTP algorithm, and almost always by the second factor simply not being asked for somewhere it should be. Coverage gaps are the most common pattern: MFA enforced on the main login form but silently absent from password-reset flows, API token or personal-access-token issuance, 'remember me' cookie-based re-authentication, or account-recovery flows - any of which can produce the same privileged session as the login form does, without ever prompting for a second factor. A second pattern is a session created too early: some implementations mark a session as authenticated as soon as the password check passes, treating the OTP step as an add-on confirmation rather than a hard gate, so a session that is only 'password-verified, MFA-pending' can already reach privileged resources if a later check does not explicitly require mfa_verified. A third pattern is a missing or racy rate limit on the OTP code itself - a six-digit code has only one million possible values, small enough to brute-force quickly if attempts are not throttled, and a rate limiter implemented as a non-atomic 'read the count, then increment it' can be raced: many near-simultaneous requests all read the same stale count before any of them writes an updated one back, letting far more attempts through than the limit intends. A fourth pattern is backup-code reuse - the offline recovery codes issued for when a user loses their authenticator device are meant to be single-use, and a store that does not mark a redeemed code as spent lets the same code work indefinitely.">MFA bypass patterns</Term>
+
+## Where MFA quietly stops being enforced
+
+- **Every path that can reach a privileged session, not just the login form.** Password reset, API key or
+  personal-access-token issuance, "remember me" cookie re-authentication, and account-recovery flows can
+  all produce the same authenticated state a normal login does - map every one of them and check MFA on
+  each individually.
+- **The exact moment a session becomes "authenticated."** Does the system mark a session as fully logged in
+  the instant the password check passes, with MFA only checked separately at certain endpoints? Or is
+  `mfa_verified` a hard, universal gate that every privileged action checks, with no path around it?
+- **The OTP verification endpoint's own rate limiting.** Six digits is a small space. Confirm attempts are
+  actually throttled per-user or per-session, and specifically test whether that throttling holds up under
+  several near-simultaneous attempts, not just several sequential ones.
+- **Backup / recovery code lifecycle.** Redeem one backup code, note it works, then try the exact same code
+  again. A single-use code that still works a second time defeats the entire purpose of having a separate,
+  offline recovery mechanism.
+
+## What "session created before MFA completes" actually means
+
+A login flow with MFA typically has two steps: verify the password, then verify the OTP. Between those two
+steps, many implementations issue a temporary, "pending" session token so the browser has something to
+send back with the OTP submission. The bypass risk lives in what that pending token can already do. If any
+endpoint checks only "is there a valid session token" and not "is this specific session's MFA step actually
+complete," a tester who stops right after step one - never submitting an OTP at all - may still be able to
+reach account settings, API keys, or other privileged actions using nothing but that pending token.
+
+<Callout type="tip">
+Test the pending, MFA-not-yet-completed session directly, not just the fully-completed one. After
+submitting a correct password but BEFORE submitting an OTP, try reaching a privileged endpoint with
+whatever session token or cookie you have at that exact moment. If it works, MFA is enforced only as a UI
+step on the login page, not as an actual authorization gate on the resources it is supposed to protect -
+a materially different, more serious finding than "the OTP prompt itself has a flaw."
+</Callout>
+
+<Callout type="mistake">
+A tester confirms MFA is enforced on the login form, sees the OTP prompt appear reliably every time, and
+reports "MFA is correctly implemented" without checking anything else. But an OTP prompt that appears on
+login says nothing about password-reset flows, API token issuance, or "remember me" re-authentication -
+each is a separate code path that may or may not call the same enforcement check. Reporting MFA as
+"working" based on one path tested is the single most common way a real coverage gap goes unnoticed; the
+correct finding scope is every path that can produce a privileged session, checked individually.
+</Callout>
+
+{/* IMAGE: a hand holding two similar physical launch keys next to a "WAR PLAN LAUNCH CONTROL" panel with two separate labeled key-switch positions ("CODE USED" and "LAUNCH"), illustrating a control that is designed to require two independent, simultaneous actions */}
+<HotspotImage
+  src="/notes/security-testing-web/authentication-testing/mfa-bypass-patterns.jpg"
+  alt="A hand holding two similar metal keys beside a Launch Control panel labeled WAR PLAN LAUNCH CONTROL, with separate key-switch positions marked SET, CODE USED, and LAUNCH"
+  credit="Nuclear missile launch keys - DoD photo by Staff Sgt. Scott Wagers, Wikimedia Commons, Public domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:Nuclear_missile_launch_keys.jpg"
+  pins={[
+    { x: 58, y: 38, label: "Two keys - two independent factors", desc: "Two separate, similar-looking keys held together. Each represents an independent factor that must be satisfied on its own - not two attempts at the same factor, and not one factor standing in for both." },
+    { x: 34, y: 46, label: "One switch, its own labeled slot", desc: "The 'LAUNCH' position is its own distinct control, reached only through its own labeled slot. A second factor needs exactly this - its own enforcement point, not a shared or optional check." },
+    { x: 23, y: 58, label: "The mechanism that actually gates action", desc: "The physical switch is what enforces the requirement, not a sign or a policy. In software, this is the hard `mfa_verified` check every privileged endpoint must actually call - not a UI prompt that can simply be skipped past." },
+    { x: 50, y: 53, label: "The whole panel this control belongs to", desc: "\"LAUNCH CONTROL\" names the single system this switch is part of. Every path that can reach the same privileged outcome - reset, API tokens, remember-me, recovery - is part of that same system and needs the identical requirement, not just the front door." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Testing MFA coverage and its edges - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Map every path that can reach a privileged session", desc: "Login, password reset, API token issuance, remember-me re-authentication, account recovery. List them before testing any one of them." },
+    { label: "Test MFA enforcement on each path individually", desc: "Confirm the OTP prompt on login proves nothing about the other paths - check each one on its own, with its own evidence." },
+    { label: "Try a privileged action using only a pending, pre-OTP session", desc: "After the password step, before submitting an OTP, attempt a privileged request with whatever token exists at that moment." },
+    { label: "Test the OTP limiter and backup codes for reuse", desc: "Send several near-simultaneous OTP attempts to probe for a race in the rate limiter, and redeem one backup code twice to check single-use enforcement." },
+  ]}
+/>
+
+Here is that same sequence in runnable form - an MFA-coverage checker across auth paths, an OTP
+rate-limiter race simulator, a pending-session privilege check, and a backup-code reuse test, all against
+local, synthetic, in-memory data.
+
+<CodePlayground
+  language="python"
+  title="Run it - an MFA implementation-flaw checker (Python)"
+  code={`# MFA implementation-flaw checker - teaching code only. Four illustrative,
+# hardcoded scenarios: enforcement coverage across auth paths, a race
+# condition on the OTP rate limiter, session privilege before MFA completes,
+# and backup-code reuse. No real network calls, no real OTPs or accounts -
+# every value below is synthetic.
+
+# ---------- Part 1: is MFA actually enforced on EVERY auth path? ----------
+AUTH_PATHS = [
+    ("main_login_form", True),
+    ("password_reset_flow", False),
+    ("api_token_issuance", False),
+    ("remember_me_cookie_login", False),
+    ("account_recovery_flow", False),
+]
+
+def find_mfa_gaps(paths):
+    return [name for name, mfa_required in paths if not mfa_required]
+
+# ---------- Part 2: race condition on the OTP rate limiter ----------
+class OtpRateLimiter:
+    def __init__(self, max_attempts):
+        self.max_attempts = max_attempts
+        self.attempts = 0
+
+    def try_attempt_sequential(self):
+        # SAFE: read-and-increment happens as one atomic step, so each
+        # attempt sees the true, up-to-date count before deciding.
+        if self.attempts >= self.max_attempts:
+            return "BLOCKED - rate limit reached"
+        self.attempts += 1
+        return "ALLOWED - attempt " + str(self.attempts)
+
+def simulate_race(max_attempts, concurrent_requests):
+    # BUGGY: models a TOCTOU race - every "concurrent" request reads the
+    # counter BEFORE any of them writes it back, so they all see the same
+    # stale count and are all allowed through together.
+    stale_count = 0
+    results = []
+    for _ in range(concurrent_requests):
+        if stale_count >= max_attempts:
+            results.append("BLOCKED")
+        else:
+            results.append("ALLOWED (read stale count=" + str(stale_count) + ")")
+    return results
+
+# ---------- Part 3: is a pre-MFA session already privileged? ----------
+class LoginSession:
+    def __init__(self, user):
+        self.user = user
+        self.password_verified = True
+        self.mfa_verified = False
+
+    def can_access(self, resource, require_mfa_enforced):
+        if not require_mfa_enforced:
+            # BUGGY: treats "password checked" as "fully authenticated,"
+            # so a session still awaiting its OTP can already reach
+            # privileged resources.
+            return True
+        return self.mfa_verified
+
+def check_pre_mfa_access(enforce_mfa):
+    session = LoginSession("erin")
+    return session.can_access("account_settings", require_mfa_enforced=enforce_mfa)
+
+# ---------- Part 4: backup-code reuse ----------
+class BackupCodeStore:
+    def __init__(self, reject_reuse):
+        self.reject_reuse = reject_reuse
+        self.codes = {"AAAA-1111": False, "BBBB-2222": False, "CCCC-3333": False}
+
+    def redeem(self, code):
+        if code not in self.codes:
+            return "REJECTED - unknown code"
+        if self.codes[code] and self.reject_reuse:
+            return "REJECTED - code already used"
+        self.codes[code] = True
+        return "ACCEPTED - backup code redeemed"
+
+def run():
+    print("Part 1 - MFA enforcement coverage across auth paths:")
+    for name, required in AUTH_PATHS:
+        print("  " + name + ": mfa_required=" + str(required))
+    gaps = find_mfa_gaps(AUTH_PATHS)
+    print("  Paths that bypass MFA entirely: " + str(gaps))
+    print()
+
+    print("Part 2 - OTP rate limiter, sequential vs racing requests:")
+    limiter = OtpRateLimiter(max_attempts=3)
+    for _ in range(5):
+        print("  Sequential: " + limiter.try_attempt_sequential())
+    race_results = simulate_race(max_attempts=3, concurrent_requests=5)
+    for i, r in enumerate(race_results):
+        print("  Racing #" + str(i + 1) + ": " + r)
+    allowed = len([r for r in race_results if r.startswith("ALLOWED")])
+    print("  -> " + str(allowed) + " of 5 concurrent requests allowed through a limit of 3 (race condition).")
+    print()
+
+    print("Part 3 - session privilege before MFA completes:")
+    print("  BUGGY (MFA not enforced on resource check): can_access=" + str(check_pre_mfa_access(enforce_mfa=False)))
+    print("  SAFE  (MFA enforced on resource check):     can_access=" + str(check_pre_mfa_access(enforce_mfa=True)))
+    print()
+
+    print("Part 4 - backup-code reuse:")
+    leaky = BackupCodeStore(reject_reuse=False)
+    print("  Leaky store, first redeem:  " + leaky.redeem("AAAA-1111"))
+    print("  Leaky store, second redeem: " + leaky.redeem("AAAA-1111") + " (BUG: same backup code worked twice)")
+
+    safe = BackupCodeStore(reject_reuse=True)
+    print("  Safe store,  first redeem:  " + safe.redeem("BBBB-2222"))
+    print("  Safe store,  second redeem: " + safe.redeem("BBBB-2222"))
+
+run()`}
+/>
+
+The identical four-part check in Java - same synthetic paths and codes, same four outcomes:
+
+<CodePlayground
+  language="java"
+  title="Run it - an MFA implementation-flaw checker (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    // MFA implementation-flaw checker - teaching code only. Four
+    // illustrative, hardcoded scenarios: enforcement coverage across auth
+    // paths, a race condition on the OTP rate limiter, session privilege
+    // before MFA completes, and backup-code reuse. No real network calls, no
+    // real OTPs or accounts - every value below is synthetic. Mirrors the
+    // Python sibling exactly, output-for-output.
+
+    static String b(boolean v) { return v ? "True" : "False"; }
+
+    static final Object[][] AUTH_PATHS = {
+        {"main_login_form", true},
+        {"password_reset_flow", false},
+        {"api_token_issuance", false},
+        {"remember_me_cookie_login", false},
+        {"account_recovery_flow", false},
+    };
+
+    static List<String> findMfaGaps(Object[][] paths) {
+        List<String> gaps = new ArrayList<>();
+        for (Object[] p : paths) {
+            if (!(Boolean) p[1]) gaps.add((String) p[0]);
+        }
+        return gaps;
+    }
+
+    static String pyListReprStr(List<String> items) {
+        if (items.isEmpty()) return "[]";
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < items.size(); i++) {
+            if (i > 0) sb.append(", ");
+            sb.append("'").append(items.get(i)).append("'");
+        }
+        return sb.append("]").toString();
+    }
+
+    static class OtpRateLimiter {
+        int maxAttempts;
+        int attempts = 0;
+        OtpRateLimiter(int maxAttempts) { this.maxAttempts = maxAttempts; }
+
+        String tryAttemptSequential() {
+            if (attempts >= maxAttempts) return "BLOCKED - rate limit reached";
+            attempts += 1;
+            return "ALLOWED - attempt " + attempts;
+        }
+    }
+
+    static List<String> simulateRace(int maxAttempts, int concurrentRequests) {
+        int staleCount = 0;
+        List<String> results = new ArrayList<>();
+        for (int i = 0; i < concurrentRequests; i++) {
+            if (staleCount >= maxAttempts) {
+                results.add("BLOCKED");
+            } else {
+                results.add("ALLOWED (read stale count=" + staleCount + ")");
+            }
+        }
+        return results;
+    }
+
+    static class LoginSession {
+        String user;
+        boolean passwordVerified = true;
+        boolean mfaVerified = false;
+        LoginSession(String user) { this.user = user; }
+
+        boolean canAccess(String resource, boolean requireMfaEnforced) {
+            if (!requireMfaEnforced) return true;
+            return mfaVerified;
+        }
+    }
+
+    static boolean checkPreMfaAccess(boolean enforceMfa) {
+        LoginSession session = new LoginSession("erin");
+        return session.canAccess("account_settings", enforceMfa);
+    }
+
+    static class BackupCodeStore {
+        boolean rejectReuse;
+        Map<String, Boolean> codes = new LinkedHashMap<>();
+        BackupCodeStore(boolean rejectReuse) {
+            this.rejectReuse = rejectReuse;
+            codes.put("AAAA-1111", false);
+            codes.put("BBBB-2222", false);
+            codes.put("CCCC-3333", false);
+        }
+
+        String redeem(String code) {
+            if (!codes.containsKey(code)) return "REJECTED - unknown code";
+            if (codes.get(code) && rejectReuse) return "REJECTED - code already used";
+            codes.put(code, true);
+            return "ACCEPTED - backup code redeemed";
+        }
+    }
+
+    public static void main(String[] args) {
+        System.out.println("Part 1 - MFA enforcement coverage across auth paths:");
+        for (Object[] p : AUTH_PATHS) {
+            System.out.println("  " + p[0] + ": mfa_required=" + b((Boolean) p[1]));
+        }
+        List<String> gaps = findMfaGaps(AUTH_PATHS);
+        System.out.println("  Paths that bypass MFA entirely: " + pyListReprStr(gaps));
+        System.out.println();
+
+        System.out.println("Part 2 - OTP rate limiter, sequential vs racing requests:");
+        OtpRateLimiter limiter = new OtpRateLimiter(3);
+        for (int i = 0; i < 5; i++) {
+            System.out.println("  Sequential: " + limiter.tryAttemptSequential());
+        }
+        List<String> raceResults = simulateRace(3, 5);
+        for (int i = 0; i < raceResults.size(); i++) {
+            System.out.println("  Racing #" + (i + 1) + ": " + raceResults.get(i));
+        }
+        long allowed = raceResults.stream().filter(r -> r.startsWith("ALLOWED")).count();
+        System.out.println("  -> " + allowed + " of 5 concurrent requests allowed through a limit of 3 (race condition).");
+        System.out.println();
+
+        System.out.println("Part 3 - session privilege before MFA completes:");
+        System.out.println("  BUGGY (MFA not enforced on resource check): can_access=" + b(checkPreMfaAccess(false)));
+        System.out.println("  SAFE  (MFA enforced on resource check):     can_access=" + b(checkPreMfaAccess(true)));
+        System.out.println();
+
+        System.out.println("Part 4 - backup-code reuse:");
+        BackupCodeStore leaky = new BackupCodeStore(false);
+        System.out.println("  Leaky store, first redeem:  " + leaky.redeem("AAAA-1111"));
+        System.out.println("  Leaky store, second redeem: " + leaky.redeem("AAAA-1111") + " (BUG: same backup code worked twice)");
+
+        BackupCodeStore safe = new BackupCodeStore(true);
+        System.out.println("  Safe store,  first redeem:  " + safe.redeem("BBBB-2222"));
+        System.out.println("  Safe store,  second redeem: " + safe.redeem("BBBB-2222"));
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: map MFA coverage across every auth path, in an authorized sandbox">
+<StepChecklist
+  steps={[
+    { text: "Get written authorization and use a tester-owned account", detail: "This platform's own BuggyShop/BuggyAPI sandbox or a named local target, with a test account and a test authenticator/backup codes you control." },
+    { text: "List every path that can reach a privileged session", detail: "Login, password reset, API token issuance, remember-me, account recovery. Write the list before testing any one of them." },
+    { text: "Test MFA enforcement on each path individually, with its own evidence", detail: "Confirming the OTP prompt on login proves nothing about the other paths - test and record each one separately." },
+    { text: "Try a privileged action with only a pending, pre-OTP session token", detail: "After the password step, before submitting an OTP, attempt one privileged request with whatever token you currently hold." },
+  ]}
+/>
+You can now test MFA as a coverage question across every path that can reach a privileged session, not
+just a single prompt on the login form - and you can tell the difference between an OTP-implementation
+flaw and a much more common, much more serious enforcement gap.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "MFA is confirmed on the login form and the finding gets closed as 'MFA implemented correctly.'",
+      fix: "Login is one path among several that can produce a privileged session. Test password reset, API token issuance, remember-me re-authentication, and account recovery individually before closing any MFA-coverage finding.",
+    },
+    {
+      symptom: "A privileged request succeeds using the session token issued right after the password step, before any OTP was ever submitted.",
+      fix: "This means MFA is enforced as a UI step on the login page, not as an authorization gate on the resources it is supposed to protect. Report it as a session-privilege finding, distinct from any OTP-implementation issue.",
+    },
+    {
+      symptom: "The OTP rate limiter holds up under sequential testing, so brute-force is marked as mitigated.",
+      fix: "Sequential testing alone does not reveal a race condition. Test with several near-simultaneous requests specifically - a 'read the count, then increment it' limiter that is not atomic can let far more attempts through when requests overlap.",
+    },
+    {
+      symptom: "A backup code is confirmed to work once, and the recovery mechanism is marked as verified secure.",
+      fix: "Working once only confirms the code is valid, not that it is single-use. Redeem the exact same code a second time - if it still succeeds, the recovery mechanism has no reuse protection at all.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **A written list of every path that can produce a privileged session** - built once, before testing, so
+  no path gets tested implicitly or skipped by assumption.
+- **Whatever session token exists between the password step and the OTP step** - the direct test for
+  whether MFA is a real authorization gate or just a login-page prompt.
+- **The OTP and backup-code endpoints under near-simultaneous requests, not just sequential ones** - races
+  in rate limiting do not show up in a one-request-at-a-time test.
+- **[[security-testing-web/authentication-testing/password-and-reset-flows]]** - password reset is one of
+  the most commonly missed MFA-coverage paths; read together with that note's own token and session checks.
+- **[[security-testing-web/authentication-testing/auth-vs-authorization-distinct-skills]]** - a session
+  privileged before MFA completes is exactly the authentication/authorization boundary that note names;
+  read there for how to word the finding precisely.
+</WhereToCheck>
+
+<WorkedExample title="finding a coverage gap and a pending-session bypass on the same BuggyShop account">
+1. A tester, authorized to test the platform's own BuggyShop sandbox with a tester-owned account that has
+   MFA enabled, confirms the main login form correctly requires an OTP every time - password alone is
+   rejected.
+2. They then try the "forgot password" flow on the same account. After answering the reset flow's
+   requirements, they land directly on the account's settings page - no OTP prompt appears anywhere in that
+   flow. This is filed as a coverage-gap finding: password reset does not enforce the second factor at all.
+3. Separately, back on the normal login form, the tester submits a correct password and captures the
+   session token issued at that exact moment - before submitting any OTP. They send that token directly to
+   a privileged account-settings endpoint.
+4. The request succeeds. The pending, MFA-not-yet-completed session was already sufficient to reach a
+   privileged resource - a second, distinct finding from the coverage gap: MFA is enforced only as a
+   login-page prompt, not as a hard gate on the resource itself.
+5. Both findings are written up separately, each with its own exact reproduction steps, so a developer can
+   fix the password-reset flow's missing MFA check and the resource endpoint's missing `mfa_verified` check
+   as two distinct, targeted changes.
+</WorkedExample>
+
+<Quiz
+  question="A tester submits a correct password, captures the session token issued at that exact moment, and successfully uses it to reach a privileged endpoint - without ever submitting an OTP. What does this prove?"
+  options={[
+    "The OTP algorithm itself has been mathematically defeated",
+    "MFA is enforced only as a login-page UI step, not as a hard authorization gate on the privileged resource",
+    "This is expected and not a finding, since the password was correct",
+    "The backup codes must also be reusable"
+  ]}
+  answer={1}
+  explain="Nothing about the OTP algorithm was touched in this scenario (ruling out option A), and a genuinely correct password does not make reaching privileged resources before MFA completes expected or safe behavior (ruling out option C) - MFA existing at all means the system intends for it to be required. Option D is an unrelated mechanism not tested here. What the scenario actually demonstrates is that the resource endpoint itself never checked whether MFA had been completed for this session - it only checked that SOME valid session token existed, which is a materially more serious finding than an OTP-prompt issue."
+/>
+
+<Flashcards
+  cards={[
+    { front: "MFA bypass patterns, in general", back: "Almost never defeating the OTP algorithm itself - almost always the second factor simply not being required somewhere it should be: a coverage gap, an early session, a racy rate limit, or a reusable backup code." },
+    { front: "Coverage gap", back: "MFA enforced on the main login form but silently absent from password reset, API token issuance, remember-me re-authentication, or account recovery - any path that can reach the same privileged session without asking for a second factor." },
+    { front: "Session privileged before MFA completes", back: "A session marked 'authenticated' as soon as the password check passes, before the OTP step, can already reach privileged resources if a later check tests only 'is there a session' rather than 'is mfa_verified true.'" },
+    { front: "How to test the pending-session risk directly", back: "After the password step but before submitting an OTP, attempt a privileged request with whatever session token currently exists. If it succeeds, MFA is a UI step, not an authorization gate." },
+    { front: "Race condition on the OTP rate limiter", back: "A non-atomic 'read the count, then increment it' limiter can let several near-simultaneous requests all read the same stale count and all get allowed through together, exceeding the intended limit." },
+    { front: "Backup-code reuse", back: "Offline recovery codes are meant to be single-use. A store that does not mark a redeemed code as spent lets the same code work indefinitely, defeating the point of a separate recovery mechanism." },
+    { front: "Why 'MFA confirmed on login' is not a complete finding", back: "It proves MFA works on exactly one path. The correct finding scope is every path that can produce a privileged session, each tested and evidenced individually." },
+  ]}
+/>
+
+<Challenge>
+In this platform's own BuggyShop sandbox, using a tester-owned account with MFA enabled, list every path
+that could plausibly produce a privileged session (login, password reset, API token issuance, remember-me,
+account recovery - or construct realistic ones if the sandbox does not expose all of them) and test MFA
+enforcement on each individually. Separately, capture the session token issued right after a correct
+password but before submitting an OTP, and attempt one privileged request with it. Write up any coverage
+gap or pending-session bypass you confirm, each with its own exact reproduction steps naming which specific
+path or mechanism failed.
+</Challenge>
+<AskCommunity prompt="I've started treating MFA testing as a coverage question - listing every path that can reach a privileged session (login, reset, API tokens, remember-me, recovery) and checking each one individually, plus testing whether the session issued right after the password step but before the OTP is already privileged. For people who test MFA regularly: what's the least obvious auth path you've found that was quietly missing the second-factor check entirely?">
+Specifically interested in paths that are not the usual 'password reset forgot MFA' case - things like
+support-initiated account recovery, SSO fallback flows, or legacy API endpoints that predate MFA being
+added to the main login form and never got retrofitted.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://cheatsheetseries.owasp.org/cheatsheets/Multifactor_Authentication_Cheat_Sheet.html", title: "OWASP - Multifactor Authentication Cheat Sheet", kind: "read" },
+    { href: "https://owasp.org/www-community/Slow_Down_Online_Guessing_Attacks_with_Device_Cookies", title: "OWASP - Slowing Down Online Guessing Attacks", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=nUC3rjIMzBI" title="PortSwigger - Two-factor authentication bypass" minutes={6} />
+
+<Takeaways
+  points={[
+    "MFA bypass is almost never about defeating the OTP algorithm - it is almost always about a path that never required the second factor in the first place.",
+    "Map every path that can reach a privileged session - login, reset, API tokens, remember-me, recovery - and test MFA enforcement on each one individually.",
+    "A session marked authenticated right after the password check, before the OTP step, can already be privileged if downstream checks test only 'session exists' rather than 'mfa_verified is true.'",
+    "Test the OTP rate limiter with near-simultaneous requests, not just sequential ones - a non-atomic counter can be raced.",
+    "Backup codes are meant to be single-use - redeeming the same code twice is a direct, simple test that is often skipped.",
+    "Test only systems you own or are explicitly, in writing, authorized to test, with tester-owned accounts and synthetic data.",
+  ]}
+/>
+
+<Complete xp={10} />
