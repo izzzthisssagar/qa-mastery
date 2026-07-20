@@ -2723,10 +2723,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "working-solo-the-mentor-gap",
         title: "Working solo (the mentor gap)",
         topics: [
-          { slug: "being-the-only-qa", title: "Being the only QA", planned: true },
-          { slug: "asking-good-questions", title: "Asking good questions", planned: true },
-          { slug: "using-the-community", title: "Using the community", planned: true },
-          { slug: "when-to-escalate", title: "When to escalate", planned: true },
+          { slug: "being-the-only-qa", title: "Being the only QA" },
+          { slug: "asking-good-questions", title: "Asking good questions" },
+          { slug: "using-the-community", title: "Using the community" },
+          { slug: "when-to-escalate", title: "When to escalate" },
         ],
       },
       {
