@@ -2300,10 +2300,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "owasp-api-security-top-10-2023",
         title: "OWASP API Security Top 10 (2023)",
         topics: [
-          { slug: "bola-and-bfla", title: "BOLA & BFLA", planned: true },
-          { slug: "broken-auth-for-apis", title: "Broken auth for APIs", planned: true },
-          { slug: "unrestricted-resource-consumption", title: "Unrestricted resource consumption", planned: true },
-          { slug: "the-full-api-list", title: "The full API list", planned: true },
+          { slug: "bola-and-bfla", title: "BOLA & BFLA" },
+          { slug: "broken-auth-for-apis", title: "Broken auth for APIs" },
+          { slug: "unrestricted-resource-consumption", title: "Unrestricted resource consumption" },
+          { slug: "the-full-api-list", title: "The full API list" },
         ],
       },
       {

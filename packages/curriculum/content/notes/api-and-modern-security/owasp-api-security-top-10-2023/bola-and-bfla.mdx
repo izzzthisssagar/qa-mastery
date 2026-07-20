@@ -1,0 +1,459 @@
+---
+title: "BOLA & BFLA"
+summary: "BOLA lets any authenticated caller reach another user's OBJECT by changing an id; BFLA lets a low-privilege caller reach a higher-privilege FUNCTION. Object-scoped versus function-scoped - different mechanisms, both API1:2023 and API5:2023, both worth testing on every endpoint."
+tags: ["api-and-modern-security", "owasp-api-security-top-10-2023", "track-c"]
+updated: "2026-07-20"
+related:
+  - "api-and-modern-security/owasp-api-security-top-10-2023/broken-auth-for-apis"
+  - "api-and-modern-security/owasp-api-security-top-10-2023/the-full-api-list"
+  - "security-testing-web/owasp-top-10-properly/broken-access-control"
+---
+
+<Hook>
+TaskFlight, this platform's practice API, has a booking endpoint and an admin endpoint. Log in as a
+normal traveler, change the booking id in the URL to one that is not yours, and the object comes back
+anyway - that is one bug. Now log in as that same normal traveler and call the admin-only "reissue any
+ticket" action directly - and it works too. Those are two DIFFERENT bugs wearing the same "authorization
+failed" headline. The first never checked who owns the booking. The second never checked what role the
+action requires. Learn to tell them apart and you can test - and report - both correctly instead of
+collapsing them into one vague "auth is broken" ticket that tells a developer nothing about which check
+to add.
+</Hook>
+
+<Callout type="analogy">
+Picture a self-storage facility: a long corridor of identical roll-up doors, each stamped with its own
+unit number, each with its own padlock hasp. Your key opens unit 110 because it is yours - and if the
+facility is doing its job, that same key does nothing to unit 111 next door, no matter how you turn it.
+That is the OBJECT check: one unit, one owner, one lock that only answers to the matching key. Now walk
+to the far end of the corridor, through the door marked staff only, into the facility's back office. In
+there sits a terminal that can force open ANY unit on the property - for a genuine eviction, an unpaid
+bill, a lost key. That terminal is not protected by a different unit number; it is protected by a
+different QUESTION entirely: are you staff? A renter who wanders in and finds that terminal unlocked can
+force open every door on the property, regardless of which key they carry. Two failures, two different
+locks: the corridor's padlocks guard OBJECTS one at a time, and the back-office terminal guards a
+FUNCTION that should never care whose unit is on the other end of it.
+</Callout>
+
+<Term define="BOLA (Broken Object Level Authorization, API1:2023) is the failure to verify that a caller actually owns or is entitled to the specific OBJECT named by an identifier in a request - so changing an id (a booking, an invoice, a profile) returns someone else's object instead of a denial. BFLA (Broken Function Level Authorization, API5:2023) is the failure to verify that a caller's ROLE actually permits the FUNCTION (the action/endpoint) being invoked - so a low-privilege caller can invoke a privileged action (refunding, deleting, promoting) regardless of which object, if any, it targets. Both are authorization failures and both are commonly triggered by the same root cause (an endpoint that checks 'is this caller logged in' and stops there) - but they fail on two independent axes: BOLA fails on WHICH OBJECT, BFLA fails on WHICH FUNCTION. A server can correctly enforce one and still completely miss the other, which is why both need their own test on every endpoint.">BOLA and BFLA</Term>
+
+## BOLA: the object check, one id at a time
+
+- **The test is a swap.** Log in as your own tester-owned account, note an object id your request
+  legitimately returns (a booking, a ticket, a profile), then request the SAME endpoint with an id you
+  do not own. A correct server denies it; a server that returns the other object never checked ownership
+  at all.
+- **Predictable ids make it worse, but unpredictable ids are not the fix.** Sequential or guessable ids
+  let an attacker enumerate every object in minutes. Random ids raise the bar but do nothing if the
+  ownership check is still missing - the fix is always a server-side "does this id belong to this
+  caller" check, never obscurity.
+- **It hides behind every parameter that names an object** - a path segment, a query string id, a
+  field inside a JSON body, even a value tucked inside a token's claims. Anywhere an object is named,
+  BOLA can be hiding.
+
+## BFLA: the function check, one role at a time
+
+- **The test is a role swap, not an id swap.** Log in as a low-privilege account and call an action
+  that should require a higher role - refund a payment, promote a user, reindex a search catalog -
+  calling the endpoint directly rather than clicking through a UI that simply hides the button.
+  A correct server denies it regardless of which object the call names.
+- **BFLA does not care whose object it is.** This is the sharpest way to separate it from BOLA: a
+  BFLA finding is just as real when a low-privilege caller invokes a privileged function on their OWN
+  object. Deleting your own account through a support-only endpoint might be harmless; deleting anyone
+  else's account through that same endpoint, as a plain user, is exactly the same missing check.
+- **Hidden menus and greyed-out buttons are not a control.** If the client-side UI decides who sees a
+  button but the server accepts the call from anyone authenticated, the function is unprotected - the
+  hidden button only stopped the honest path, not a crafted request.
+
+<Callout type="tip">
+Run both tests on every endpoint you touch, as two separate questions in this order: first, "if I swap
+the id, do I get someone else's object" (BOLA); second, "if I swap my role - or just call this as a
+lower-privileged account - do I get to run an action that should be gated" (BFLA). Keep two or three
+tester-owned accounts at different roles specifically so this pair of swaps is always one login away,
+never something you have to improvise mid-session.
+</Callout>
+
+<Callout type="mistake">
+Testing BOLA thoroughly on an endpoint, finding it clean, and concluding the endpoint is "authorization
+safe." A booking-cancellation endpoint might correctly refuse to cancel someone else's booking (BOLA:
+solid) while still allowing a plain traveler account to call the airline-staff-only "cancel and refund
+without penalty" variant of that same action (BFLA: wide open). The two checks are independent tests
+against independent mechanisms - passing one proves nothing about the other, and a report that only
+covers object ownership can walk right past a live function-level hole.
+</Callout>
+
+{/* IMAGE: a long corridor inside a self-storage facility, lined with identical numbered orange roll-up doors, each with its own padlock hasp, receding toward a red door at the far end */}
+<HotspotImage
+  src="/notes/api-and-modern-security/owasp-api-security-top-10-2023/bola-and-bfla.jpg"
+  alt="A corridor of a self-storage facility lined with numbered orange roll-up unit doors, each fitted with its own padlock hasp, receding toward a red door at the far end"
+  credit="Couloir d'un site de self stockage Annexx - Ppeyrot, Wikimedia Commons, CC BY 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Couloir_d%27un_site_de_self_stockage_Annexx.jpg"
+  pins={[
+    { x: 20, y: 24, label: "The unit number - the object identifier", desc: "Unit 110, booking id 110, invoice id 110 - whatever handle a request uses to say WHICH object it wants. BOLA begins the moment a server trusts this number without checking who it belongs to." },
+    { x: 35, y: 62, label: "The padlock hasp - the object-level check", desc: "Each door has its own lock, answering only to its own key. This is what a correct object check does: verifies THIS caller owns THIS specific object before returning anything - not that the caller is merely logged in." },
+    { x: 62, y: 78, label: "The shared corridor floor - authenticated is not the same as authorized", desc: "Anyone with facility access can walk this hallway. That is authentication. Whether they may open any ONE specific door is a completely separate question - the one BOLA testing asks, id by id." },
+    { x: 88, y: 46, label: "The door at the far end - a function, not an object", desc: "Behind it sits the facility's own back-office terminal, which can force open any unit on the property. That terminal is not guarded by a unit number at all - it is guarded by a role question, is this caller staff, which is exactly the shape of a BFLA check." },
+    { x: 50, y: 20, label: "Identical doors, invisible checks", desc: "Every door looks the same from the corridor - you cannot tell by looking whether its lock (object check) or the office's role check (function check) is actually enforced. Both have to be tested directly; neither can be verified by appearance." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Testing one endpoint for both failures - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Confirm authorization and set up two or three tester-owned accounts", desc: "One low-privilege account, one peer account at the same level, and one elevated-role account if the system has one. Only ever on a system you own or are explicitly permitted to test." },
+    { label: "BOLA swap: same account, swap the id", desc: "As the low-privilege account, request the endpoint with your own object id, then with a peer's id. A denial is correct; the peer's object coming back is an API1:2023 finding." },
+    { label: "BFLA swap: swap the account instead, keep or drop the id", desc: "As the low-privilege account, call an action that should require a higher role - directly, not through the UI. A denial is correct; success is an API5:2023 finding, regardless of whose object it targeted." },
+    { label: "Report each on its own mechanism", desc: "An object leak and a function leak are different root causes even on the same endpoint - name which check was missing (ownership, or role) rather than writing one vague authorization bug for both." },
+  ]}
+/>
+
+Here is that same pair of independent checks in runnable form - one simulator that models an OBJECT
+check and a FUNCTION check side by side, with a vulnerable version of each that only checks "is this
+caller logged in," and a fixed version that checks the thing that actually matters.
+
+<CodePlayground
+  language="python"
+  title="Run it - an object-ownership simulator and a role-permission checker (Python)"
+  code={`# BOLA vs BFLA: two DIFFERENT authorization checks, modeled side by side.
+# BOLA (API1:2023) = missing OBJECT ownership check: an authenticated user
+# reaches an OBJECT (a booking) that is not theirs by changing an id.
+# BFLA (API5:2023) = missing FUNCTION role check: a caller with too LOW a
+# role reaches a FUNCTION (an action) that should require a higher role -
+# regardless of whose object it is being called on.
+
+USERS = {
+    "alice": "user",
+    "bob":   "user",
+    "carol": "support-agent",
+    "dave":  "admin",
+}
+
+# Objects: booking id -> owning user. This is what an OBJECT-level check verifies.
+BOOKINGS = {501: "alice", 502: "bob", 503: "carol"}
+
+# Functions: action name -> the MINIMUM role required to call it, no matter
+# which object (if any) it targets. This is what a FUNCTION-level check verifies.
+ROLE_RANK = {"user": 0, "support-agent": 1, "admin": 2}
+FUNCTIONS = {
+    "view_booking":        "user",
+    "cancel_own_booking":  "user",
+    "issue_refund":        "support-agent",
+    "delete_any_account":  "admin",
+}
+
+def vulnerable_object_check(actor, booking_id):
+    # BUG: only checks that actor is a known, logged-in user - never ownership.
+    return actor in USERS
+
+def secure_object_check(actor, booking_id):
+    owner = BOOKINGS.get(booking_id)
+    role = USERS.get(actor)
+    return owner == actor or role in ("support-agent", "admin")
+
+def vulnerable_function_check(actor, function_name):
+    # BUG: only checks that actor is a known, logged-in user - never role rank.
+    return actor in USERS
+
+def secure_function_check(actor, function_name):
+    needed = ROLE_RANK[FUNCTIONS[function_name]]
+    have = ROLE_RANK[USERS[actor]]
+    return have >= needed
+
+OBJECT_REQUESTS = [
+    ("alice", 501),  # owner reads own booking
+    ("alice", 502),  # BOLA attempt: alice reaches bob's booking by id
+    ("bob",   503),  # BOLA attempt: bob reaches carol's booking by id
+    ("carol", 501),  # support-agent legitimately views any booking
+]
+
+FUNCTION_REQUESTS = [
+    ("alice", "cancel_own_booking"),   # normal user function, fine
+    ("alice", "issue_refund"),         # BFLA attempt: a plain user calls a support-agent function
+    ("bob",   "delete_any_account"),   # BFLA attempt: a plain user calls an admin function
+    ("dave",  "delete_any_account"),   # admin legitimately calls an admin function
+]
+
+def run():
+    print("OBJECT-level requests (BOLA is the failure mode here):")
+    for label, check in [("vulnerable (checks login only)", vulnerable_object_check),
+                          ("fixed (checks ownership/role)", secure_object_check)]:
+        print("  " + label + ":")
+        for actor, booking_id in OBJECT_REQUESTS:
+            owner = BOOKINGS[booking_id]
+            allowed = check(actor, booking_id)
+            authorized = owner == actor or USERS[actor] in ("support-agent", "admin")
+            flag = "  <-- BOLA LEAK" if allowed and not authorized else ""
+            verdict = "ALLOW" if allowed else "DENY "
+            print("    " + verdict + " " + actor.ljust(6) + " -> booking " + str(booking_id) + " (owner " + owner + ")" + flag)
+    print()
+    print("FUNCTION-level requests (BFLA is the failure mode here):")
+    for label, check in [("vulnerable (checks login only)", vulnerable_function_check),
+                          ("fixed (checks role rank)", secure_function_check)]:
+        print("  " + label + ":")
+        for actor, fn in FUNCTION_REQUESTS:
+            allowed = check(actor, fn)
+            authorized = ROLE_RANK[USERS[actor]] >= ROLE_RANK[FUNCTIONS[fn]]
+            flag = "  <-- BFLA LEAK" if allowed and not authorized else ""
+            verdict = "ALLOW" if allowed else "DENY "
+            print("    " + verdict + " " + actor.ljust(6) + " -> " + fn + " (role " + USERS[actor] + ")" + flag)
+    print()
+    print("BOLA checks WHO OWNS THE OBJECT. BFLA checks WHAT ROLE THE FUNCTION NEEDS.")
+    print("A server can pass one check and still fail the other - test both, on every endpoint.")
+
+run()`}
+/>
+
+The same two checks in Java - identical accounts, identical requests, identical verdicts:
+
+<CodePlayground
+  language="java"
+  title="Run it - an object-ownership simulator and a role-permission checker (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    // BOLA vs BFLA: two DIFFERENT authorization checks, modeled side by side.
+    // BOLA (API1:2023) = missing OBJECT ownership check: an authenticated user
+    // reaches an OBJECT (a booking) that is not theirs by changing an id.
+    // BFLA (API5:2023) = missing FUNCTION role check: a caller with too LOW a
+    // role reaches a FUNCTION (an action) that should require a higher role -
+    // regardless of whose object it is being called on.
+
+    static final Map<String, String> USERS = new LinkedHashMap<>();
+    static final Map<Integer, String> BOOKINGS = new LinkedHashMap<>();
+    static final Map<String, Integer> ROLE_RANK = new LinkedHashMap<>();
+    static final Map<String, String> FUNCTIONS = new LinkedHashMap<>();
+
+    static {
+        USERS.put("alice", "user");
+        USERS.put("bob", "user");
+        USERS.put("carol", "support-agent");
+        USERS.put("dave", "admin");
+
+        BOOKINGS.put(501, "alice");
+        BOOKINGS.put(502, "bob");
+        BOOKINGS.put(503, "carol");
+
+        ROLE_RANK.put("user", 0);
+        ROLE_RANK.put("support-agent", 1);
+        ROLE_RANK.put("admin", 2);
+
+        FUNCTIONS.put("view_booking", "user");
+        FUNCTIONS.put("cancel_own_booking", "user");
+        FUNCTIONS.put("issue_refund", "support-agent");
+        FUNCTIONS.put("delete_any_account", "admin");
+    }
+
+    interface ObjectCheck { boolean allow(String actor, int bookingId); }
+    interface FunctionCheck { boolean allow(String actor, String fn); }
+
+    // BUG: only checks that actor is a known, logged-in user - never ownership.
+    static boolean vulnerableObjectCheck(String actor, int bookingId) {
+        return USERS.containsKey(actor);
+    }
+
+    static boolean secureObjectCheck(String actor, int bookingId) {
+        String owner = BOOKINGS.get(bookingId);
+        String role = USERS.get(actor);
+        return owner.equals(actor) || "support-agent".equals(role) || "admin".equals(role);
+    }
+
+    // BUG: only checks that actor is a known, logged-in user - never role rank.
+    static boolean vulnerableFunctionCheck(String actor, String fn) {
+        return USERS.containsKey(actor);
+    }
+
+    static boolean secureFunctionCheck(String actor, String fn) {
+        int needed = ROLE_RANK.get(FUNCTIONS.get(fn));
+        int have = ROLE_RANK.get(USERS.get(actor));
+        return have >= needed;
+    }
+
+    static final Object[][] OBJECT_REQUESTS = {
+        {"alice", 501},  // owner reads own booking
+        {"alice", 502},  // BOLA attempt: alice reaches bob's booking by id
+        {"bob", 503},    // BOLA attempt: bob reaches carol's booking by id
+        {"carol", 501},  // support-agent legitimately views any booking
+    };
+
+    static final String[][] FUNCTION_REQUESTS = {
+        {"alice", "cancel_own_booking"},  // normal user function, fine
+        {"alice", "issue_refund"},        // BFLA attempt: a plain user calls a support-agent function
+        {"bob", "delete_any_account"},    // BFLA attempt: a plain user calls an admin function
+        {"dave", "delete_any_account"},   // admin legitimately calls an admin function
+    };
+
+    static String pad(String s, int n) {
+        StringBuilder sb = new StringBuilder(s);
+        while (sb.length() < n) sb.append(' ');
+        return sb.toString();
+    }
+
+    public static void main(String[] args) {
+        System.out.println("OBJECT-level requests (BOLA is the failure mode here):");
+        String[] objectLabels = {"vulnerable (checks login only)", "fixed (checks ownership/role)"};
+        ObjectCheck[] objectChecks = {Main::vulnerableObjectCheck, Main::secureObjectCheck};
+        for (int i = 0; i < objectChecks.length; i++) {
+            System.out.println("  " + objectLabels[i] + ":");
+            for (Object[] req : OBJECT_REQUESTS) {
+                String actor = (String) req[0];
+                int bookingId = (Integer) req[1];
+                String owner = BOOKINGS.get(bookingId);
+                boolean allowed = objectChecks[i].allow(actor, bookingId);
+                boolean authorized = owner.equals(actor) || "support-agent".equals(USERS.get(actor)) || "admin".equals(USERS.get(actor));
+                String flag = (allowed && !authorized) ? "  <-- BOLA LEAK" : "";
+                String verdict = allowed ? "ALLOW" : "DENY ";
+                System.out.println("    " + verdict + " " + pad(actor, 6) + " -> booking " + bookingId + " (owner " + owner + ")" + flag);
+            }
+        }
+        System.out.println();
+        System.out.println("FUNCTION-level requests (BFLA is the failure mode here):");
+        String[] fnLabels = {"vulnerable (checks login only)", "fixed (checks role rank)"};
+        FunctionCheck[] fnChecks = {Main::vulnerableFunctionCheck, Main::secureFunctionCheck};
+        for (int i = 0; i < fnChecks.length; i++) {
+            System.out.println("  " + fnLabels[i] + ":");
+            for (String[] req : FUNCTION_REQUESTS) {
+                String actor = req[0], fn = req[1];
+                boolean allowed = fnChecks[i].allow(actor, fn);
+                boolean authorized = ROLE_RANK.get(USERS.get(actor)) >= ROLE_RANK.get(FUNCTIONS.get(fn));
+                String flag = (allowed && !authorized) ? "  <-- BFLA LEAK" : "";
+                String verdict = allowed ? "ALLOW" : "DENY ";
+                System.out.println("    " + verdict + " " + pad(actor, 6) + " -> " + fn + " (role " + USERS.get(actor) + ")" + flag);
+            }
+        }
+        System.out.println();
+        System.out.println("BOLA checks WHO OWNS THE OBJECT. BFLA checks WHAT ROLE THE FUNCTION NEEDS.");
+        System.out.println("A server can pass one check and still fail the other - test both, on every endpoint.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: test one TaskFlight endpoint for both failures">
+<StepChecklist
+  steps={[
+    { text: "Confirm scope and set up tester-owned accounts", detail: "Use TaskFlight's own sandbox (or another system you are explicitly authorized to test), with accounts you created yourself and synthetic booking data - never a real traveler's data." },
+    { text: "Run the BOLA swap on a booking-detail endpoint", detail: "As account A, note your own booking id from a normal request. As account A again, request the same endpoint with account B's booking id. Expect a denial; record the request and response either way." },
+    { text: "Run the BFLA swap on a privileged action", detail: "Find an action that should need a higher role (cancel-and-refund, admin-only reindex, user promotion). As a plain low-privilege account, call it directly - not through any UI button. Expect a denial regardless of whose object it names." },
+    { text: "Write up each finding on its own mechanism", detail: "If either swap succeeds, report it as its own finding: name it API1:2023 BOLA for an object leak, API5:2023 BFLA for a function leak, with the exact request, the response, and minimal proof - never enumerate further than needed to demonstrate it." },
+  ]}
+/>
+You have now run the two tests that, between them, catch the two most common authorization mechanisms
+in any API - and you can tell a reviewer exactly which check was missing, not just that "auth is broken."
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "Swapping an id in a request returns another account's object.",
+      fix: "That is API1:2023 BOLA: the endpoint fetched by id without verifying the caller owns it. The fix is a server-side ownership check on every object lookup, deny by default. Report the exact request, the id swapped, and the object returned - and stop there rather than enumerating further ids.",
+    },
+    {
+      symptom: "A low-privilege account can call an action that should need a higher role, no matter whose data it targets.",
+      fix: "That is API5:2023 BFLA: the endpoint checked that the caller was logged in but never checked their role against what the action actually requires. The fix is a server-side role check on every privileged function, independent of any UI that hides the button. Confirm by calling the endpoint directly, bypassing the interface entirely.",
+    },
+    {
+      symptom: "An endpoint passes the object-ownership test cleanly, so the team marks its authorization as done.",
+      fix: "Object-level and function-level checks are independent mechanisms - passing one says nothing about the other. Re-test the SAME endpoint's privileged actions with a role swap before calling authorization complete; a clean BOLA result and an open BFLA hole can coexist on one endpoint.",
+    },
+    {
+      symptom: "A finding gets written up as generic 'broken authorization' with no clear fix for developers.",
+      fix: "Name the mechanism: was it the OBJECT check (ownership) or the FUNCTION check (role) that was missing? A developer fixing BOLA adds an ownership lookup; a developer fixing BFLA adds a role gate. A vague report forces them to guess which one you actually found.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Every parameter that names an object** - path segments, query ids, body fields, even values folded
+  into a token's claims. Each is a BOLA candidate: confirm the server checks ownership, not just that
+  the id is well-formed.
+- **Every action gated by role in the product's design** - refunds, deletions, promotions, exports,
+  admin-only reads. Each is a BFLA candidate: confirm the server re-checks the caller's actual role,
+  independent of what the UI shows or hides.
+- **The response to a denied request** - a consistent, non-revealing denial (403, or a 404 that gives
+  nothing away) is correct for both failure modes; an inconsistent response between similar endpoints is
+  itself worth a note.
+- **[[api-and-modern-security/owasp-api-security-top-10-2023/broken-auth-for-apis]]** - authorization
+  (may you?) and authentication (who are you?) are different questions; that note covers the
+  authentication side that this one assumes is already working.
+- **[[api-and-modern-security/owasp-api-security-top-10-2023/the-full-api-list]]** - see where BOLA
+  (API1) and BFLA (API5) sit among all ten 2023 categories, as a coverage map rather than a ranking.
+</WhereToCheck>
+
+<WorkedExample title="one endpoint, two independent findings">
+1. A tester, authorized to test TaskFlight's staging sandbox with two tester-owned accounts, opens the
+   booking-detail endpoint as account A and notes the request uses a plain integer booking id.
+2. BOLA swap: as account A, the tester requests the same endpoint with account B's booking id. The
+   server returns account B's full booking - name, flight, payment last-four. No ownership check ran.
+   Finding one is filed as API1:2023 BOLA, with both requests and the leaked fields as evidence.
+3. Separately, the tester notices a "reissue ticket without penalty" action that the product only
+   exposes to airline staff in the UI. As account A - a plain traveler, no staff role - the tester calls
+   that action's endpoint directly, targeting account A's OWN booking (deliberately not touching account
+   B's data for this second test, to isolate the mechanism being checked).
+4. The server performs the reissue. No role check ran - the endpoint only confirmed account A was
+   logged in. Finding two is filed as API5:2023 BFLA, evidenced by the request, the response, and the
+   fact that the UI's own staff-only labeling contradicts what the server actually enforced.
+5. Two findings, two mechanisms, one endpoint family: the object check and the function check each
+   needed their own test, and each failed independently of the other.
+</WorkedExample>
+
+<Quiz
+  question="A booking-cancellation endpoint correctly refuses to cancel another traveler's booking when you swap the id (a clean BOLA result). What should you conclude about that endpoint's authorization?"
+  options={[
+    "Authorization is fully verified - object-level and function-level checks are the same mechanism",
+    "Nothing yet about function-level authorization - BOLA and BFLA are independent checks, so a privileged variant of the same action (for example a staff-only cancel-without-penalty) still needs its own role-swap test",
+    "The endpoint cannot have a BFLA issue, since BOLA passing implies role checks are also correct",
+    "No further testing is needed because BFLA only applies to admin panels, never to traveler-facing actions"
+  ]}
+  answer={1}
+  explain="BOLA (object ownership) and BFLA (function role) are independent mechanisms, verified by independent tests - a server can enforce one correctly while completely missing the other. A clean id-swap result says only that the ownership check works; it says nothing about whether a related privileged function (a staff-only variant of the same action, or an unrelated admin action) correctly checks the caller's role. Options one and three collapse the two mechanisms into one, which is exactly the mistake this note warns against. Option four is wrong because BFLA can appear on any role boundary, not only admin panels - a support-agent-only function callable by a plain traveler is just as much a BFLA finding."
+/>
+
+<Flashcards
+  cards={[
+    { front: "BOLA (API1:2023)", back: "Broken Object Level Authorization: the server returns or modifies an OBJECT (a booking, an invoice) without checking that the caller actually owns or is entitled to it - triggered by swapping an identifier." },
+    { front: "BFLA (API5:2023)", back: "Broken Function Level Authorization: the server executes a FUNCTION (an action/endpoint) without checking that the caller's ROLE actually permits it - triggered by a low-privilege caller invoking a privileged action, regardless of whose object it targets." },
+    { front: "The one-line distinction", back: "BOLA fails on WHICH OBJECT (an ownership question). BFLA fails on WHICH FUNCTION (a role question). Passing one check proves nothing about the other." },
+    { front: "The two swaps", back: "BOLA test: same account, swap the id. BFLA test: swap the account's role (or use a low-privilege account), call a privileged action directly, bypassing any UI that merely hides the button." },
+    { front: "Why a hidden button is not a fix", back: "If the server accepts a privileged action from any authenticated caller, hiding its button in the UI only stops the honest path - a direct request to the same endpoint sails through, which is exactly what a BFLA test checks for." },
+    { front: "Reporting rule", back: "Name the missing check, not just 'authorization broken': an object leak is API1:2023 BOLA, needing an ownership check; a function leak is API5:2023 BFLA, needing a role check. The two fixes are different." },
+  ]}
+/>
+
+<Challenge>
+On TaskFlight's sandbox (or another system you are explicitly authorized to test), using tester-owned
+accounts at two different privilege levels: first, pick one endpoint that returns an object by id and
+run the BOLA swap - request it as one account with the other account's id, and record the result.
+Second, pick one action that should require a higher role than your low-privilege account holds, and
+call its endpoint directly - not through any button - recording that result too. Write up whichever of
+the two (or both) actually leak as separate findings, each naming the specific mechanism missing
+(ownership check, or role check), with minimal proof and no further enumeration than needed to
+demonstrate it.
+</Challenge>
+
+<AskCommunity prompt="I'm now running two separate authorization tests on every endpoint I touch: an id-swap between two accounts I own (for BOLA) and a role-swap calling privileged actions directly, bypassing the UI (for BFLA). For people who test APIs regularly: how do you keep both checks systematic across a large surface of endpoints without missing entire categories of privileged actions, and how do you decide when a function is 'privileged enough' to warrant a BFLA test in the first place?">
+Knowing which functions actually deserve a role-swap test - and doing it consistently across a big API
+surface without a manual pass on every single endpoint - is exactly the gap between a spot-check and a
+real authorization review; hearing how other testers scope this is the fastest way to close it.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/", title: "OWASP API1:2023 Broken Object Level Authorization - the official category page", kind: "read" },
+    { href: "https://owasp.org/API-Security/editions/2023/en/0xa5-broken-function-level-authorization/", title: "OWASP API5:2023 Broken Function Level Authorization - the official category page", kind: "read" },
+    { href: "https://owasp.org/API-Security/", title: "OWASP API Security Top 10 - project home", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=YciLnEY1AN0" title="Broken Object Level Authorization (BOLA) Explained" minutes={8} />
+
+<Takeaways
+  points={[
+    "BOLA (API1:2023) and BFLA (API5:2023) are both authorization failures, but on independent axes: BOLA fails on WHICH OBJECT a caller reaches, BFLA fails on WHICH FUNCTION a caller's role permits.",
+    "Test BOLA with an id swap between two accounts you control; test BFLA with a role swap - a low-privilege account calling a privileged action directly, bypassing any UI that only hides the button.",
+    "A server can pass one check and completely fail the other - a clean object-ownership result proves nothing about function-level role checks, and vice versa.",
+    "BFLA does not care whose object is targeted; a low-privilege caller invoking a privileged function on their OWN data is just as real a finding as on someone else's.",
+    "Report the specific mechanism missing (an ownership check for BOLA, a role check for BFLA) rather than a generic 'authorization is broken' - the two fixes are different, and a vague report forces a developer to guess which one you found.",
+    "Only test systems you own or are explicitly authorized in writing to test, with tester-owned accounts and synthetic data, capturing minimal proof - never harvest real users' objects or escalate beyond what demonstrates the finding.",
+  ]}
+/>
+
+<Complete xp={10} />

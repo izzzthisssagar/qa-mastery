@@ -1,0 +1,358 @@
+---
+title: "Unrestricted resource consumption"
+summary: "API4:2023 is what happens when an API never says enough: no cap on requests per minute, no cap on payload size, no cap on rows returned, no cap on how expensive a single query can be. Four separate ceilings, each worth testing on its own."
+tags: ["api-and-modern-security", "owasp-api-security-top-10-2023", "track-c"]
+updated: "2026-07-20"
+related:
+  - "api-and-modern-security/owasp-api-security-top-10-2023/broken-auth-for-apis"
+  - "api-and-modern-security/owasp-api-security-top-10-2023/the-full-api-list"
+  - "performance-testing/load-vs-stress-vs-soak/goals"
+---
+
+<Hook>
+A TaskFlight search endpoint works perfectly for one traveler making one request. Now imagine a script
+making that same request a thousand times a second, each one asking for a hundred thousand rows, each
+row assembled by a query with no bound on how much of the database it may scan. Nothing about any SINGLE
+request looks wrong - it is only the absence of a CEILING that turns a normal endpoint into an outage
+waiting for a script. Unrestricted resource consumption is not one bug; it is the missing ceiling on
+four separate things - requests, payload size, response size, and cost - and an API needs all four.
+</Hook>
+
+<Callout type="analogy">
+Picture a community makerspace's shared 3D printer, the kind a small membership pays to use. A healthy
+booking system caps how many HOURS each member can reserve per week, so one enthusiastic member cannot
+occupy the machine every day and starve everyone else - that is a rate limit. It caps how large an
+object the print bed can physically hold, rejecting a file sized for a machine twice as big - that is a
+payload-size limit. The staff post prints in batches on a viewing shelf instead of piling every finished
+part from the whole month onto one table at once - that is a pagination limit. And running a large,
+slow, resin-heavy print costs real money in materials and machine time, so the makerspace requires a
+staff sign-off before anyone queues one up - that is a cost-based control on an expensive operation. Pull
+out any one of those four rules and the same three-thousand-dollar printer stops serving the membership
+and starts serving whoever showed up first with the biggest, most expensive job.
+</Callout>
+
+<Term define="Unrestricted resource consumption (API4:2023) is the failure to cap how much of a system's resources - requests, CPU, memory, storage, or spend - a single caller can consume, so that ordinary-looking traffic can degrade the service or run up cost without ever tripping an authorization or injection check. Four independent ceilings address it: rate limiting (a cap on requests per caller per time window, rejecting excess with a clear too-many-requests response), payload-size limits (a cap on the size of an incoming request body, upload, or array), pagination limits (a server-enforced cap on how many rows or records a single response may return, regardless of what the caller asked for), and cost-based abuse controls (recognizing that some endpoints are cheap to REQUEST but expensive to RUN - a report over an entire dataset, a search with no index - and bounding or metering those separately). None of the four substitutes for the others; an API can enforce a perfect rate limit and still be brought down by one oversized payload, or cap payload size and still be drained by an unbounded, expensive query.">Unrestricted resource consumption</Term>
+
+## Four ceilings, tested one at a time
+
+- **Rate limiting** - send a burst of requests from one caller and confirm the API starts refusing
+  with a clear "too many requests" response well before the underlying service is stressed. No refusal
+  at all, however high the burst, is the finding.
+- **Payload-size limits** - send a request body, upload, or array noticeably larger than any
+  reasonable use case, and confirm the API rejects it outright rather than accepting and processing it.
+- **Pagination limits** - request an unreasonably large page size or omit pagination parameters
+  entirely, and confirm the server still caps what comes back, rather than trusting whatever number the
+  caller supplied.
+- **Cost-based abuse** - look for endpoints that are cheap to call but expensive to execute (broad
+  searches, cross-account reports, uncached aggregations) and check whether the API meters, queues, or
+  restricts them differently from a simple lookup.
+
+<Callout type="tip">
+Test all four ceilings as separate questions on any endpoint that returns a list or accepts a body:
+"what happens if I call this fast," "what happens if I send this big," "what happens if I ask for
+everything back at once," and "does this particular action cost more to run than it looks like it
+costs to call." A single endpoint can pass three of the four and still fail the fourth.
+</Callout>
+
+<Callout type="mistake">
+Confusing "we have a rate limiter" with "resource consumption is under control." A gateway-level rate
+limit stops request FLOOD, but does nothing about one single request carrying a ten-megabyte array, or
+one single request asking for every row in a table, or one single request triggering an unindexed
+cross-table aggregation. Each of those is its own ceiling, and a team that only ever tested requests per
+minute can still ship all three of the others wide open.
+</Callout>
+
+{/* IMAGE: a close-up of a 3D printer's extruder head actively depositing plastic filament onto a blue print bed, with the machine's frame and guide rods visible behind it */}
+<HotspotImage
+  src="/notes/api-and-modern-security/owasp-api-security-top-10-2023/unrestricted-resource-consumption.jpg"
+  alt="Close-up of a 3D printer's extruder head depositing plastic filament onto a blue print bed, with the printer's frame and guide rods visible behind it"
+  credit="Printing with a 3D printer at Makers Party Bangalore 2013 - Subhashish Panigrahi, Wikimedia Commons, CC BY-SA 3.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Printing_with_a_3D_printer_at_Makers_Party_Bangalore_2013_11.JPG"
+  pins={[
+    { x: 50, y: 62, label: "The print bed - a fixed, physical ceiling", desc: "The bed has a maximum size and it never changes. This is a payload-size limit made physical: the machine simply cannot accept an object bigger than the bed, the same way an API should refuse a request body bigger than its configured cap." },
+    { x: 58, y: 38, label: "The nozzle - one unit of work at a time", desc: "The extruder deposits filament at a fixed, bounded rate - it cannot dump the whole spool onto the bed in one instant. This is what rate limiting enforces on an API: work happens in metered units per window, never all at once." },
+    { x: 30, y: 28, label: "The FRONT label - a machine built to one known capacity", desc: "Every part of this printer is rated for a known load; running it past that rating does not make it faster, it makes it fail. An API without a rate limit or payload cap is being asked to run past its rating on every oversized or overly frequent request." },
+    { x: 22, y: 55, label: "The cooling fan and wiring - the real cost behind a simple-looking job", desc: "A print that looks like one job on a screen is actually motors, a heated nozzle, and time - genuine cost. The same is true of an API call: a one-line search request can trigger an expensive, unbounded query behind it, which is exactly what cost-based abuse controls are meant to catch." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Testing all four ceilings on one endpoint - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Burst the endpoint from one caller", desc: "Send a fast sequence of otherwise-valid requests in an authorized test. Expect a clear too-many-requests response well before the burst gets large - not silence, not a crash." },
+    { label: "Send one oversized request body", desc: "A large upload, a long string field, or an array with far more elements than any real use case. Expect a clean rejection at the size boundary, not an attempt to process it." },
+    { label: "Ask for an unreasonable page size", desc: "Request thousands of rows in one page, or omit a page-size parameter entirely. Expect the server's own cap to apply regardless of what was asked for." },
+    { label: "Look for the expensive-but-cheap-to-call endpoint", desc: "A broad search, a full-account export, an uncached report. Check whether it is metered, queued, or restricted differently from a simple single-record lookup." },
+  ]}
+/>
+
+Here is a token-bucket rate limiter in runnable form - it decides ACCEPT or REJECT on a burst of
+requests, then the same demo checks a payload-size cap and a pagination cap right alongside it. Nothing
+here sends real traffic; it is the same accounting a gateway performs before a request is even allowed
+to run.
+
+<CodePlayground
+  language="python"
+  title="Run it - a token-bucket rate limiter plus payload and pagination caps (Python)"
+  code={`# A token-bucket rate limiter - simulating ACCEPT/REJECT decisions on a burst
+# of requests. This never sends real traffic: it is the same accounting a
+# gateway/API performs before a request is even allowed to run.
+
+class TokenBucket:
+    def __init__(self, capacity, refill_per_tick):
+        self.capacity = capacity
+        self.tokens = capacity
+        self.refill_per_tick = refill_per_tick
+
+    def tick(self):
+        self.tokens = min(self.capacity, self.tokens + self.refill_per_tick)
+
+    def try_consume(self):
+        if self.tokens >= 1:
+            self.tokens -= 1
+            return True
+        return False
+
+bucket = TokenBucket(capacity=3, refill_per_tick=3)
+
+print("Token-bucket rate limiter: capacity=3, refills 3 tokens per tick")
+print()
+print("A burst of 5 requests arriving in the same instant:")
+for i in range(1, 6):
+    allowed = bucket.try_consume()
+    verdict = "200 OK" if allowed else "429 Too Many Requests"
+    print("  request " + str(i) + ": " + verdict + " (tokens left: " + str(bucket.tokens) + ")")
+
+print()
+print("Time passes - one tick, bucket refills...")
+bucket.tick()
+allowed = bucket.try_consume()
+print("  next request: " + ("200 OK" if allowed else "429 Too Many Requests") + " (tokens left: " + str(bucket.tokens) + ")")
+print()
+
+def check_payload(size_kb, max_kb=256):
+    return size_kb <= max_kb
+
+def check_page_size(requested, max_page=100):
+    return min(requested, max_page), requested > max_page
+
+oversized = 300
+verdict = "accepted" if check_payload(oversized) else "413 Payload Too Large"
+print("Payload-size check: a " + str(oversized) + "KB request body against a 256KB cap -> " + verdict)
+
+served, capped = check_page_size(10000)
+print("Pagination check: client asked for 10000 rows in one page -> served " + str(served) + " rows (capped: " + ("true" if capped else "false") + ")")
+print()
+print("Four independent controls, one goal - stop UNRESTRICTED consumption:")
+print("rate limit (requests per window), payload-size cap (bytes per request),")
+print("pagination cap (rows per response), and flagging cost-based abuse - an")
+print("endpoint that is cheap to REQUEST but expensive to RUN, like a report")
+print("over the whole dataset with no bound on the query it triggers.")`}
+/>
+
+The same rate limiter and caps in Java - identical burst, identical verdicts:
+
+<CodePlayground
+  language="java"
+  title="Run it - a token-bucket rate limiter plus payload and pagination caps (Java)"
+  code={`public class Main {
+    // A token-bucket rate limiter - simulating ACCEPT/REJECT decisions on a burst
+    // of requests. This never sends real traffic: it is the same accounting a
+    // gateway/API performs before a request is even allowed to run.
+
+    static class TokenBucket {
+        int capacity;
+        int tokens;
+        int refillPerTick;
+
+        TokenBucket(int capacity, int refillPerTick) {
+            this.capacity = capacity;
+            this.tokens = capacity;
+            this.refillPerTick = refillPerTick;
+        }
+
+        void tick() {
+            tokens = Math.min(capacity, tokens + refillPerTick);
+        }
+
+        boolean tryConsume() {
+            if (tokens >= 1) {
+                tokens -= 1;
+                return true;
+            }
+            return false;
+        }
+    }
+
+    static boolean checkPayload(int sizeKb, int maxKb) {
+        return sizeKb <= maxKb;
+    }
+
+    static int[] checkPageSize(int requested, int maxPage) {
+        int served = Math.min(requested, maxPage);
+        int capped = requested > maxPage ? 1 : 0;
+        return new int[]{served, capped};
+    }
+
+    public static void main(String[] args) {
+        TokenBucket bucket = new TokenBucket(3, 3);
+
+        System.out.println("Token-bucket rate limiter: capacity=3, refills 3 tokens per tick");
+        System.out.println();
+        System.out.println("A burst of 5 requests arriving in the same instant:");
+        for (int i = 1; i <= 5; i++) {
+            boolean allowed = bucket.tryConsume();
+            String verdict = allowed ? "200 OK" : "429 Too Many Requests";
+            System.out.println("  request " + i + ": " + verdict + " (tokens left: " + bucket.tokens + ")");
+        }
+
+        System.out.println();
+        System.out.println("Time passes - one tick, bucket refills...");
+        bucket.tick();
+        boolean allowed = bucket.tryConsume();
+        System.out.println("  next request: " + (allowed ? "200 OK" : "429 Too Many Requests") + " (tokens left: " + bucket.tokens + ")");
+        System.out.println();
+
+        int oversized = 300;
+        String verdict = checkPayload(oversized, 256) ? "accepted" : "413 Payload Too Large";
+        System.out.println("Payload-size check: a " + oversized + "KB request body against a 256KB cap -> " + verdict);
+
+        int[] result = checkPageSize(10000, 100);
+        String cappedStr = result[1] == 1 ? "true" : "false";
+        System.out.println("Pagination check: client asked for 10000 rows in one page -> served " + result[0] + " rows (capped: " + cappedStr + ")");
+        System.out.println();
+        System.out.println("Four independent controls, one goal - stop UNRESTRICTED consumption:");
+        System.out.println("rate limit (requests per window), payload-size cap (bytes per request),");
+        System.out.println("pagination cap (rows per response), and flagging cost-based abuse - an");
+        System.out.println("endpoint that is cheap to REQUEST but expensive to RUN, like a report");
+        System.out.println("over the whole dataset with no bound on the query it triggers.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: test all four ceilings on one TaskFlight endpoint">
+<StepChecklist
+  steps={[
+    { text: "Pick one list-returning endpoint on TaskFlight's sandbox", detail: "A flight search or booking-list endpoint works well - anything that can return multiple rows or accept a body." },
+    { text: "Burst it, briefly and deliberately", detail: "Send a short, fast sequence of otherwise-valid requests, purely to observe the response - not a sustained flood. Expect a too-many-requests response before too many succeed." },
+    { text: "Send one oversized request", detail: "A body noticeably larger than any real use case (a long string field, a big array). Expect a clean rejection at the boundary." },
+    { text: "Ask for an unreasonable page size", detail: "Request far more rows than any real UI would ever display in one page. Expect the server's own cap to apply regardless of what you asked for." },
+  ]}
+/>
+You have now tested three of the four ceilings end to end, and you know exactly which of them TaskFlight
+enforces - the same four questions apply to any API you are authorized to test next.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A fast burst of requests from one caller all succeed with no refusal.",
+      fix: "Missing rate limiting. Report the burst size, the time window, and the fact that no 429 or equivalent appeared. The fix is a server- or gateway-level cap on requests per caller per window, with a clear rejection response once it is exceeded.",
+    },
+    {
+      symptom: "A very large request body is accepted and processed rather than rejected.",
+      fix: "Missing payload-size limiting. Report the size sent and the fact that it was accepted; the fix is a hard cap on request-body size, applied before the body is parsed or processed, not after.",
+    },
+    {
+      symptom: "A response returns far more rows than any real page size, even though the caller never asked the server to cap it.",
+      fix: "Missing pagination limiting - the server is trusting whatever count the caller supplied instead of enforcing its own ceiling. Report the requested count against the returned count; the fix is a server-side maximum applied regardless of the client's request.",
+    },
+    {
+      symptom: "One specific endpoint is measurably slower or more resource-intensive than every other endpoint of similar shape.",
+      fix: "A likely cost-based abuse candidate - it may be cheap to call but expensive to run (an unindexed query, a full-table aggregation). Report the observed cost difference; the fix is often caching, an added index, or a separate, stricter limit just for that endpoint.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Any endpoint that accepts a body** - confirm a payload-size cap exists and is enforced before the
+  body is processed, not merely logged after the fact.
+- **Any endpoint that returns a list** - confirm a maximum page size is enforced server-side, regardless
+  of what the caller requests or omits.
+- **Response headers on a rate-limited call** - well-designed APIs return remaining-quota and reset-time
+  headers alongside a 429; their presence (or absence) is itself worth noting.
+- **[[performance-testing/load-vs-stress-vs-soak/goals]]** - the broader performance-testing goals that
+  a missing rate limit or cost control ultimately threatens.
+- **[[api-and-modern-security/owasp-api-security-top-10-2023/the-full-api-list]]** - see where API4 sits
+  among all ten 2023 categories, as a coverage map rather than a ranking.
+</WhereToCheck>
+
+<WorkedExample title="the search endpoint with three of four ceilings missing">
+1. A tester, authorized to test TaskFlight's sandbox, sends a short burst of ten flight-search requests
+   in quick succession, purely to observe rate-limiting behavior. All ten return 200 with no slowdown
+   and no too-many-requests response.
+2. The same tester sends one search request with a deliberately long, malformed filter string many
+   times longer than any real query would need. It is accepted and processed rather than rejected.
+3. The tester requests a page size far larger than the UI ever uses. The response returns every
+   matching row with no server-side cap applied.
+4. Three findings are filed under API4:2023, each naming its own missing ceiling: no rate limiting, no
+   payload-size cap on the filter field, and no pagination cap - each with its own request, response,
+   and a recommended fix (a request cap per caller, a field-length limit, and a server-enforced maximum
+   page size).
+5. A fourth check - whether the search query itself is unusually expensive to run - is flagged for the
+   development team to profile separately, since confirming actual query cost needs access the tester's
+   black-box position does not have.
+</WorkedExample>
+
+<Quiz
+  question="An API enforces a strict rate limit (100 requests per minute per caller) on every endpoint. Does this alone confirm API4:2023 Unrestricted Resource Consumption is fully addressed?"
+  options={[
+    "Yes - a rate limit is the only control API4:2023 requires",
+    "No - rate limiting addresses request FREQUENCY only; payload-size limits, pagination limits, and cost-based abuse controls are independent ceilings that a rate limit does not enforce",
+    "Yes, because any request that could cause harm would also exceed the rate limit eventually",
+    "No - API4:2023 is only about database cost, not about request frequency at all"
+  ]}
+  answer={1}
+  explain="Unrestricted resource consumption names four independent ceilings - rate limiting, payload-size limits, pagination limits, and cost-based abuse controls - and a strict rate limit only enforces the first. A single request within that 100-per-minute allowance could still carry a huge payload, request an unbounded number of rows, or trigger an expensive, unbounded query - none of which a request-frequency limit touches. Option three is wrong because a single oversized or expensive request can cause real harm well within a generous rate limit; option four is wrong because request frequency (rate limiting) is very much one of the four ceilings this category covers, just not the only one."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Unrestricted resource consumption (API4:2023)", back: "The failure to cap how much of a system's resources - requests, payload size, response size, or cost - a single caller can consume, letting ordinary-looking traffic degrade service or run up cost." },
+    { front: "The four ceilings", back: "Rate limiting (requests per window), payload-size limits (bytes per request), pagination limits (rows per response), and cost-based abuse controls (metering expensive-to-run operations separately from cheap ones)." },
+    { front: "Why the four are independent", back: "An API can enforce a perfect rate limit and still be brought down by one oversized payload, or cap payload size and still be drained by one unbounded, expensive query - each ceiling needs its own test." },
+    { front: "The rate-limit test", back: "Send a short, deliberate burst of requests from one caller and confirm a clear too-many-requests response appears before the burst grows large - never a sustained real flood." },
+    { front: "The cost-based-abuse candidate", back: "An endpoint that is cheap to CALL but expensive to RUN - a broad search, a full-account export, an uncached aggregation - worth flagging even when black-box testing cannot directly measure server-side cost." },
+    { front: "What a 429 response should look like", back: "A clear, distinct too-many-requests status, ideally with remaining-quota and reset-time headers - silence, a crash, or a generic error under load is a weaker and less testable signal than a proper 429." },
+  ]}
+/>
+
+<Challenge>
+On TaskFlight's sandbox (or another system you are explicitly authorized to test), pick one endpoint
+that returns a list and run all three ceilings you can safely observe as a black-box tester: send a
+short, deliberate burst of requests and record whether a too-many-requests response appears; send one
+oversized request body or filter value and record whether it is rejected; and request an unreasonably
+large page size and record whether the response is capped. Write up any ceiling that is missing as its
+own API4:2023 finding, naming exactly which of the three failed, with the request and response as
+evidence - never sustain a real flood beyond what is needed to observe the behavior once.
+</Challenge>
+
+<AskCommunity prompt="I'm now testing four separate ceilings on any list-returning API endpoint: rate limiting, payload-size limits, pagination limits, and looking for cost-based-abuse candidates (cheap-to-call, expensive-to-run operations). For people who test this regularly: how big a burst do you consider 'enough' to prove no rate limit exists without it looking like a real denial-of-service attempt against a shared environment, and how do you flag a likely cost-based-abuse candidate as a black-box tester when you cannot see the actual query cost?">
+Calibrating a burst that proves the point without crossing into real abuse, and building a credible
+case for "this is probably expensive to run" without server-side visibility, are exactly the two
+judgment calls this kind of testing needs - hearing how other testers handle both safely is the fastest
+way to get this right.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/", title: "OWASP API4:2023 Unrestricted Resource Consumption - the official category page", kind: "read" },
+    { href: "https://owasp.org/API-Security/", title: "OWASP API Security Top 10 - project home", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=N7dDsM2peeU" title="Unrestricted Resource Consumption - 2023 OWASP Top 10 API Security Risks" minutes={2} />
+
+<Takeaways
+  points={[
+    "Unrestricted resource consumption (API4:2023) is missing ceilings on four independent things: requests per window, bytes per request, rows per response, and cost per operation.",
+    "Rate limiting alone does not address payload size, pagination, or cost-based abuse - each ceiling needs its own dedicated test, and a strong result on one says nothing about the others.",
+    "A runnable rate limiter models ACCEPT/REJECT decisions through token accounting - the same mechanism a real gateway uses, without ever sending real load at a system.",
+    "Some endpoints are cheap to call but expensive to run; flagging that mismatch is part of testing this category even when black-box access cannot measure server-side cost directly.",
+    "A correct 429 response is a clear, distinct signal - ideally with remaining-quota and reset-time headers - not silence, a crash, or a generic error once traffic increases.",
+    "Test bursts, oversized payloads, and large page requests deliberately and briefly, only on systems you are explicitly authorized to test - never sustain real load beyond what is needed to observe the behavior once.",
+  ]}
+/>
+
+<Complete xp={10} />

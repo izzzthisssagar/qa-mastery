@@ -1,0 +1,360 @@
+---
+title: "Broken auth for APIs"
+summary: "API2:2023 covers three distinct authentication weaknesses: secrets too weak to deserve the name, auth endpoints with no attempt limit, and tokens accepted without real signature verification. Any one of the three lets an attacker become someone they are not."
+tags: ["api-and-modern-security", "owasp-api-security-top-10-2023", "track-c"]
+updated: "2026-07-20"
+related:
+  - "api-and-modern-security/owasp-api-security-top-10-2023/bola-and-bfla"
+  - "api-and-modern-security/owasp-api-security-top-10-2023/unrestricted-resource-consumption"
+  - "api-testing-fundamentals/auth-manually/bearer-and-jwt"
+---
+
+<Hook>
+Everything else this chapter teaches - object checks, function checks, rate limits - assumes the API
+already knows who is asking. Broken authentication is the failure BEFORE that assumption gets to be
+true: a login or token endpoint that lets an attacker become somebody else in the first place, before
+any ownership or role check ever runs. Get in through this door and every downstream check is answering
+the wrong question, because it was built to trust an identity that was never actually verified.
+</Hook>
+
+<Callout type="analogy">
+The photo below is an ATM. Look at three things happening in one small machine. First, the card slot:
+it identifies which account is being claimed, exactly like a username or an API key identifies which
+caller is talking - identification alone, proving nothing yet. Second, the keypad, half-hidden by cupped
+hands: a short PIN is perfectly fine as a secret, but only because the machine backs it with a hard
+limit on wrong guesses - three tries and the card is captured, no fourth attempt possible. Third, the
+bright screen behind that whole exchange: nothing behind it is reachable until the PIN check passes,
+and every one of its menu screens exists only because that gate held. Weaken any one of those three
+things - a PIN so short a limitless number of guesses would crack it, a machine that never bothers to
+lock the card after failed attempts, or a screen that lights up for a card it never actually verified -
+and the entire machine hands over money to whoever asked, correct PIN or not. An API's login and token
+endpoints are the exact same three-part machine, minus the plastic.
+</Callout>
+
+<Term define="Broken authentication for APIs (API2:2023) is the category covering weaknesses in how an API verifies WHO is calling, before any authorization check runs. Three distinct symptoms are common: (1) a credential or API key too weak or guessable to function as a real secret, such as a short numeric key or one reused across every customer, (2) authentication endpoints - login, password reset, token issuance - that accept unlimited attempts with no throttling, delay, or lockout, letting an attacker guess by brute force, and (3) tokens whose signature or structure is never actually verified, such as a server that accepts an unsigned or weakly-signed token because it merely looks well-formed. Each symptom breaks a different part of the authentication flow, but all three share one consequence: a caller who should have been refused is instead treated as a legitimate, identified user, and every downstream authorization check now trusts a false identity. Deep JWT-specific signature and claim mechanics - forging a token, tampering a claim, choosing a weak algorithm - are their own dedicated topic later in this module; here the job is to recognize that authentication itself, not what comes after it, is a common and severe point of API failure.">Broken authentication for APIs</Term>
+
+## Three symptoms, one category
+
+- **A secret that is not actually secret.** A four-digit numeric key, a key reused across every
+  customer of an integration, or a password with no minimum strength rule all fail the same way: they
+  are guessable within a practical number of attempts, which makes them decoration rather than defense.
+  The test is simple - could this value plausibly be brute-forced or guessed in a reasonable window.
+- **An auth endpoint with no attempt limit.** Login, password-reset, and token-issuance endpoints are
+  the highest-value targets in an API precisely because a correct guess grants full access. An endpoint
+  that accepts guess after guess with no lockout, delay, or CAPTCHA turns even a reasonably strong
+  secret into one that will eventually fall to automation.
+- **A token accepted without real verification.** A server that checks a token's shape ("does this look
+  like a token") instead of its signature ("was this token actually issued and signed by us") will
+  accept a forged one. This note stops at recognizing that this class of bug exists and is severe; the
+  mechanics of forging and tampering a token are covered in depth in this module's dedicated JWT chapter.
+- **Any one of the three is enough.** These are independent bugs - a system can have a perfectly strong
+  secret policy and still fail from having no lockout, or have a solid lockout and still fail from
+  accepting unverified tokens. Test all three, not just whichever is easiest to check.
+
+<Callout type="tip">
+On any authentication endpoint, ask three separate questions in order: is the secret itself strong
+enough to resist guessing, does the endpoint actually stop you after a handful of wrong attempts, and
+does a token get REJECTED the moment anything about its signature does not check out. Three yes answers
+is a solid authentication flow; any single no is a finding worth its own writeup, because each maps to a
+different fix on the server.
+</Callout>
+
+<Callout type="mistake">
+Treating "we use API keys" or "we use JWTs" as proof that authentication is handled. The technology
+choice says nothing about whether the KEY is strong, whether the LOGIN endpoint throttles guesses, or
+whether the TOKEN's signature is actually checked on every request. A team can adopt the most modern
+token format available and still ship all three weaknesses underneath it - the format is not the
+control, the verification behavior is.
+</Callout>
+
+{/* IMAGE: a close-up of a bank ATM, showing the card slot, a row of on-screen function buttons, and a person's two hands cupped over the numeric keypad while entering a PIN */}
+<HotspotImage
+  src="/notes/api-and-modern-security/owasp-api-security-top-10-2023/broken-auth-for-apis.jpg"
+  alt="Close-up of a bank ATM showing the card slot, on-screen function buttons, and a person's hands cupped over the numeric keypad while entering a PIN"
+  credit="Person covering hand at ATM - 3dman_eu, Wikimedia Commons, CC0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Person_covering_hand_at_ATM.jpg"
+  pins={[
+    { x: 78, y: 9, label: "The card slot - identifies the caller, proves nothing yet", desc: "Inserting a card claims an account, exactly like a username or an API key names which caller is talking. Identification alone is not authentication - it is only the claim that the PIN, or the secret, is about to test." },
+    { x: 57, y: 22, label: "The bright screen - a gate, not a decoration", desc: "Nothing behind this screen is reachable until the PIN check passes. An API's login or token endpoint is the same gate, and the highest-value target an attacker can hit, because a single correct guess opens everything behind it." },
+    { x: 47, y: 63, label: "The keypad - where the secret gets entered", desc: "A PIN is short, and that is fine PRECISELY because the machine enforces a hard limit on wrong guesses. An API secret needs the same pairing: a real secret plus a hard attempt limit - remove the limit and even a decent secret becomes guessable by brute force." },
+    { x: 70, y: 80, label: "Hands cupped over the pad - secrecy is the whole defense", desc: "This is a bearer-secret system: whoever enters the correct PIN is treated as the account holder, no second question asked. An API secret deserves the same instinct - never logged, never echoed in an error message, never typed into a shared terminal." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Checking one auth endpoint for all three symptoms - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Assess the secret itself", desc: "Is the key or password long and unpredictable enough to resist a realistic number of guesses - not \"does it look complicated,\" but could it plausibly be brute-forced in a practical window." },
+    { label: "Throw repeated wrong attempts at the endpoint", desc: "Send several deliberately wrong guesses in a row, within an authorized test. A correct endpoint slows down, locks out, or challenges you well before hundreds of attempts pass." },
+    { label: "Check whether a broken token is actually rejected", desc: "Send a token that is malformed, or one your test account never received, and confirm the server refuses it rather than trusting anything that merely looks like a token." },
+    { label: "Report the specific symptom, not \"weak auth\" in general", desc: "A weak-secret finding, a no-lockout finding, and an unverified-token finding each point a developer at a different fix - naming the mechanism is what makes the report actionable." },
+  ]}
+/>
+
+Here is that three-part check in runnable form - a secret-strength heuristic, an attempt-limited login,
+and a minimal token-verification gate, run back to back.
+
+<CodePlayground
+  language="python"
+  title="Run it - three broken-authentication checks for APIs (Python)"
+  code={`# Three DIFFERENT broken-authentication failure modes for APIs (API2:2023),
+# modeled as pass/fail checks - never touching a real system:
+# (1) a "secret" too weak to deserve the name, (2) an auth endpoint with no
+# attempt limit, (3) a token whose signature is never actually verified.
+
+import re
+
+def is_strong_enough(secret):
+    # Toy heuristic only - real policy lives in your auth provider's docs.
+    # The POINT: "aa" or "12345" should never pass as an API secret.
+    return len(secret) >= 12 and re.search(r"[A-Za-z]", secret) and re.search(r"\\d", secret)
+
+CANDIDATE_KEYS = ["aa", "12345", "sk_live_FAKE_EXAMPLE_KEY_007"]
+
+print("1) Is this string strong enough to serve as an API secret?")
+for k in CANDIDATE_KEYS:
+    verdict = "OK" if is_strong_enough(k) else "TOO WEAK"
+    shown = k if len(k) <= 6 else k[:6] + "..."
+    print("   " + shown.ljust(10) + " -> " + verdict)
+print()
+
+def attempt_login(guess, correct_password, attempts_so_far, max_attempts=5):
+    if attempts_so_far >= max_attempts:
+        return "LOCKED - too many attempts, correct or not"
+    return "200 OK" if guess == correct_password else "401 wrong password"
+
+print("2) A login endpoint WITH a real attempt limit (max 5), correct password is 's3cret!'")
+attempts = 0
+for guess in ["wrong1", "wrong2", "wrong3", "wrong4", "wrong5", "s3cret!"]:
+    result = attempt_login(guess, "s3cret!", attempts)
+    print("   attempt " + str(attempts + 1) + ": guess=" + guess.ljust(10) + " -> " + result)
+    attempts += 1
+print("   Even the RIGHT password on attempt 6 is refused - the lockout, not luck, stopped the guesser.")
+print()
+
+def verify_token(token, valid_tokens):
+    # A minimal stand-in for signature verification: is this token one the
+    # server actually issued and signed? (Full JWT signature/claim mechanics
+    # are a later, dedicated topic - this is the yes/no gate only.)
+    return token in valid_tokens
+
+VALID = {"tok_abc123_signed"}
+print("3) Does the server actually verify the token, or just trust that it exists?")
+for token in ["tok_abc123_signed", "tok_forged_but_well_formatted"]:
+    verified = verify_token(token, VALID)
+    outcome = "ACCEPTED (signature checks out)" if verified else "REJECTED (not issued/signed by this server)"
+    print("   " + token.ljust(32) + " -> " + outcome)
+print()
+print("Three different bugs, one category: API2:2023 Broken Authentication.")
+print("A weak secret, an unthrottled login, and an unverified token are not")
+print("the same mechanism - but all three let someone in who should not be.")`}
+/>
+
+The same three checks in Java - identical inputs, identical verdicts:
+
+<CodePlayground
+  language="java"
+  title="Run it - three broken-authentication checks for APIs (Java)"
+  code={`import java.util.*;
+import java.util.regex.Pattern;
+
+public class Main {
+    // Three DIFFERENT broken-authentication failure modes for APIs (API2:2023),
+    // modeled as pass/fail checks - never touching a real system:
+    // (1) a "secret" too weak to deserve the name, (2) an auth endpoint with no
+    // attempt limit, (3) a token whose signature is never actually verified.
+
+    static boolean isStrongEnough(String secret) {
+        // Toy heuristic only - real policy lives in your auth provider's docs.
+        // The POINT: "aa" or "12345" should never pass as an API secret.
+        boolean hasLetter = Pattern.compile("[A-Za-z]").matcher(secret).find();
+        boolean hasDigit = Pattern.compile("\\\\d").matcher(secret).find();
+        return secret.length() >= 12 && hasLetter && hasDigit;
+    }
+
+    static String pad(String s, int n) {
+        StringBuilder sb = new StringBuilder(s);
+        while (sb.length() < n) sb.append(' ');
+        return sb.toString();
+    }
+
+    static String attemptLogin(String guess, String correctPassword, int attemptsSoFar, int maxAttempts) {
+        if (attemptsSoFar >= maxAttempts) {
+            return "LOCKED - too many attempts, correct or not";
+        }
+        return guess.equals(correctPassword) ? "200 OK" : "401 wrong password";
+    }
+
+    static boolean verifyToken(String token, Set<String> validTokens) {
+        // A minimal stand-in for signature verification: is this token one the
+        // server actually issued and signed? (Full JWT signature/claim mechanics
+        // are a later, dedicated topic - this is the yes/no gate only.)
+        return validTokens.contains(token);
+    }
+
+    public static void main(String[] args) {
+        String[] candidateKeys = {"aa", "12345", "sk_live_FAKE_EXAMPLE_KEY_007"};
+
+        System.out.println("1) Is this string strong enough to serve as an API secret?");
+        for (String k : candidateKeys) {
+            String verdict = isStrongEnough(k) ? "OK" : "TOO WEAK";
+            String shown = k.length() <= 6 ? k : k.substring(0, 6) + "...";
+            System.out.println("   " + pad(shown, 10) + " -> " + verdict);
+        }
+        System.out.println();
+
+        System.out.println("2) A login endpoint WITH a real attempt limit (max 5), correct password is 's3cret!'");
+        String[] guesses = {"wrong1", "wrong2", "wrong3", "wrong4", "wrong5", "s3cret!"};
+        int attempts = 0;
+        for (String guess : guesses) {
+            String result = attemptLogin(guess, "s3cret!", attempts, 5);
+            System.out.println("   attempt " + (attempts + 1) + ": guess=" + pad(guess, 10) + " -> " + result);
+            attempts++;
+        }
+        System.out.println("   Even the RIGHT password on attempt 6 is refused - the lockout, not luck, stopped the guesser.");
+        System.out.println();
+
+        Set<String> valid = new HashSet<>(Arrays.asList("tok_abc123_signed"));
+        System.out.println("3) Does the server actually verify the token, or just trust that it exists?");
+        String[] tokens = {"tok_abc123_signed", "tok_forged_but_well_formatted"};
+        for (String token : tokens) {
+            boolean verified = verifyToken(token, valid);
+            String outcome = verified ? "ACCEPTED (signature checks out)" : "REJECTED (not issued/signed by this server)";
+            System.out.println("   " + pad(token, 32) + " -> " + outcome);
+        }
+        System.out.println();
+        System.out.println("Three different bugs, one category: API2:2023 Broken Authentication.");
+        System.out.println("A weak secret, an unthrottled login, and an unverified token are not");
+        System.out.println("the same mechanism - but all three let someone in who should not be.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: run the three-part auth check on TaskFlight's login">
+<StepChecklist
+  steps={[
+    { text: "Confirm scope, and use only tester-owned credentials", detail: "TaskFlight's sandbox login, or another system you are explicitly authorized to test. Never attempt this against a real account you do not own." },
+    { text: "Assess the secret", detail: "Note the format of the API key or password TaskFlight issues you - length, character set, whether it is unique per account. Would a realistic number of guesses plausibly find it?" },
+    { text: "Send a short burst of deliberately wrong login attempts", detail: "Five or six wrong guesses in a row against your own test account. Expect a slowdown, a lockout, or a challenge well before the attempts run into the hundreds." },
+    { text: "Send one malformed or unissued token to a protected endpoint", detail: "A token you edited, or simply one your test account never received. Expect a clean rejection - not a response that treats it as valid because it merely looks like a token." },
+  ]}
+/>
+You have now checked all three symptoms of API2:2023 on a real login flow - the secret, the attempt
+limit, and the token check - and you know, for this one endpoint, exactly which of the three actually
+holds.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A short or predictable key/password is accepted as a valid credential.",
+      fix: "The secret itself is too weak to resist realistic guessing. Report it as API2:2023 with the observed format (length, character set) and, if policy allows, a demonstration that a plausible number of guesses could find it. The fix is a stronger minimum secret policy, enforced server-side at creation time.",
+    },
+    {
+      symptom: "Dozens of wrong login or password-reset attempts are all accepted with no slowdown or lockout.",
+      fix: "Missing rate limiting on an authentication endpoint - the single highest-value target in the API, since one correct guess grants full access. Report it as API2:2023 with the attempt count and elapsed time; the fix is server-side throttling, lockout, or a challenge after a small number of failures.",
+    },
+    {
+      symptom: "A token that is malformed, expired, or was never issued to you is still accepted.",
+      fix: "The server is trusting a token's shape instead of verifying it. Report it as API2:2023 with the exact token sent and the response received; the fix is enforcing real verification on every request, not merely checking that a token-shaped value is present.",
+    },
+    {
+      symptom: "A team argues authentication is fine because it uses a well-known standard (API keys, JWTs, OAuth).",
+      fix: "The standard is not the control - the enforcement is. Ask the three questions directly: is the secret strong, is the endpoint throttled, is the token actually verified. Any one 'no' is a real finding regardless of which standard sits underneath it.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The credential/key issuance flow** - what format is issued, how long it is, whether it is unique
+  per caller, and whether weak values are rejected at creation time rather than merely at use time.
+- **Login, password-reset, and token-issuance endpoints specifically** - these are the highest-value
+  targets in the whole API; confirm each one throttles, locks out, or challenges repeated failures.
+- **The token-verification step on a protected endpoint** - send a deliberately broken or unissued
+  token and confirm a clean rejection, not silent acceptance.
+- **[[api-testing-fundamentals/auth-manually/bearer-and-jwt]]** - the mechanics of decoding, tampering,
+  and expiry-testing a JWT once you have confirmed the server is actually verifying signatures at all.
+- **[[api-and-modern-security/owasp-api-security-top-10-2023/bola-and-bfla]]** - once identity is
+  confirmed to be genuine, this is where the next layer of testing (object and function authorization)
+  picks up.
+</WhereToCheck>
+
+<WorkedExample title="the password-reset endpoint with no attempt limit">
+1. A tester, authorized to test TaskFlight's sandbox with a tester-owned account, requests a password
+   reset and receives an email with a six-digit numeric code.
+2. Six digits means one million possible codes - plausible to brute-force if nothing else stops it. The
+   tester sends twenty submissions of made-up codes in quick succession, purely to observe the
+   endpoint's behavior, never attempting to guess a real code tied to another account.
+3. All twenty are accepted as attempts with an identical, immediate "invalid code" response - no
+   slowdown, no lockout, no CAPTCHA appears at any point in the sequence.
+4. The finding is filed as "API2:2023 Broken Authentication - password-reset code endpoint has no
+   attempt limit," with the response timing and count as evidence, and a calculation of how many
+   requests a scripted attacker would need to exhaust the six-digit space at that endpoint's observed
+   rate.
+5. The recommended fix is a small fixed lockout (for example five attempts) plus a delay - a fix that
+   is independent of whether the six-digit code format itself is ever lengthened.
+</WorkedExample>
+
+<Quiz
+  question="An API uses long, randomly generated JWTs for every session, and a security review confirms the secret used to sign them is strong. Is authentication for this API necessarily solid?"
+  options={[
+    "Yes - a strong signing secret and long random tokens are the only requirements for API2:2023",
+    "Not necessarily - a strong secret says nothing about whether the login endpoint throttles repeated attempts, or whether every protected endpoint actually verifies a token's signature on each request",
+    "Yes, because JWTs cannot be forged once a strong secret is in use, regardless of what else the API does",
+    "No - JWTs are inherently insecure and should never be used for API authentication"
+  ]}
+  answer={1}
+  explain="Broken authentication for APIs has three independent symptoms - secret strength, attempt-limiting on auth endpoints, and actual signature verification on every request - and a strong signing secret only answers the first. An endpoint could still accept unlimited login guesses (no rate limiting) or fail to verify a token's signature on some protected route (trusting a token that merely looks well-formed), and either gap alone is a full API2:2023 finding regardless of how strong the secret is. Option three is wrong because a strong secret prevents FORGING a valid signature, but says nothing about whether the server actually checks it everywhere; option four overstates the case - JWTs are not inherently insecure, weak enforcement around them is the actual problem this note covers."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Broken authentication for APIs (API2:2023)", back: "The category covering weaknesses in how an API verifies WHO is calling, before any authorization check runs - three common symptoms: weak secrets, unthrottled auth endpoints, and unverified tokens." },
+    { front: "Symptom one: the weak secret", back: "A key or password short/predictable enough to be guessed within a realistic number of attempts - the secret exists, but is not actually secret." },
+    { front: "Symptom two: no attempt limit", back: "Login, password-reset, and token-issuance endpoints that accept unlimited guesses with no throttling, delay, or lockout - the highest-value target in the API, since one correct guess opens everything." },
+    { front: "Symptom three: the unverified token", back: "A server that checks a token's shape instead of its signature, accepting a forged or unissued token because it merely looks well-formed. Full JWT tamper/forgery mechanics are a later, dedicated topic." },
+    { front: "Why the three are independent", back: "A system can have a strong secret and still fail from no lockout, or have a solid lockout and still fail from accepting unverified tokens - each needs its own test, and the standard used (API keys, JWTs, OAuth) is not itself proof of anything." },
+    { front: "The three-question check", back: "Is the secret strong enough to resist guessing? Does the endpoint stop repeated wrong attempts? Is a broken or unissued token actually rejected? All three yes is solid; any one no is a finding." },
+  ]}
+/>
+
+<Challenge>
+On TaskFlight's sandbox (or another system you are explicitly authorized to test), using only a
+tester-owned account: assess the format of the credential or API key you were issued and note whether
+it looks brute-forceable in principle. Then send five to ten deliberately wrong login or password-reset
+attempts in a row and record whether the endpoint slows down, locks out, or stays silent. Finally, send
+one deliberately broken or unissued token to a protected endpoint and record whether it is rejected.
+Write up any of the three that fail as its own API2:2023 finding, naming the specific symptom - weak
+secret, missing rate limit, or unverified token - rather than one vague "auth is weak" note.
+</Challenge>
+
+<AskCommunity prompt="I'm now checking three separate things on every API login/token flow I test: secret strength, whether repeated auth attempts get throttled, and whether a broken/unissued token actually gets rejected. For people who test API authentication regularly: how many wrong attempts do you typically send before deciding 'no lockout exists' versus 'I just have not hit it yet,' and how do you responsibly test rate limiting without looking like you are launching a real brute-force attack against a shared environment?">
+Knowing where the line sits between "a legitimate handful of negative-auth tests" and "traffic that
+looks like an actual attack" is exactly the judgment call this kind of testing requires - hearing how
+experienced API testers calibrate it, especially on shared or production-adjacent environments, is the
+fastest way to test this responsibly.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://owasp.org/API-Security/editions/2023/en/0xa2-broken-authentication/", title: "OWASP API2:2023 Broken Authentication - the official category page", kind: "read" },
+    { href: "https://owasp.org/API-Security/", title: "OWASP API Security Top 10 - project home", kind: "read" },
+    { href: "https://cheatsheetseries.owasp.org/cheatsheets/REST_Security_Cheat_Sheet.html", title: "OWASP REST Security Cheat Sheet - authentication and session guidance for APIs", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=ycAC24R8N4o" title="OWASP API Top 10 - Broken Authentication" minutes={9} />
+
+<Takeaways
+  points={[
+    "API2:2023 Broken Authentication covers three independent symptoms: a secret too weak to resist guessing, an auth endpoint with no attempt limit, and a token accepted without real signature verification.",
+    "Each symptom fails a different part of the flow - a strong secret does not fix a missing lockout, and a solid lockout does not fix an unverified token. Test all three separately.",
+    "Login, password-reset, and token-issuance endpoints are the highest-value targets in an API, because a single correct guess or forged token grants full identity, before any authorization check even runs.",
+    "The technology label (API keys, JWTs, OAuth) is never proof of solid authentication - only the actual enforcement behavior (strength, throttling, verification) is.",
+    "Deep JWT forgery and tampering mechanics are covered in a later, dedicated chapter - here the goal is recognizing that authentication itself is a common, severe point of API failure worth its own test.",
+    "Only test authentication flows on systems you are explicitly authorized to test, using tester-owned credentials, with a small, deliberate number of negative attempts - never a real brute-force campaign.",
+  ]}
+/>
+
+<Complete xp={10} />
