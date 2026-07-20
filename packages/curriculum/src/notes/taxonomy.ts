@@ -2404,10 +2404,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "device-and-os-matrix",
         title: "Device & OS matrix",
         topics: [
-          { slug: "fragmentation", title: "Fragmentation", planned: true },
-          { slug: "building-a-matrix", title: "Building a matrix", planned: true },
-          { slug: "real-vs-emulated", title: "Real vs emulated", planned: true },
-          { slug: "device-farms", title: "Device farms", planned: true },
+          { slug: "fragmentation", title: "Fragmentation" },
+          { slug: "building-a-matrix", title: "Building a matrix" },
+          { slug: "real-vs-emulated", title: "Real vs emulated" },
+          { slug: "device-farms", title: "Device farms" },
         ],
       },
       {
