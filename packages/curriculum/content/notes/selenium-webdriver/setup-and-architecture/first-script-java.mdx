@@ -1,0 +1,292 @@
+---
+title: "Your first Selenium script in Java"
+summary: "Put Selenium in the active Maven project, prove the JDK Maven actually uses, drive Selenium's web form, assert an outcome, and guarantee browser cleanup with try/finally."
+tags: ["selenium-webdriver", "setup-and-architecture", "java", "track-d"]
+updated: "2026-07-18"
+related:
+  - "automation/frameworks/selenium-java"
+  - "selenium-webdriver/setup-and-architecture/drivers-and-selenium-manager"
+  - "selenium-webdriver/setup-and-architecture/first-script-python"
+---
+
+<Hook>
+A browser opening is not a passing test. Your first useful Selenium script must prove four things:
+Maven can see Selenium, a browser session starts, an interaction produces the expected result, and
+the session closes even when the assertion fails. Miss any one and you have a demo, not a test.
+</Hook>
+
+<Callout type="analogy">
+Think of an assembly line. The JDK powers the factory, Maven supplies the specified parts, Selenium
+defines the work instructions, and Chrome is the car moving through the stations. A car entering the
+line only proves startup. The inspection station is the assertion that proves the result; `quit()` in
+`finally` closes the line even when inspection rejects the car.
+</Callout>
+
+<Term define="A Selenium WebDriver session is the stateful browser-control relationship created when a driver such as ChromeDriver starts. Commands such as get, findElement, and click belong to that session until quit ends it and releases browser and driver processes.">WebDriver session</Term>
+
+## Make the build boring before opening a browser
+
+Run `java -version` and `mvn -version` in the same terminal. The second command reports the Java
+runtime Maven actually uses; it can differ from the JDK selected by an IDE. Then put Selenium under
+`dependencies` in the `pom.xml` of the project you will run, not in a nearby tutorial folder:
+
+```xml
+<properties>
+  <maven.compiler.release>17</maven.compiler.release>
+  <selenium.version>4.46.0</selenium.version>
+</properties>
+
+<dependencies>
+  <dependency>
+    <groupId>org.seleniumhq.selenium</groupId>
+    <artifactId>selenium-java</artifactId>
+    <version>${selenium.version}</version>
+  </dependency>
+</dependencies>
+```
+
+`mvn dependency:tree` should then list `org.seleniumhq.selenium:selenium-java`. Modern Selenium uses
+Selenium Manager when a suitable driver is not otherwise supplied, but that cannot repair a missing
+Java dependency or a build launched from the wrong project.
+
+<Callout type="tip">
+Diagnose from the inside out: first `mvn -version`, then `mvn dependency:tree`, then compile. Only
+after imports resolve should you investigate Chrome or driver startup. This separates build failures
+from browser-control failures.
+</Callout>
+
+<Callout type="mistake">
+Treating "Chrome opened" as success. A script that clicks but asserts nothing cannot detect a wrong
+title or message, and a script that calls `quit()` only on the happy path leaks processes as soon as
+an exception interrupts it.
+</Callout>
+
+<HotspotImage
+  src="/notes/selenium-webdriver/setup-and-architecture/first-script-java.jpg"
+  alt="A 1913 Ford assembly line with cars moving through a sequence of raised workstations beside a factory"
+  credit="Ford assembly line, 1913 — Ford Motor Company / Library of Congress, public domain"
+  creditHref="https://commons.wikimedia.org/wiki/File:AssemblyLine.jpg"
+  pins={[
+    { x: 25, y: 73, label: "First car = session startup", desc: "The car enters the line before later stations can act on it. Likewise, new ChromeDriver must create a session before navigation or assertions can run." },
+    { x: 52, y: 55, label: "Raised line = ordered test steps", desc: "Each station receives the work produced by the previous station. Imports, startup, navigation, interaction, and assertion form the same ordered pipeline." },
+    { x: 72, y: 32, label: "Workers = Maven dependencies", desc: "Every station needs the right worker and tool. The active Maven project must resolve selenium-java before org.openqa.selenium imports can compile." },
+    { x: 85, y: 64, label: "End of line = quit in finally", desc: "A run needs a controlled exit even when an earlier station reports a defect. A finally block ends the browser session after success or failure." },
+  ]}
+/>
+
+<FlowAnimation
+  title="From Maven project to a closed browser session"
+  intervalMs={1700}
+  nodes={[
+    { label: "Resolve the active project", desc: "Maven reads this directory's pom.xml and builds its dependency graph." },
+    { label: "Compile Selenium imports", desc: "WebDriver, By, WebElement, and ChromeDriver must exist on the compile classpath." },
+    { label: "Start and use a session", desc: "ChromeDriver creates one session; get, findElement, sendKeys, and click use it." },
+    { label: "Assert observable state", desc: "Compare the actual title and submitted message with explicit expected values." },
+    { label: "Quit from finally", desc: "End the session and release processes regardless of the assertion outcome." },
+  ]}
+/>
+
+## The real Selenium path
+
+Prerequisites: JDK 17 or newer, Maven, Chrome, the Selenium dependency above, and network access to
+the official test page (and possibly for first-run driver management). This is real Selenium code,
+so it belongs in a normal fenced block rather than the dependency-free playground.
+
+```java
+import org.openqa.selenium.By;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebElement;
+import org.openqa.selenium.chrome.ChromeDriver;
+
+public class FirstScript {
+    public static void main(String[] args) {
+        WebDriver driver = new ChromeDriver();
+        try {
+            driver.get("https://www.selenium.dev/selenium/web/web-form.html");
+            if (!"Web form".equals(driver.getTitle())) {
+                throw new AssertionError("Unexpected title: " + driver.getTitle());
+            }
+
+            WebElement textBox = driver.findElement(By.name("my-text"));
+            textBox.sendKeys("Selenium");
+            driver.findElement(By.cssSelector("button")).click();
+
+            String message = driver.findElement(By.id("message")).getText();
+            if (!"Received!".equals(message)) {
+                throw new AssertionError("Unexpected message: " + message);
+            }
+        } finally {
+            driver.quit();
+        }
+    }
+}
+```
+
+The playgrounds below are **models**, not Selenium. They use only each language's standard library
+so the curriculum runner can deterministically prove the same lifecycle contract without Chrome,
+Maven, pip, a driver, or the network.
+
+<CodePlayground
+  language="python"
+  title="Model the session lifecycle — Python"
+  code={`events = []
+session = "session-7"
+url = "https://www.selenium.dev/selenium/web/web-form.html"
+expected_title = "Web form"
+actual_title = "Web form"
+assertion_passed = False
+teardown_recorded = False
+
+events.append(f"START session={session}")
+try:
+    events.append(f"NAVIGATE url={url}")
+    assertion_passed = actual_title == expected_title
+    if assertion_passed:
+        events.append(f"ASSERT title expected={expected_title} actual={actual_title} PASS")
+finally:
+    events.append(f"QUIT session={session}")
+    teardown_recorded = True
+
+assert assertion_passed, "title assertion failed"
+assert any(event.startswith("ASSERT ") for event in events), "assertion event missing"
+assert teardown_recorded and events[-1].startswith("QUIT "), "teardown missing"
+
+for event in events:
+    print(event)
+print(f"RESULT assertion={str(assertion_passed).lower()} teardown={str(teardown_recorded).lower()}")`}
+/>
+
+<CodePlayground
+  language="java"
+  title="Model the same session lifecycle — Java"
+  code={`import java.util.ArrayList;
+import java.util.List;
+
+public class Main {
+    public static void main(String[] args) {
+        List<String> events = new ArrayList<>();
+        String session = "session-7";
+        String url = "https://www.selenium.dev/selenium/web/web-form.html";
+        String expectedTitle = "Web form";
+        String actualTitle = "Web form";
+        boolean assertionPassed = false;
+        boolean teardownRecorded = false;
+
+        events.add("START session=" + session);
+        try {
+            events.add("NAVIGATE url=" + url);
+            assertionPassed = actualTitle.equals(expectedTitle);
+            if (assertionPassed) {
+                events.add("ASSERT title expected=" + expectedTitle + " actual=" + actualTitle + " PASS");
+            }
+        } finally {
+            events.add("QUIT session=" + session);
+            teardownRecorded = true;
+        }
+
+        if (!assertionPassed) throw new AssertionError("title assertion failed");
+        if (events.stream().noneMatch(e -> e.startsWith("ASSERT "))) throw new AssertionError("assertion event missing");
+        if (!teardownRecorded || !events.get(events.size() - 1).startsWith("QUIT ")) throw new AssertionError("teardown missing");
+
+        events.forEach(System.out::println);
+        System.out.println("RESULT assertion=" + assertionPassed + " teardown=" + teardownRecorded);
+    }
+}`}
+/>
+
+<FirstTime title="Run the real script once, with evidence">
+<StepChecklist
+  steps={[
+    { text: "Verify both Java selectors", detail: "Run java -version and mvn -version; confirm Maven reports the JDK you intend." },
+    { text: "Prove dependency placement", detail: "From the directory containing the active pom.xml, run mvn dependency:tree and find selenium-java." },
+    { text: "Compile before browser diagnosis", detail: "Run the project compile goal. Resolve classpath and package errors before investigating Chrome." },
+    { text: "Run and watch the assertion", detail: "The script should enter text, submit, and verify both title and Received! message." },
+    { text: "Force a failure", detail: "Temporarily change the expected message. Confirm the assertion fails and Chrome still closes via finally." },
+  ]}
+/>
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    { symptom: "package org.openqa.selenium does not exist", fix: "Maven is compiling without selenium-java. Run mvn dependency:tree from the module that owns this source file; move the dependency into that module's active pom.xml and reimport Maven in the IDE." },
+    { symptom: "The IDE compiles but Maven fails, or the reverse", fix: "Compare the IDE project SDK with the Java home printed by mvn -version. Fix the JDK selection, then rebuild from the command line to remove IDE cache ambiguity." },
+    { symptom: "Chrome opens and remains after a failure", fix: "The quit call is on the happy path or missing. Create the driver once, put all session work in try, and call driver.quit() in finally." },
+    { symptom: "The script finishes green even when the page is wrong", fix: "Actions are not assertions. Capture title or message text and compare it to an explicit expected value that throws on mismatch." },
+  ]}
+/>
+
+<WhereToCheck>
+- **`mvn -version`** — the JDK Maven truly runs with.
+- **`mvn dependency:tree`** — whether Selenium is in this module's effective dependency graph.
+- **The first compiler error** — import failures are classpath evidence, not driver evidence.
+- **Task Manager or Activity Monitor** — leaked Chrome or driver processes after an intentional failure.
+- **The assertion message** — expected and actual values should explain the behavioural failure.
+</WhereToCheck>
+
+<WorkedExample title="The dependency was correct — in the wrong project">
+Mina adds `selenium-java` to a parent tutorial's `pom.xml`, then runs a class from a sibling Maven
+module. Her IDE remembers cached imports, but `mvn compile` reports that `org.openqa.selenium` does
+not exist. From the source module she runs `mvn dependency:tree`; Selenium is absent. She moves the
+dependency into that module's active `pom.xml`, reloads Maven, and compilation succeeds. Next she
+changes the expected title to force failure: the assertion reports expected versus actual and Chrome
+closes. The two observations prove both the oracle and teardown, not merely that a window appeared.
+</WorkedExample>
+
+<Quiz
+  question="A Java Selenium script opens Chrome, submits a form, and calls quit() on the next line. What two changes turn it into a trustworthy first test?"
+  options={[
+    "Add a longer sleep and print the page source",
+    "Assert an observable result and place quit() in a finally block",
+    "Replace Maven with manual JAR downloads",
+    "Use more locators before closing the browser"
+  ]}
+  answer={1}
+  explain="An assertion makes incorrect behaviour fail, while finally guarantees cleanup when any earlier operation or assertion throws. A sleep, more actions, or manual dependency handling supplies neither property."
+/>
+
+<Flashcards
+  cards={[
+    { front: "What does mvn -version prove?", back: "Which Java runtime Maven actually uses, which may differ from the IDE's selected JDK." },
+    { front: "What does mvn dependency:tree prove?", back: "Whether selenium-java is in the active Maven module's resolved classpath." },
+    { front: "Why is an opened browser insufficient?", back: "It proves session startup, not that the interaction produced the expected state." },
+    { front: "Why quit in finally?", back: "Because assertions and browser commands can throw; finally still ends the session and releases processes." },
+    { front: "Real example versus playground", back: "The fenced example uses Selenium and Chrome; the playground is a standard-library lifecycle model for deterministic execution." },
+  ]}
+/>
+
+<Challenge>
+Run the real example, then make the expected message deliberately wrong. Capture the failing
+expected/actual evidence and confirm no Chrome or driver process remains. Restore the expectation,
+run again, and explain which observation proves assertion quality and which proves teardown quality.
+</Challenge>
+
+<AskCommunity prompt="My Java first script fails at [compile / session start / assertion / teardown]. Here are mvn -version, the selenium-java line from dependency:tree, the first error, and whether Chrome remains after failure. Which boundary rejected it?">
+Share boundary evidence, not only a screenshot of the browser. It lets others distinguish a Maven
+classpath problem from driver startup, page behaviour, or lifecycle cleanup.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://www.selenium.dev/documentation/webdriver/getting_started/install_library/", title: "Selenium — Install a Selenium library", kind: "read" },
+    { href: "https://www.selenium.dev/documentation/webdriver/getting_started/first_script/", title: "Selenium — Write your first Selenium script", kind: "read" },
+    { href: "https://www.selenium.dev/selenium/docs/api/java/org/openqa/selenium/WebDriver.html", title: "Selenium Java API — WebDriver", kind: "reference" },
+    { href: "https://www.selenium.dev/documentation/webdriver/troubleshooting/errors/driver_location/", title: "Selenium — Unable to locate driver troubleshooting", kind: "read" },
+  ]}
+/>
+
+This recording is useful for its Maven dependency and first-class walkthrough, but its manual driver
+setup predates built-in Selenium Manager. Use the modern `new ChromeDriver()` flow shown above.
+
+<Video href="https://www.youtube.com/watch?v=YyB2NGV69xE" title="Write your first Selenium WebDriver code using Maven - POM Dependency" minutes={13} />
+
+<Takeaways
+  points={[
+    "Java setup begins with the active Maven module and the JDK Maven reports, not with the browser.",
+    "ChromeDriver starts a WebDriver session; commands use that stateful session until quit ends it.",
+    "An interaction becomes a test only when an explicit expected value is compared with actual browser state.",
+    "driver.quit() belongs in finally so failures cannot leak browser and driver processes.",
+    "The real fenced example requires Selenium and Chrome; the dual playgrounds model its lifecycle deterministically with standard libraries only.",
+  ]}
+/>
+
+<Complete xp={10} />

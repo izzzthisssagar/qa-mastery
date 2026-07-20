@@ -1,0 +1,223 @@
+---
+title: "WebDriver architecture"
+summary: "Trace a browser command through Selenium's language binding, remote end, session boundary, browser, and protocol response."
+tags: ["selenium", "webdriver", "architecture", "browser-automation", "track-d"]
+updated: "2026-07-18"
+related:
+  - "automation/frameworks/selenium-java"
+  - "selenium-webdriver/setup-and-architecture/drivers-and-selenium-manager"
+  - "selenium-webdriver/setup-and-architecture/first-script-java"
+  - "selenium-webdriver/setup-and-architecture/first-script-python"
+---
+
+<Hook>
+Your test says “open this URL,” but the browser never receives source code from your test directly.
+Several boundaries translate, route, validate, execute, and report that request. If you cannot name the
+boundary that rejected a command, every WebDriver failure looks like “Selenium is broken.”
+</Hook>
+
+<Callout type="analogy">
+Think of airport ground control. A pilot makes a request, a dispatcher formats it, the control tower
+checks the flight identity, a specialist routes the aircraft, and a status comes back. A valid action
+sent with the wrong flight identity must stop at the tower, not reach the runway.
+</Callout>
+
+<Term define="A WebDriver session is the stateful automation relationship created by a remote end and identified by a session ID used to route later commands.">WebDriver session</Term>
+
+## Follow one command, then follow the response
+
+Your **test code** calls a method such as `driver.get(url)`. The Selenium **language binding** for
+Python, Java, or another supported language turns that call into a WebDriver command. A **remote end**
+receives the command. In a local run that remote end is usually a browser-specific driver process; in
+a distributed run it can be reached through Selenium Grid. The remote end validates the command and
+session, asks the browser to perform the operation, then returns a success value or protocol error.
+
+The session ID is the routing boundary. Session creation returns an ID and capabilities that describe
+the negotiated browser session. Later commands carry that ID. A command for a missing, ended, or
+different session should produce an `invalid session id` error rather than operate on an arbitrary
+browser. An unsupported command, malformed URL, or invalid argument is a different failure: the
+session may be healthy even though that command is not acceptable.
+
+Python and Java use different syntax and dependency tooling, but they do not invent separate browser
+protocols. Their bindings express equivalent WebDriver commands and interpret equivalent responses.
+
+<Callout type="tip">
+Capture the session ID, command name, remote-end address, browser and driver versions, response status,
+and error name together. That evidence identifies which layer accepted the request and which rejected it.
+</Callout>
+
+<Callout type="mistake">
+Calling every remote end “Grid.” A local ChromeDriver or GeckoDriver is already a remote end in the
+WebDriver model. Grid adds routing and remote execution; it is not required for the command protocol.
+</Callout>
+
+<HotspotImage src="/notes/selenium-webdriver/setup-and-architecture/webdriver-architecture.jpg" alt="Air traffic controllers working at consoles beneath route maps in the Washington Air Route Traffic Control Center" credit="Washington ARTCC controllers — U.S. Federal Aviation Administration, public domain" creditHref="https://commons.wikimedia.org/wiki/File:AirTraffic-8.jpg" pins={[
+  { x: 79, y: 49, label: "Caller", desc: "The foreground controller initiates work, like test code stating an intention through a Selenium language binding." },
+  { x: 27, y: 56, label: "Binding", desc: "Controllers translate intent into precise operational instructions, as a binding packages a method call as a WebDriver command." },
+  { x: 43, y: 55, label: "Remote end", desc: "The central console represents the driver boundary that validates the active session and command before contacting the browser." },
+  { x: 30, y: 29, label: "Browser state and response", desc: "The route displays expose changing system state; success values and named protocol errors return through the command chain." },
+]}/>
+
+<FlowAnimation title="A navigation command crosses the session boundary" intervalMs={1500} nodes={[
+  { label: "Test code", desc: "Calls the binding's navigation method with a target URL." },
+  { label: "Language binding", desc: "Creates the WebDriver command for the active session." },
+  { label: "Remote end", desc: "Checks the session ID and validates command arguments." },
+  { label: "Browser", desc: "Navigates only after the remote end accepts the command." },
+  { label: "Response", desc: "Returns the result or a named protocol error to the binding." },
+]}/>
+
+The playgrounds below are standard-library simulations of that contract, not Selenium clients. They
+need no browser or driver, so the session-boundary oracle stays deterministic.
+
+<CodePlayground language="python" title="Run it — reject a wrong WebDriver session (Python)" code={`from dataclasses import dataclass
+
+ACTIVE_SESSION = "session-42"
+TARGET_URL = "https://example.test"
+
+@dataclass(frozen=True)
+class Command:
+    session_id: str
+    name: str
+    argument: str
+
+@dataclass(frozen=True)
+class Response:
+    status: int
+    detail: str
+
+def remote_end(command: Command) -> Response:
+    if command.session_id != ACTIVE_SESSION:
+        return Response(404, "invalid session id")
+    if command.name != "navigate":
+        return Response(400, "unsupported command")
+    if not command.argument.startswith("https://"):
+        return Response(400, "invalid argument")
+    return Response(200, f"url={command.argument}")
+
+valid = remote_end(Command(ACTIVE_SESSION, "navigate", TARGET_URL))
+wrong_session = remote_end(Command("session-99", "navigate", TARGET_URL))
+
+valid_accepted = valid == Response(200, f"url={TARGET_URL}")
+wrong_session_rejected = wrong_session == Response(404, "invalid session id")
+
+assert valid_accepted, "the valid navigation command must reach the browser boundary"
+assert wrong_session_rejected, "a command for session-99 must be rejected by the remote end"
+
+print(f"STATUS {valid.status} {valid.detail}")
+print(f"STATUS {wrong_session.status} {wrong_session.detail}")
+print("RESULT valid_accepted=true wrong_session_rejected=true")`}/>
+
+<CodePlayground language="java" title="Run it — reject a wrong WebDriver session (Java)" code={`public class Main {
+    static final String ACTIVE_SESSION = "session-42";
+    static final String TARGET_URL = "https://example.test";
+
+    record Command(String sessionId, String name, String argument) {}
+    record Response(int status, String detail) {}
+
+    static Response remoteEnd(Command command) {
+        if (!command.sessionId().equals(ACTIVE_SESSION)) {
+            return new Response(404, "invalid session id");
+        }
+        if (!command.name().equals("navigate")) {
+            return new Response(400, "unsupported command");
+        }
+        if (!command.argument().startsWith("https://")) {
+            return new Response(400, "invalid argument");
+        }
+        return new Response(200, "url=" + command.argument());
+    }
+
+    public static void main(String[] args) {
+        Response valid = remoteEnd(new Command(ACTIVE_SESSION, "navigate", TARGET_URL));
+        Response wrongSession = remoteEnd(new Command("session-99", "navigate", TARGET_URL));
+
+        boolean validAccepted = valid.equals(new Response(200, "url=" + TARGET_URL));
+        boolean wrongSessionRejected = wrongSession.equals(new Response(404, "invalid session id"));
+
+        if (!validAccepted) {
+            throw new AssertionError("the valid navigation command must reach the browser boundary");
+        }
+        if (!wrongSessionRejected) {
+            throw new AssertionError("a command for session-99 must be rejected by the remote end");
+        }
+
+        System.out.println("STATUS " + valid.status() + " " + valid.detail());
+        System.out.println("STATUS " + wrongSession.status() + " " + wrongSession.detail());
+        System.out.println("RESULT valid_accepted=true wrong_session_rejected=true");
+    }
+}`}/>
+
+<FirstTime title="Your mission: trace one failed command">
+<StepChecklist steps={[
+  { text: "Record the session", detail: "Capture the session ID and whether session creation completed successfully." },
+  { text: "Record the command", detail: "Name the operation and preserve its arguments without exposing secrets." },
+  { text: "Find the rejecting layer", detail: "Compare binding logs, remote-end logs, and the named protocol error." },
+  { text: "Prove the boundary", detail: "Send one known-valid command in the same session before changing test code." },
+]}/>
+You now have a layer-by-layer trace instead of a generic browser failure.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "A command fails with invalid session id.", fix: "Check whether the session was never created, already quit, crashed, or the command used an ID from another run." },
+  { symptom: "The session exists but one command is rejected.", fix: "Read the protocol error name and inspect command support and arguments before replacing the driver." },
+  { symptom: "The driver starts, then loses the browser.", fix: "Collect browser and driver versions, process exits, crash logs, ports, and transport errors." },
+  { symptom: "A remote failure is blamed on Grid without evidence.", fix: "Identify the actual remote-end URL and trace whether routing, the node driver, or the browser returned the error." },
+]}/>
+
+<WhereToCheck>
+- **Binding logs** — command name, target remote end, session ID, and decoded response.
+- **Driver logs** — session creation, command validation, browser transport, and process exit.
+- **Browser logs** — crashes, policy blocks, profile errors, and navigation failures.
+- **Grid logs, when Grid is present** — router, distributor, node assignment, and session map.
+- **W3C error name** — distinguish invalid session, invalid argument, unknown command, and unknown error.
+</WhereToCheck>
+
+<WorkedExample title="a navigation that never reached the browser">
+1. A test creates `session-42` and successfully reads the current URL.
+2. A retry helper accidentally reuses `session-99` from a previous test report.
+3. The remote end returns `invalid session id` before executing navigation.
+4. Browser network logs contain no request for the target URL, confirming the browser never received it.
+5. The fix passes the active driver instance into the helper instead of copying a stale session value.
+</WorkedExample>
+
+<Quiz question="Which evidence most directly proves a navigation command was rejected at the remote-end session boundary?" options={[
+  "The page loaded slowly in a manual browser",
+  "The response names invalid session id and the browser shows no target navigation",
+  "The Java and Python tests use different method names",
+  "A Grid dashboard exists in another environment"
+]} answer={1} explain="The named protocol error identifies session validation, while absence of browser navigation supports that the command stopped before execution." />
+
+<Flashcards cards={[
+  { front: "Language binding", back: "The client library that turns language-level calls into WebDriver commands and decodes responses." },
+  { front: "Remote end", back: "The WebDriver endpoint that owns sessions, validates commands, controls the browser, and returns responses." },
+  { front: "Session ID", back: "The identifier that routes later commands to one active browser automation session." },
+  { front: "Protocol error", back: "A named WebDriver response such as invalid session id or invalid argument, not merely a stack trace." },
+  { front: "Selenium Grid", back: "Infrastructure that routes sessions to remote nodes; it is not the same thing as a local driver process." },
+]}/>
+
+<Challenge>
+Extend both playgrounds with an `unsupported` command and an invalid `http://` argument. Keep session
+validation first, then assert that each accepted-session failure returns the correct, distinct error.
+</Challenge>
+
+<AskCommunity prompt="Command [name] failed for session [sanitized ID] at remote end [local/Grid]. The protocol error was [name], driver/browser versions were [versions], and the last successful command was [command]. Which layer should I inspect next?">
+Share the smallest trace that preserves ordering; remove credentials, cookies, and private URLs.
+</AskCommunity>
+
+<Resources links={[
+  { href: "https://www.selenium.dev/documentation/webdriver/getting_started/", title: "Selenium documentation — Getting started with WebDriver", kind: "read" },
+  { href: "https://www.selenium.dev/documentation/webdriver/drivers/", title: "Selenium documentation — Driver sessions", kind: "reference" },
+  { href: "https://www.w3.org/TR/webdriver2/", title: "W3C WebDriver specification", kind: "reference" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=8fm5sJ_P90Y" title="Selenium 4 - What is W3C WebDriver Architecture? || No More JSON Wire Protocol - Whiteboard Learning" minutes={25} />
+
+<Takeaways points={[
+  "A language binding sends WebDriver commands; it does not control browser internals directly.",
+  "The remote end owns the session boundary and rejects commands with the wrong session ID.",
+  "Local drivers and Selenium Grid participate in the same WebDriver command model but are not interchangeable terms.",
+  "Named errors and ordered logs reveal which layer rejected a command.",
+  "Python and Java bindings express equivalent protocol behavior through different language APIs.",
+]}/>
+
+<Complete xp={10} />

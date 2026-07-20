@@ -1,0 +1,152 @@
+---
+title: "Actions API: sequences, device state, and cleanup"
+summary: "Build low-level pointer and keyboard sequences only when high-level element commands are insufficient, then release state and assert the outcome."
+tags: ["selenium", "webdriver", "interactions", "navigation", "track-d"]
+updated: "2026-07-18"
+related:
+  - "selenium-webdriver/actions-and-navigation/clicks-and-input"
+  - "selenium-webdriver/actions-and-navigation/dropdowns-and-alerts"
+  - "selenium-webdriver/actions-and-navigation/frames-and-windows"
+---
+
+<Hook>A held Shift key is session state, not a one-line detail. If an action sequence fails before key-up, later tests can inherit a modifier you forgot was still pressed.</Hook>
+<Callout type="analogy">A mouse has distinct pointer movement, buttons, and a wheel; the browser remembers their state across a sequence. The Actions API is the control surface for those devices, not a stronger version of every ordinary click.</Callout>
+<Term define="The Actions API is WebDriver's low-level interface for composing synchronized virtual keyboard, pointer, pen, touch, and wheel input sources.">Actions API</Term>
+
+## Act inside the right boundary
+
+Use high-level WebElement click and sendKeys for ordinary controls. Use Actions when behavior depends on hover, drag, chorded keys, pointer offsets, click-and-hold, or wheel input. Java `Actions` and Python `ActionChains` build sequences and send them with `perform`.
+
+Input sources are stateful across the session. Keep key-down and key-up balanced, release held pointer buttons, and clear input state after interrupted or intentionally incomplete sequences. Synchronize on the application outcome after `perform`; execution of the input sequence is not the business oracle.
+
+<Callout type="tip">Keep action chains short and name the user gesture they model; long chains make the failing device transition hard to locate.</Callout>
+<Callout type="mistake">Replacing every intercepted click with an Actions chain. A center-point obstruction may be a product defect, not a need for lower-level input.</Callout>
+
+<HotspotImage src="/notes/selenium-webdriver/actions-and-navigation/actions-api.jpg" alt="Three-button computer mouse with left and right buttons, wheel, body, and cable" credit="3-button Microsoft mouse — Darkone, CC BY-SA 2.5" creditHref="https://commons.wikimedia.org/wiki/File:3-Tasten-Maus_Microsoft.jpg" pins={[
+  { x: 25, y: 25, label: "Target", desc: "The visible target must belong to the active context and intended interaction." },
+  { x: 70, y: 30, label: "Input boundary", desc: "Element, prompt, frame, window, and device APIs are not interchangeable." },
+  { x: 35, y: 70, label: "Transition", desc: "The ordered command changes browser or application state." },
+  { x: 75, y: 75, label: "Outcome oracle", desc: "Observed final state proves the interaction achieved its purpose." },
+]}/>
+
+<FlowAnimation title="A verified browser interaction" intervalMs={1500} nodes={[
+  { label: "Identify boundary", desc: "Choose element, prompt, frame, window, or input device." },
+  { label: "Establish context", desc: "Locate or switch to the exact target." },
+  { label: "Perform sequence", desc: "Send the smallest ordered interaction." },
+  { label: "Verify outcome", desc: "Assert application state, not command completion alone." },
+  { label: "Restore context", desc: "Release input and switch back when required." },
+]}/>
+
+## Real Selenium examples
+
+These fenced samples require Selenium. The playground pair models ordering without a browser.
+
+~~~python
+ActionChains(driver).move_to_element(card).key_down(Keys.SHIFT).send_keys("a").key_up(Keys.SHIFT).click().perform()
+assert card.get_attribute("value") == "A"
+~~~
+
+~~~java
+new Actions(driver).moveToElement(card).keyDown(Keys.SHIFT).sendKeys("a").keyUp(Keys.SHIFT).click().perform();
+assertEquals("A", card.getAttribute("value"));
+~~~
+
+<CodePlayground language="python" title="Run it — verify an ordered interaction (Python)" code={`EXPECTED = "move:card>key-down:SHIFT>type:a>key-up:SHIFT>click:card"
+EVENTS = ["move:card","key-down:SHIFT","type:a","key-up:SHIFT","click:card"]
+
+def execute(events):
+    trace = ">".join(events)
+    if trace != EXPECTED:
+        raise AssertionError(f"unexpected sequence={trace}")
+    return trace, "pointer=card keys=released value=A clicked=true"
+
+trace, state = execute(EVENTS)
+sequence_accepted = trace == EXPECTED
+assert sequence_accepted, "the intended interaction sequence must be accepted"
+assert state == "pointer=card keys=released value=A clicked=true", "the final application/context state is the oracle"
+print(f"TRACE {trace}")
+print(f"STATE {state}")
+print("RESULT sequence_accepted=true final_state_verified=true")`}/>
+
+<CodePlayground language="java" title="Run it — verify an ordered interaction (Java)" code={`import java.util.List;
+
+public class Main {
+    static final String EXPECTED = "move:card>key-down:SHIFT>type:a>key-up:SHIFT>click:card";
+    record Result(String trace, String state) {}
+    static Result execute(List<String> events) {
+        String trace = String.join(">", events);
+        if (!trace.equals(EXPECTED)) throw new AssertionError("unexpected sequence=" + trace);
+        return new Result(trace, "pointer=card keys=released value=A clicked=true");
+    }
+    public static void main(String[] args) {
+        Result result = execute(List.of("move:card", "key-down:SHIFT", "type:a", "key-up:SHIFT", "click:card"));
+        boolean sequenceAccepted = result.trace().equals(EXPECTED);
+        if (!sequenceAccepted) throw new AssertionError("the intended interaction sequence must be accepted");
+        if (!result.state().equals("pointer=card keys=released value=A clicked=true")) throw new AssertionError("the final state is the oracle");
+        System.out.println("TRACE " + result.trace());
+        System.out.println("STATE " + result.state());
+        System.out.println("RESULT sequence_accepted=true final_state_verified=true");
+    }
+}`}/>
+
+<FirstTime title="Your mission: prove one interaction">
+<StepChecklist steps={[
+  { text: "Name the boundary", detail: "Identify element, select, alert, frame, window, or input device." },
+  { text: "Capture starting context", detail: "Record handle, frame path, target identity, and relevant state." },
+  { text: "Perform the minimum sequence", detail: "Keep input ordered and balance held device state." },
+  { text: "Assert the outcome", detail: "Verify visible, navigational, or persisted application state." },
+]}/>
+You now have a user-meaningful interaction oracle, not just a completed command.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "The element is visible but not found.", fix: "Check the active window and frame before changing the locator." },
+  { symptom: "Click is intercepted.", fix: "Inspect the center point, overlay, scrolling, and viewport rather than bypassing interactability." },
+  { symptom: "A later test types uppercase unexpectedly.", fix: "Release held modifier keys or reset the session input state." },
+  { symptom: "The command succeeds but behavior is wrong.", fix: "Strengthen the post-action oracle and verify the target identity." },
+]}/>
+
+<WhereToCheck>
+- **Current context** — window handle, handle set, frame path, title, and URL.
+- **Element evidence** — tag, enabled/displayed state, center-point obstruction, current value.
+- **Prompt state** — alert text and chosen accept/dismiss response.
+- **Input state** — focused element, pointer location, held keys/buttons, and action sequence.
+</WhereToCheck>
+
+<WorkedExample title="the click that saved the wrong panel">
+A page contains two Save buttons. The command completes, but the test checks only that no exception was thrown. After a redesign, the first match belongs to a notification panel. The repaired test scopes the target, verifies identity, performs the interaction in the correct context, and asserts the profile confirmation and persisted value.
+</WorkedExample>
+
+<Quiz question="What proves a WebDriver interaction succeeded?" options={["The command returned", "The element was found once", "The intended application outcome was observed", "No screenshot was taken"]} answer={2} explain="Command completion is transport evidence; the application outcome is the behavioral oracle." />
+
+<Flashcards cards={[
+  { front: "Interactability", back: "Whether WebDriver can perform the requested user-like element action." },
+  { front: "Window handle", back: "A session-persistent identifier for one top-level browsing context." },
+  { front: "Alert", back: "A browser prompt addressed outside the page DOM." },
+  { front: "Input state", back: "Remembered pointer, button, and key state across action sequences." },
+]}/>
+
+<Challenge>
+Mutate EXPECTED in both playgrounds. The unchanged event sequence must make each program exit nonzero. Then remove the final restoration or key-release event and require the state oracle to reject the sequence.
+</Challenge>
+
+<AskCommunity prompt="Interaction [sequence] ran in window/frame [context] against [target]. The command result was [result], final state was [state], and logs showed [evidence]. Which boundary should I inspect?">Remove secrets, cookies, customer data, and private URLs.</AskCommunity>
+
+<Resources links={[
+  { href: "https://www.selenium.dev/documentation/webdriver/actions_api/", title: "Selenium — Actions API", kind: "reference" },
+  { href: "https://www.selenium.dev/documentation/webdriver/actions_api/mouse/", title: "Selenium — Mouse actions", kind: "reference" },
+  { href: "https://www.selenium.dev/documentation/webdriver/actions_api/keyboard/", title: "Selenium — Keyboard actions", kind: "reference" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=W6NZfCO5SIk" title="JavaScript Course for Beginners – Your First Step to Web Development" minutes={48} />
+
+<Takeaways points={[
+  "Choose the API that matches the browser boundary.",
+  "Command completion is not the application outcome.",
+  "Frames and windows require explicit context management.",
+  "Low-level input state must be balanced and restored.",
+  "Real Selenium stays fenced; playgrounds model sequence deterministically.",
+]}/>
+
+<Complete xp={10} />
+

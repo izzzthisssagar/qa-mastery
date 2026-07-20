@@ -1,0 +1,170 @@
+---
+title: "Implicit versus explicit waits"
+summary: "Separate WebDriver's session-wide element lookup timeout from condition-specific explicit waits, and avoid unpredictable combinations."
+tags: ["selenium", "webdriver", "waits", "synchronization", "track-d"]
+updated: "2026-07-18"
+related:
+  - "selenium-webdriver/waits-and-sync/fluent-waits"
+  - "selenium-webdriver/waits-and-sync/avoiding-sleeps"
+  - "selenium-webdriver/waits-and-sync/handling-async"
+---
+
+<Hook>A ten-second timeout does not mean Selenium understands what ready means. An implicit wait only changes element lookup; an explicit wait can name the exact state required for the next action.</Hook>
+
+<Callout type="analogy">An annunciator panel has separate named warnings rather than one generic delay light. Explicit waits work the same way: visible, clickable, text present, or gone are different conditions. A global implicit wait is closer to giving every lookup the same grace period.</Callout>
+
+<Term define="An explicit wait repeatedly evaluates a named condition until it succeeds or a maximum timeout expires.">explicit wait</Term>
+
+## Wait for evidence, not elapsed time
+
+An implicit wait is a session-wide timeout used by element location commands. Its default is zero, and a successful lookup returns as soon as an element is found. It does not wait for arbitrary business state, enabledness, text, or network completion. An explicit wait runs a client-side polling loop for a particular condition and throws a timeout if the condition never succeeds.
+
+Selenium warns not to mix implicit and explicit waits because nested lookup delays can produce unpredictable total times. Prefer explicit waits when the next command depends on a named state. Keep the condition close to the action and include the locator, condition, timeout, and last observed state in failure evidence.
+
+<Callout type="tip">Choose a condition that proves readiness for the next action, not merely presence in the DOM.</Callout>
+<Callout type="mistake">Setting a long implicit wait and assuming every later click, text read, and disappearance check is synchronized.</Callout>
+
+<HotspotImage src="/notes/selenium-webdriver/waits-and-sync/implicit-vs-explicit.jpg" alt="Apollo command module caution panel with individually labelled indicators" credit="Apollo Command Module Master Caution and Event Annunciator Panel — Steve Jurvetson, CC BY 2.0" creditHref="https://commons.wikimedia.org/wiki/File:Apollo_Command_Module_Master_Caution_%26_Event_Annunciator_Panel_%E2%80%94_with_the_Infamous_%22Main_Bus_B_Undervolt%22_Alarm_of_Apollo_13_(53839889630).jpg" pins={[
+  { x: 25, y: 25, label: "Initial state", desc: "The first visible state is evidence, not yet success." },
+  { x: 70, y: 30, label: "Repeated observation", desc: "Polling samples state without assuming when it changes." },
+  { x: 35, y: 70, label: "Decisive condition", desc: "The named target state releases the next action." },
+  { x: 75, y: 75, label: "Deadline", desc: "A bounded wait rejects missing readiness with evidence." },
+]}/>
+
+<FlowAnimation title="A condition-based wait" intervalMs={1500} nodes={[
+  { label: "Trigger", desc: "Perform the action that starts asynchronous work." },
+  { label: "Observe", desc: "Evaluate one named condition." },
+  { label: "Poll", desc: "Retry only while the deadline and transient policy allow." },
+  { label: "Return or reject", desc: "Continue on decisive state or fail with the last observation." },
+]}/>
+
+## Real Selenium examples
+
+These fenced samples require Selenium; the playground pair is a dependency-free timing model.
+
+~~~python
+driver.implicitly_wait(0)
+wait = WebDriverWait(driver, 10)
+button = wait.until(EC.element_to_be_clickable((By.ID, "submit")))
+~~~
+
+~~~java
+driver.manage().timeouts().implicitlyWait(Duration.ZERO);
+WebElement button = new WebDriverWait(driver, Duration.ofSeconds(10))
+    .until(ExpectedConditions.elementToBeClickable(By.id("submit")));
+~~~
+
+<CodePlayground language="python" title="Run it — wait for one decisive state (Python)" code={`EXPECTED = "clickable"
+OBSERVATIONS = [[0,"missing"],[2,"present"],[4,"clickable"]]
+
+def wait_until(observations, expected, deadline):
+    for timestamp, state in observations:
+        if timestamp > deadline:
+            break
+        if state == expected:
+            return timestamp, state
+    raise AssertionError(f"timeout deadline={deadline} expected={expected}")
+
+ready = wait_until(OBSERVATIONS, EXPECTED, 5)
+accepted = ready == (4, EXPECTED)
+assert accepted, "the wait must return the first decisive observation"
+
+try:
+    wait_until(OBSERVATIONS, EXPECTED, 3)
+    raise AssertionError("the short deadline must reject readiness")
+except AssertionError as error:
+    timeout_rejected = str(error).startswith("timeout deadline=")
+assert timeout_rejected, "timeout evidence must be preserved"
+
+print(f"READY t={ready[0]} state={ready[1]}")
+print("REJECT timeout deadline=3")
+print("RESULT ready=true timeout_rejected=true")`}/>
+
+<CodePlayground language="java" title="Run it — wait for one decisive state (Java)" code={`import java.util.List;
+
+public class Main {
+    static final String EXPECTED = "clickable";
+    record Observation(int time, String state) {}
+    static Observation waitUntil(List<Observation> observations, String expected, int deadline) {
+        for (Observation item : observations) {
+            if (item.time() > deadline) break;
+            if (item.state().equals(expected)) return item;
+        }
+        throw new AssertionError("timeout deadline=" + deadline + " expected=" + expected);
+    }
+    public static void main(String[] args) {
+        List<Observation> observations = List.of(new Observation(0, "missing"), new Observation(2, "present"), new Observation(4, "clickable"));
+        Observation ready = waitUntil(observations, EXPECTED, 5);
+        boolean accepted = ready.equals(new Observation(4, EXPECTED));
+        if (!accepted) throw new AssertionError("the wait must return the first decisive observation");
+        boolean timeoutRejected = false;
+        try { waitUntil(observations, EXPECTED, 3); }
+        catch (AssertionError error) { timeoutRejected = error.getMessage().startsWith("timeout deadline="); }
+        if (!timeoutRejected) throw new AssertionError("timeout evidence must be preserved");
+        System.out.println("READY t=" + ready.time() + " state=" + ready.state());
+        System.out.println("REJECT timeout deadline=3");
+        System.out.println("RESULT ready=true timeout_rejected=true");
+    }
+}`}/>
+
+<FirstTime title="Your mission: replace one sleep">
+<StepChecklist steps={[
+  { text: "Name the transition", detail: "Write the state before and the decisive state after the async work." },
+  { text: "Choose an observation", detail: "Use visible UI or protocol evidence required by the next action." },
+  { text: "Bound the wait", detail: "Set timeout and polling cadence appropriate to the system." },
+  { text: "Capture failure", detail: "Preserve last state, condition, locator, elapsed time, and relevant logs." },
+]}/>
+You now have a synchronization oracle rather than a delay guess.
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "The wait times out although the page looks ready.", fix: "Compare the named condition with the actual next-action requirement and last observed state." },
+  { symptom: "The wait is much longer than configured.", fix: "Check for mixed implicit and explicit waits or slow work inside the condition." },
+  { symptom: "A stale element repeats until timeout.", fix: "Relocate by a stable locator after rerender instead of polling an old reference." },
+  { symptom: "CI fails but local runs pass.", fix: "Capture timings, network, console, and the exact transition instead of enlarging a sleep." },
+]}/>
+
+<WhereToCheck>
+- **Wait diagnostics** — condition, locator, timeout, poll count, and last observed value.
+- **Browser console and network** — async errors, rejected requests, and completion timing.
+- **DOM snapshots** — node replacement, visibility, enabledness, and text changes.
+- **Timeout configuration** — implicit, explicit, script, and page-load timeouts kept distinct.
+</WhereToCheck>
+
+<WorkedExample title="the spinner that outlived the sleep">
+A test clicks Search, sleeps two seconds, and reads an empty results panel. On a busy runner the response takes three seconds. The repair waits for the spinner to disappear and results to become visible, returns early on fast runs, and reports the last state plus network failure when readiness never occurs.
+</WorkedExample>
+
+<Quiz question="What should release an explicit wait?" options={["The average historical delay", "A named state required by the next action", "The longest sleep the suite can tolerate", "Any ignored exception"]} answer={1} explain="A wait is useful when its condition proves the next action can proceed; elapsed time alone does not." />
+
+<Flashcards cards={[
+  { front: "Implicit wait", back: "A session-wide timeout applied to element location." },
+  { front: "Explicit wait", back: "A bounded polling loop for one named condition." },
+  { front: "Polling interval", back: "How often a wait reevaluates its condition." },
+  { front: "Last observation", back: "The state or exception that makes a timeout diagnosable." },
+]}/>
+
+<Challenge>
+Mutate EXPECTED in both playgrounds. The original state observations must make each program exit nonzero. Then add an observation exactly at the deadline and prove the boundary policy is inclusive.
+</Challenge>
+
+<AskCommunity prompt="After [trigger], I waited [timeout] for [condition] at [locator]. The last state was [state], poll count was [count], and network/console evidence was [summary]. Which boundary should I inspect next?">Remove credentials, private URLs, cookies, and customer data.</AskCommunity>
+
+<Resources links={[
+  { href: "https://www.selenium.dev/documentation/webdriver/waits/", title: "Selenium — Waiting strategies", kind: "reference" },
+  { href: "https://www.selenium.dev/selenium/docs/api/java/org/openqa/selenium/support/ui/FluentWait.html", title: "Selenium Java API — FluentWait", kind: "reference" },
+  { href: "https://www.selenium.dev/selenium/docs/api/py/selenium_webdriver_support/selenium.webdriver.support.wait.html", title: "Selenium Python API — waits", kind: "reference" },
+]}/>
+
+<Video href="https://www.youtube.com/watch?v=07NCR1ml0O4" title="Selenium Class 50: How To Use Explicit Wait in Selenium 4" minutes={7} />
+
+<Takeaways points={[
+  "Readiness is a condition, not a duration.",
+  "Implicit waits affect lookup; explicit waits can name richer state.",
+  "Do not mix implicit and explicit waits.",
+  "Bounded polling should preserve the last observation and cause.",
+  "Real Selenium stays fenced; playgrounds model timing deterministically.",
+]}/>
+
+<Complete xp={10} />
+
