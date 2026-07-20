@@ -1,0 +1,369 @@
+---
+title: "Excessive data exposure"
+summary: "Excessive data exposure happens when an endpoint like GET /users/me serializes the whole internal record - password hashes, internal flags, other fields the UI never shows - and relies on the CLIENT to only render the few fields it needs, instead of the server only ever sending them."
+tags: ["api-and-modern-security", "rest-api-attacks", "track-c"]
+updated: "2026-07-21"
+related:
+  - "api-and-modern-security/rest-api-attacks/mass-assignment"
+  - "api-and-modern-security/owasp-api-security-top-10-2023/bola-and-bfla"
+  - "api-and-modern-security/owasp-api-security-top-10-2023/the-full-api-list"
+---
+
+<Hook>
+TaskFlight's account page shows a traveler exactly three things: their display name, their email, and
+their plan tier. A tester, authorized to test the sandbox, opens the network tab while that page loads and
+looks at the actual response the `GET /users/me` call returned - not what rendered on screen, but the raw
+JSON body underneath it. The three displayed fields are there, but so is a great deal more: a password
+hash, an internal `is_internal_test_account` flag, a `risk_score`, the last login IP. None of that ever
+reaches the visible page - the front-end code simply never reads those keys. But the response carrying
+them was still sent, in full, over the wire, to the browser, where any tool that can read a network
+response can read them too. Nothing about authentication or object ownership failed here; the traveler is
+looking at their own record, correctly. What failed is a much quieter assumption: that it is safe for the
+server to hand back everything it has, on the belief that the client will only ever look at the parts it
+was told to display.
+</Hook>
+
+<Callout type="analogy">
+Picture a library's old card catalog: rows of small wooden drawers, each one holding hundreds of index
+cards for a range of names, each card carrying a patron's full borrowing history. A patron at the desk asks
+a librarian for one specific piece of information - "what is Smith, W.'s current due date?" A librarian
+doing the job correctly pulls the one relevant card, reads out the due date, and puts the card back - the
+patron never touches the drawer at all. Now imagine a librarian who, instead, simply hands the ENTIRE open
+drawer across the desk - hundreds of cards, every patron's borrowing history in that range, all of it -
+and says "the one you want is in there somewhere." The patron who only ever wanted one due date now holds
+everyone else's history too, not because they asked for it or forced their way past a lock, but because
+the person handing things across the desk decided it was easier to hand over the whole drawer than to pull
+the single card that was actually requested.
+</Callout>
+
+<Term define="Excessive data exposure is the failure of an API response to limit its serialized fields to only what a given endpoint is meant to return, instead handing back an entire internal record - sensitive or not, requested or not - and relying on the CLIENT to filter down to what it actually displays. It typically happens when an API implementation serializes a database entity or ORM object directly onto the wire instead of mapping it through an explicit response shape (often called a DTO, a data transfer object) that names exactly which fields leave the server. The caller in this failure is fully authenticated and reaching only their OWN object - so BOLA's ownership check is not in play at all - yet the response body itself carries fields no legitimate UI ever reads: password hashes, internal risk flags, other users' data nested inside a list response, soft-deleted or draft records the UI is not supposed to surface yet. OWASP folded excessive data exposure into API3:2023 Broken Object Property Level Authorization alongside mass assignment, because the two are the same root cause read in opposite directions: excessive data exposure is the server sending back MORE fields than a response should ever carry; mass assignment is the server accepting MORE fields than a request should ever be allowed to set. Confirming it means reading the RAW response body directly - not the rendered UI - and finding fields that the client-side code never uses at all. The fix to recommend is always an explicit, server-side allowlist of response fields (a DTO, a serializer, a response schema) applied before anything leaves the server - never a client-side filter, which a caller can simply bypass by reading the network response directly.">Excessive data exposure</Term>
+
+## Finding it: read the wire, not the screen
+
+- **Open the network tab, not the rendered page.** The UI only ever proves what the CLIENT chose to
+  display - the actual finding lives in the raw response body, which may carry far more than what renders.
+- **Compare the field list against what the UI actually uses.** Any field present in the response but never
+  referenced anywhere in the client-side code that consumes it is a candidate - some are harmless, some
+  (password hashes, internal flags, other users' data) are not.
+- **Check list and search endpoints especially closely.** A response returning an array of objects
+  multiplies the exposure - a leaked internal field on a single-object endpoint is one record; the same
+  field on a list endpoint is every record in the page.
+- **Look for fields that reveal MORE than the field's own value.** A `risk_score` or `is_internal_test_account`
+  flag does not just leak a number - it can leak how the system classifies the account, information a
+  legitimate UI has no reason to need at all.
+
+## Why "the UI doesn't show it" is not a control
+
+- **A response body is available to anyone who can read network traffic, not just the rendering code.**
+  Browser dev tools, a proxy, or a direct API call all see the exact same JSON the UI receives - filtering
+  in the front end changes what is DISPLAYED, never what actually left the server.
+- **Serializing an entire database object is a common, easy default - and an easy trap.** Many frameworks
+  make it trivial to return a whole ORM entity as JSON with a single line of code; nothing about that
+  convenience checks whether every field on that entity belongs in a client-facing response.
+- **A field being irrelevant to today's UI does not mean it is harmless tomorrow.** An internal field only
+  a future admin panel will read is still exposed to every current caller of a public-facing endpoint the
+  moment it appears in that endpoint's response.
+
+<Callout type="tip">
+When testing any endpoint that returns an object, read the raw response body field by field and ask, for
+each key: "does the client-side code that consumes this response ever actually use this field?" Fields
+that answer no are not automatically bugs - some are genuinely inert - but password hashes, internal
+flags, risk or scoring fields, and any other user's data nested in the response are worth flagging every
+time, regardless of whether the current UI happens to read them.
+</Callout>
+
+<Callout type="mistake">
+A team responds to a reported excessive-data-exposure finding by removing the sensitive field from the
+front-end code that used to display it, and marks the finding resolved. This fixes what renders on screen
+and does nothing about what the SERVER still sends - the field is still present in the raw response body,
+still readable by anyone who bypasses the UI and reads the network response directly, whether through dev
+tools, a proxy, or a direct API call. Confirm a real fix by re-checking the RAW response body after the
+change ships, not by re-loading the page and confirming the field no longer renders - a rendering fix and a
+response-shape fix are two completely different changes.
+</Callout>
+
+{/* IMAGE: a wooden card-catalog cabinet with rows of labeled drawers, one open drawer full of index cards labeled "140 Smith, W - Spindler" with a hand reaching in to pull a single card, surrounded by neighboring closed drawers labeled with other name ranges */}
+<HotspotImage
+  src="/notes/api-and-modern-security/rest-api-attacks/excessive-data-exposure.jpg"
+  alt="A wooden library card-catalog cabinet with rows of labeled drawers, one drawer open and packed with index cards labeled 140 Smith, W - Spindler, with a hand reaching in to pull a single card, surrounded by neighboring closed drawers labeled with other name ranges like 129, 130, 139, 147, and 148"
+  credit="Hand in filing cabinet - Watty62, Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Hand_in_filing_cabinet.jpg"
+  pins={[
+    { x: 62, y: 48, label: "One hand, reaching for one card", desc: "This is what a correctly scoped response looks like: the client asked for one specific piece of information, and only that one card was meant to come back - the equivalent of a response naming display_name, email, and plan, and nothing else." },
+    { x: 50, y: 58, label: "The open drawer, packed with hundreds of cards", desc: "This is what serializing an entire internal record looks like: instead of pulling the one card requested, the whole drawer - every field on the object, sensitive or not - is handed across, leaving the recipient to sort out which one they actually needed." },
+    { x: 67, y: 63, label: "The drawer's own label - '140 Smith, W - Spindler'", desc: "The drawer is scoped and labeled, the same way an endpoint's name (GET /users/me) implies a scope - but everything behind that label still arrives together the moment the drawer itself, rather than one card in it, is what gets handed over." },
+    { x: 10, y: 25, label: "Every neighboring drawer, labeled and within reach", desc: "Rows of other drawers, each holding a different range of records, sit right beside the one that was opened. Once an endpoint is willing to over-return an entire record instead of the requested fields, whichever id a caller asks for is just one drawer among a whole cabinet exposed the same way." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Confirming excessive data exposure on one endpoint - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Open the network tab, not the rendered page", desc: "Load the feature normally, then inspect the RAW response body the endpoint actually returned - not what the UI chose to display from it." },
+    { label: "List every field in the response", desc: "Write down every key present, including any the rendered page never shows anywhere - password hashes, internal flags, scoring fields, nested other-user data." },
+    { label: "Cross-check against the client-side code", desc: "Confirm which fields the front-end code that consumes this response actually reads. Anything present but unused is a candidate worth flagging." },
+    { label: "Report the response shape, with the raw body as evidence", desc: "Name the endpoint, the unused/sensitive fields found, and the raw JSON as proof - and recommend an explicit response allowlist (a DTO/serializer), not a front-end change." },
+  ]}
+/>
+
+Here is that same allowlist-on-the-way-out question in runnable form - a `GET /users/me` endpoint modeled
+two ways: one that serializes the whole internal record, and one that only ever serializes an explicit
+response allowlist.
+
+<CodePlayground
+  language="python"
+  title="Run it - an excessive-data-exposure response-allowlist simulator (Python)"
+  code={`# Excessive data exposure simulator - a GET /users/me endpoint. The client UI
+# only ever displays three fields (display_name, email, plan), but the
+# VULNERABLE endpoint serializes the entire internal record and lets the
+# client sort out what to show. The SECURE endpoint only ever serializes an
+# explicit response allowlist - the internal-only fields never leave the
+# server at all.
+
+INTERNAL_RECORD = {
+    "display_name": "Alice",
+    "email": "test_alice@example.com",
+    "plan": "pro",
+    "password_hash": "$2b$12$KIXQ7f3n9opaque-hash-value",
+    "is_internal_test_account": True,
+    "risk_score": 17,
+    "last_login_ip": "203.0.113.9",
+}
+
+RESPONSE_ALLOWLIST = ["display_name", "email", "plan"]
+SENSITIVE_FIELDS = ["password_hash", "is_internal_test_account", "risk_score", "last_login_ip"]
+
+def get_me_VULNERABLE(record):
+    # BUG: serializes the whole internal record - every field, sensitive or
+    # not - and relies on the CLIENT to only render the three it needs.
+    return dict(record)
+
+def get_me_SECURE(record):
+    # SAFE: only fields on RESPONSE_ALLOWLIST are ever copied into the
+    # response body - sensitive fields never leave the server.
+    return {key: record[key] for key in RESPONSE_ALLOWLIST}
+
+def report(label, response):
+    print("== " + label + " ==")
+    print("  FIELDS_RETURNED=" + str(sorted(response.keys())))
+    leaked = [f for f in SENSITIVE_FIELDS if f in response]
+    print("  SENSITIVE_FIELDS_LEAKED=" + str(leaked))
+    print("  LEAK=" + ("true" if leaked else "false"))
+    print()
+    return leaked
+
+vulnerable_response = get_me_VULNERABLE(INTERNAL_RECORD)
+vulnerable_leaks = report("VULNERABLE /users/me (serializes the whole record)", vulnerable_response)
+
+secure_response = get_me_SECURE(INTERNAL_RECORD)
+secure_leaks = report("SECURE /users/me (serializes an explicit allowlist)", secure_response)
+
+print("VULNERABLE_LEAK_COUNT=" + str(len(vulnerable_leaks)))
+print("SECURE_LEAK_COUNT=" + str(len(secure_leaks)))
+print("RESULT=" + ("PASS - the allowlisted response carried none of the sensitive fields" if not secure_leaks else "FAIL"))`}
+/>
+
+The identical response-allowlist check in Java - same record, same two implementations, same result:
+
+<CodePlayground
+  language="java"
+  title="Run it - an excessive-data-exposure response-allowlist simulator (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static final Map<String, Object> INTERNAL_RECORD = new LinkedHashMap<>();
+    static final List<String> RESPONSE_ALLOWLIST = Arrays.asList("display_name", "email", "plan");
+    static final List<String> SENSITIVE_FIELDS = Arrays.asList(
+        "password_hash", "is_internal_test_account", "risk_score", "last_login_ip"
+    );
+
+    static {
+        INTERNAL_RECORD.put("display_name", "Alice");
+        INTERNAL_RECORD.put("email", "test_alice@example.com");
+        INTERNAL_RECORD.put("plan", "pro");
+        INTERNAL_RECORD.put("password_hash", "$2b$12$KIXQ7f3n9opaque-hash-value");
+        INTERNAL_RECORD.put("is_internal_test_account", true);
+        INTERNAL_RECORD.put("risk_score", 17);
+        INTERNAL_RECORD.put("last_login_ip", "203.0.113.9");
+    }
+
+    static Map<String, Object> getMeVulnerable(Map<String, Object> record) {
+        return new LinkedHashMap<>(record);
+    }
+
+    static Map<String, Object> getMeSecure(Map<String, Object> record) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (String key : RESPONSE_ALLOWLIST) {
+            result.put(key, record.get(key));
+        }
+        return result;
+    }
+
+    static String pyListRepr(List<String> items) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < items.size(); i++) {
+            if (i > 0) sb.append(", ");
+            sb.append("'").append(items.get(i)).append("'");
+        }
+        sb.append("]");
+        return sb.toString();
+    }
+
+    static List<String> report(String label, Map<String, Object> response) {
+        System.out.println("== " + label + " ==");
+        List<String> fieldsReturned = new ArrayList<>(response.keySet());
+        Collections.sort(fieldsReturned);
+        System.out.println("  FIELDS_RETURNED=" + pyListRepr(fieldsReturned));
+        List<String> leaked = new ArrayList<>();
+        for (String f : SENSITIVE_FIELDS) {
+            if (response.containsKey(f)) leaked.add(f);
+        }
+        System.out.println("  SENSITIVE_FIELDS_LEAKED=" + pyListRepr(leaked));
+        System.out.println("  LEAK=" + (leaked.isEmpty() ? "false" : "true"));
+        System.out.println();
+        return leaked;
+    }
+
+    public static void main(String[] args) {
+        Map<String, Object> vulnerableResponse = getMeVulnerable(INTERNAL_RECORD);
+        List<String> vulnerableLeaks = report("VULNERABLE /users/me (serializes the whole record)", vulnerableResponse);
+
+        Map<String, Object> secureResponse = getMeSecure(INTERNAL_RECORD);
+        List<String> secureLeaks = report("SECURE /users/me (serializes an explicit allowlist)", secureResponse);
+
+        System.out.println("VULNERABLE_LEAK_COUNT=" + vulnerableLeaks.size());
+        System.out.println("SECURE_LEAK_COUNT=" + secureLeaks.size());
+        System.out.println("RESULT=" + (secureLeaks.isEmpty() ? "PASS - the allowlisted response carried none of the sensitive fields" : "FAIL"));
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: read the raw response body of one TaskFlight endpoint">
+<StepChecklist
+  steps={[
+    { text: "Confirm authorization and pick one object-returning endpoint", detail: "On TaskFlight's own sandbox (or another system you are explicitly authorized to test), pick an endpoint like GET /users/me or a booking-detail endpoint." },
+    { text: "Open the network tab and read the RAW response, not the page", detail: "Load the feature normally, then find the exact response body the endpoint returned - every key, not just what renders on screen." },
+    { text: "List every field and cross-check against the client code", detail: "Write down every key in the response. Confirm which ones the client-side code that consumes this response actually reads." },
+    { text: "Flag fields present but unused, especially sensitive ones", detail: "Password hashes, internal flags, scoring fields, or other users' nested data that appear in the response but nowhere in the rendered UI are worth reporting, regardless of the current page's behavior." },
+  ]}
+/>
+You have now tested the one thing a purely UI-driven walkthrough never reveals - what an endpoint actually
+sends over the wire, independent of what the current front end happens to read from it.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A response body contains fields - a password hash, an internal flag, a risk score - that the rendered UI never displays anywhere.",
+      fix: "That is an excessive-data-exposure finding. Report the endpoint, the exact fields found, and the raw response body as evidence. The fix is an explicit, server-side response allowlist (a DTO or serializer) applied before anything leaves the server - never a change to what the front end chooses to render.",
+    },
+    {
+      symptom: "A team 'fixes' the finding by removing the field from the front-end code that used to display it.",
+      fix: "This fixes what renders, not what the server sends. The field is still present in the raw response, still readable by anyone who bypasses the UI. Confirm a real fix by re-checking the raw response body directly after the change ships, not by reloading the page.",
+    },
+    {
+      symptom: "A list-returning endpoint leaks the same internal field the single-object endpoint does, multiplying the exposure across every row.",
+      fix: "Report this as a distinct, higher-severity instance of the same root cause - the same missing response allowlist, but now leaking the field for every object in the returned array rather than just one.",
+    },
+    {
+      symptom: "A tester only checks the fields the UI displays and concludes the endpoint's data exposure is fine.",
+      fix: "The rendered page only proves what the client chose to show - it says nothing about what the server actually sent. Always read the raw network response directly before concluding an endpoint's response shape is safe.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Every endpoint that returns an object you own** - profile, account, booking, settings: each is an
+  independent response-allowlist question, even on an endpoint whose ownership and role checks are airtight.
+- **List and search endpoints especially** - the same leaked field on an array response multiplies the
+  exposure across every returned record, not just one.
+- **The raw network response, every time** - never conclude an endpoint is safe based on what the rendered
+  UI displays; the response body is available to anyone who reads it directly, with or without the UI's
+  cooperation.
+- **[[api-and-modern-security/rest-api-attacks/mass-assignment]]** - the write-side sibling of this same
+  failure: excessive data exposure is a server sending fields it should not; mass assignment is a server
+  accepting fields it should not. OWASP now groups both under API3:2023.
+- **[[api-and-modern-security/owasp-api-security-top-10-2023/bola-and-bfla]]** - BOLA confirms WHICH OBJECT
+  a caller may reach at all; excessive data exposure is the separate question of which FIELDS on an object
+  the caller is already entitled to reach actually get returned. Both checks are independent on one endpoint.
+- **[[api-and-modern-security/owasp-api-security-top-10-2023/the-full-api-list]]** - see where excessive data
+  exposure sits inside API3:2023 among all ten 2023 categories, as a coverage map rather than a ranking.
+</WhereToCheck>
+
+<WorkedExample title="one account endpoint, confirmed straight from the raw response">
+1. A tester, authorized to test TaskFlight's sandbox with a tester-owned account, opens the account
+   settings page, which visibly displays a display name, an email address, and a plan tier.
+2. The tester opens the network tab and inspects the raw response from the `GET /users/me` call the page
+   made to render that data. Alongside the three displayed fields, the response also contains
+   `password_hash`, `is_internal_test_account`, `risk_score`, and `last_login_ip`.
+3. The tester checks the front-end code bundle that consumes this response and confirms none of those four
+   fields are referenced anywhere in it - they are received but never rendered, never used.
+4. The finding is filed as excessive data exposure (API3:2023) against `GET /users/me`, with the raw
+   response body as evidence and each unused field named individually, distinguishing the password hash
+   (most severe) from the less sensitive but still unnecessary internal flags.
+5. The recommended fix is an explicit response allowlist naming exactly `display_name`, `email`, and `plan`
+   as the only fields this endpoint should ever serialize - applied server-side, independent of anything the
+   current front end does or does not read.
+</WorkedExample>
+
+<Quiz
+  question="A tester loads an account page, confirms it visually displays only a display name, email, and plan tier, and concludes the underlying endpoint has no excessive-data-exposure issue. Is this conclusion sound?"
+  options={[
+    "Yes - if the rendered page only shows three fields, the endpoint is only returning three fields",
+    "No - the rendered page only proves what the CLIENT chose to display; the raw response body can carry additional fields the front-end code simply never reads, which are still exposed to anyone who reads the network response directly",
+    "Yes, because excessive data exposure only applies to endpoints that return lists, never single-object endpoints",
+    "No, but only because the tester should have logged in as a different account first"
+  ]}
+  answer={1}
+  explain="What renders on a page is entirely a client-side decision - the front-end code chooses which fields of a response to display, and that choice says nothing about what the server actually sent. Confirming an endpoint's data exposure requires reading the raw response body directly (via network tab, proxy, or a direct API call) and checking every field present against what the client code actually uses. Option three is wrong because excessive data exposure applies equally to single-object and list-returning endpoints (list endpoints just multiply the exposure). Option four misses the actual gap entirely - the issue here is never inspecting the raw response in the first place."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Excessive data exposure", back: "An API response serializes an entire internal record - sensitive fields included - instead of an explicit response allowlist, relying on the CLIENT to only render the few fields it actually needs." },
+    { front: "How to find it", back: "Read the RAW response body directly (network tab, proxy, or direct API call), list every field present, and cross-check against what the client-side code that consumes the response actually uses." },
+    { front: "Why 'the UI doesn't show it' is not a control", back: "A response body is available to anyone who reads network traffic directly - dev tools, a proxy, a direct API call - regardless of what the rendering code chooses to display from it." },
+    { front: "Excessive data exposure vs mass assignment", back: "Excessive data exposure is the READ-side failure: the server returns more fields than it should. Mass assignment is the WRITE-side failure: the server accepts more fields than it should. OWASP groups both under API3:2023 Broken Object Property Level Authorization." },
+    { front: "Why list endpoints are higher severity", back: "The same leaked field on an array response multiplies the exposure across every object in the returned list, not just one record." },
+    { front: "The actual fix to recommend", back: "An explicit, server-side response allowlist (a DTO or serializer) naming exactly which fields an endpoint may return, applied before anything leaves the server - never a front-end change to what currently renders." },
+  ]}
+/>
+
+<Challenge>
+On TaskFlight's sandbox (or another system you are explicitly authorized to test), using a tester-owned
+account: pick one endpoint that returns an object you own, open the network tab, and read the raw response
+body field by field. List every key present, then check the client-side code that consumes this response
+to see which fields it actually uses. Write up any field present but unused - especially anything
+resembling a password hash, an internal flag, or a scoring field - as an excessive-data-exposure finding,
+naming the missing server-side response allowlist as the fix.
+</Challenge>
+
+<AskCommunity prompt="I've started reading the raw network response body for every object-returning endpoint I test, rather than trusting what the rendered page displays, and cross-checking each field against whether the client-side code actually uses it. For people who test APIs regularly: how do you handle the judgment call on fields that are present but genuinely ambiguous - not obviously sensitive like a password hash, but also not obviously fine, like an internal numeric id or a timestamp format that might reveal something about backend structure? Where do you draw the line on what's worth flagging versus what's just noise in a finding?">
+Telling a genuinely reportable field apart from harmless backend noise, without either under-reporting real
+exposure or burying a finding in low-value nitpicks, is exactly the calibration this kind of testing needs -
+hearing how other testers draw that line is the fastest way to sharpen it.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://owasp.org/API-Security/editions/2023/en/0xa3-broken-object-property-level-authorization/", title: "OWASP API3:2023 Broken Object Property Level Authorization - the official category page (covers excessive data exposure)", kind: "read" },
+    { href: "https://owasp.org/API-Security/editions/2019/en/0xa3-excessive-data-exposure/", title: "OWASP API3:2019 Excessive Data Exposure - the original standalone category page", kind: "read" },
+    { href: "https://cheatsheetseries.owasp.org/cheatsheets/REST_Security_Cheat_Sheet.html", title: "OWASP REST Security Cheat Sheet", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=pRLowx7buIY" title="API Security: Excessive Data Exposure I" minutes={2} />
+
+<Takeaways
+  points={[
+    "Excessive data exposure is a read-side failure: an endpoint serializes an entire internal record instead of an explicit response allowlist, relying on the client to only render what it needs.",
+    "Find it by reading the RAW response body directly, never by trusting what the rendered page displays - the client's rendering choice says nothing about what the server actually sent.",
+    "It is the read-side counterpart to mass assignment (the write-side leak); OWASP now groups both under API3:2023 Broken Object Property Level Authorization.",
+    "List and search endpoints multiply the exposure - the same leaked field appears on every object in the returned array, not just one.",
+    "A fix that only changes the front end's rendering does not resolve the finding - confirm any fix by re-checking the raw response body directly after it ships.",
+    "Test only systems you own or are explicitly authorized to test, with tester-owned accounts and synthetic data, reporting minimal proof rather than harvesting more of the exposed data than needed to demonstrate the finding.",
+  ]}
+/>
+
+<Complete xp={10} />

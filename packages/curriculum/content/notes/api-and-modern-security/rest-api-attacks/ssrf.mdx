@@ -1,0 +1,394 @@
+---
+title: "SSRF"
+summary: "Server-Side Request Forgery happens when an API fetches a URL on the server's own behalf - an avatar import, a webhook, a link preview - and never checks whether that destination should be reachable, letting a crafted URL redirect the fetch to an internal-only target instead."
+tags: ["api-and-modern-security", "rest-api-attacks", "track-c"]
+updated: "2026-07-21"
+related:
+  - "api-and-modern-security/rest-api-attacks/mass-assignment"
+  - "api-and-modern-security/rest-api-attacks/rate-limit-and-abuse-testing"
+  - "api-and-modern-security/owasp-api-security-top-10-2023/the-full-api-list"
+---
+
+<Hook>
+TaskFlight lets a traveler set a profile picture two ways: upload a file, or paste a URL and have the
+server fetch it. A tester, authorized to test the sandbox, tries the second option with a perfectly normal
+image URL first, confirms it works, and then tries something else: instead of an external image host, the
+URL points at an address the SERVER itself can reach but a traveler's own browser never could - an internal
+metadata endpoint, a loopback address, an admin service with no public DNS name at all. If the server
+dutifully fetches that address too and hands back what it finds, nothing about the traveler's own
+authentication or authorization broke. The traveler never touched anyone else's account or data directly.
+What broke is a decision the server made on its own: it treated a caller-supplied URL as a legitimate
+fetch target without ever asking whether THAT destination was one the server itself should be making
+requests to. That is SSRF - the server, not the attacker, ends up making the dangerous request, from
+inside the network boundary the attacker could never have reached directly.
+</Hook>
+
+<Callout type="analogy">
+Picture a hotel's telephone switchboard from the era before direct-dial phones, where every call - to a
+guest room, to a local restaurant, to the hotel's own back-office accounting line - is placed by an
+operator manually plugging a cord into a numbered jack. A guest at the front desk asks the operator to
+place one call: "please connect me to this florist downtown." A well-trained operator recognizes which
+jacks are guest-reachable outside lines and which ones are internal-only - the accounting office, the
+manager's private line, the safe-deposit room - and simply refuses to complete a connection to an internal
+jack no matter how a guest's request is worded. An operator who instead treats every request the same way,
+plugging in whichever jack a guest names without checking whether that jack is even meant to be
+guest-reachable, ends up connecting a guest's request straight through to the hotel's own internal lines -
+using the switchboard's own trusted position inside the building to reach somewhere no guest's own phone
+could ever have dialed directly.
+</Callout>
+
+<Term define="Server-Side Request Forgery (SSRF, API7:2023) is the failure of an API to validate or restrict the destination of a request the SERVER ITSELF makes on a caller's behalf - triggered by any feature that accepts a URL, hostname, or similar caller-influenced address and then fetches it: importing an avatar from a URL, registering a webhook callback, generating a link preview, converting a document from a remote file. The danger is not that the caller reaches the destination directly - the caller often could not, since the target is frequently internal-only, unreachable from outside the network entirely. The danger is that the SERVER, sitting inside the network boundary with its own credentials and its own network access, becomes the one making the request - reaching cloud metadata endpoints (which can hand back live cloud credentials), internal admin panels with no public exposure, or other backend services never meant to receive traffic from outside. Confirming SSRF means demonstrating that a caller-controlled URL parameter actually causes the server to fetch and return content from a destination the caller could never have reached on their own - not merely that a URL parameter exists. The fix to recommend is always a server-side allowlist of permitted destinations (by hostname, IP range, or scheme) checked BEFORE any fetch is attempted - never a denylist of 'known-bad' addresses, which a redirect or an alternate address representation can slip past.">SSRF</Term>
+
+## Finding it: point the fetch somewhere only the server can reach
+
+- **Start from any feature that fetches a URL on your behalf.** Avatar-from-URL, webhook registration,
+  link unfurling/preview, "import from a link," server-side PDF or document conversion from a remote file -
+  each is a candidate the moment it accepts a caller-supplied address and the SERVER (not your browser)
+  does the fetching.
+- **Try an address you cannot reach yourself, but the server plausibly can.** A cloud metadata address
+  (commonly a specific link-local IP many cloud providers use for exactly this purpose), a loopback address,
+  or an internal hostname with no public DNS record - the point is a destination outside the caller's own
+  reach that the server, sitting inside the network, might still be able to fetch.
+- **Confirm with the actual content returned, not just a fast response.** A response that echoes back
+  metadata, an internal service's banner, or content clearly not from the intended external destination is
+  the finding; a generic error or timeout on its own is a lead, not yet confirmed impact.
+- **Watch for a fetch that "fails" usefully anyway.** Even a blocked internal address can leak information
+  through response TIMING (an internal address answering fast, an external one answering slow) or through
+  ERROR MESSAGES that reveal whether a port was open - both worth noting even without content coming back.
+
+## Why a denylist of "bad" addresses never actually closes it
+
+- **A denylist has to enumerate every disguise for an internal address, and it never fully can.** Alternate
+  IP representations, redirects through an external URL that then bounce internally, and DNS entries an
+  attacker controls that resolve to an internal address can all slip past a list of specifically blocked
+  strings.
+- **The only check that actually holds is an allowlist, resolved and checked before the fetch happens.** Not
+  "is this destination on our blocklist" but "is this destination on the short list of places this feature
+  is actually supposed to reach" - checked against the address the request will ACTUALLY hit, not just the
+  hostname as originally typed.
+- **A redirect from an allowed external host is still a live path in.** An endpoint that validates the
+  initial URL but then blindly follows a 3xx redirect can be sent to an allowed-looking address that
+  redirects straight to an internal one - the check needs to hold on the final destination too, not just
+  the first hop.
+
+<Callout type="tip">
+When you find a feature that fetches a caller-supplied URL, test it as two separate questions: first,
+"does an obviously external, legitimate-looking URL work" (confirm the feature functions at all), and
+second, "does a destination outside MY OWN reach but plausibly inside the SERVER's reach also get fetched"
+(the actual SSRF test). The first question alone tells you nothing about the second - a feature can work
+perfectly for real external images and still fetch an internal metadata address just as happily, because
+nothing in the code ever distinguished between the two.
+</Callout>
+
+<Callout type="mistake">
+A developer "fixes" a reported SSRF by adding the specific internal IP address a tester used to a denylist
+list of blocked strings, and the fix ships as complete. This treats one demonstrated address as the whole
+vulnerability, when the actual gap is the missing allowlist logic itself. The exact same class of
+destination - a different internal IP, an internal hostname, a redirect chain that lands somewhere
+internal after an allowed-looking first hop - remains just as reachable, because nothing about HOW the
+server decides which destinations to fetch actually changed. Confirm a real fix by testing a DIFFERENT
+internal-style destination than the one originally reported, not just a repeat of the exact address that
+was blocklisted.
+</Callout>
+
+{/* IMAGE: a 1975 photo of a telephone operator manually connecting calls at a switchboard, hand plugging colored patch cords into a large panel of numbered jacks, with a rotary phone visible on the desk in front */}
+<HotspotImage
+  src="/notes/api-and-modern-security/rest-api-attacks/ssrf.jpg"
+  alt="A 1975 telephone operator's hand plugging a colored patch cord into a panel of numbered jacks on a manual switchboard, with a tangle of connected cords and a rotary telephone handset visible on the desk"
+  credit="Jersey Telecom switchboard and operator (1975) - Joseph A. Carr, Wikimedia Commons, attribution-only license"
+  creditHref="https://commons.wikimedia.org/wiki/File:Jersey_Telecom_switchboard_and_operator.jpg"
+  pins={[
+    { x: 39, y: 28, label: "The operator's hand, making the connection", desc: "The operator - not the guest - is the one physically completing the call. This is the server: it is the party actually reaching out to a destination on someone else's request, using its own position inside the building's phone system." },
+    { x: 59, y: 56, label: "A tangle of patch cords - one request, one physical link", desc: "Each cord is one connection made because someone asked for it. An SSRF-vulnerable endpoint makes exactly this kind of connection on request, without first asking whether the requested destination is one it should ever be linking to." },
+    { x: 78, y: 19, label: "Rows of identical-looking jacks", desc: "From the switchboard's own panel, a guest-reachable outside line and an internal-only accounting extension can look exactly the same - just another numbered jack. The operator's judgment about WHICH jacks are safe to connect to is the entire control; nothing about the jack's appearance tells you." },
+    { x: 78, y: 88, label: "The handset - the one who asked, not the one who connects", desc: "The person on this end only ever gets to request a connection; they never plug the cord in themselves. The actual reach into the building's internal lines belongs entirely to the operator - exactly the trust boundary SSRF abuses when the operator connects anywhere asked, without checking." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Testing one URL-fetching feature for SSRF - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Find a feature that fetches a caller-supplied URL", desc: "Avatar-from-URL, webhook registration, link preview, remote-file import - any feature where the SERVER, not your browser, does the fetching." },
+    { label: "Confirm it works normally first", desc: "Send a legitimate external URL and confirm the feature actually fetches and uses it - establishing the baseline before probing anywhere else." },
+    { label: "Point it at a destination outside your own reach", desc: "A cloud metadata address, a loopback address, or an internal hostname - somewhere your own browser could never reach directly, but the server plausibly can from inside the network." },
+    { label: "Confirm with returned content, not just a fast or slow response", desc: "Real metadata, an internal banner, or clearly non-external content is the finding. A timeout or generic error is a lead - note it, but do not report it as confirmed impact without content." },
+  ]}
+/>
+
+Here is that same allowlist-before-fetch decision in runnable form - an "import avatar from URL" endpoint
+modeled two ways: one that fetches whatever host it is given, and one that checks the destination's kind
+against an allowlist before ever fetching anything.
+
+<CodePlayground
+  language="python"
+  title="Run it - an SSRF allowlist simulator (Python)"
+  code={`# SSRF simulator - an "import avatar from URL" endpoint that fetches a URL on
+# the SERVER's behalf. This never sends a real network request: it is a
+# local, synthetic model of the one decision that matters - should the server
+# fetch THIS destination at all - checked before any fetch would happen.
+
+# A tiny synthetic map of "reachable" hosts and what they are, standing in for
+# real DNS/network resolution in this sandbox-only simulation.
+HOSTS = {
+    "images.taskflight-cdn.example":  {"kind": "external", "body": "<png bytes: user avatar>"},
+    "public.example.com":              {"kind": "external", "body": "<png bytes: generic photo>"},
+    "169.254.169.254":                 {"kind": "cloud-metadata", "body": "iam-role-credentials: SECRET"},
+    "127.0.0.1":                       {"kind": "loopback", "body": "internal-admin-panel: SECRET"},
+    "internal-billing.local":          {"kind": "internal", "body": "billing-service: SECRET"},
+}
+
+def fetch_avatar_VULNERABLE(url_host):
+    # BUG: fetches whatever host the caller supplied, no allowlist, no check
+    # on whether the destination is internal-only.
+    target = HOSTS.get(url_host)
+    if target is None:
+        return "DNS_ERROR"
+    return "200 OK -> " + target["body"]
+
+ALLOWED_KINDS = {"external"}
+
+def fetch_avatar_SECURE(url_host):
+    # SAFE: resolves the destination's kind FIRST and only proceeds for an
+    # allowlisted external kind - internal, loopback, and cloud-metadata
+    # destinations are refused before any fetch happens.
+    target = HOSTS.get(url_host)
+    if target is None:
+        return "DNS_ERROR"
+    if target["kind"] not in ALLOWED_KINDS:
+        return "400 Rejected - destination is not an allowed external host"
+    return "200 OK -> " + target["body"]
+
+REQUESTS = [
+    ("images.taskflight-cdn.example", "the intended, legitimate avatar host"),
+    ("169.254.169.254", "SSRF attempt: cloud metadata endpoint"),
+    ("127.0.0.1", "SSRF attempt: loopback / internal admin panel"),
+    ("internal-billing.local", "SSRF attempt: internal-only service by hostname"),
+]
+
+def run():
+    for label, fetcher in [("VULNERABLE (fetches any supplied host)", fetch_avatar_VULNERABLE),
+                            ("SECURE (allowlist checked before fetch)", fetch_avatar_SECURE)]:
+        print("== " + label + " ==")
+        for host, desc in REQUESTS:
+            kind = HOSTS[host]["kind"]
+            result = fetcher(host)
+            leaked = result.startswith("200 OK") and kind != "external"
+            print("HOST=" + host + " KIND=" + kind)
+            print("  DESC=" + desc)
+            print("  RESPONSE=" + result)
+            print("  LEAK=" + ("true" if leaked else "false"))
+        print()
+
+run()
+
+secure_leaks = [host for host, _ in REQUESTS if fetch_avatar_SECURE(host).startswith("200 OK") and HOSTS[host]["kind"] != "external"]
+print("RESULT=" + ("PASS - every internal destination was refused before fetching" if not secure_leaks else "FAIL"))`}
+/>
+
+The identical allowlist check in Java - same hosts, same four requests, same verdicts:
+
+<CodePlayground
+  language="java"
+  title="Run it - an SSRF allowlist simulator (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static class HostInfo {
+        String kind, body;
+        HostInfo(String k, String b) { kind = k; body = b; }
+    }
+
+    static final Map<String, HostInfo> HOSTS = new LinkedHashMap<>();
+    static final Set<String> ALLOWED_KINDS = new LinkedHashSet<>(Arrays.asList("external"));
+
+    static {
+        HOSTS.put("images.taskflight-cdn.example", new HostInfo("external", "<png bytes: user avatar>"));
+        HOSTS.put("public.example.com", new HostInfo("external", "<png bytes: generic photo>"));
+        HOSTS.put("169.254.169.254", new HostInfo("cloud-metadata", "iam-role-credentials: SECRET"));
+        HOSTS.put("127.0.0.1", new HostInfo("loopback", "internal-admin-panel: SECRET"));
+        HOSTS.put("internal-billing.local", new HostInfo("internal", "billing-service: SECRET"));
+    }
+
+    static String fetchAvatarVulnerable(String urlHost) {
+        HostInfo target = HOSTS.get(urlHost);
+        if (target == null) return "DNS_ERROR";
+        return "200 OK -> " + target.body;
+    }
+
+    static String fetchAvatarSecure(String urlHost) {
+        HostInfo target = HOSTS.get(urlHost);
+        if (target == null) return "DNS_ERROR";
+        if (!ALLOWED_KINDS.contains(target.kind)) return "400 Rejected - destination is not an allowed external host";
+        return "200 OK -> " + target.body;
+    }
+
+    static final String[][] REQUESTS = {
+        {"images.taskflight-cdn.example", "the intended, legitimate avatar host"},
+        {"169.254.169.254", "SSRF attempt: cloud metadata endpoint"},
+        {"127.0.0.1", "SSRF attempt: loopback / internal admin panel"},
+        {"internal-billing.local", "SSRF attempt: internal-only service by hostname"},
+    };
+
+    interface Fetcher { String fetch(String host); }
+
+    public static void main(String[] args) {
+        String[] labels = {"VULNERABLE (fetches any supplied host)", "SECURE (allowlist checked before fetch)"};
+        Fetcher[] fetchers = {Main::fetchAvatarVulnerable, Main::fetchAvatarSecure};
+
+        for (int i = 0; i < fetchers.length; i++) {
+            System.out.println("== " + labels[i] + " ==");
+            for (String[] req : REQUESTS) {
+                String host = req[0], desc = req[1];
+                String kind = HOSTS.get(host).kind;
+                String result = fetchers[i].fetch(host);
+                boolean leaked = result.startsWith("200 OK") && !kind.equals("external");
+                System.out.println("HOST=" + host + " KIND=" + kind);
+                System.out.println("  DESC=" + desc);
+                System.out.println("  RESPONSE=" + result);
+                System.out.println("  LEAK=" + (leaked ? "true" : "false"));
+            }
+            System.out.println();
+        }
+
+        List<String> secureLeaks = new ArrayList<>();
+        for (String[] req : REQUESTS) {
+            String host = req[0];
+            String result = fetchAvatarSecure(host);
+            if (result.startsWith("200 OK") && !HOSTS.get(host).kind.equals("external")) {
+                secureLeaks.add(host);
+            }
+        }
+
+        System.out.println("RESULT=" + (secureLeaks.isEmpty() ? "PASS - every internal destination was refused before fetching" : "FAIL"));
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: test one TaskFlight URL-fetching feature for SSRF">
+<StepChecklist
+  steps={[
+    { text: "Confirm authorization and find a URL-fetching feature", detail: "On TaskFlight's own sandbox (or another system you are explicitly authorized to test), find any feature where the server fetches a caller-supplied URL - avatar import, webhook, link preview." },
+    { text: "Confirm it works with a legitimate external URL first", detail: "Establish the baseline: the feature genuinely fetches and uses a normal external address before you probe anywhere else." },
+    { text: "Point it at a destination outside your own reach", detail: "Try a cloud metadata address, a loopback address, or an internal-only hostname - somewhere your own browser could not reach directly." },
+    { text: "Confirm impact with the actual response content", detail: "Look for returned content that is clearly not from the intended external destination - metadata, an internal banner - before writing up a finding; a timeout alone is a lead, not confirmed impact." },
+  ]}
+/>
+You have now tested the one mechanism BOLA, BFLA, and mass-assignment testing never touch - whether the
+server itself can be tricked into making a request to somewhere it should never reach on anyone's behalf.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A URL-fetching feature returns real content from an internal-only or metadata address.",
+      fix: "That is a confirmed SSRF finding. Report the exact feature, the destination used, and the returned content as proof. The fix is a server-side allowlist of permitted destinations, resolved and checked before any fetch is attempted - never a denylist of specific blocked addresses.",
+    },
+    {
+      symptom: "A fix ships that blocks the exact internal IP a tester originally reported, and the finding is marked resolved.",
+      fix: "A denylist of one demonstrated address does not close the underlying gap - any other internal address, hostname, or redirect chain remains just as reachable. Re-test with a DIFFERENT internal-style destination than the one originally reported before accepting the fix.",
+    },
+    {
+      symptom: "An endpoint validates the initial URL's hostname but then follows a redirect without re-checking the final destination.",
+      fix: "A redirect from an allowed-looking external host can still land on an internal address. The allowlist check needs to hold on the address actually being fetched at each hop, not just the URL as originally submitted.",
+    },
+    {
+      symptom: "A probe against an internal address returns no content, so the tester concludes there is no SSRF.",
+      fix: "Absence of returned content is not the end of the test - check response timing and error messages too. A fast response or a distinct error for an internal address versus a slow timeout for a truly unreachable one can still confirm the server is treating the address differently, worth noting even without content leaking back.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Any feature where the server fetches a caller-influenced address** - avatar/image import, webhook
+  registration, link previews, remote document conversion, server-side "check this URL" utilities: each is
+  an independent SSRF candidate.
+- **The exact destination actually fetched, not just the URL as typed** - confirm an allowlist check holds
+  through DNS resolution and through any redirect the server follows, not only against the caller's literal
+  input string.
+- **[[api-and-modern-security/rest-api-attacks/mass-assignment]]** - a different independent write-side
+  failure that can appear on the very same "import from URL" feature if it also accepts other body fields
+  without an allowlist.
+- **[[api-and-modern-security/rest-api-attacks/rate-limit-and-abuse-testing]]** - a URL-fetching feature is
+  also worth testing for abuse of the fetch itself (repeated requests used to scan an internal network), a
+  question that sits alongside, not instead of, the destination-allowlist check this note covers.
+- **[[api-and-modern-security/owasp-api-security-top-10-2023/the-full-api-list]]** - see where SSRF (API7)
+  sits among all ten 2023 categories, as a coverage map rather than a ranking.
+</WhereToCheck>
+
+<WorkedExample title="one avatar-import feature, confirmed with returned content">
+1. A tester, authorized to test TaskFlight's sandbox, finds a profile settings option: "import avatar from
+   URL." Pasting a normal external image URL works exactly as expected - the image appears on the profile.
+2. The tester then pastes a cloud-metadata-style address in the same field instead of an image URL, and
+   submits the form.
+3. The response comes back 200 OK, and the "avatar" now displayed is not an image at all - it is raw JSON
+   text containing what looks like temporary access credentials, clearly not something an external image
+   host would ever return.
+4. To rule out a fluke, the tester tries a second, different internal-style address (an internal hostname
+   with no public DNS record) through the same feature, and it is fetched and returned just as readily.
+5. The finding is filed as SSRF (API7:2023) against the avatar-import endpoint, with both requests and both
+   returned bodies as evidence, and a recommendation for a server-side allowlist of permitted external image
+   hosts, checked before any fetch is attempted - not a list of specific blocked addresses.
+</WorkedExample>
+
+<Quiz
+  question="A team fixes a reported SSRF finding by adding the exact internal IP address a tester used to a blocklist of forbidden addresses. Is this finding now resolved?"
+  options={[
+    "Yes - the specific address that was demonstrated can no longer be reached through the feature",
+    "Not necessarily - a blocklist of one demonstrated address does not address the missing allowlist logic; any other internal address, hostname, or a redirect chain landing internally likely remains just as reachable",
+    "Yes, because SSRF findings are address-specific and cannot recur once the reported address is blocked",
+    "No further testing is needed since the exact reported request now fails"
+  ]}
+  answer={1}
+  explain="Blocking one demonstrated address treats a single example as the whole vulnerability, when the actual gap is that the server never validates destinations against an allowlist of what the feature is actually supposed to reach. A different internal IP, an internal hostname, or a redirect chain that starts at an allowed-looking external host and lands internally can all slip past a denylist built from one prior finding. Confirming a real fix means testing a DIFFERENT internal-style destination than the one originally reported, not simply re-checking that the exact same address still fails."
+/>
+
+<Flashcards
+  cards={[
+    { front: "SSRF (API7:2023)", back: "The server itself, not the caller, makes a request to a destination - triggered by any feature that fetches a caller-supplied URL (avatar import, webhook, link preview) without validating whether that destination should be reachable at all." },
+    { front: "Why SSRF matters even when the caller can't reach the target directly", back: "The server sits inside the network with its own credentials and access - it can often reach cloud metadata endpoints, internal admin panels, and backend services the caller's own browser never could." },
+    { front: "How to find it", back: "Confirm a URL-fetching feature works with a legitimate external address first, then point it at a destination outside your own reach (metadata address, loopback, internal hostname) and confirm with the actual content returned." },
+    { front: "Why a denylist never actually closes it", back: "A denylist has to enumerate every disguise for an internal address - alternate representations, redirects, attacker-controlled DNS - and it never fully can. Only an allowlist checked against the actual resolved destination holds." },
+    { front: "The redirect trap", back: "An endpoint that validates the initial URL but blindly follows a 3xx redirect can be sent to an allowed-looking address that redirects straight to an internal one - the allowlist check needs to hold on the final destination too." },
+    { front: "The fix to recommend", back: "A server-side allowlist of permitted destinations (by hostname, IP range, or scheme), resolved and checked before any fetch is attempted - never a denylist of specific blocked addresses." },
+  ]}
+/>
+
+<Challenge>
+On TaskFlight's sandbox (or another system you are explicitly authorized to test), find one feature where
+the server fetches a caller-supplied URL. Confirm it works with a legitimate external address, then try one
+destination outside your own reach (a metadata-style address, a loopback address, or an internal hostname)
+through the same feature. Record the exact request and the exact response content. If it returns content
+that is clearly not from the intended external destination, write up the finding naming the missing
+server-side allowlist as the fix - and if it does not, note that result too, since a clean refusal is
+exactly what a correct allowlist check should produce.
+</Challenge>
+
+<AskCommunity prompt="I've been testing 'fetch a URL' API features for SSRF by confirming they work normally with an external address first, then trying a destination outside my own reach and checking the ACTUAL returned content rather than just the response speed or status code. For people who test this regularly: what internal-style destinations do you find most useful to try in a black-box sandbox test without real cloud infrastructure behind it, and how do you tell a genuinely blocked SSRF attempt apart from a feature that just doesn't support fetching that kind of address at all?">
+Choosing a destination that is actually meaningful to try when there's no real cloud environment behind
+the sandbox, and telling "correctly refused" apart from "never supported in the first place," are exactly
+the judgment calls this kind of testing needs - hearing how other testers handle both is the fastest way to
+get it right.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://owasp.org/API-Security/editions/2023/en/0xa7-server-side-request-forgery/", title: "OWASP API7:2023 Server Side Request Forgery - the official category page", kind: "read" },
+    { href: "https://portswigger.net/web-security/ssrf", title: "PortSwigger Web Security Academy - Server-side request forgery (SSRF)", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=-KSOFjNOOMw" title="What is SSRF? Server-Side Request Forgery Explained (With Real Attack Example)" minutes={9} />
+
+<Takeaways
+  points={[
+    "SSRF (API7:2023) is the server itself making a request to a destination it should not, triggered by any feature that fetches a caller-supplied URL on the server's own behalf.",
+    "The danger is not that the caller reaches the target directly - it is that the server, sitting inside the network with its own access, becomes the one making the request.",
+    "Find it by confirming a URL-fetching feature works with a legitimate external address first, then pointing it at a destination outside your own reach and confirming with the actual content returned.",
+    "A denylist of specific blocked addresses never fully closes SSRF - only an allowlist checked against the actual resolved destination, including through redirects, holds.",
+    "A fix that only blocks the exact address a tester originally reported is not a real fix - confirm with a different internal-style destination before accepting the finding as resolved.",
+    "Test only systems you own or are explicitly authorized to test, using synthetic destinations and minimal proof - never probe real third-party infrastructure or attempt to reach production cloud credentials.",
+  ]}
+/>
+
+<Complete xp={10} />

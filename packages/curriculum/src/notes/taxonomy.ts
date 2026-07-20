@@ -2310,10 +2310,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "rest-api-attacks",
         title: "REST API attacks",
         topics: [
-          { slug: "mass-assignment", title: "Mass assignment", planned: true },
-          { slug: "ssrf", title: "SSRF", planned: true },
-          { slug: "rate-limit-and-abuse-testing", title: "Rate-limit & abuse testing", planned: true },
-          { slug: "excessive-data-exposure", title: "Excessive data exposure", planned: true },
+          { slug: "mass-assignment", title: "Mass assignment" },
+          { slug: "ssrf", title: "SSRF" },
+          { slug: "rate-limit-and-abuse-testing", title: "Rate-limit & abuse testing" },
+          { slug: "excessive-data-exposure", title: "Excessive data exposure" },
         ],
       },
       {
