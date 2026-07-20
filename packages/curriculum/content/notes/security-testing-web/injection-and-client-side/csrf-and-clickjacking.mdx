@@ -1,0 +1,388 @@
+---
+title: "CSRF & clickjacking"
+summary: "CSRF forges a cross-site request that rides the victim's ambient session cookie, needing no click at all. Clickjacking forges a UI click via an invisible iframe over a real page. Different mechanisms, different fixes: tokens/SameSite versus frame headers."
+tags: ["security-testing-web", "injection-and-client-side", "track-c"]
+updated: "2026-07-20"
+related:
+  - "security-testing-web/injection-and-client-side/xss-reflected-stored-dom"
+  - "security-testing-web/injection-and-client-side/sql-injection-by-hand"
+  - "security-testing-web/owasp-top-10-properly/broken-access-control"
+---
+
+<Hook>
+You are logged into your own banking-style test account in one browser tab, and in another tab you open
+a page you are authorized to test that just happens to auto-submit a hidden form the instant it loads -
+no click from you at all - and your account setting changes anyway. Different day, different sandbox
+page: this one asks you to click a big "Play again" button, and the click lands on a real "Delete
+account" button hidden underneath, invisible, in an iframe you never knew was there. Both attacks trick
+your authenticated browser into doing something you never intended. Neither one is the other: one forges
+a REQUEST your browser sends without asking you; the other forges what your very real CLICK actually
+lands on.
+</Hook>
+
+<Callout type="analogy">
+A marionette show explains both at once. Look up past the little proscenium arch and you will see the
+strings running into the dark above the stage, tied off somewhere the audience never sees - the puppet's
+joints move exactly as those strings dictate, with no way to refuse a pull, because the strings were
+already attached before the show even started. That is CSRF: your browser is the puppet, the session
+cookie is the string already tied on, and a hand you never see can move a joint - submit a request - the
+instant it wants to, without you doing anything at all. Now look at the stage front itself: the ornate
+arch and curtain are what the audience's whole attention is drawn to, while the actual controlling rig
+sits entirely above and behind it, out of sight. That is clickjacking: what you see framed as "the show"
+is not where the real mechanism lives - your genuine click, aimed at the visible decoy, lands on the real
+hidden layer behind it instead.
+</Callout>
+
+<Term define="CSRF and clickjacking are two different mechanisms that both trick a victim's own authenticated browser into an unintended action, but they attack two different things. Cross-site request forgery (CSRF) forges a REQUEST: a page on another site causes the victim's browser to submit a request, often a state-changing POST, to a target site, and the browser automatically attaches the victim's ambient session cookie because cookies are attached based on the request's destination, not on which page triggered the request. The victim never has to see or click anything for the forged request to be sent, and the target site cannot tell it apart from a legitimate one unless something ties the request to genuine, page-originated intent. Clickjacking forges a UI INTERACTION: the target site's own real page is loaded inside an invisible iframe, layered underneath a decoy page the victim can see, so the victim's genuine click - aimed at what they can see - actually lands on the real, hidden page beneath it. The victim's session and their intent to click something are both entirely real; what the click actually activated was not what they perceived. CSRF is mitigated by proving a request genuinely originated from the site's own page: a per-request CSRF token a cross-site page cannot read, or SameSite=Lax/Strict cookies that the browser simply does not attach on qualifying cross-site requests. Clickjacking is mitigated by preventing the page from being framed by another origin at all: the X-Frame-Options header or a Content-Security-Policy frame-ancestors directive. These are different controls at different layers - a CSRF token does nothing to stop a real click from landing on a hidden iframe, and a frame-denying header does nothing to stop a forged cross-site request. All hands-on testing here is performed only against systems the tester owns or is explicitly, in writing, authorized to test - this platform's own BuggyShop/BuggyAPI sandbox or a named local target - using tester-owned accounts and synthetic data, never a real third-party site.">CSRF and clickjacking</Term>
+
+## Confirming each mechanism, safely
+
+- **Confirm CSRF with a self-submitting local test page.** Build a small, local HTML page containing a
+  form that targets a state-changing endpoint on your authorized sandbox, load it while authenticated to
+  that sandbox in another tab, and check whether the action actually succeeds without any token your test
+  page could not have known.
+- **Test whether the CSRF token is validated, not just present.** Submit the real request with the token
+  field stripped, or swapped for an obviously wrong value. If the action still succeeds, the token exists
+  in the HTML but is not actually checked server-side - functionally identical to having no token.
+- **Check SameSite by reading the actual Set-Cookie header.** Confirm the attribute is genuinely present
+  (`Strict`, `Lax`, or `None`) rather than assumed from a framework's default documentation, and confirm
+  a cross-site POST from your local test page does not carry the cookie when it should not.
+- **Confirm clickjacking by checking response headers first.** Look for `X-Frame-Options` or a CSP
+  `frame-ancestors` directive on the target page's response. If both are absent, a simple local HTML page
+  embedding the target in an iframe (reduced opacity, for your own observation only) will load it - proof
+  the page can be framed.
+- **Match the fix to the mechanism.** A CSRF token or SameSite cookie policy does nothing about framing;
+  an `X-Frame-Options`/CSP `frame-ancestors` header does nothing about a forged cross-site request. Name
+  the correct control for each finding.
+
+<Callout type="tip">
+A CSRF token that only exists as a hidden form field, never checked by the server, is the same as having
+no protection at all - and the only way to know is to submit the real request with the token removed or
+corrupted. Do not stop at confirming the token is present in the page's HTML; confirm the server actually
+rejects the request when the token is wrong or missing.
+</Callout>
+
+<Callout type="mistake">
+Assuming a valid CSRF token also protects against clickjacking. A tester confirms a page includes a
+properly server-validated per-request CSRF token and concludes the page is safe from clickjacking too,
+reasoning that "there's a token protecting it." But clickjacking never needs to construct or guess a
+forged request at all - it rides the victim's own genuine click through an invisible iframe straight into
+the real page, submitting the real form with its real, valid token fully intact, because the victim's own
+authentic, already-authenticated browser session is doing the submitting. A CSRF token proves a request
+genuinely originated from the site's own page; it says nothing about whether that page can be loaded
+inside someone else's invisible iframe. Check the framing headers as their own, separate control.
+</Callout>
+
+{/* IMAGE: a marionette theatre stage seen from below, two puppets on stage - a pianist and a singer - with visible strings running up into dark tree branches above, and children's hands pressed against the surrounding wall watching */}
+<HotspotImage
+  src="/notes/security-testing-web/injection-and-client-side/csrf-and-clickjacking.jpg"
+  alt="A marionette theatre stage seen from below with two puppets, a pianist and a singer, and visible strings running up into dark branches above the stage, with children watching from below"
+  credit="Madrid Marionettentheater - Ermell, Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Madrid_Marionettentheater_Kinder-20150110-RM-144736.jpg"
+  pins={[
+    { x: 48, y: 14, label: "Strings tied on before the show even starts", desc: "The puppet moves because something above, out of the audience's sight, pulls a string that was already attached. That is exactly how a session cookie works: ambient, already attached, and automatically sent - a hidden hand only has to pull, not ask permission." },
+    { x: 89, y: 17, label: "The audience never sees who is pulling", desc: "Children press against the wall straining to see backstage, but the performance never reveals who controls which string from above. That is CSRF's blind spot: the target site only ever sees a valid-looking request arrive - never who or what actually triggered it." },
+    { x: 23, y: 8, label: "The framed show is not where control lives", desc: "The ornate arch draws the whole audience's attention, while the actual controlling rig sits entirely above and behind it, unseen. That is clickjacking exactly: an invisible layer stacked behind the visible, framed decoy the victim actually looks at and clicks." },
+    { x: 48, y: 38, label: "A joint has no way to refuse a pull", desc: "Every joint on the puppet moves exactly as its string dictates - it cannot check who is pulling before it moves. A browser is the same: it cannot refuse to attach a stored session cookie just because the page that triggered the request came from another site." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Testing CSRF and clickjacking separately - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Build a local, self-submitting test page for CSRF", desc: "Targeting a state-changing endpoint on your authorized sandbox. Load it while authenticated elsewhere and check if the action succeeds unasked." },
+    { label: "Strip or corrupt the CSRF token and resubmit", desc: "If the action still succeeds, the token is present but not actually validated server-side - the same as no protection." },
+    { label: "Check the response headers for frame defenses", desc: "X-Frame-Options or CSP frame-ancestors. Their absence is the clickjacking signal, independent of anything CSRF-related." },
+    { label: "Recommend the matching control for each", desc: "CSRF tokens or SameSite cookies for forged requests. X-Frame-Options or frame-ancestors for forged clicks. Never swap the two." },
+  ]}
+/>
+
+Here is the same distinction in runnable form - a CSRF-token validator, a SameSite cookie-policy
+simulator for a forged cross-site POST, and a clickjacking-defense header checker, all reasoning over
+hardcoded, local, synthetic values.
+
+<CodePlayground
+  language="python"
+  title="Run it - a CSRF-token validator and clickjacking-header checker (Python)"
+  code={`# A CSRF-token validator, a SameSite cookie-policy simulator, and a
+# clickjacking-defense header checker. All logic runs on hardcoded, local,
+# synthetic values - no network call, no real site involved.
+
+def validate_csrf_token(session_expected_token, submitted_token):
+    # Constant-time-style comparison (length check first, then compare) is
+    # good practice for token comparisons; the real point for CSRF is that a
+    # cross-site form CANNOT know or read this token, so a forged request has
+    # ambient cookies but no valid token to submit alongside them.
+    if session_expected_token is None or submitted_token is None:
+        return False
+    if len(session_expected_token) != len(submitted_token):
+        return False
+    return session_expected_token == submitted_token
+
+def would_cookie_ride_along(samesite_value, request_is_cross_site, request_method):
+    # Simulates browser SameSite enforcement for a cookie on an outgoing
+    # request - this is what actually stops (or allows) ambient credentials
+    # from riding along on a forged cross-site request.
+    value = (samesite_value or "lax").lower()
+    if not request_is_cross_site:
+        return True
+    if value == "strict":
+        return False
+    if value == "lax":
+        # Lax still allows the cookie on a top-level, cross-site GET
+        # navigation, but not on a cross-site POST - which is exactly the
+        # request shape a forged form submission uses.
+        return request_method.upper() == "GET"
+    if value == "none":
+        return True
+    return False
+
+def check_frame_defense(headers):
+    # Clickjacking defense is a DIFFERENT control from CSRF tokens: it stops
+    # the page from being rendered inside another site's invisible iframe at
+    # all, so a forged overlay click never lands on a real button.
+    xfo = headers.get("X-Frame-Options", "").upper()
+    csp = headers.get("Content-Security-Policy", "")
+    has_frame_ancestors = "frame-ancestors" in csp
+    protected = xfo in ("DENY", "SAMEORIGIN") or has_frame_ancestors
+    return protected, xfo, has_frame_ancestors
+
+def run():
+    print("CSRF token validation (mechanism: forged REQUEST, ambient credentials):")
+    session_token = "fake_test_token_9f2c"
+    scenarios = [
+        ("legitimate same-site form", session_token),
+        ("forged cross-site form (attacker cannot read the real token)", "fake_test_token_0000"),
+        ("forged cross-site form with no token field at all", None),
+    ]
+    for label, submitted in scenarios:
+        ok = validate_csrf_token(session_token, submitted)
+        print("  " + label + " -> " + ("ACCEPTED" if ok else "REJECTED"))
+    print()
+
+    print("SameSite cookie simulation for a cross-site POST (a forged <form> submit):")
+    for samesite in ["Strict", "Lax", "None"]:
+        rides_along = would_cookie_ride_along(samesite, True, "POST")
+        print("  SameSite=" + samesite + " -> cookie sent on cross-site POST: " + str(rides_along))
+    print()
+
+    print("Clickjacking defense header check (mechanism: forged UI CLICK, invisible iframe):")
+    header_sets = [
+        ("no defense configured", {}),
+        ("X-Frame-Options set", {"X-Frame-Options": "DENY"}),
+        ("CSP frame-ancestors set", {"Content-Security-Policy": "frame-ancestors 'self'"}),
+    ]
+    for label, headers in header_sets:
+        protected, xfo, has_fa = check_frame_defense(headers)
+        print("  " + label + " -> framing blocked: " + str(protected) + " (X-Frame-Options=" + repr(xfo) + ", frame-ancestors=" + str(has_fa) + ")")
+
+run()`}
+/>
+
+The identical validator and checker in Java - same scenarios, same verdicts:
+
+<CodePlayground
+  language="java"
+  title="Run it - a CSRF-token validator and clickjacking-header checker (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    // A CSRF-token validator, a SameSite cookie-policy simulator, and a
+    // clickjacking-defense header checker. All logic runs on hardcoded,
+    // local, synthetic values - no network call, no real site involved.
+
+    static boolean validateCsrfToken(String sessionExpectedToken, String submittedToken) {
+        if (sessionExpectedToken == null || submittedToken == null) return false;
+        if (sessionExpectedToken.length() != submittedToken.length()) return false;
+        return sessionExpectedToken.equals(submittedToken);
+    }
+
+    static boolean wouldCookieRideAlong(String samesiteValue, boolean requestIsCrossSite, String requestMethod) {
+        String value = (samesiteValue == null ? "lax" : samesiteValue).toLowerCase();
+        if (!requestIsCrossSite) return true;
+        if (value.equals("strict")) return false;
+        if (value.equals("lax")) return requestMethod.equalsIgnoreCase("GET");
+        if (value.equals("none")) return true;
+        return false;
+    }
+
+    static class FrameCheck {
+        boolean protectedFraming;
+        String xfo;
+        boolean hasFrameAncestors;
+        FrameCheck(boolean p, String x, boolean f) { protectedFraming = p; xfo = x; hasFrameAncestors = f; }
+    }
+
+    static FrameCheck checkFrameDefense(Map<String, String> headers) {
+        String xfo = headers.getOrDefault("X-Frame-Options", "").toUpperCase();
+        String csp = headers.getOrDefault("Content-Security-Policy", "");
+        boolean hasFrameAncestors = csp.contains("frame-ancestors");
+        boolean protectedFraming = xfo.equals("DENY") || xfo.equals("SAMEORIGIN") || hasFrameAncestors;
+        return new FrameCheck(protectedFraming, xfo, hasFrameAncestors);
+    }
+
+    public static void main(String[] args) {
+        System.out.println("CSRF token validation (mechanism: forged REQUEST, ambient credentials):");
+        String sessionToken = "fake_test_token_9f2c";
+        String[][] scenarios = {
+            {"legitimate same-site form", sessionToken},
+            {"forged cross-site form (attacker cannot read the real token)", "fake_test_token_0000"},
+            {"forged cross-site form with no token field at all", null},
+        };
+        for (String[] s : scenarios) {
+            boolean ok = validateCsrfToken(sessionToken, s[1]);
+            System.out.println("  " + s[0] + " -> " + (ok ? "ACCEPTED" : "REJECTED"));
+        }
+        System.out.println();
+
+        System.out.println("SameSite cookie simulation for a cross-site POST (a forged <form> submit):");
+        for (String samesite : new String[]{"Strict", "Lax", "None"}) {
+            boolean ridesAlong = wouldCookieRideAlong(samesite, true, "POST");
+            System.out.println("  SameSite=" + samesite + " -> cookie sent on cross-site POST: " + ridesAlong);
+        }
+        System.out.println();
+
+        System.out.println("Clickjacking defense header check (mechanism: forged UI CLICK, invisible iframe):");
+        List<Object[]> headerSets = new ArrayList<>();
+        headerSets.add(new Object[]{"no defense configured", new HashMap<String, String>()});
+        Map<String, String> h2 = new HashMap<>(); h2.put("X-Frame-Options", "DENY");
+        headerSets.add(new Object[]{"X-Frame-Options set", h2});
+        Map<String, String> h3 = new HashMap<>(); h3.put("Content-Security-Policy", "frame-ancestors 'self'");
+        headerSets.add(new Object[]{"CSP frame-ancestors set", h3});
+
+        for (Object[] entry : headerSets) {
+            String label = (String) entry[0];
+            @SuppressWarnings("unchecked")
+            Map<String, String> headers = (Map<String, String>) entry[1];
+            FrameCheck fc = checkFrameDefense(headers);
+            System.out.println("  " + label + " -> framing blocked: " + fc.protectedFraming +
+                " (X-Frame-Options='" + fc.xfo + "', frame-ancestors=" + fc.hasFrameAncestors + ")");
+        }
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: test both mechanisms separately, in an authorized sandbox">
+<StepChecklist
+  steps={[
+    { text: "Get written authorization and use a tester-owned account", detail: "This platform's own BuggyShop/BuggyAPI sandbox or a named local target, with a test account you own and synthetic data only." },
+    { text: "Build a local self-submitting page for one state-changing action", detail: "Load it while authenticated elsewhere and check if the action succeeds. Then resubmit with the token stripped or corrupted." },
+    { text: "Read the Set-Cookie and response headers directly", detail: "Confirm the actual SameSite value and check for X-Frame-Options or CSP frame-ancestors - do not assume defaults from documentation." },
+    { text: "Write two separate findings if both are missing", detail: "Name CSRF and clickjacking as distinct mechanisms with distinct fixes - a token/SameSite recommendation for one, a frame header recommendation for the other." },
+  ]}
+/>
+You can now test and report CSRF and clickjacking as the two genuinely different mechanisms they are,
+instead of treating "the page felt exploitable" as one vague finding.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A forged request succeeds even though the form includes a CSRF token field.",
+      fix: "A token present in the HTML proves nothing by itself. Resubmit the real request with the token stripped or replaced with a garbage value; if the server still accepts it, the token is not actually being validated server-side.",
+    },
+    {
+      symptom: "SameSite=Lax is documented as set, but your test shows the cookie still riding along on a cross-site POST.",
+      fix: "Read the literal Set-Cookie response header rather than trusting framework documentation or defaults - confirm the attribute is actually present, spelled correctly, and applied to the specific cookie in question.",
+    },
+    {
+      symptom: "An iframe-embedding test page shows the target page refusing to load at all.",
+      fix: "That is the defense working, not a bug - confirm it directly by reading the X-Frame-Options or CSP frame-ancestors header, and record it as a pass rather than continuing to look for a workaround.",
+    },
+    {
+      symptom: "A clickjacking finding is closed on the reasoning that the page requires login, so an attacker cannot reach it.",
+      fix: "Clickjacking rides the victim's own already-authenticated browser session inside the invisible iframe - the login requirement does not prevent framing at all. Only frame-denying headers do; re-open the finding and check for them specifically.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The literal Set-Cookie and response headers, read directly** - SameSite value, HttpOnly, Secure,
+  X-Frame-Options, and CSP frame-ancestors - never assumed from a framework's stated defaults.
+- **Whether the CSRF token is validated server-side, not just present** - confirmed by resubmitting with
+  it stripped or corrupted, not by inspecting the form's HTML alone.
+- **Every state-changing endpoint, not just the first one tested** - a form with ten actions can have ten
+  independently forgeable requests; one confirmed token does not clear the other nine.
+- **[[security-testing-web/injection-and-client-side/xss-reflected-stored-dom]]** - a stored XSS finding
+  on a shared page can itself plant a hidden auto-submitting form, one common way persistent script
+  injection escalates into a forged request; worth checking together.
+- **[[security-testing-web/owasp-top-10-properly/broken-access-control]]** - session and authorization
+  checks that a forged request or a hijacked click ultimately rides on; useful background for scoring the
+  real impact of either finding.
+</WhereToCheck>
+
+<WorkedExample title="two separate findings on the BuggyShop account-settings page">
+1. A tester, authorized to test the platform's own BuggyShop sandbox with a tester-owned account, builds
+   a small local HTML page containing a form that auto-submits to the account's email-change endpoint.
+2. Loaded while authenticated to BuggyShop in another tab, the email address changes with no click and no
+   valid token - the endpoint accepted the request purely on the strength of the ambient session cookie.
+   This is filed as CSRF, with SameSite=Lax cookies (or a validated per-request token) recommended.
+3. Separately, the tester checks the same page's response headers and finds neither X-Frame-Options nor a
+   CSP frame-ancestors directive present. A local test page embeds the account page in a low-opacity
+   iframe, for observation only, and it loads successfully.
+4. This is filed as a second, distinct finding: clickjacking, with X-Frame-Options or frame-ancestors
+   recommended as the fix - explicitly noted as unrelated to the CSRF finding and requiring its own,
+   different control.
+</WorkedExample>
+
+<Quiz
+  question="A page has a properly server-validated, per-request CSRF token on all of its forms, but no X-Frame-Options header or CSP frame-ancestors directive. Is this page vulnerable to clickjacking?"
+  options={[
+    "No, since a valid CSRF token also prevents the page from being framed",
+    "Yes, because clickjacking rides the victim's genuine, already-authenticated click through an invisible iframe and submits the real form with its real valid token intact - a CSRF token does not control framing",
+    "No, since clickjacking requires stealing the session cookie, which a CSRF token prevents",
+    "Only if the page also has no SameSite attribute set on its cookies"
+  ]}
+  answer={1}
+  explain="CSRF tokens and frame-denying headers are different controls at different layers. A CSRF token proves a request genuinely originated from the site's own page; it says nothing about whether that page can be loaded inside another origin's invisible iframe. Clickjacking does not need to forge a request or steal a cookie (ruling out option C) - it rides the victim's own real click and real session through the hidden iframe, submitting the real form, token included. SameSite (option D) is a CSRF control as well and does not affect framing either."
+/>
+
+<Flashcards
+  cards={[
+    { front: "CSRF (cross-site request forgery)", back: "Forges a REQUEST: a cross-site page causes the victim's browser to submit a request, and the ambient session cookie rides along automatically based on the request's destination, not who triggered it." },
+    { front: "Clickjacking", back: "Forges a UI INTERACTION: the target's real page loads in an invisible iframe under a visible decoy, so the victim's genuine click lands on the real hidden page instead of what they perceived." },
+    { front: "Why a CSRF token doesn't stop clickjacking", back: "Clickjacking rides the victim's own authentic, already-authenticated click and session through the hidden iframe - the real form, with its real valid token, gets submitted for real. The token proves origin, not frameability." },
+    { front: "CSRF's real fix", back: "A per-request CSRF token a cross-site page cannot read, or SameSite=Lax/Strict cookies the browser will not attach on qualifying cross-site requests." },
+    { front: "Clickjacking's real fix", back: "X-Frame-Options or a Content-Security-Policy frame-ancestors directive, preventing the page from being loaded inside another origin's iframe at all." },
+    { front: "Testing token validation, not just presence", back: "Resubmit the real request with the CSRF token stripped or corrupted. If it still succeeds, the token exists in the HTML but is not actually checked server-side." },
+    { front: "Testing for clickjacking exposure", back: "Read the X-Frame-Options and CSP frame-ancestors response headers directly; their absence is the signal, confirmable with a local, low-opacity iframe test page." },
+  ]}
+/>
+
+<Challenge>
+In this platform's own BuggyShop sandbox, using a tester-owned account, pick one state-changing action
+(such as an account-detail change) and test it for both mechanisms separately: build a local self-submitting
+test page to check CSRF, then resubmit with the token stripped to confirm it is actually validated; then
+read the response headers for X-Frame-Options and CSP frame-ancestors to check for clickjacking exposure.
+Write up each as its own finding with its own matching fix - or, if both controls are already correctly in
+place, write up what you confirmed and how, for each, separately.
+</Challenge>
+<AskCommunity prompt="I've started testing CSRF and clickjacking as two completely separate findings - resubmitting a request with its CSRF token stripped to confirm server-side validation, then separately reading the X-Frame-Options/CSP frame-ancestors headers rather than assuming a token covers both. For people who test these regularly: what is the cleanest safe way you've found to build a local clickjacking test harness without touching a real third-party site, and have you seen a CSRF token that looked present in the HTML but turned out not to be validated server-side at all?">
+A safe, repeatable local clickjacking test harness, and real examples of a CSRF token that looked present
+in a form but was never actually checked server-side, are exactly the kind of concrete detail that turns
+this from a definitional distinction into a testing habit.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html", title: "OWASP - Cross-Site Request Forgery Prevention Cheat Sheet", kind: "read" },
+    { href: "https://cheatsheetseries.owasp.org/cheatsheets/Clickjacking_Defense_Cheat_Sheet.html", title: "OWASP - Clickjacking Defense Cheat Sheet", kind: "read" },
+    { href: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite", title: "MDN - Set-Cookie: SameSite attribute", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=eWEgUcHPle0" title="Cross-Site Request Forgery (CSRF) Explained" minutes={14} />
+
+<Takeaways
+  points={[
+    "CSRF forges a request - the ambient session cookie rides along automatically, no click from the victim required.",
+    "Clickjacking forges a UI interaction - a real click, on a real invisible iframe, submitting the real page underneath a visible decoy.",
+    "A CSRF token proves a request's origin; it does not and cannot prevent a page from being framed by another origin.",
+    "Test token validation by stripping or corrupting it and resubmitting, not by confirming the field exists in the HTML.",
+    "Test clickjacking exposure by reading X-Frame-Options and CSP frame-ancestors headers directly, confirmable with a local test iframe.",
+    "Test only systems you own or are explicitly, in writing, authorized to test, with tester-owned accounts and synthetic data.",
+  ]}
+/>
+
+<Complete xp={10} />

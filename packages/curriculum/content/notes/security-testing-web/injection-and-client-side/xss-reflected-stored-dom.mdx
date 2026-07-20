@@ -1,0 +1,377 @@
+---
+title: "XSS: reflected / stored / DOM"
+summary: "Reflected, stored, and DOM-based XSS are three different mechanisms - one round-trips through a request, one persists server-side, one never touches the server. HttpOnly blocks cookie reads only; it never stops an injected script from running."
+tags: ["security-testing-web", "injection-and-client-side", "track-c"]
+updated: "2026-07-20"
+related:
+  - "security-testing-web/injection-and-client-side/sql-injection-by-hand"
+  - "security-testing-web/injection-and-client-side/csrf-and-clickjacking"
+  - "security-testing-web/owasp-top-10-properly/the-2021-list-and-how-to-use-it"
+---
+
+<Hook>
+You post one comment on a page you are authorized to test, and a small alert box pops up in your own
+browser. Harmless, and exactly the point: something you typed as text just ran as code. Now the real
+question starts - does that box pop up for you and only you, right after you post it (reflected)? Does
+it pop up for every single visitor who opens that page for the next month (stored)? Or does it never
+touch the server's stored content at all, and only appear because a script already running in the page
+read something from the URL and wrote it straight into the page (DOM-based)? Same symptom, three
+genuinely different mechanisms - and the fix, the blast radius, and the report all depend on telling
+them apart correctly.
+</Hook>
+
+<Callout type="analogy">
+A parish notice board tells all three stories at once. Papers pinned inside its two locked glass
+compartments, on the felt board, stay there for every visitor who walks past for weeks - that is STORED:
+written once, served to everyone who arrives later, with no crafted link needed per victim. A hand-written
+page taped straight onto the post outside the case, answering one specific event, is up only because
+someone stuck it directly onto the visible surface for whoever happens to glance at that exact spot right
+now - that is REFLECTED: it exists only in that one moment, tied to that one occasion, and never becomes
+part of the board's own permanent contents. And the sky and hedge visible in the glass are not inside the
+case at all - they are only ever a reflection of what is already standing in front of it. That is
+DOM-based: nothing was ever pinned inside the board; what a viewer sees was assembled entirely on their
+own side of the glass, from what was already there, without the board itself ever holding or serving it.
+</Callout>
+
+<Term define="Cross-site scripting (XSS) is a family of three distinct mechanisms that all end with an attacker-influenced script running in another user's browser, but they differ in where the payload lives and how it gets there. Reflected XSS round-trips through a single request and response: unescaped input from the current request (a URL parameter, a search term) is echoed directly back into that same page, so it only affects whoever is tricked into following one crafted link or submitting one crafted request. Stored XSS is persisted server-side once - saved to a database, a file, a log - and then rendered unescaped to every subsequent visitor who views that page, with no crafted link required per victim. DOM-based XSS never touches the server at all: a client-side script reads an attacker-influenceable source already available in the browser (the URL fragment, document.referrer, window.name) and writes it into a dangerous sink (innerHTML, document.write) entirely on the client, so server-side output encoding alone cannot catch it - view-source will show nothing unusual, since the change happens after the page loads. A frequent point of confusion is the HttpOnly cookie flag: it blocks JavaScript from reading that cookie's value via document.cookie, and only that - it does not stop an injected script from running, does not stop it from submitting forms, calling APIs, or taking any other action the page itself could already take using the browser's ambient session. HttpOnly narrows one specific consequence of XSS; it is not a fix for XSS and does not reduce where or whether the injected script executes. All hands-on testing here is performed only against systems the tester owns or is explicitly, in writing, authorized to test - this platform's own BuggyShop/BuggyAPI sandbox or a named local target - using tester-owned accounts and synthetic content, never a real third-party site.">Cross-site scripting (reflected, stored, DOM-based)</Term>
+
+## Confirming each mechanism, safely
+
+- **Reflected - round-trip a distinctive marker.** Submit a short, harmless, uniquely-named marker string
+  in a URL parameter or search field and check whether it comes back unescaped in that same response. If
+  it only ever appears for the request that carried it, and only in that one response, that is reflected.
+- **Stored - submit once, view from elsewhere.** Post the marker into a comment, bio, or similar field
+  once, then load the same page again later, or from a second tester-owned account, with no crafted link
+  involved. If the unescaped marker is still there and visible to that separate view, it persisted -
+  that is stored.
+- **DOM-based - stop trusting view-source, open DevTools.** Because the content is assembled entirely on
+  the client, the server's response never contains it - view-source will look clean. Trace client-side
+  sources (`location.hash`, `document.referrer`, `window.name`) into sinks (`innerHTML`,
+  `document.write`, `eval`) using the browser's Elements panel or a benign marker, not the raw HTML.
+- **The actual fix is context-aware output encoding, not a blocklist.** Encoding a value for the HTML-body
+  context, the attribute context, the JavaScript-string context, and the URL context are four different
+  jobs; a filter that only strips a literal script tag misses every other sink and context.
+- **Never confuse HttpOnly with a fix.** If a page is vulnerable to XSS, an injected script still runs,
+  still reads anything else on the page, still submits requests using the ambient session, and still
+  performs any action the legitimate page could perform - HttpOnly only prevents that script from reading
+  the cookie's raw value directly.
+
+<Callout type="tip">
+When you cannot tell reflected from stored at a glance, change who is looking. Load the exact same URL
+from a second tester-owned account, or from a private/incognito window with no crafted link, a few
+minutes later. If the payload is still there for that separate, uninvolved view, it was stored; if it
+only ever appeared for the one crafted request that carried it, it was reflected. Guessing from the
+payload's shape alone is unreliable - the mechanism is proven by who else sees it and how.
+</Callout>
+
+<Callout type="mistake">
+Reporting a finding as "not exploitable" because the session cookie has HttpOnly set. A tester confirms a
+comment field is vulnerable to stored XSS, checks the cookie flags, sees HttpOnly present, and concludes
+the impact is minor because "the cookie can't be stolen." But HttpOnly only blocks one specific read
+operation - document.cookie access from script. The injected script still runs in every visitor's
+browser with full access to the page: it can submit forms, call the site's own APIs using the visitor's
+live session, deface the page, or redirect the visitor, none of which require ever reading the cookie's
+value at all. Score XSS impact by what the script can DO on the page, not by whether one cookie flag
+happens to be set.
+</Callout>
+
+{/* IMAGE: a wooden village notice board named GREAT FINBOROUGH with two glazed compartments full of pinned papers on a purple felt board, and a separate yellow paper taped directly to the post below the case */}
+<HotspotImage
+  src="/notes/security-testing-web/injection-and-client-side/xss-reflected-stored-dom.jpg"
+  alt="A wooden village notice board with two glazed compartments full of pinned papers on a purple felt board, and a separate yellow paper taped directly to the post below the case"
+  credit="Great Finborough Village Notice Board - Geographer, Wikimedia Commons, CC BY-SA 2.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Great_Finborough_Village_Notice_Board_-_geograph.org.uk_-_4985509.jpg"
+  pins={[
+    { x: 30, y: 38, label: "STORED - pinned once, served to everyone after", desc: "The papers behind the glass persist for every visitor who walks past, for weeks, with no crafted link needed. That is stored XSS: saved server-side once, rendered unescaped to every later viewer." },
+    { x: 23, y: 55, label: "REFLECTED - taped on for this one moment", desc: "The yellow notice answers one specific event and is stuck directly onto the visible surface, outside the permanent case. That is reflected XSS: it exists only for the one request/response that carried it." },
+    { x: 50, y: 24, label: "DOM-based - never inside the case at all", desc: "What the glass shows here is only ever a reflection of what already stands in front of it, not content the board itself holds. DOM-based XSS is the same: assembled entirely client-side, so the server's response - and view-source - never contains it." },
+    { x: 50, y: 15, label: "The named, trusted channel", desc: "GREAT FINBOROUGH is stencilled once, by the parish, as the one legitimate persistent channel. Context-aware output encoding is the same idea in code: only properly-encoded output ever becomes part of the trusted page structure." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Telling the three mechanisms apart - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Submit a short, harmless, uniquely-named marker", desc: "Into a URL parameter, a search field, or a comment/bio field you are authorized to test. Note exactly where you put it." },
+    { label: "Check if it reflects in the same response only", desc: "If the marker appears unescaped only in the response to the exact request that carried it, and nowhere else, that is reflected." },
+    { label: "Check if it persists for a separate, later view", desc: "Reload later, or view from a second tester-owned account, with no crafted link. Still there and unescaped means it was stored server-side." },
+    { label: "If view-source shows nothing, check the DOM instead", desc: "Trace client-side sources into sinks with DevTools. Content assembled entirely in the browser, never in the server's response, is DOM-based." },
+  ]}
+/>
+
+Here is the same three-way distinction in runnable form - a classifier that matches each finding's
+mechanism tag to reflected, stored, or DOM-based, plus an auditor that shows exactly what the HttpOnly
+flag does and does not cover on a sample cookie.
+
+<CodePlayground
+  language="python"
+  title="Run it - a reflected/stored/DOM classifier and HttpOnly auditor (Python)"
+  code={`# A reflected-vs-stored-vs-DOM XSS classifier, plus a cookie-flag auditor
+# that shows exactly what HttpOnly does and does NOT protect against.
+# No real payloads run anywhere - this only reasons about mechanism tags and
+# a Set-Cookie header string, both hardcoded, locally.
+
+FINDINGS = [
+    ("F01", "A search box's query is echoed unescaped straight back into that same response", {"echoes-request-input-same-response"}),
+    ("F02", "A comment is saved to the database and rendered unescaped to every later visitor", {"persists-then-renders-to-other-users"}),
+    ("F03", "A page reads location.hash and writes it into innerHTML with no server round trip at all", {"client-side-sink-no-server-roundtrip"}),
+    ("F04", "A profile bio is saved once, then rendered unescaped on every profile view by any visitor", {"persists-then-renders-to-other-users"}),
+    ("F05", "An error page prints the unescaped 'file' query parameter back into the same error response", {"echoes-request-input-same-response"}),
+]
+
+def classify(tags):
+    if "persists-then-renders-to-other-users" in tags:
+        return "stored"
+    if "client-side-sink-no-server-roundtrip" in tags:
+        return "dom-based"
+    if "echoes-request-input-same-response" in tags:
+        return "reflected"
+    return "unclassified"
+
+MECHANISM_NOTE = {
+    "reflected": "Round-trips through one request/response - never stored, only affects whoever follows the crafted link.",
+    "stored": "Persisted server-side once, served to every later visitor - no crafted link needed per victim.",
+    "dom-based": "Never touches the server at all - a client-side script reads an attacker-controlled source and writes it into a dangerous sink.",
+}
+
+def audit_cookie(set_cookie_header):
+    # Parses a Set-Cookie header and reports its flags - and is explicit
+    # about what each one actually does.
+    parts = [p.strip() for p in set_cookie_header.split(";")]
+    flags = {p.split("=")[0].lower() for p in parts[1:]} if len(parts) > 1 else set()
+    has_httponly = "httponly" in flags
+    has_secure = "secure" in flags
+    report = []
+    report.append("HttpOnly present: " + str(has_httponly))
+    if has_httponly:
+        report.append("  -> blocks JavaScript from READING this cookie's value via document.cookie.")
+        report.append("  -> does NOT stop an injected script from running, submitting forms, calling")
+        report.append("     APIs with the browser's ambient session, or doing anything else the page")
+        report.append("     itself could already do. XSS impact is not fixed by HttpOnly alone.")
+    else:
+        report.append("  -> any script running on the page (including an injected one) can read this")
+        report.append("     cookie's value directly via document.cookie.")
+    report.append("Secure present: " + str(has_secure))
+    return report
+
+def run():
+    print("Classifying findings by mechanism, not symptom:")
+    for fid, desc, tags in FINDINGS:
+        category = classify(tags)
+        print("  [" + fid + "] " + category.upper() + " - " + desc)
+        print("           " + MECHANISM_NOTE[category])
+    print()
+
+    sample_cookie = "session_id=fake_test_session_abc123; HttpOnly; Path=/"
+    print("Auditing a sample Set-Cookie header: " + sample_cookie)
+    for line in audit_cookie(sample_cookie):
+        print("  " + line)
+
+run()`}
+/>
+
+The identical classifier and auditor in Java - same findings, same tags, same conclusions:
+
+<CodePlayground
+  language="java"
+  title="Run it - a reflected/stored/DOM classifier and HttpOnly auditor (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    // A reflected-vs-stored-vs-DOM XSS classifier, plus a cookie-flag auditor
+    // that shows exactly what HttpOnly does and does NOT protect against.
+    // No real payloads run anywhere - this only reasons about mechanism tags
+    // and a Set-Cookie header string, both hardcoded, locally.
+
+    static Object[] finding(String id, String desc, String... tags) {
+        return new Object[]{id, desc, new HashSet<>(Arrays.asList(tags))};
+    }
+
+    static final List<Object[]> FINDINGS = Arrays.asList(
+        finding("F01", "A search box's query is echoed unescaped straight back into that same response", "echoes-request-input-same-response"),
+        finding("F02", "A comment is saved to the database and rendered unescaped to every later visitor", "persists-then-renders-to-other-users"),
+        finding("F03", "A page reads location.hash and writes it into innerHTML with no server round trip at all", "client-side-sink-no-server-roundtrip"),
+        finding("F04", "A profile bio is saved once, then rendered unescaped on every profile view by any visitor", "persists-then-renders-to-other-users"),
+        finding("F05", "An error page prints the unescaped 'file' query parameter back into the same error response", "echoes-request-input-same-response")
+    );
+
+    static String classify(Set<String> tags) {
+        if (tags.contains("persists-then-renders-to-other-users")) return "stored";
+        if (tags.contains("client-side-sink-no-server-roundtrip")) return "dom-based";
+        if (tags.contains("echoes-request-input-same-response")) return "reflected";
+        return "unclassified";
+    }
+
+    static final Map<String, String> MECHANISM_NOTE = new LinkedHashMap<>();
+    static {
+        MECHANISM_NOTE.put("reflected", "Round-trips through one request/response - never stored, only affects whoever follows the crafted link.");
+        MECHANISM_NOTE.put("stored", "Persisted server-side once, served to every later visitor - no crafted link needed per victim.");
+        MECHANISM_NOTE.put("dom-based", "Never touches the server at all - a client-side script reads an attacker-controlled source and writes it into a dangerous sink.");
+    }
+
+    static List<String> auditCookie(String setCookieHeader) {
+        String[] parts = setCookieHeader.split(";");
+        Set<String> flags = new HashSet<>();
+        for (int i = 1; i < parts.length; i++) flags.add(parts[i].trim().split("=")[0].toLowerCase());
+        boolean hasHttpOnly = flags.contains("httponly");
+        boolean hasSecure = flags.contains("secure");
+
+        List<String> report = new ArrayList<>();
+        report.add("HttpOnly present: " + hasHttpOnly);
+        if (hasHttpOnly) {
+            report.add("  -> blocks JavaScript from READING this cookie's value via document.cookie.");
+            report.add("  -> does NOT stop an injected script from running, submitting forms, calling");
+            report.add("     APIs with the browser's ambient session, or doing anything else the page");
+            report.add("     itself could already do. XSS impact is not fixed by HttpOnly alone.");
+        } else {
+            report.add("  -> any script running on the page (including an injected one) can read this");
+            report.add("     cookie's value directly via document.cookie.");
+        }
+        report.add("Secure present: " + hasSecure);
+        return report;
+    }
+
+    public static void main(String[] args) {
+        System.out.println("Classifying findings by mechanism, not symptom:");
+        for (Object[] f : FINDINGS) {
+            String fid = (String) f[0], desc = (String) f[1];
+            @SuppressWarnings("unchecked")
+            Set<String> tags = (Set<String>) f[2];
+            String category = classify(tags);
+            System.out.println("  [" + fid + "] " + category.toUpperCase() + " - " + desc);
+            System.out.println("           " + MECHANISM_NOTE.get(category));
+        }
+        System.out.println();
+
+        String sampleCookie = "session_id=fake_test_session_abc123; HttpOnly; Path=/";
+        System.out.println("Auditing a sample Set-Cookie header: " + sampleCookie);
+        for (String line : auditCookie(sampleCookie)) System.out.println("  " + line);
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: classify one XSS finding by mechanism, in an authorized sandbox">
+<StepChecklist
+  steps={[
+    { text: "Get written authorization and use a tester-owned account", detail: "This platform's own BuggyShop/BuggyAPI sandbox or a named local target, with a test account you own and synthetic content only." },
+    { text: "Submit one short, harmless, uniquely-named marker", detail: "Into a comment, bio, or search field. Note the exact field and the exact string." },
+    { text: "Check same-response, separate-view, and client-side-only", detail: "Round-trips only in the one response it's reflected. Persists for a second account or a later reload it's stored. Only visible via DevTools sinks with a clean view-source it's DOM-based." },
+    { text: "Write the finding with its correct mechanism and impact", detail: "Name reflected, stored, or DOM-based specifically, and describe impact by what the script can do on the page - never by whether HttpOnly happens to be set." },
+  ]}
+/>
+You can now tell, from behavior rather than a guess, which of the three genuinely different XSS
+mechanisms you are looking at - and you can explain HttpOnly's actual, narrow scope correctly in a
+report.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "You confirm script execution but view-source shows nothing unusual anywhere in the response.",
+      fix: "This is the signature of DOM-based XSS - the content never appears in the server's response because it is assembled entirely on the client. Use the browser's DevTools Elements panel and trace client-side sources into sinks instead of relying on view-source.",
+    },
+    {
+      symptom: "The same marker payload works when you post it, but a second tester-owned account never sees it.",
+      fix: "That is consistent with reflected, not stored - the payload only ever appears in the response to the specific request that carried it. Confirm by reloading the page later or viewing it from a separate session with no crafted link involved.",
+    },
+    {
+      symptom: "A finding gets downgraded because the session cookie has HttpOnly set.",
+      fix: "HttpOnly blocks only direct JavaScript reads of that cookie's value - it does not stop the injected script from running or acting. Re-score the finding by what the script can actually do on the page (submit forms, call APIs, deface content) using the browser's ambient session, independent of that one flag.",
+    },
+    {
+      symptom: "Encoding was added and a literal `<script>` tag no longer executes, so the finding is marked fixed.",
+      fix: "Confirm encoding is applied correctly for every context the value reaches - HTML body, HTML attribute, JavaScript string, and URL each need a different encoding. A fix that only blocks one literal tag in one context can still be bypassed through an attribute-based or JavaScript-context sink.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The exact marker string and where it reappears** - same response only (reflected), a separate later
+  view (stored), or only via a DevTools-traced sink with a clean view-source (DOM-based).
+- **The Set-Cookie header's actual flags** - HttpOnly, Secure, and SameSite each do a specific, narrow
+  job; confirm what is actually set rather than assuming from the app's general security posture.
+- **Every context a value reaches, not just the first one tested** - HTML body, attribute, JavaScript
+  string, and URL each require their own encoding; a value can be safe in one and dangerous in another.
+- **[[security-testing-web/injection-and-client-side/sql-injection-by-hand]]** - the sibling injection
+  category where input becomes query syntax instead of markup or script; the same data-versus-instruction
+  mechanism, a different interpreter.
+- **[[security-testing-web/injection-and-client-side/csrf-and-clickjacking]]** - a stored XSS finding that
+  can plant a hidden form is one common way a persistent XSS escalates into forging authenticated
+  requests; worth checking together on a shared page.
+</WhereToCheck>
+
+<WorkedExample title="telling reflected from stored on the BuggyShop comment feature">
+1. A tester, authorized to test the platform's own BuggyShop sandbox with two tester-owned accounts,
+   posts a short, uniquely-named marker string into a product comment field on account A and sees it
+   render unescaped immediately in the response.
+2. To determine the mechanism rather than assume, they log in as account B - a separate session, no
+   crafted link - and load the same product page fresh.
+3. The marker still renders unescaped for account B. That confirms the comment was persisted server-side
+   and served to a completely uninvolved viewer - this is stored XSS, not reflected.
+4. They check the session cookie's flags and find HttpOnly set. The finding is written up as stored XSS
+   with full impact - the script runs for every visitor to that product page regardless of HttpOnly,
+   which only prevents that script from reading the cookie's raw value - and context-aware output
+   encoding on the comment field is recommended as the fix.
+</WorkedExample>
+
+<Quiz
+  question="A stored XSS finding is confirmed on a page whose session cookie has the HttpOnly flag set. What is the correct way to score its impact?"
+  options={[
+    "Treat it as low severity, since HttpOnly prevents the cookie from being stolen",
+    "Treat it as not exploitable, since HttpOnly blocks the XSS entirely",
+    "Score it by what the injected script can actually do on the page using the browser's ambient session - HttpOnly only blocks direct JavaScript reads of the cookie value",
+    "Ignore HttpOnly entirely, since cookie flags never matter for XSS findings"
+  ]}
+  answer={2}
+  explain="HttpOnly narrows exactly one consequence of XSS - it stops document.cookie from returning that cookie's value to script. It does not stop the injected script from running, submitting forms, calling APIs, or performing any other action the legitimate page could already perform with the visitor's session. Impact should be scored by what the script can actually do on the page, not by whether one cookie flag happens to be set (ruling out options A and B), and cookie flags are still worth checking and reporting accurately (ruling out option D)."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Reflected XSS", back: "Unescaped input from the current request is echoed back into that same response - round-trips through one request/response, affecting only whoever follows a crafted link or submits a crafted request." },
+    { front: "Stored XSS", back: "Input is persisted server-side once (database, file, log) and rendered unescaped to every later visitor - no crafted link needed per victim." },
+    { front: "DOM-based XSS", back: "A client-side script reads an attacker-influenceable source and writes it into a dangerous sink entirely in the browser - never touches the server, so view-source shows nothing unusual." },
+    { front: "What HttpOnly actually does", back: "Blocks JavaScript from reading a cookie's value via document.cookie. Nothing more." },
+    { front: "What HttpOnly does NOT do", back: "Does not stop an injected script from running, submitting forms, calling APIs, or performing any other action the page could already take using the browser's ambient session." },
+    { front: "How to tell reflected from stored", back: "Reload the page later, or view it from a second tester-owned account with no crafted link. Still there for that separate view means stored; only present for the one request that carried it means reflected." },
+    { front: "Why view-source misses DOM-based XSS", back: "The content is assembled entirely client-side after the page loads, so the server's response never contains it - use DevTools to trace sources into sinks instead." },
+  ]}
+/>
+
+<Challenge>
+In this platform's own BuggyShop sandbox, using a tester-owned account (or a second one where the test
+requires it), find one example of each mechanism - or construct a plausible one if the sandbox does not
+currently expose all three. For each, write the exact marker used, the exact evidence that proves reflected
+versus stored versus DOM-based (same-response only, separate-view persistence, or a DevTools-traced sink
+with clean view-source), and the correct output-encoding fix for the context involved. For at least one
+finding, explicitly score its impact assuming HttpOnly is set, describing what the script could still do
+despite that flag.
+</Challenge>
+<AskCommunity prompt="I've started proving reflected versus stored XSS by checking whether a marker persists for a second, uninvolved tester account rather than guessing from the payload's shape, and I score impact by what the injected script can do rather than by whether HttpOnly happens to be set. For people who test XSS regularly: what is the cleanest way you have found to trace a DOM-based sink back to its source in DevTools, and how do you explain the HttpOnly distinction to a developer who assumes it fixes XSS?">
+Tracing a DOM-based sink back to its exact source without spending an hour in DevTools, and getting a
+developer to understand that HttpOnly is a narrow cookie-read control rather than an XSS fix, are both
+recurring friction points - hearing how other testers explain and confirm both quickly would help a lot.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html", title: "OWASP - Cross Site Scripting Prevention Cheat Sheet", kind: "read" },
+    { href: "https://portswigger.net/web-security/cross-site-scripting", title: "PortSwigger Web Security Academy - Cross-site scripting", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=L5l9lSnNMxg" title="Computerphile - Cracking Websites with Cross Site Scripting" minutes={9} />
+
+<Takeaways
+  points={[
+    "Reflected, stored, and DOM-based XSS are three distinct mechanisms - where the payload lives and how it reaches the victim differs between them.",
+    "Prove the mechanism with behavior: same-response-only is reflected, persists for a separate uninvolved view is stored, visible only via a DevTools-traced sink with clean view-source is DOM-based.",
+    "HttpOnly blocks JavaScript from reading a cookie's value - and only that. It does not stop an injected script from running or acting.",
+    "Score XSS impact by what the injected script can actually do on the page, never by which cookie flags happen to be set.",
+    "The real fix is context-aware output encoding for every sink (HTML body, attribute, JavaScript string, URL), not a blocklist for one literal tag.",
+    "Test only systems you own or are explicitly, in writing, authorized to test, with tester-owned accounts and synthetic content.",
+  ]}
+/>
+
+<Complete xp={10} />

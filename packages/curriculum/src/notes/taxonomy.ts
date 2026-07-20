@@ -2253,10 +2253,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "injection-and-client-side",
         title: "Injection & client-side",
         topics: [
-          { slug: "sql-injection-by-hand", title: "SQL injection by hand", planned: true },
-          { slug: "xss-reflected-stored-dom", title: "XSS: reflected / stored / DOM", planned: true },
-          { slug: "command-and-template-injection", title: "Command & template injection", planned: true },
-          { slug: "csrf-and-clickjacking", title: "CSRF & clickjacking", planned: true },
+          { slug: "sql-injection-by-hand", title: "SQL injection by hand" },
+          { slug: "xss-reflected-stored-dom", title: "XSS: reflected / stored / DOM" },
+          { slug: "command-and-template-injection", title: "Command & template injection" },
+          { slug: "csrf-and-clickjacking", title: "CSRF & clickjacking" },
         ],
       },
       {
