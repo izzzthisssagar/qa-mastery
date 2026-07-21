@@ -1,0 +1,250 @@
+---
+title: "Why AI apps break differently"
+summary: "assert(output == expected) stops meaning anything once the same prompt can legitimately return a different answer every run. AI systems fail through hallucination, bias, and silent drift, not exceptions - testing has to shift from exact match to sampled, scored evaluation."
+tags: ["ai-and-the-modern-tester", "testing-ai-systems", "track-c"]
+updated: "2026-07-21"
+related:
+  - "ai-and-the-modern-tester/testing-ai-systems/evaluating-llm-outputs"
+  - "ai-and-the-modern-tester/testing-ai-systems/regression-for-prompts-and-models"
+  - "ai-and-the-modern-tester/ai-powered-test-automation/when-ai-automation-lies"
+---
+
+<Hook>
+`assert(calculateTotal(cart) == 42.50)` runs a thousand times and returns exactly 42.50 every single
+time - that guarantee is the entire foundation conventional software testing is built on. Ask an LLM
+the same question twice, with the same prompt, and it can legitimately return two different, both
+individually reasonable answers - not a bug, the expected behavior of a model sampling from a
+probability distribution. The moment that guarantee disappears, most of what "testing" meant before
+has to be rebuilt from a different foundation.
+</Hook>
+
+<Callout type="analogy">
+A machined bolt gets checked with a go/no-go gauge: it either fits the exact tolerance or it does
+not, one clean binary answer, every single bolt compared against one fixed standard. A batch of
+coffee never gets checked that way - a trained cupper works down a row of nearly identical bowls,
+tasting each one, scoring it against a rubric (acidity, body, aftertaste), fully expecting real
+variation batch to batch even when nothing went wrong. Nobody would ever demand two cups from the same
+roast taste bit-for-bit identical - the standard is "does this fall within the range that counts as
+good," judged by a trained palate across many samples, not one caliper reading against one fixed
+number. AI system testing needs the cupping standard, not the go/no-go gauge - because assert-equals
+was built for bolts.
+</Callout>
+
+<Term define="AI systems break differently because their core behavior is non-deterministic - the same input can legitimately produce different outputs across runs, because the model is sampling from a probability distribution rather than executing fixed logic - and because their failure modes (hallucination, bias, unsafe content, silent quality drift) are quality problems on a spectrum rather than crashes or thrown exceptions.">Why AI apps break differently</Term>
+
+## The exact-match assertion stops working
+
+Conventional automated testing is built on one guarantee: given a known input, a correct
+implementation returns the same known output, every time, and a mismatch means something broke. An
+LLM-backed feature breaks that guarantee at the foundation - sampling temperature, token-by-token
+probability, even non-reproducible floating-point operations on GPU hardware mean the exact same
+prompt can return meaningfully different phrasing, different reasoning paths, sometimes different
+conclusions, on two consecutive calls with zero code change in between. A test written as
+`assert(response == expected_string)` will fail constantly on entirely correct behavior, or worse,
+pass by coincidence on a response that happens to match a fixed string while being subtly wrong in a
+way the string match could never catch.
+
+## New failure modes with no exception to catch
+
+Traditional bugs throw something - a null pointer, a failed HTTP call, a stack trace pointing at a
+line number. AI system failures mostly do not: a hallucinated fact, a subtly biased response pattern
+across demographic groups, an unsafe or toxic completion, a RAG pipeline silently retrieving the wrong
+supporting document, a prompt injection that hijacks the model's actual behavior mid-conversation -
+none of these throw an error. The system runs successfully, returns a well-formed response, and the
+failure is entirely in the *content*, invisible to anything checking only "did this crash." Worse
+still, a model or prompt update can silently degrade output quality with no code change and no test
+suite alarm, because nothing about the failure resembles what a stack trace or a status code was ever
+built to surface.
+
+<Callout type="tip">
+Run every meaningful test prompt N times (a commonly cited range is 3 to 10 rollouts), not once, and
+report the distribution - mean, worst case, how much variance - rather than a single pass/fail. A wide
+spread in quality across identical-input runs is itself a real signal, even when the average looks
+fine.
+</Callout>
+
+<Callout type="mistake">
+Treating a single successful run as proof a prompt or model change is safe to ship. Non-determinism
+means one good-looking response proves far less than it would for deterministic code - the same
+prompt run five more times might reveal a meaningfully different quality profile the first run never
+showed.
+</Callout>
+
+{/* IMAGE: a woman in a denim jacket bent over a long metal table lined with a row of white cupping bowls filled with coffee, tasting one with a spoon, with labeled cards distinguishing different batches, against an exposed brick wall */}
+<HotspotImage
+  src="/notes/ai-and-the-modern-tester/testing-ai-systems/why-ai-apps-break-differently.jpg"
+  alt="A person tasting coffee with a spoon from a long row of white cupping bowls on a metal table, with labeled cards marking different batches"
+  credit="Coffee Cupping — Visitor7, CC BY-SA 3.0, via Wikimedia Commons"
+  creditHref="https://commons.wikimedia.org/wiki/File:Coffee_Cupping-1.jpg"
+  pins={[
+    { x: 63, y: 75, label: "A row of nearly identical bowls", desc: "Nothing here is bit-identical - beans, water, brew time vary slightly batch to batch, expected rather than a failure. Testing an AI system starts from the same premise: no two outputs are ever expected to match exactly." },
+    { x: 38, y: 26, label: "Tasting, not measuring", desc: "No caliper or go/no-go gauge applies here - quality is judged against a trained palate and a scoring rubric. Evaluating an LLM's output works the same way: scored against criteria, never compared for an exact string match." },
+    { x: 70, y: 66, label: "Labeled batches, tracked individually", desc: "Every bowl is tied to its specific source so a bad batch can be traced back. An AI eval suite needs the same discipline - track exactly which prompt and model version produced which output." },
+    { x: 39, y: 71, label: "One bowl, sampled now", desc: "A single taste is one data point, not the verdict - real judgment comes from tasting across the whole row. Testing an LLM the same way needs many sampled runs, never one lucky or unlucky output." },
+  ]}
+/>
+
+<FlowAnimation title="Where the deterministic model breaks down" intervalMs={1700} nodes={[
+  { label: "Same prompt, run twice", desc: "A deterministic function returns identical output both times. An LLM, sampling from a probability distribution, legitimately may not." },
+  { label: "Exact-match assertion fails on correct behavior", desc: "assert(output == expected) treats normal variation as a bug, or passes a subtly wrong response that happens to match a fixed string." },
+  { label: "Failures show up as content, not exceptions", desc: "Hallucination, bias, unsafe output, silent retrieval errors - the system runs cleanly and returns a well-formed, wrong answer." },
+  { label: "Evaluation shifts to sampled, scored judgment", desc: "Multiple rollouts per prompt, scored against a rubric, distribution reported - not a single run compared to one fixed expected value." },
+]}/>
+
+<CodePlayground language="python" title="Sampling multiple rollouts instead of trusting one run (Python)" code={`import random
+
+random.seed(7)
+
+# Simulated LLM responses to the same prompt, run 6 times - a stand-in for real
+# non-determinism (in a real system these would be actual model calls).
+def simulated_llm_call():
+    candidates = [
+        {"text": "The capital of Australia is Canberra.", "correct": True},
+        {"text": "The capital of Australia is Sydney.", "correct": False},
+        {"text": "Canberra is the capital of Australia.", "correct": True},
+        {"text": "The capital of Australia is Canberra.", "correct": True},
+    ]
+    return random.choice(candidates)
+
+
+ROLLOUTS = 6
+results = [simulated_llm_call() for _ in range(ROLLOUTS)]
+
+correct_count = sum(1 for r in results if r["correct"])
+pass_rate = correct_count / ROLLOUTS
+
+print("Ran the same prompt " + str(ROLLOUTS) + " times:")
+for i, r in enumerate(results, 1):
+    print("  Run " + str(i) + ": " + ("CORRECT" if r["correct"] else "WRONG") + " - " + r["text"])
+
+print("")
+print("Pass rate across rollouts: " + str(round(pass_rate * 100)) + "%")
+if pass_rate == 1.0:
+    print("Verdict: consistently correct across all sampled runs")
+elif pass_rate >= 0.8:
+    print("Verdict: mostly correct, but not consistent - investigate the failing rollout(s)")
+else:
+    print("Verdict: not reliable enough - a single passing run would have hidden this")`}/>
+
+<CodePlayground language="java" title="Sampling multiple rollouts instead of trusting one run (Java)" code={`import java.util.*;
+
+public class Main {
+    static class Response {
+        String text; boolean correct;
+        Response(String text, boolean correct) { this.text = text; this.correct = correct; }
+    }
+
+    static Response simulatedLlmCall(Random rng, List<Response> candidates) {
+        return candidates.get(rng.nextInt(candidates.size()));
+    }
+
+    public static void main(String[] args) {
+        Random rng = new Random(7);
+
+        List<Response> candidates = Arrays.asList(
+                new Response("The capital of Australia is Canberra.", true),
+                new Response("The capital of Australia is Sydney.", false),
+                new Response("Canberra is the capital of Australia.", true),
+                new Response("The capital of Australia is Canberra.", true)
+        );
+
+        int rollouts = 6;
+        List<Response> results = new ArrayList<>();
+        for (int i = 0; i < rollouts; i++) {
+            results.add(simulatedLlmCall(rng, candidates));
+        }
+
+        int correctCount = 0;
+        for (Response r : results) if (r.correct) correctCount++;
+        double passRate = (double) correctCount / rollouts;
+
+        System.out.println("Ran the same prompt " + rollouts + " times:");
+        for (int i = 0; i < results.size(); i++) {
+            Response r = results.get(i);
+            System.out.println("  Run " + (i + 1) + ": " + (r.correct ? "CORRECT" : "WRONG") + " - " + r.text);
+        }
+
+        System.out.println();
+        System.out.println("Pass rate across rollouts: " + Math.round(passRate * 100) + "%");
+        if (passRate == 1.0) {
+            System.out.println("Verdict: consistently correct across all sampled runs");
+        } else if (passRate >= 0.8) {
+            System.out.println("Verdict: mostly correct, but not consistent - investigate the failing rollout(s)");
+        } else {
+            System.out.println("Verdict: not reliable enough - a single passing run would have hidden this");
+        }
+    }
+}`}/>
+
+<FirstTime title="Feel the difference with one real prompt">
+<StepChecklist steps={[
+  { text: "Pick one real prompt against an LLM you have access to - something with a clear correct answer", detail: "A factual question, a specific calculation, a well-defined classification task." },
+  { text: "Run the exact same prompt 5-10 times", detail: "Same wording, same parameters, nothing else changed between calls." },
+  { text: "Compare every response for both correctness and phrasing", detail: "Note whether the underlying answer changed, only the wording changed, or both stayed identical." },
+  { text: "Write down what a single-run assertion would have told you vs. what the full set of runs actually shows", detail: "This is the core lesson made concrete - one run is a sample, not a verdict." },
+]}/>
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "A test suite for an AI feature is flaky - passes and fails inconsistently with no code changes.", fix: "That flakiness may be accurately reporting real non-determinism, not a broken test. Switch from a single exact-match assertion to a multi-rollout pass-rate check with an explicit acceptable threshold." },
+  { symptom: "A model or prompt update ships with zero failing tests, but users report worse answers.", fix: "Classic silent quality drift - exact-match or crash-only checks have no mechanism to catch a subtle content regression. Add scored evaluation (see evaluating LLM outputs) as a standing regression gate, not just functional smoke tests." },
+  { symptom: "A test that always used to pass with a fixed expected string starts failing after a completely unrelated change.", fix: "The model's phrasing for that specific prompt likely shifted within normal variation - if the underlying meaning is still correct, the test was too brittle for how the system actually behaves and needs to move to semantic/rubric-based scoring." },
+]}/>
+
+<WhereToCheck>
+- Any test asserting on an LLM output with `==` against a fixed string - a strong signal the test needs to move to sampled, scored evaluation instead.
+- Any AI feature that shipped a model or prompt change without a scored regression check, purely on the strength of passing functional/crash tests.
+- [[ai-and-the-modern-tester/testing-ai-systems/evaluating-llm-outputs]] for the concrete scoring frameworks (RAGAS, DeepEval) that operationalize the sampled-evaluation approach this note introduces.
+- [[ai-and-the-modern-tester/testing-ai-systems/regression-for-prompts-and-models]] for catching the specific silent-drift failure mode across model or prompt versions over time.
+- [[ai-and-the-modern-tester/ai-powered-test-automation/when-ai-automation-lies]] for the related pattern of confident-but-wrong output, one specific instance of the broader non-determinism this note describes.
+</WhereToCheck>
+
+<WorkedExample title="a chatbot that passed every test and still shipped a real regression">
+1. A support chatbot's test suite checks for crashes, correct API calls, and a handful of exact-match
+   assertions on simple factual questions ("What are your business hours?") - all green before a
+   prompt template update ships.
+2. The update, meant to make responses more concise, subtly changes how the model handles multi-part
+   questions - it now frequently answers only the first part of a two-part user question and silently
+   drops the second.
+3. No test in the suite ever asked a multi-part question, and nothing about a partial answer throws
+   an error or fails an exact-match check on the simple prompts that were tested.
+4. User complaints about being "ignored" on follow-up questions surface a week later - traced back to
+   the prompt update through manual investigation, not through any automated signal.
+5. Fix: add a scored evaluation set specifically covering multi-part questions, sampled across several
+   rollouts each, with a rubric checking whether every distinct sub-question in the input actually
+   received an answer - exactly the kind of check an exact-match or crash-only suite was never built
+   to run.
+</WorkedExample>
+
+<Quiz question="Why does this note recommend running the same prompt multiple times (rollouts) rather than trusting a single run when evaluating an AI system?" options={[
+  "Because a single run is always technically incorrect",
+  "Because the model samples from a probability distribution, so one run is a single data point that may not represent the system's typical or worst-case behavior - variance itself is a real signal",
+  "Because running a prompt only once is against most AI providers' terms of service",
+  "Because multiple rollouts make the output deterministic"
+]} answer={1} explain="A deterministic function's single run tells you everything, because it will behave identically every time. An LLM's single run tells you only what happened on that one sample from its underlying probability distribution - a wide spread of quality across repeated identical-input runs is itself meaningful information a single run can never surface." />
+
+<Flashcards cards={[
+  { front: "Why exact-match assertions break on AI systems", back: "The same prompt can legitimately return different (both individually valid) output across runs because the model samples from a probability distribution - assert(output == expected) treats normal variation as a failure." },
+  { front: "AI failure modes with no exception to catch", back: "Hallucination, bias, unsafe content, wrong retrieval, silent quality drift - all show up as well-formed but wrong content, invisible to anything checking only for crashes or errors." },
+  { front: "The rollout approach to evaluation", back: "Run the same prompt multiple times (commonly 3-10), score each response, and report the distribution (mean, worst case, variance) rather than trusting a single pass/fail run." },
+  { front: "Why a single good-looking run is not proof a change is safe", back: "Non-determinism means one favorable sample proves far less than it would for deterministic code - the same prompt run several more times can reveal a meaningfully different quality profile." },
+]}/>
+
+<Challenge>Run the same prompt against an LLM 5-10 times and record every response. Note how many were correct, how much the phrasing varied, and what a single exact-match assertion against the first response would have missed about the other runs.</Challenge>
+<AskCommunity prompt="Our AI feature's test suite is still built entirely on exact-match assertions from before we understood non-determinism, and rewriting it all to scored, sampled evaluation feels like a big lift. What's a reasonable way to migrate incrementally without leaving gaps in coverage the whole time?" />
+
+<Resources links={[
+  { href: "https://www.confident-ai.com/blog/a-gentle-introduction-to-llm-evaluation", title: "Confident AI — A Gentle Introduction to LLM Evaluation", kind: "read" },
+  { href: "https://arize.com/llm-evaluation/", title: "Arize AI — The Definitive Guide to LLM Evaluation", kind: "read" },
+  { href: "https://www.youtube.com/watch?v=ZHiJ12MhfQ8", title: "DeepEval Tutorial: Unit Testing LLM AI Applications", kind: "watch" },
+]}/>
+<Video href="https://www.youtube.com/watch?v=ZHiJ12MhfQ8" title="DeepEval Tutorial: Unit Testing LLM AI Applications" minutes={10} />
+
+<Takeaways points={[
+  "AI systems break the core guarantee conventional testing relies on: the same input can legitimately produce different, individually valid output across runs.",
+  "AI failure modes - hallucination, bias, unsafe content, silent retrieval errors, quality drift - show up as well-formed content, not exceptions, invisible to crash-only or exact-match checks.",
+  "Run multiple rollouts per prompt (commonly 3-10) and report the distribution, not a single pass/fail - variance across identical-input runs is itself a meaningful signal.",
+  "A single successful run proves far less for an AI system than for deterministic code - the same prompt run again can reveal a different quality profile entirely.",
+  "The right mental model is a coffee cupping panel, not a go/no-go gauge: scored judgment across many samples against a rubric, never a single exact-match comparison.",
+]}/>
+<Complete xp={10} />

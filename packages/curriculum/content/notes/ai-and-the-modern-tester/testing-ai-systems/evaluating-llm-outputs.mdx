@@ -1,0 +1,233 @@
+---
+title: "Evaluating LLM outputs"
+summary: "RAGAS scores a RAG answer on faithfulness, relevancy, and how well retrieval actually covered the question - DeepEval runs those checks pytest-style with a pass/fail threshold. A dartboard, not a coin flip: outputs land somewhere on a scored ring, never just hit-or-miss."
+tags: ["ai-and-the-modern-tester", "testing-ai-systems", "track-c"]
+updated: "2026-07-21"
+related:
+  - "ai-and-the-modern-tester/testing-ai-systems/why-ai-apps-break-differently"
+  - "ai-and-the-modern-tester/testing-ai-systems/regression-for-prompts-and-models"
+  - "ai-and-the-modern-tester/ai-powered-test-automation/ai-test-generation-tools"
+---
+
+<Hook>
+"Is this answer good?" is not a yes/no question for an LLM response the way "did this API return 200"
+is. RAGAS and DeepEval both answer it the same structural way: break "good" into several separate,
+individually scored dimensions - is it grounded in the source material, does it actually address the
+question, did retrieval pull in what was needed - and combine those into a number a threshold can be
+set against. Not a pass/fail check. A rubric.
+</Hook>
+
+<Callout type="analogy">
+A dart that lands in the exact center scores highest, but the board around it is built entirely from
+graduated rings, not one bullseye and one giant "miss" zone - a throw that lands just outside center
+still scores well, one further out scores less, and almost nothing that hits the board scores zero.
+Judging an LLM's answer works the same way: faithfulness, relevancy, and coverage are separate rings
+on the same board, each throw (each response) scored on where exactly it lands, never collapsed into
+a single hit-or-miss call the way a boolean assertion would.
+</Callout>
+
+<Term define="Evaluating LLM outputs means scoring a generated response across several distinct, individually measurable dimensions - such as faithfulness to source material, relevancy to the question asked, and how completely retrieval covered what was needed - typically using an open-source framework (RAGAS for RAG-specific metrics, DeepEval for a broader pytest-style testing harness) rather than a single pass/fail check.">Evaluating LLM outputs</Term>
+
+## RAGAS: four numbers for a RAG pipeline
+
+RAGAS was built specifically for retrieval-augmented generation and centers on four core metrics.
+**Faithfulness** measures whether every claim in the generated answer is actually supported by the
+retrieved context - the direct, measurable stand-in for hallucination in a RAG system. **Answer
+relevancy** checks whether the response actually addresses the question asked, independent of whether
+it is factually correct. **Context precision** measures how much of what got retrieved was actually
+useful, penalizing a pipeline that buries the right document under noise. **Context recall** checks
+the opposite failure: whether retrieval found everything genuinely needed to answer the question
+completely, catching a pipeline that quietly leaves out a necessary source. Two of the four measure
+generation quality; two measure retrieval quality - a system can fail on either half independently,
+and RAGAS scores them as fully separate numbers on purpose.
+
+## DeepEval: the same idea, run like a test suite
+
+DeepEval wraps a similar metric set - faithfulness, answer relevancy, contextual precision/recall,
+plus bias and toxicity checks - inside a `pytest`-style harness, so an evaluation looks and runs like
+a familiar test: `assert_test(test_case, [FaithfulnessMetric(threshold=0.7)])`. Its most flexible tool
+is **G-Eval**: define a custom evaluation criterion in plain language ("does this response avoid
+giving specific medical dosage advice") and DeepEval uses an LLM to judge new outputs against that
+exact criterion, producing a score without hand-writing a metric from scratch. Both RAGAS's fixed
+metrics and DeepEval's G-Eval share the same underlying mechanism - **LLM-as-judge**: a model (often a
+stronger one than the system under test) reads the response and the rubric, and produces the score.
+
+<Callout type="tip">
+Periodically sample-check LLM-as-judge scores against real human ratings on the same set of outputs.
+Judge models carry their own biases - a documented tendency to favor longer, more verbose answers, and
+a self-preference bias toward outputs from the same model family - so an automated score that never
+gets calibrated against a human baseline can drift confidently in a direction nobody chose on purpose.
+</Callout>
+
+<Callout type="mistake">
+Setting every metric's pass threshold to the same number by default. A hallucination-adjacent metric
+like faithfulness usually deserves a stricter threshold than something like answer relevancy, where
+some legitimate stylistic variance is expected and acceptable - a single blanket threshold treats very
+different kinds of risk as equally tolerable.
+</Callout>
+
+{/* IMAGE: a close-up overhead photo of a professional steel dartboard, showing the black and cream number wedges, red and green scoring rings including the double ring, triple ring, and green bullseye center, mounted against a red felt wall */}
+<HotspotImage
+  src="/notes/ai-and-the-modern-tester/testing-ai-systems/evaluating-llm-outputs.jpg"
+  alt="Overhead close-up of a professional dartboard showing its numbered wedges and concentric red, green, and cream scoring rings around a green bullseye"
+  credit="Dartscheibe für Steeldarts — Oldtreesman22, CC BY-SA 4.0, via Wikimedia Commons"
+  creditHref="https://commons.wikimedia.org/wiki/File:Dartscheibe_f%C3%BCr_Steeldarts.jpg"
+  pins={[
+    { x: 50, y: 49, label: "Bullseye - the ideal response", desc: "Fully faithful, fully relevant, zero hallucination. Rare, and exactly what a high faithfulness or answer-relevancy score is built to recognize when a response actually lands there." },
+    { x: 50, y: 31, label: "The triple ring - strong, not perfect", desc: "Still a high score, just not dead center. Most good LLM responses land here: correct and useful, phrased differently than any single fixed string - exactly why exact-match assertions miss them entirely." },
+    { x: 35, y: 31, label: "A wide single area - partial credit", desc: "Most of the board, most real outcomes. A response that's relevant but incomplete, or grounded but a little verbose, scores somewhere in this wide middle band - never a flat pass/fail." },
+    { x: 50, y: 6, label: "The outer double ring", desc: "Thin and easy to miss just outside it. A scoring rubric this narrow needs real calibration - too strict a threshold and even genuinely good responses register as a miss." },
+  ]}
+/>
+
+<FlowAnimation title="Scoring one RAG response" intervalMs={1700} nodes={[
+  { label: "A question is asked, context is retrieved, an answer is generated", desc: "The full pipeline runs exactly as it would in production." },
+  { label: "Faithfulness: is every claim supported by the retrieved context?", desc: "Measures hallucination directly - a claim not grounded in what was retrieved fails this metric regardless of whether it happens to be true." },
+  { label: "Answer relevancy: does the response actually address the question?", desc: "Scored independently of factual correctness - a faithful but off-topic answer still fails here." },
+  { label: "Context precision and recall: did retrieval do its job?", desc: "Precision checks for noise in what was retrieved; recall checks whether anything necessary was missing entirely." },
+]}/>
+
+<CodePlayground language="python" title="A simplified G-Eval-style scorer with thresholds (Python)" code={`response = {
+    "answer": "Canberra is the capital of Australia, chosen in 1908 as a compromise between Sydney and Melbourne.",
+    "retrieved_context": "Canberra was selected as Australia's capital in 1908 as a compromise between rival cities Sydney and Melbourne.",
+    "question": "What is the capital of Australia and why was it chosen?",
+}
+
+METRICS = {
+    "faithfulness": 0.95,       # every claim matches the retrieved context closely
+    "answer_relevancy": 0.9,    # directly addresses both parts of the question
+    "context_precision": 0.85,  # the single retrieved chunk was highly relevant
+    "context_recall": 0.8,      # covers the "why," could include a touch more detail
+}
+
+THRESHOLDS = {
+    "faithfulness": 0.85,       # stricter - this is the hallucination-adjacent metric
+    "answer_relevancy": 0.7,
+    "context_precision": 0.7,
+    "context_recall": 0.7,
+}
+
+print("Scoring response to: '" + response["question"] + "'")
+print("")
+
+all_passed = True
+for metric, score in METRICS.items():
+    threshold = THRESHOLDS[metric]
+    passed = score >= threshold
+    all_passed = all_passed and passed
+    status = "PASS" if passed else "FAIL"
+    print("  " + metric + ": " + str(score) + " (threshold " + str(threshold) + ") -> " + status)
+
+print("")
+print("Overall: " + ("PASS - all metrics cleared their threshold" if all_passed else
+                      "FAIL - at least one metric missed its threshold"))`}/>
+
+<CodePlayground language="java" title="A simplified G-Eval-style scorer with thresholds (Java)" code={`import java.util.*;
+
+public class Main {
+    public static void main(String[] args) {
+        String question = "What is the capital of Australia and why was it chosen?";
+
+        Map<String, Double> metrics = new LinkedHashMap<>();
+        metrics.put("faithfulness", 0.95);      // every claim matches the retrieved context closely
+        metrics.put("answer_relevancy", 0.9);   // directly addresses both parts of the question
+        metrics.put("context_precision", 0.85); // the single retrieved chunk was highly relevant
+        metrics.put("context_recall", 0.8);     // covers the "why," could include a touch more detail
+
+        Map<String, Double> thresholds = new LinkedHashMap<>();
+        thresholds.put("faithfulness", 0.85);   // stricter - this is the hallucination-adjacent metric
+        thresholds.put("answer_relevancy", 0.7);
+        thresholds.put("context_precision", 0.7);
+        thresholds.put("context_recall", 0.7);
+
+        System.out.println("Scoring response to: '" + question + "'");
+        System.out.println();
+
+        boolean allPassed = true;
+        for (Map.Entry<String, Double> entry : metrics.entrySet()) {
+            String metric = entry.getKey();
+            double score = entry.getValue();
+            double threshold = thresholds.get(metric);
+            boolean passed = score >= threshold;
+            allPassed = allPassed && passed;
+            System.out.println("  " + metric + ": " + score + " (threshold " + threshold + ") -> " +
+                    (passed ? "PASS" : "FAIL"));
+        }
+
+        System.out.println();
+        System.out.println("Overall: " + (allPassed ?
+                "PASS - all metrics cleared their threshold" :
+                "FAIL - at least one metric missed its threshold"));
+    }
+}`}/>
+
+<FirstTime title="Run a first RAGAS or DeepEval evaluation">
+<StepChecklist steps={[
+  { text: "Pick one real RAG question-answer pair from a system you have access to", detail: "Include the question, the retrieved context, and the generated answer." },
+  { text: "Install RAGAS or DeepEval and run faithfulness and answer relevancy on it", detail: "Both are pip-installable and documented for a first evaluation run in their quickstart guides." },
+  { text: "Read the score, not just pass/fail", detail: "Note where it landed within the 0-1 range and whether that matches your own judgment reading the same answer." },
+  { text: "Deliberately break the answer (add an unsupported claim) and re-score it", detail: "Confirm faithfulness actually drops - a metric you have not seen catch a real problem is one you should not fully trust yet." },
+]}/>
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "A faithfulness score stays high even on a response containing an obvious hallucination.", fix: "Check whether the retrieved context itself is being passed into the evaluation correctly - a faithfulness metric can only judge against the context it is actually given, and a pipeline bug feeding it the wrong context will silently produce meaningless scores." },
+  { symptom: "LLM-as-judge scores consistently favor longer, more verbose responses regardless of actual quality.", fix: "This is a documented judge-model bias, not a fluke - sample-check scores against human ratings and consider a G-Eval criterion that explicitly penalizes unnecessary length." },
+  { symptom: "All four RAGAS metrics score reasonably but users still report bad answers.", fix: "The four metrics cover faithfulness, relevancy, and retrieval quality - not tone, safety, or task-specific correctness. Add a custom G-Eval criterion targeting the specific quality users are actually complaining about." },
+]}/>
+
+<WhereToCheck>
+- Any RAG pipeline shipping without faithfulness and context recall tracked at all, since those two specifically catch hallucination and incomplete retrieval that a purely functional test would miss.
+- Metric thresholds themselves, reviewed against real risk - a hallucination-adjacent metric usually deserves a stricter bar than a stylistic one.
+- [[ai-and-the-modern-tester/testing-ai-systems/why-ai-apps-break-differently]] for the underlying reason scored evaluation replaces exact-match assertions in the first place.
+- [[ai-and-the-modern-tester/testing-ai-systems/regression-for-prompts-and-models]] for tracking these same scores over time across prompt and model changes, not just as a one-off check.
+- [[ai-and-the-modern-tester/ai-powered-test-automation/ai-test-generation-tools]] for a related use of LLM-as-judge - evaluating AI-generated test assertions themselves.
+</WhereToCheck>
+
+<WorkedExample title="a RAG chatbot that scored well on three metrics and failed on the one that mattered">
+1. A support chatbot's RAG pipeline is evaluated with RAGAS: answer relevancy 0.91, context precision
+   0.88, context recall 0.83 - all comfortably above their thresholds.
+2. Faithfulness scores 0.52, well below its stricter 0.85 threshold, on a batch of billing-related
+   questions specifically.
+3. Investigation traces it to the retrieval step returning an outdated pricing document alongside the
+   current one - the model, faithful to the (wrong) retrieved context it was given, generates answers
+   citing the outdated price with full apparent confidence.
+4. The other three metrics looked fine because they measure relevancy and retrieval coverage, not
+   whether the *retrieved* information itself was current - a gap none of them were built to catch.
+5. Fix: the outdated document is removed from the retrieval index, faithfulness on the same question
+   set rises to 0.94 on re-evaluation, and a periodic document-freshness check is added as a separate
+   safeguard, since RAGAS itself has no metric for "is the source material still accurate."
+</WorkedExample>
+
+<Quiz question="A RAG pipeline scores well on answer relevancy and context precision/recall, but faithfulness scores low specifically on questions about pricing. What does this note's worked example identify as the most likely cause?" options={[
+  "The model is too creative and needs a lower temperature setting",
+  "The retrieval step is returning outdated or incorrect source material, which the model then faithfully (and confidently) repeats - a gap the other three metrics were never built to catch",
+  "The faithfulness metric itself is broken and should be ignored",
+  "The question wording is too ambiguous for the model to understand"
+]} answer={1} explain="Faithfulness measures whether the answer matches the retrieved context - it says nothing about whether that context was itself correct or current. A model generating a confident, well-formed answer from outdated retrieved information will score low on faithfulness relative to ground truth while still being perfectly 'faithful' to what it was given, which is exactly the gap this worked example traces to a stale document in the retrieval index." />
+
+<Flashcards cards={[
+  { front: "Evaluating LLM outputs", back: "Scoring a generated response across several distinct dimensions - faithfulness, relevancy, retrieval coverage - using a framework like RAGAS or DeepEval, rather than a single pass/fail check." },
+  { front: "RAGAS's four core metrics", back: "Faithfulness (claims grounded in retrieved context), answer relevancy (addresses the question), context precision (retrieved material is useful, not noisy), context recall (retrieval found everything needed)." },
+  { front: "G-Eval", back: "DeepEval's flexible metric: define a custom evaluation criterion in plain language, and an LLM judges new outputs against it, producing a score without hand-writing a metric from scratch." },
+  { front: "Why LLM-as-judge scores need human-rating calibration", back: "Judge models carry documented biases - favoring longer, more verbose answers and outputs from their own model family - so uncalibrated automated scores can drift confidently in an unintended direction." },
+]}/>
+
+<Challenge>Take one real RAG question-answer pair and score it manually against RAGAS's four dimensions (faithfulness, answer relevancy, context precision, context recall) using your own judgment. Then run it through RAGAS or DeepEval if you have access, and compare your manual scores to the tool's.</Challenge>
+<AskCommunity prompt="Our faithfulness scores look great but our RAG pipeline occasionally cites outdated source documents with full confidence, since faithfulness only checks against whatever was retrieved. What's a good complementary check for document freshness that isn't reinventing RAGAS from scratch?" />
+
+<Resources links={[
+  { href: "https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/", title: "RAGAS — Available Metrics Documentation", kind: "read" },
+  { href: "https://www.confident-ai.com/blog/rag-evaluation-metrics-answer-relevancy-faithfulness-and-more", title: "Confident AI — RAG Evaluation Metrics Explained", kind: "read" },
+  { href: "https://www.youtube.com/watch?v=wOoYP55eYF0", title: "RAG Evaluation Metrics Explained: Context Precision, Recall, Relevancy & Faithfulness", kind: "watch" },
+]}/>
+<Video href="https://www.youtube.com/watch?v=wOoYP55eYF0" title="RAG Evaluation Metrics Explained: Context Precision, Recall, Relevancy & Faithfulness" minutes={12} />
+
+<Takeaways points={[
+  "RAGAS scores a RAG pipeline on four separate dimensions - faithfulness, answer relevancy, context precision, context recall - because generation and retrieval quality can each fail independently.",
+  "DeepEval runs the same category of metrics inside a pytest-style harness, plus G-Eval for defining custom scoring criteria in plain language, judged by an LLM.",
+  "Both frameworks rely on LLM-as-judge - use a model to score another model's output against a rubric - which needs periodic calibration against real human ratings to catch judge-model bias.",
+  "Set stricter thresholds on hallucination-adjacent metrics like faithfulness than on stylistic ones like relevancy - not every risk deserves the same bar.",
+  "A high score on relevancy and retrieval metrics does not guarantee faithfulness, and vice versa - a RAG pipeline can pass three metrics and still fail the one that matters for a specific failure mode.",
+]}/>
+<Complete xp={10} />
