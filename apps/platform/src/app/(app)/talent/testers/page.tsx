@@ -1,8 +1,8 @@
 import Link from "next/link";
+import { Button, EmptyState } from "@qa-mastery/ui";
 import { searchTesters, type TesterFilters } from "../actions";
 import { TesterCard } from "../_components/tester-card";
 import { FilterRail } from "../_components/filter-rail";
-import { EmptyState } from "../_components/empty-state";
 
 type Search = { [key: string]: string | string[] | undefined };
 
@@ -49,7 +49,26 @@ export default async function TestersPage({ searchParams }: { searchParams: Prom
 
         <div className="space-y-6">
           {items.length === 0 ? (
-            <EmptyState filtered={hasFilters} />
+            <EmptyState
+              title={hasFilters ? "No testers match those filters" : "The directory is just getting started"}
+              description={
+                hasFilters
+                  ? "Try widening your specialty or availability filters."
+                  : "QA Mastery graduates are publishing profiles now. Check back soon — or, if you test, claim your spot."
+              }
+              actions={
+                <>
+                  {!hasFilters && (
+                    <Link href="/talent/profile">
+                      <Button>Create your tester profile</Button>
+                    </Link>
+                  )}
+                  <Link href="/talent/post">
+                    <Button variant="secondary">Post a project</Button>
+                  </Link>
+                </>
+              }
+            />
           ) : (
             <>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
