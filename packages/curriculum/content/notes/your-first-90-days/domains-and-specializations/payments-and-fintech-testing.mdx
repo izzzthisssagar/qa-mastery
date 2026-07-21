@@ -1,0 +1,202 @@
+---
+title: "Payments & fintech testing"
+summary: "An antique brass cash register's dials had to land on the exact right number every single time - a transaction system with no tolerance for 'probably correct.' Testing payments and fintech software carries that same weight: a rounding error here is someone's real money, not a cosmetic glitch."
+tags: ["your-first-90-days", "domains-and-specializations", "track-c"]
+updated: "2026-07-21"
+related:
+  - "your-first-90-days/domains-and-specializations/picking-a-niche-deliberately"
+  - "your-first-90-days/domains-and-specializations/erp-crm-and-enterprise"
+  - "api-and-modern-security/rest-api-attacks/mass-assignment"
+---
+
+<Hook>
+A UI bug that shows the wrong username for a split second is an annoyance. A payments bug that
+processes a refund twice, or drops a cent of rounding on every transaction, is a real financial loss
+multiplying with every additional transaction it touches - the exact same category of "small, easy to
+miss" bug carries fundamentally different weight once real money is involved.
+</Hook>
+
+<Callout type="analogy">
+An antique brass cash register has no tolerance for "probably correct" - every lever pull and dial has
+to land on the exact figure every single time, because the number printed on the receipt is someone's
+actual money changing hands, not a display that can be quietly off by a little. A software bug in a
+modern payment flow inherits that same weight even though it's invisible - a double-charge, a dropped
+cent of rounding repeated across thousands of transactions, or a refund that silently fails all carry
+real financial consequences a cosmetic UI bug simply doesn't.
+</Callout>
+
+<Term define="Payments and fintech testing is QA work specifically focused on money-moving systems - payment processing, banking, lending, or trading software - where correctness bugs carry direct financial consequences and testing must specifically account for concerns like idempotency, precise rounding, regulatory compliance, and fraud-adjacent edge cases that most other software domains don't need to worry about to the same degree.">Payments and fintech testing</Term>
+
+## Idempotency and exact precision aren't optional edge cases here
+
+A retry on a flaky network connection is a minor annoyance in most software - in payments, an
+unprotected retry on a non-idempotent charge request can double-bill a real customer, which is why
+payment APIs commonly build in idempotency keys specifically to make retries safe, and testing them
+thoroughly is a core, expected part of the job rather than a nice-to-have edge case. Rounding is
+similarly non-negotiable: floating-point arithmetic that's "close enough" for most software can produce
+a real, compounding discrepancy in a financial system processing millions of transactions, which is why
+fintech testing typically requires verifying exact decimal precision rather than trusting standard
+floating-point behavior by default.
+
+## Compliance and fraud-adjacent testing are domain-specific skills of their own
+
+Financial software regularly operates under regulatory frameworks like PCI DSS for card data handling,
+with real audit and compliance requirements that most other software domains never encounter -
+understanding what these frameworks actually require, even without being a compliance officer, is part
+of testing competently in this space. Fraud-adjacent testing - verifying that rate limits, velocity
+checks, and unusual-pattern detection actually catch what they're supposed to, without producing
+excessive false positives that block legitimate users - is another skill fairly specific to this domain,
+distinct from general functional testing.
+
+<Callout type="tip">
+Use a payment provider's official test mode and documented test card numbers (most major processors
+publish these) rather than improvising fake payment data - this is exactly what they're designed for,
+and it's how real fintech testing verifies both success and specific failure paths safely.
+</Callout>
+
+<Callout type="mistake">
+Treating a payments testing task like any other functional test, without specifically probing
+idempotency, exact rounding, and failure-path behavior (declined cards, timeouts mid-transaction,
+partial refunds). The happy path working correctly says very little in this domain - the failure and
+retry paths are where the real risk concentrates.
+</Callout>
+
+{/* IMAGE: a long row of ornate antique brass cash registers with mechanical number dials on display in a museum */}
+<HotspotImage
+  src="/notes/your-first-90-days/domains-and-specializations/payments-and-fintech-testing.jpg"
+  alt="A row of ornate antique brass cash registers with mechanical number dials on display"
+  credit="Antique Cash Register Collection — Eric Friedebach, CC BY 2.0, via Wikimedia Commons"
+  creditHref="https://commons.wikimedia.org/wiki/File:Antique_Cash_Register_Collection_(51838621133).jpg"
+  pins={[
+    { x: 30, y: 55, label: "The mechanical number dials on the nearest register", desc: "Every digit has to land exactly right - no rounding shortcuts, no 'close enough.' Modern payment systems inherit this exact same zero-tolerance requirement for precision." },
+    { x: 55, y: 45, label: "The row of registers stretching into the distance", desc: "Each one an independent transaction system, all needing the same rigor - the same way a payments platform needs every code path, not just the common one, tested to this standard." },
+    { x: 15, y: 70, label: "The ornate, heavily engineered brass casing", desc: "Real engineering investment in a system handling real money - a visible reminder of why payments testing carries more weight than a typical feature area." },
+    { x: 75, y: 35, label: "The drawer mechanism, visible beneath the register", desc: "The actual money changing hands, physically real - the direct, tangible version of what a payments bug in software ultimately still touches, even though the money itself is now just numbers in a database." },
+  ]}
+/>
+
+<FlowAnimation title="Approaching a payments or fintech testing task" intervalMs={1700} nodes={[
+  { label: "Test the happy path, but don't stop there", desc: "A successful charge working correctly says little on its own in this domain - it's the expected baseline, not the hard part." },
+  { label: "Deliberately probe idempotency with retries", desc: "Send the same request twice - confirm it doesn't double-charge, double-refund, or duplicate an effect." },
+  { label: "Verify exact decimal precision, not approximate correctness", desc: "Rounding errors that seem trivial compound into real discrepancies at scale." },
+  { label: "Test failure and partial-failure paths explicitly", desc: "Declined cards, timeouts mid-transaction, partial refunds - where the real domain-specific risk actually concentrates." },
+]}/>
+
+<CodePlayground language="python" title="Checking idempotency safety for a simulated charge retry (Python)" code={`processed_charges = {}
+
+def process_charge(idempotency_key, amount):
+    if idempotency_key in processed_charges:
+        return "SKIPPED - already processed (idempotency key: " + idempotency_key + ")"
+    processed_charges[idempotency_key] = amount
+    return "CHARGED $" + str(amount)
+
+# Simulate a network retry sending the same request twice
+key = "order-8842"
+print(process_charge(key, 49.99))
+print(process_charge(key, 49.99))  # retry, should NOT double-charge
+
+total_charged = sum(processed_charges.values())
+print("Total actually charged: $" + str(total_charged))
+assert total_charged == 49.99, "FAIL: retry caused a double charge"
+print("PASS: retry was safely deduplicated")`}/>
+
+<CodePlayground language="java" title="Checking idempotency safety for a simulated charge retry (Java)" code={`import java.util.*;
+
+public class Main {
+    static Map<String, Double> processedCharges = new HashMap<>();
+
+    static String processCharge(String idempotencyKey, double amount) {
+        if (processedCharges.containsKey(idempotencyKey)) {
+            return "SKIPPED - already processed (idempotency key: " + idempotencyKey + ")";
+        }
+        processedCharges.put(idempotencyKey, amount);
+        return "CHARGED $" + amount;
+    }
+
+    public static void main(String[] args) {
+        String key = "order-8842";
+        System.out.println(processCharge(key, 49.99));
+        System.out.println(processCharge(key, 49.99)); // retry, should NOT double-charge
+
+        double totalCharged = 0;
+        for (double v : processedCharges.values()) totalCharged += v;
+        System.out.println("Total actually charged: $" + totalCharged);
+
+        if (totalCharged != 49.99) {
+            throw new AssertionError("FAIL: retry caused a double charge");
+        }
+        System.out.println("PASS: retry was safely deduplicated");
+    }
+}`}/>
+
+<FirstTime title="Explore a real payment provider's test mode">
+<StepChecklist steps={[
+  { text: "Sign up for a payment provider's free developer/test mode account", detail: "Stripe's test mode is commonly used and well-documented for exactly this kind of exploration." },
+  { text: "Trigger a successful test charge using a documented test card number", detail: "Confirm the expected success response and data." },
+  { text: "Trigger at least one documented failure case", detail: "A declined card test number, an expired card - see how the failure is actually surfaced." },
+  { text: "Send the same charge request twice with the same idempotency key", detail: "Confirm only one charge is actually recorded, not two." },
+]}/>
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "A payment flow works correctly in every manual test but a customer reports a double charge in production.", fix: "A near-certain sign of an untested retry path - verify idempotency handling explicitly under simulated network failure conditions, not just the clean happy path." },
+  { symptom: "A financial total is off by a fraction of a cent in aggregate reporting despite individual transactions looking correct.", fix: "Check for floating-point rounding accumulation - verify the system uses exact decimal arithmetic for money, not standard floating-point types prone to compounding small errors at scale." },
+  { symptom: "A fraud or velocity check blocks legitimate customers at a noticeably high rate.", fix: "This is a real testing target of its own in fintech - false-positive rate needs explicit verification, not just confirming the check catches genuinely fraudulent patterns." },
+]}/>
+
+<WhereToCheck>
+- Any payment or money-moving flow, checked specifically for idempotency safety under a simulated retry.
+- Financial totals and aggregates, checked for exact decimal precision rather than assumed floating-point correctness.
+- [[your-first-90-days/domains-and-specializations/picking-a-niche-deliberately]] for weighing this domain honestly against others before committing to it.
+- [[your-first-90-days/domains-and-specializations/erp-crm-and-enterprise]] for a different enterprise-adjacent domain with its own distinct specialized testing demands.
+- [[api-and-modern-security/rest-api-attacks/mass-assignment]] for a security-testing skill directly relevant to protecting payment and account data specifically.
+</WhereToCheck>
+
+<WorkedExample title="a double-charge bug that only idempotency testing would have caught">
+1. A checkout flow passes every manual and automated functional test - successful charges process
+   correctly, declined cards are handled gracefully, refunds work as expected.
+2. In production, a small number of customers report being charged twice for a single order during a
+   period of elevated mobile network instability.
+3. Investigation traces it to the client's retry logic: on a timeout with no confirmed response, the
+   client automatically resent the charge request - and the server, with no idempotency key check in
+   place, processed it as a brand new charge both times.
+4. The fix adds a required idempotency key to the charge endpoint, checked server-side before processing
+   - a retry with the same key is now safely recognized and skipped rather than creating a duplicate
+   charge.
+5. A new automated test is added specifically simulating this exact scenario - sending an identical
+   charge request twice - which the original test suite never covered because every existing test
+   assumed a single clean request per transaction.
+</WorkedExample>
+
+<Quiz question="According to this note, why does idempotency testing matter specifically more in payments and fintech than in most other software domains?" options={[
+  "It doesn't actually matter more - idempotency is an equally minor concern in every software domain",
+  "A retry on a non-idempotent request in most software is a minor inconvenience, but in payments it can produce a real, direct financial consequence like a duplicate charge - which is why payment systems specifically build in and test for retry safety",
+  "Idempotency only matters for payments made through mobile apps, not web browsers",
+  "Payment systems are technically incapable of receiving duplicate requests, making the concern purely theoretical"
+]} answer={1} explain="A retry on a flaky connection is a minor annoyance in most software - worst case, a user clicks a button twice and sees a brief glitch. In payments, an unprotected retry on a non-idempotent charge can produce a real, direct financial consequence: an actual duplicate charge to a real customer. That's exactly why idempotency keys and their explicit testing are a core, expected part of competent payments testing rather than an edge case." />
+
+<Flashcards cards={[
+  { front: "Payments and fintech testing", back: "QA work focused on money-moving systems, where bugs carry direct financial consequences - requiring specific attention to idempotency, exact rounding, compliance, and fraud-adjacent edge cases." },
+  { front: "Why idempotency testing is non-negotiable in this domain", back: "An unprotected retry on a non-idempotent charge can double-bill a real customer - a consequence most other software domains don't carry to the same direct financial degree." },
+  { front: "Why exact decimal precision matters more here than elsewhere", back: "Floating-point rounding that's 'close enough' in most software can compound into a real, measurable discrepancy across millions of financial transactions." },
+  { front: "Why the happy path alone tells you little in payments testing", back: "A successful charge working is the expected baseline - the real domain-specific risk concentrates in retry, failure, and partial-failure paths, which need to be tested explicitly." },
+]}/>
+
+<Challenge>Sign up for a payment provider's free test mode. Trigger one successful test charge and one documented failure case, then send the same charge request twice with an identical idempotency key and confirm only one charge is actually recorded.</Challenge>
+<AskCommunity prompt="I'm interested in specializing in payments/fintech testing but I don't currently work at a company handling real money. What's a realistic way to build genuine, demonstrable experience in this specific domain without direct on-the-job exposure to it?" />
+
+<Resources links={[
+  { href: "https://docs.stripe.com/testing", title: "Stripe — Testing (Official Documentation)", kind: "read" },
+  { href: "https://www.pcisecuritystandards.org/faq/", title: "PCI Security Standards Council — FAQ", kind: "read" },
+  { href: "https://www.youtube.com/watch?v=o0oFlkmezUQ", title: "Intro to Payment Testing: Basics and Challenges | Applause", kind: "watch" },
+]}/>
+<Video href="https://www.youtube.com/watch?v=o0oFlkmezUQ" title="Intro to Payment Testing: Basics and Challenges | Applause" minutes={5} />
+
+<Takeaways points={[
+  "Payments and fintech testing carries direct financial weight - the same class of small bug that's cosmetic elsewhere is a real monetary loss here.",
+  "Idempotency testing is core, expected work in this domain - an unprotected retry on a charge can produce a real duplicate transaction.",
+  "Exact decimal precision matters more than in most domains - floating-point 'close enough' compounds into real discrepancies at scale.",
+  "Compliance frameworks like PCI DSS and fraud-adjacent testing (velocity checks, false-positive rates) are skills fairly specific to this space.",
+  "The happy path working correctly says little on its own - real risk concentrates in retry, failure, and partial-failure paths.",
+]}/>
+<Complete xp={10} />
