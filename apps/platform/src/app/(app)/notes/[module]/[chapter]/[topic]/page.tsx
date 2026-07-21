@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MDXRemote } from "next-mdx-remote/rsc";
-import { listNoteFiles, getNote, findNoteModule, findNoteLeaf } from "@qa-mastery/curriculum";
+import { listNoteFiles, getNote, findNoteModule, findNoteLeaf, labForChapter } from "@qa-mastery/curriculum";
 import { mdxComponents } from "@/app/(app)/learn/[slug]/mdx-components";
 import { getNoteCompletion } from "../../../actions";
+import { getNoteLabState } from "../../../lab-actions";
+import { ChapterLab } from "../../../chapter-lab";
 import { NoteProgressProvider } from "../../../note-progress-context";
 import {
   AskCommunity,
@@ -90,6 +92,19 @@ export default async function NoteTopicPage({
   const noteSlug = `${moduleSlug}/${chapterSlug}/${topicSlug}`;
   const { done: initialDone } = await getNoteCompletion(noteSlug);
 
+  // A lab closes out its whole chapter, and there is no chapter route — so it
+  // renders after the LAST file-backed topic, which is where a learner who has
+  // read the chapter actually ends up. Registry-driven: no .mdx authoring.
+  const chapterLabSlug = `${moduleSlug}/${chapterSlug}`;
+  const chapterTopics = (findNoteModule(moduleSlug)?.chapters ?? [])
+    .find((c) => c.slug === chapterSlug)
+    ?.topics.filter((t) => !t.planned && getNote(moduleSlug, chapterSlug, t.slug));
+  const isLastTopic = chapterTopics?.at(-1)?.slug === topicSlug;
+  const labState =
+    isLastTopic && labForChapter(chapterLabSlug)
+      ? await getNoteLabState(chapterLabSlug)
+      : null;
+
   // Related notes are authored as "module/chapter/topic" triples; resolve each
   // against the taxonomy + disk so a stale or planned-only reference never 404s.
   const related = note.frontmatter.related
@@ -136,6 +151,8 @@ export default async function NoteTopicPage({
           />
         </article>
       </NoteProgressProvider>
+
+      {labState && <ChapterLab state={labState} />}
 
       {related.length > 0 && (
         <div className="mt-10 border-t border-border pt-6">
