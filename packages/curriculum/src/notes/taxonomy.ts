@@ -2518,10 +2518,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "environments-and-test-data",
         title: "Environments & test data",
         topics: [
-          { slug: "dev-qa-staging-prod", title: "Dev / QA / staging / prod", planned: true },
-          { slug: "environment-parity-and-config", title: "Environment parity & config", planned: true },
-          { slug: "test-data-management-and-anonymization", title: "Test data management & anonymization", planned: true },
-          { slug: "gdpr-and-sensitive-data-in-tests", title: "GDPR & sensitive data in tests", planned: true },
+          { slug: "dev-qa-staging-prod", title: "Dev / QA / staging / prod" },
+          { slug: "environment-parity-and-config", title: "Environment parity & config" },
+          { slug: "test-data-management-and-anonymization", title: "Test data management & anonymization" },
+          { slug: "gdpr-and-sensitive-data-in-tests", title: "GDPR & sensitive data in tests" },
         ],
       },
       {
