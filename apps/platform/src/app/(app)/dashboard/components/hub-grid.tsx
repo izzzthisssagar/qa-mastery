@@ -10,20 +10,24 @@ interface HubCard {
   label: string;
   desc: string;
   icon: string;
-  accent: string;
+  /** Icon-chip background tint. A background wash, not text color, on
+   *  purpose: these are the raw Tailwind palette (not semantic tokens) for
+   *  per-category variety, and none of them are AA-safe as text on the light
+   *  surface this card sits on — only safe as a low-alpha background. */
+  chip: string;
 }
 
 export function HubGrid({ showTalent }: { showTalent: boolean }) {
   const cards: HubCard[] = [
-    { href: "/community", label: "Community", desc: "Posts, questions & answers", icon: "💬", accent: "text-sky-400" },
-    { href: "/simulator", label: "Coding simulator", desc: "Run code in 5 languages", icon: "⌨️", accent: "text-violet-400" },
-    { href: "/notes", label: "Notes wiki", desc: "The QA reference library", icon: "📚", accent: "text-amber-400" },
-    { href: "/portfolio/me", label: "Portfolio", desc: "Your public proof of work", icon: "🎯", accent: "text-emerald-400" },
-    { href: "/test-cases", label: "Test cases", desc: "Author & manage test cases", icon: "✅", accent: "text-teal-400" },
-    { href: "/tasks", label: "Tasks", desc: "Assigned practice & planner", icon: "🗂️", accent: "text-rose-400" },
+    { href: "/community", label: "Community", desc: "Posts, questions & answers", icon: "💬", chip: "bg-sky-500/12" },
+    { href: "/simulator", label: "Coding simulator", desc: "Run code in 5 languages", icon: "⌨️", chip: "bg-violet-500/12" },
+    { href: "/notes", label: "Notes wiki", desc: "The QA reference library", icon: "📚", chip: "bg-amber-500/12" },
+    { href: "/portfolio/me", label: "Portfolio", desc: "Your public proof of work", icon: "🎯", chip: "bg-emerald-500/12" },
+    { href: "/test-cases", label: "Test cases", desc: "Author & manage test cases", icon: "✅", chip: "bg-teal-500/12" },
+    { href: "/tasks", label: "Tasks", desc: "Assigned practice & planner", icon: "🗂️", chip: "bg-rose-500/12" },
   ];
   if (showTalent) {
-    cards.push({ href: "/talent", label: "Talent", desc: "The QA marketplace", icon: "🧑‍💻", accent: "text-accent" });
+    cards.push({ href: "/talent", label: "Talent", desc: "The QA marketplace", icon: "🧑‍💻", chip: "bg-accent/12" });
   }
 
   return (
@@ -35,7 +39,9 @@ export function HubGrid({ showTalent }: { showTalent: boolean }) {
           data-testid={`hub-card-${c.label.toLowerCase().split(" ")[0]}`}
           className="group flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4 transition-colors hover:border-accent/50"
         >
-          <span className="text-xl" aria-hidden>{c.icon}</span>
+          <span className={`grid size-9 place-items-center rounded-xl text-xl ${c.chip}`} aria-hidden>
+            {c.icon}
+          </span>
           <span className={`mt-1 text-sm font-semibold text-foreground`}>{c.label}</span>
           <span className="text-xs text-muted-foreground">{c.desc}</span>
         </Link>

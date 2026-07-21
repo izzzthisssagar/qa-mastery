@@ -71,7 +71,7 @@ function Alerts({ state }: { state: AuthFormState }) {
           role="status"
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-emerald-200"
+          className="rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-success-text"
         >
           {state.message}
         </motion.p>
@@ -93,7 +93,7 @@ const backToLogin = (
     Remembered it?{" "}
     <Link
       href="/login"
-      className="font-medium text-accent underline-offset-4 transition-colors hover:text-emerald-300 hover:underline"
+      className="font-medium text-accent underline-offset-4 transition-colors hover:opacity-80 hover:underline"
     >
       Back to log in
     </Link>

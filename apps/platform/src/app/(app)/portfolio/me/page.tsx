@@ -59,7 +59,7 @@ export default async function PortfolioPage() {
           </p>
           <Link
             href="/dashboard"
-            className="mt-4 inline-block font-medium text-accent underline-offset-4 transition-colors hover:text-emerald-300 hover:underline"
+            className="mt-4 inline-block font-medium text-accent underline-offset-4 transition-colors hover:opacity-80 hover:underline"
           >
             Back to dashboard →
           </Link>

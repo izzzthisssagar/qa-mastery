@@ -146,7 +146,7 @@ export function Quiz({
       </div>
       {done && (
         <div
-          className={`mt-3 rounded-xl border px-3.5 py-3 text-sm ${correct ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" : "border-bug/30 bg-bug/10 text-amber-200"}`}
+          className={`mt-3 rounded-xl border px-3.5 py-3 text-sm ${correct ? "border-emerald-400/30 bg-emerald-400/10 text-success-text" : "border-bug/30 bg-bug/10 text-warning-text"}`}
         >
           <b>{correct ? "Correct! " : "Not quite. "}</b>
           {explain}

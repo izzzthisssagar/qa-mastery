@@ -84,7 +84,7 @@ export function CapstonePanel({ slug }: { slug: string }) {
           <p className="text-sm font-semibold text-foreground">Rubric — {result.score}%</p>
           <ul data-testid="capstone-checklist" className="mt-2 space-y-1 text-xs">
             {result.checklist.map((c) => (
-              <li key={c.label} className={c.passed ? "text-accent" : "text-amber-300"}>
+              <li key={c.label} className={c.passed ? "text-accent" : "text-warning-text"}>
                 <span className="sr-only">{c.passed ? "Passed: " : "Failed: "}</span>
                 <span aria-hidden="true">{c.passed ? "✓" : "✗"}</span> {c.label}
               </li>
@@ -102,7 +102,7 @@ export function CapstonePanel({ slug }: { slug: string }) {
       )}
 
       {error && (
-        <p data-testid="capstone-error" role="alert" className="mt-4 text-sm text-red-400">
+        <p data-testid="capstone-error" role="alert" className="mt-4 text-sm text-danger-text">
           {error}
         </p>
       )}

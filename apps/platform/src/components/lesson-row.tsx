@@ -47,7 +47,7 @@ export function LessonRow({
         {done ? (
           <span
             data-testid={`lesson-done-${slug}`}
-            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400"
+            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-success-text"
           >
             <span aria-hidden>✓</span> done
           </span>

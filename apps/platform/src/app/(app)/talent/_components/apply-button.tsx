@@ -12,7 +12,7 @@ export function ApplyButton({ projectId, applied }: { projectId: string; applied
   const [pending, startTransition] = useTransition();
 
   if (done) {
-    return <p className="text-sm text-emerald-300">You&apos;ve applied to this project.</p>;
+    return <p className="text-sm text-success-text">You&apos;ve applied to this project.</p>;
   }
 
   function apply() {

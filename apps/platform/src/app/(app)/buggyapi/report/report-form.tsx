@@ -157,7 +157,7 @@ export function ApiBugReportForm() {
         </div>
       )}
 
-      {error && <p data-testid="api-bug-error" className="mt-4 text-sm text-red-400">{error}</p>}
+      {error && <p data-testid="api-bug-error" className="mt-4 text-sm text-danger-text">{error}</p>}
 
       <div className="mt-5">
         {result ? (

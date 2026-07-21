@@ -55,7 +55,7 @@ export function FilterRail() {
   const chip = (on: boolean) =>
     "rounded-full border px-3 py-1 text-xs transition-colors " +
     (on
-      ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-200"
+      ? "border-emerald-500/50 bg-emerald-500/15 text-success-text"
       : "border-border text-muted-foreground hover:border-border");
 
   const hasAny = specs.length > 0 || avail || verified;

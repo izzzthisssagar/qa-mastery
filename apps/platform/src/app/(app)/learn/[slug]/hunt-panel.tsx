@@ -94,7 +94,7 @@ export function HuntPanel({ slug }: { slug: string }) {
             {status?.found.map((id) => (
               <li
                 key={id}
-                className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-200"
+                className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-xs text-success-text"
               >
                 {id}
               </li>
@@ -102,7 +102,7 @@ export function HuntPanel({ slug }: { slug: string }) {
           </ul>
         )}
         {complete && (
-          <p data-testid="hunt-complete" className="mt-3 text-sm font-semibold text-emerald-300">
+          <p data-testid="hunt-complete" className="mt-3 text-sm font-semibold text-success-text">
             🏅 Milestone complete — you found every seeded bug in this release.
           </p>
         )}

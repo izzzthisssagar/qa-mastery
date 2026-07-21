@@ -50,7 +50,7 @@ function Chips({
             className={
               "rounded-full border px-3 py-1 text-xs transition-colors " +
               (on
-                ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-200"
+                ? "border-emerald-500/50 bg-emerald-500/15 text-success-text"
                 : "border-border text-muted-foreground hover:border-border")
             }
           >
@@ -260,7 +260,7 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
       </div>
 
       {error && <p className="text-sm text-danger-text">{error}</p>}
-      {saved && !error && <p className="text-sm text-emerald-300">Saved.</p>}
+      {saved && !error && <p className="text-sm text-success-text">Saved.</p>}
 
       <div className="flex flex-wrap items-center gap-3">
         <Button onClick={save} loading={pending && active === "save"} disabled={pending}>

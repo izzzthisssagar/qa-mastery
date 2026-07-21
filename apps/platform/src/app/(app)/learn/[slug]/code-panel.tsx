@@ -68,10 +68,10 @@ export function CodeRunnerLab({ slug }: { slug: string }) {
         <Button onClick={runCode} loading={running} disabled={!code.trim()} data-testid="run-code">
           {running ? "Running..." : "Run Code"}
         </Button>
-        {result?.status === "passed" && <span className="text-xs font-semibold text-emerald-400">Execution completed</span>}
+        {result?.status === "passed" && <span className="text-xs font-semibold text-success-text">Execution completed</span>}
       </div>
 
-      {error && <p role="alert" className="mt-4 text-sm text-red-400">{error}</p>}
+      {error && <p role="alert" className="mt-4 text-sm text-danger-text">{error}</p>}
 
       {result && (
         <div className="mt-4" role="status" aria-live="polite">

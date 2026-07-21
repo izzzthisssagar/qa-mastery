@@ -151,7 +151,7 @@ export function FeedbackWidget() {
             ))}
           </div>
 
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-danger-text">{error}</p>}
 
           <button
             type="button"

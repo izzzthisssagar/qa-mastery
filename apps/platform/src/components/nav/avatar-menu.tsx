@@ -48,7 +48,7 @@ export function AvatarMenu({ email }: { email: string }) {
           onSelect={() => {
             void logout();
           }}
-          className="text-red-400 hover:bg-red-500/10"
+          className="text-danger-text hover:bg-red-500/10"
         >
           Sign out
         </DropdownItem>

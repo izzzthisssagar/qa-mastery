@@ -37,7 +37,7 @@ function Chips({
             className={
               "rounded-full border px-3 py-1 text-xs transition-colors " +
               (on
-                ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-200"
+                ? "border-emerald-500/50 bg-emerald-500/15 text-success-text"
                 : "border-border text-muted-foreground hover:border-border")
             }
           >
@@ -89,7 +89,7 @@ export function PostProjectForm() {
   if (done) {
     return (
       <div className="space-y-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-6">
-        <h2 className="font-medium text-emerald-200">Project posted.</h2>
+        <h2 className="font-medium text-success-text">Project posted.</h2>
         <p className="text-sm text-muted-foreground">Now find testers who match what you need.</p>
         <Link href="/talent/testers">
           <Button>Browse testers</Button>

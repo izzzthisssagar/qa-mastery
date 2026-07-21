@@ -35,7 +35,7 @@ export function BuggyApiCard() {
       className="mt-4 flex w-full flex-col gap-4 rounded-2xl border border-cyan-500/25 bg-cyan-500/[0.05] px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
     >
       <div>
-        <p className="text-xs font-medium uppercase tracking-widest text-cyan-400">BuggyAPI</p>
+        <p className="text-xs font-medium uppercase tracking-widest text-cyan-700 dark:text-cyan-400">BuggyAPI</p>
         <p className="mt-1 font-medium text-foreground">
           Practice API testing on a live, documented API →
         </p>
@@ -46,7 +46,7 @@ export function BuggyApiCard() {
         <Link
           href="/buggyapi/report"
           data-testid="buggyapi-report-link"
-          className="mt-2 inline-block text-xs font-medium text-cyan-300 underline-offset-2 hover:underline"
+          className="mt-2 inline-block text-xs font-medium text-cyan-700 dark:text-cyan-300 underline-offset-2 hover:underline"
         >
           Found a bug? File a report →
         </Link>
@@ -66,7 +66,7 @@ export function BuggyApiCard() {
           data-testid="buggyapi-launch-bughunt"
           onClick={() => launch("bughunt")}
           disabled={pending}
-          className="rounded-lg border border-cyan-500/40 px-4 py-2 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-500/10 disabled:opacity-60"
+          className="rounded-lg border border-cyan-500/40 px-4 py-2 text-sm font-semibold text-cyan-700 dark:text-cyan-300 transition hover:bg-cyan-500/10 disabled:opacity-60"
         >
           Bug hunt
         </button>

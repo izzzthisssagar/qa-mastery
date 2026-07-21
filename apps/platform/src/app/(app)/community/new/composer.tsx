@@ -143,7 +143,7 @@ export function Composer({ userId, videoEnabled }: { userId: string; videoEnable
         {uploading && <span className="text-xs text-accent">Uploading…</span>}
       </div>
 
-      {error && <p className="text-sm text-red-400" data-testid="composer-error">{error}</p>}
+      {error && <p className="text-sm text-danger-text" data-testid="composer-error">{error}</p>}
 
       <Button onClick={submit} loading={pending} disabled={uploading || !body.trim()} data-testid="composer-submit">
         {pending ? "Posting…" : "Post"}

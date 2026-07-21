@@ -51,7 +51,7 @@ export function CvUploader({ userId, hasCv }: { userId: string; hasCv: boolean }
           disabled={pending}
         />
       </label>
-      {done && !error && <span className="text-sm text-emerald-300">CV attached ✓</span>}
+      {done && !error && <span className="text-sm text-success-text">CV attached ✓</span>}
       {error && <span className="text-sm text-danger-text">{error}</span>}
     </div>
   );

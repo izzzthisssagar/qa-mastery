@@ -253,7 +253,7 @@ export function LocatorLab() {
             aria-live="polite"
             className={`mt-3 rounded-lg border px-3 py-2 text-sm ${
               result.error
-                ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
+                ? "border-amber-500/40 bg-amber-500/10 text-warning-text"
                 : result.ok
                   ? "border-accent/40 bg-accent/10 text-accent"
                   : "border-border bg-surface-raised/50 text-foreground"

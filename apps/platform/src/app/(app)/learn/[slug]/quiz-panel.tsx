@@ -119,9 +119,9 @@ export function QuizPanel({
                       ? "border-accent bg-accent/10 text-foreground"
                       : "border-border text-foreground hover:border-border"
                     : isCorrect
-                      ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-200"
+                      ? "border-emerald-500/60 bg-emerald-500/10 text-success-text"
                       : isSelected
-                        ? "border-red-500/60 bg-red-500/10 text-red-200"
+                        ? "border-red-500/60 bg-red-500/10 text-danger-text"
                         : "border-border text-muted-foreground";
                   return (
                     <button
@@ -161,7 +161,7 @@ export function QuizPanel({
       </ol>
 
       {error && (
-        <p data-testid="quiz-error" className="mt-4 text-sm text-red-400">
+        <p data-testid="quiz-error" className="mt-4 text-sm text-danger-text">
           {error}
         </p>
       )}

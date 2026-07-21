@@ -77,7 +77,7 @@ export function SettingsForm({
           </span>
         ) : null}
         {state.ok ? (
-          <span role="status" className="text-sm text-emerald-300">
+          <span role="status" className="text-sm text-success-text">
             Saved.
           </span>
         ) : null}

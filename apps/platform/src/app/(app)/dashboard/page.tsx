@@ -130,7 +130,7 @@ export default async function DashboardPage() {
             className="group mt-4 flex w-full items-center justify-between gap-4 rounded-2xl border border-violet-500/25 bg-violet-500/[0.05] px-5 py-4 text-left transition-colors hover:border-violet-500/50"
           >
             <div>
-              <p className="text-xs font-medium uppercase tracking-widest text-violet-400">
+              <p className="text-xs font-medium uppercase tracking-widest text-violet-700 dark:text-violet-400">
                 Coding simulator
               </p>
               <p className="mt-1 font-medium text-foreground">
@@ -169,7 +169,7 @@ export default async function DashboardPage() {
                   <Link
                     href={`/certificate/${track.slug}`}
                     data-testid={`certificate-link-${track.slug}`}
-                    className="mt-2 inline-block text-xs font-medium text-accent hover:text-emerald-300"
+                    className="mt-2 inline-block text-xs font-medium text-accent hover:opacity-80"
                   >
                     🏆 View your certificate →
                   </Link>

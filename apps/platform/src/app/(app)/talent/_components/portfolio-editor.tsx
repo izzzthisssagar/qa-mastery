@@ -120,7 +120,7 @@ export function PortfolioEditor({
                 key={`${a.source_table}-${a.source_id}`}
                 type="button"
                 onClick={() => prefillFromArtifact(a)}
-                className="rounded-md border border-border px-2 py-1 text-left text-xs text-foreground hover:border-emerald-500/50 hover:text-emerald-200"
+                className="rounded-md border border-border px-2 py-1 text-left text-xs text-foreground hover:border-emerald-500/50 hover:text-success-text"
               >
                 <span className="font-medium">{a.title}</span>{" "}
                 <span className="text-muted-foreground">· {a.meta}</span>
@@ -132,7 +132,7 @@ export function PortfolioEditor({
 
       <div className="space-y-3 rounded-xl border border-border p-4">
         {link && (
-          <p className="text-xs text-emerald-300">
+          <p className="text-xs text-success-text">
             Linked to your {link.source_table === "bug_reports" ? "bug report" : "test case"}.{" "}
             <button type="button" className="text-muted-foreground underline" onClick={() => setLink(null)}>
               unlink
