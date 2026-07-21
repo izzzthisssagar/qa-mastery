@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Reveal, RevealOnView } from "@/components/motion";
 import { BugHuntCard } from "@/components/marketing/bug-hunt-card";
 import { CtaLink } from "@/components/marketing/cta-link";
+import { NotesShelf } from "@/components/marketing/notes-shelf";
 import { TrackSwitch } from "@/components/marketing/track-switch";
 import { talentEnabled } from "@/lib/talent/flag";
 
@@ -30,9 +31,10 @@ const PILLARS = [
 ];
 
 const STATS = [
+  { value: "876", label: "cross-linked reference notes" },
+  { value: "48", label: "modules, zero to job-ready" },
   { value: "2", label: "tracks — manual & automation" },
   { value: "5", label: "interactive concept widgets" },
-  { value: "∞", label: "reps on a real practice app" },
 ];
 
 // The full QA-lead arc — every discipline now has a full notes curriculum.
@@ -120,7 +122,7 @@ export default function HomePage() {
             </Reveal>
 
             <Reveal delay={0.32}>
-              <dl className="mt-12 grid max-w-md grid-cols-3 gap-6 border-t border-border pt-6">
+              <dl className="mt-12 grid max-w-lg grid-cols-2 gap-x-6 gap-y-8 border-t border-border pt-6 sm:grid-cols-4">
                 {STATS.map((s) => (
                   <div key={s.label}>
                     <dt className="font-display text-2xl font-bold text-foreground">
@@ -217,6 +219,40 @@ export default function HomePage() {
                 </RevealOnView>
               );
             })}
+          </div>
+        </section>
+
+        {/* ── Notes wiki ─────────────────────────────────────────── */}
+        <section className="border-y border-border/60 bg-surface/20 py-20">
+          <div className="mx-auto w-full max-w-6xl px-6 sm:px-10">
+            <RevealOnView>
+              <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted-foreground">
+                876 notes · 48 modules · fully cross-linked
+              </p>
+              <h2 className="font-display mt-3 max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">
+                Everything a QA lead knows,{" "}
+                <span className="font-serif-accent font-normal text-accent">
+                  written down
+                </span>
+                .
+              </h2>
+              <p className="mt-5 max-w-xl text-base leading-7 text-muted-foreground">
+                From how a computer boots to your first 90 days on the job — a
+                reference library you read on your own terms, not just when
+                it&apos;s your lesson&apos;s turn. Every note links to the
+                ones around it, so one question always leads to the next.
+              </p>
+            </RevealOnView>
+
+            <RevealOnView delay={0.1} className="mt-10">
+              <NotesShelf />
+            </RevealOnView>
+
+            <RevealOnView delay={0.15}>
+              <div className="mt-8">
+                <CtaLink href="/notes">Browse the notes wiki</CtaLink>
+              </div>
+            </RevealOnView>
           </div>
         </section>
 
