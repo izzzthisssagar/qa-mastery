@@ -1,0 +1,255 @@
+---
+title: "Self-healing tests"
+summary: "A locator breaks, the framework scores every element in the current DOM against a stored fingerprint, and swaps in the best match automatically - Mabl records over 35 attributes per element to make that call. The seam gets logged, not hidden."
+tags: ["ai-and-the-modern-tester", "ai-powered-test-automation", "track-c"]
+updated: "2026-07-21"
+related:
+  - "ai-and-the-modern-tester/ai-powered-test-automation/ai-test-generation-tools"
+  - "ai-and-the-modern-tester/ai-powered-test-automation/when-ai-automation-lies"
+  - "automation/fundamentals/locators"
+---
+
+<Hook>
+A button's `id` changes during a routine refactor and a brittle Selenium test breaks overnight - one
+line in a CI log, no context, someone spends twenty minutes tracking down which element moved. A
+self-healing framework watching the same page instead notices the old locator failed, scores every
+candidate element in the current DOM against what it recorded about the original button - its text,
+its position, its nearby siblings - finds a confident match, and keeps the test running. The break
+still gets logged. It just does not have to stop the whole suite to get fixed.
+</Hook>
+
+<Callout type="analogy">
+A kintsugi bowl is repaired pottery, mended with lacquer mixed with gold dust poured exactly along
+the break line - not hidden, not disguised as if it never cracked, but visibly, permanently marked
+where the damage was and how it was fixed. Anyone who picks it up can see precisely what broke and
+trust that the repair actually followed the real crack, not a nearby line that merely looked similar.
+A well-built self-healing test does the same job: it repairs a broken locator along the exact seam
+where the UI actually changed, and it leaves a visible record of the repair for a human to check -
+never a silent, untraceable patch that erases the evidence something moved at all.
+</Callout>
+
+<Term define="A self-healing test is an automated test that, when its recorded locator no longer resolves, scores candidate elements in the current DOM against a stored fingerprint of the original element - its tag, attributes, text, and position - and automatically substitutes the highest-confidence match to keep the test running, while logging the substitution for human review.">A self-healing test</Term>
+
+## What actually gets recorded and compared
+
+Every self-healing tool works from the same core idea, at different depths. Mabl records over 35
+distinct attributes per UI element at the moment a test is authored - tag name, text content,
+relative DOM position, CSS properties, nearby sibling elements - building a rich fingerprint before
+anything ever breaks. Healenium, the leading open-source option, wraps Selenium WebDriver directly:
+when a `findElement` call throws, it intercepts the failure, pulls the element's historical
+signatures from its own stored history, and scores every element currently in the DOM against that
+history using a similarity algorithm, substituting the best match above a confidence threshold.
+Testim layers machine learning on top of a similar attribute set to auto-correct locators mid-run.
+None of them are magic - they are all systematically comparing "what this element used to look like"
+against "what's here now."
+
+## The seam has to stay visible
+
+The single detail separating a self-healing tool worth trusting from one quietly making things worse
+is whether it logs what it healed. A tool that silently swaps a locator and reports a green test gives
+a team zero signal that the UI actually changed - which is often exactly the information worth
+knowing, refactor-related or not. Healenium and Mabl both surface a healing report or diff for review;
+treating that report as required reading, not an optional dashboard nobody opens, is what keeps
+self-healing from becoming an unmonitored source of drift between what a test claims to check and
+what the UI actually looks like now.
+
+<Callout type="tip">
+Review the healing report on a fixed cadence, not only when something looks wrong. A locator that
+gets silently re-healed every single run without anyone ever confirming the match is genuinely
+correct is a slow-motion version of the exact blind trust an unreviewed report was meant to prevent.
+</Callout>
+
+<Callout type="mistake">
+Assuming self-healing means a test can never meaningfully fail anymore. A confidence threshold exists
+precisely because sometimes no candidate element is a good enough match - and that is the tool working
+correctly, not a bug. A test that never fails, ever, after self-healing is enabled is a sign the
+threshold may be too permissive, not a sign the automation reached perfection.
+</Callout>
+
+{/* IMAGE: a black ceramic kintsugi pot with visible gold-lacquer crack repairs, sitting on a small round rattan side table against a plain wall, with an unrelated violin hanging on the wall in the background */}
+<HotspotImage
+  src="/notes/ai-and-the-modern-tester/ai-powered-test-automation/self-healing-tests.jpg"
+  alt="A black ceramic pot with visible gold kintsugi crack repairs running down its body, sitting on a small rattan table"
+  credit="Kintsugi — Guggger, CC BY-SA 4.0, via Wikimedia Commons"
+  creditHref="https://commons.wikimedia.org/wiki/File:Kintsugi.jpg"
+  pins={[
+    { x: 55, y: 39, label: "The gold seam - the healed break", desc: "Visible on purpose. A well-built self-healing test does the same: it logs exactly what locator changed and why, instead of quietly patching over the break where no one will ever see it." },
+    { x: 41, y: 37, label: "The handle - the part that never broke", desc: "Not every element in a test needs healing. Good self-healing touches only what actually changed, leaving everything else exactly as recorded." },
+    { x: 51, y: 63, label: "Where the repair follows the real crack", desc: "The gold traces the actual break line precisely. A locator update that latches onto the wrong element is gold poured where the pot was never actually broken - it does not hold, and it hides the real problem." },
+    { x: 66, y: 28, label: "The chipped rim, left unrepaired", desc: "Kintsugi does not heal everything invisibly - some damage stays visibly unrepaired. The same restraint matters here: not every locator failure should auto-heal. Some should stay a red, human-reviewed failure." },
+  ]}
+/>
+
+<FlowAnimation title="One self-healing resolution" intervalMs={1700} nodes={[
+  { label: "Test authored, element fingerprint recorded", desc: "Tag, text, attributes, position, and nearby siblings captured before anything can break." },
+  { label: "A run's locator lookup fails", desc: "The original selector no longer matches anything in the current DOM." },
+  { label: "Every current candidate is scored against the stored fingerprint", desc: "Text match, position proximity, attribute overlap - combined into a single confidence score per candidate." },
+  { label: "Above threshold: heal and log. Below threshold: fail and flag.", desc: "A confident match keeps the run going with a recorded substitution; no confident match is reported as a real failure, not silently ignored." },
+]}/>
+
+<CodePlayground language="python" title="A self-healing locator resolver (Python)" code={`recorded_fingerprint = {"tag": "button", "text": "Add to cart", "x": 420, "y": 180}
+
+current_dom = [
+    {"id": "btn-1", "tag": "button", "text": "Add to cart", "x": 425, "y": 182},
+    {"id": "btn-2", "tag": "button", "text": "Add to wishlist", "x": 420, "y": 240},
+    {"id": "btn-3", "tag": "a", "text": "Add to cart", "x": 60, "y": 500},
+]
+
+CONFIDENCE_THRESHOLD = 0.7
+
+
+def score(candidate, fingerprint):
+    s = 0.0
+    if candidate["tag"] == fingerprint["tag"]:
+        s += 0.3
+    if candidate["text"] == fingerprint["text"]:
+        s += 0.4
+    dx = abs(candidate["x"] - fingerprint["x"])
+    dy = abs(candidate["y"] - fingerprint["y"])
+    distance = (dx ** 2 + dy ** 2) ** 0.5
+    s += max(0, 0.3 - distance / 1000)
+    return round(s, 3)
+
+
+scored = [(c["id"], score(c, recorded_fingerprint)) for c in current_dom]
+scored.sort(key=lambda x: x[1], reverse=True)
+
+print("Original locator failed - scoring candidates against recorded fingerprint:")
+for candidate_id, s in scored:
+    print("  " + candidate_id + ": confidence " + str(s))
+
+best_id, best_score = scored[0]
+print("")
+if best_score >= CONFIDENCE_THRESHOLD:
+    print("HEALED: substituting " + best_id + " (confidence " + str(best_score) +
+          ") - logged for review")
+else:
+    print("NOT HEALED: no candidate met the " + str(CONFIDENCE_THRESHOLD) +
+          " threshold - test fails, flagged for a human")`}/>
+
+<CodePlayground language="java" title="A self-healing locator resolver (Java)" code={`import java.util.*;
+
+public class Main {
+    static class Elem {
+        String id, tag, text;
+        int x, y;
+        Elem(String id, String tag, String text, int x, int y) {
+            this.id = id; this.tag = tag; this.text = text; this.x = x; this.y = y;
+        }
+    }
+
+    static double score(Elem candidate, Elem fingerprint) {
+        double s = 0.0;
+        if (candidate.tag.equals(fingerprint.tag)) s += 0.3;
+        if (candidate.text.equals(fingerprint.text)) s += 0.4;
+        double dx = Math.abs(candidate.x - fingerprint.x);
+        double dy = Math.abs(candidate.y - fingerprint.y);
+        double distance = Math.sqrt(dx * dx + dy * dy);
+        s += Math.max(0, 0.3 - distance / 1000);
+        return Math.round(s * 1000.0) / 1000.0;
+    }
+
+    public static void main(String[] args) {
+        Elem fingerprint = new Elem("recorded", "button", "Add to cart", 420, 180);
+
+        List<Elem> currentDom = new ArrayList<>();
+        currentDom.add(new Elem("btn-1", "button", "Add to cart", 425, 182));
+        currentDom.add(new Elem("btn-2", "button", "Add to wishlist", 420, 240));
+        currentDom.add(new Elem("btn-3", "a", "Add to cart", 60, 500));
+
+        double confidenceThreshold = 0.7;
+
+        List<Map.Entry<String, Double>> scored = new ArrayList<>();
+        for (Elem c : currentDom) {
+            scored.add(new AbstractMap.SimpleEntry<>(c.id, score(c, fingerprint)));
+        }
+        scored.sort((a, b) -> Double.compare(b.getValue(), a.getValue()));
+
+        System.out.println("Original locator failed - scoring candidates against recorded fingerprint:");
+        for (Map.Entry<String, Double> entry : scored) {
+            System.out.println("  " + entry.getKey() + ": confidence " + entry.getValue());
+        }
+
+        Map.Entry<String, Double> best = scored.get(0);
+        System.out.println();
+        if (best.getValue() >= confidenceThreshold) {
+            System.out.println("HEALED: substituting " + best.getKey() + " (confidence " + best.getValue() + ") - logged for review");
+        } else {
+            System.out.println("NOT HEALED: no candidate met the " + confidenceThreshold + " threshold - test fails, flagged for a human");
+        }
+    }
+}`}/>
+
+<FirstTime title="Try self-healing on a small test suite">
+<StepChecklist steps={[
+  { text: "Set up Healenium (or another self-healing wrapper) on one existing Selenium test", detail: "It sits between the test and WebDriver, recording element fingerprints as the test runs successfully the first time." },
+  { text: "Change one element's id or class in the target page", detail: "Something small and cosmetic - simulating exactly the kind of refactor that normally breaks a brittle locator." },
+  { text: "Re-run the test and check whether it healed or failed", detail: "Look specifically at the healing report, not just whether the test went green." },
+  { text: "Manually confirm the healed locator points at the correct element", detail: "The tool's confidence score is not proof - independently verify the substitution before trusting it." },
+]}/>
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "A self-healing test stays green even though the feature it checks is now broken.", fix: "The tool likely healed onto a decoy element that scored well on text/position but is not actually the right one - check the healing report for that run and manually verify the substituted element." },
+  { symptom: "The same locator gets 're-healed' on every single run.", fix: "The original locator recording is probably stale or was never accurate to begin with - re-record the fingerprint from a known-good page state rather than letting the tool keep patching around a bad baseline." },
+  { symptom: "Self-healing masks a real regression that should have failed the build.", fix: "The confidence threshold is likely too permissive for that element - lower it for high-stakes flows (checkout, auth) so an ambiguous match fails loudly instead of silently substituting." },
+]}/>
+
+<WhereToCheck>
+- The healing report or dashboard specifically, on a standing cadence - not only when a test result looks suspicious.
+- High-stakes flows (checkout, authentication, payment) for a tighter confidence threshold than lower-risk pages, since a wrong silent substitution there costs the most.
+- [[ai-and-the-modern-tester/ai-powered-test-automation/when-ai-automation-lies]] for the broader pattern of automated tools reporting false confidence, which self-healing is one specific instance of.
+- [[ai-and-the-modern-tester/ai-powered-test-automation/ai-test-generation-tools]] for how the same fingerprint-and-score approach shows up in AI-generated test authoring, not just locator repair.
+- [[automation/fundamentals/locators]] for the underlying locator strategies self-healing tools are scoring against in the first place.
+</WhereToCheck>
+
+<WorkedExample title="a healed locator that quietly latched onto the wrong product">
+1. A self-healing suite records a fingerprint for the "Add to cart" button on a product page during
+   a passing run - text "Add to cart", specific position, specific nearby siblings.
+2. A catalog redesign adds a second "Add to cart" button for a bundled accessory just above the
+   original, shifting the original button's on-page position and removing one of its recorded
+   sibling elements.
+3. On the next run, the original locator fails. The self-healing tool scores both buttons - the
+   original one (position shifted, one sibling missing, but exact text match) and the new bundled one
+   (identical text, closer to some now-different siblings) - and the new bundled button edges out a
+   marginally higher confidence score.
+4. The test heals onto the wrong button, adds the bundled accessory to the cart instead of the main
+   product, and reports green - the actual checkout flow this test exists to protect is now silently
+   untested for the real product.
+5. Caught only because a human reviewed the healing report and noticed the substituted element's ID
+   did not match the product page's actual "Add to cart" button - exactly the review step a team
+   skips at its own risk.
+</WorkedExample>
+
+<Quiz question="What does this note say is the single detail that separates a trustworthy self-healing tool from one quietly making things worse?" options={[
+  "Whether it uses machine learning or a simpler scoring algorithm",
+  "Whether it logs and surfaces every healed substitution for human review, rather than silently swapping locators with no visible record",
+  "Whether it is open-source or a commercial product",
+  "Whether it can heal 100% of broken locators without ever failing a test"
+]} answer={1} explain="A tool that heals silently gives a team zero signal that the UI changed at all - which is often valuable information regardless of whether the change was expected. Logging and surfacing every substitution (a habit that has to actually be followed, not just available) is what keeps self-healing from becoming an unmonitored source of drift between what a test claims to verify and what is actually there." />
+
+<Flashcards cards={[
+  { front: "A self-healing test", back: "An automated test that, when its locator fails, scores candidate elements in the current DOM against a stored fingerprint and substitutes the highest-confidence match automatically, logging the substitution for review." },
+  { front: "What Mabl records per element", back: "Over 35 distinct attributes - tag, text, position, CSS properties, nearby siblings - captured at authoring time to build the fingerprint later comparisons are scored against." },
+  { front: "Why a confidence threshold matters", back: "It lets the tool refuse to heal when no candidate is a good enough match - a real failure in that case is the tool working correctly, not a limitation." },
+  { front: "The most dangerous self-healing failure mode", back: "Healing onto a decoy element that scores well by coincidence (similar text, nearby position) but is not actually the right element - the test passes while the real feature it was meant to check goes unverified." },
+]}/>
+
+<Challenge>Set up a self-healing wrapper (Healenium or similar) on one small existing test. Deliberately change a locator's underlying attribute, re-run, and check the healing report. Manually verify whether the substituted element is actually correct - don't just trust the confidence score.</Challenge>
+<AskCommunity prompt="Our self-healing suite has been quietly re-healing the same three locators every run for weeks and nobody noticed until now. What's a good process for auditing existing healing reports retroactively, without having to manually re-verify every single healed test we have?" />
+
+<Resources links={[
+  { href: "https://healenium.io/", title: "Healenium — Self-Healing Library for Selenium", kind: "read" },
+  { href: "https://github.com/healenium/healenium", title: "Healenium — GitHub", kind: "read" },
+  { href: "https://www.youtube.com/watch?v=chrxSU0-eTg", title: "Healenium setup and demo for Selenium test cases — self healing", kind: "watch" },
+]}/>
+<Video href="https://www.youtube.com/watch?v=chrxSU0-eTg" title="Healenium setup and demo for Selenium test cases — self healing" minutes={11} />
+
+<Takeaways points={[
+  "Self-healing tests score candidate elements in the current DOM against a stored fingerprint of the original element, substituting the highest-confidence match when a locator fails.",
+  "Mabl records over 35 attributes per element at authoring time; Healenium wraps Selenium directly to intercept failures and score history against the live DOM.",
+  "The detail that separates trustworthy self-healing from a silent liability: every substitution gets logged and surfaced for human review, not hidden inside a green test result.",
+  "A confidence threshold that refuses to heal an ambiguous match is the tool working correctly - a self-healing suite that never fails is a warning sign, not a milestone.",
+  "The highest-risk failure mode is healing onto a decoy element that scores well by coincidence, which passes the test while the actual feature goes silently unverified.",
+]}/>
+<Complete xp={10} />
