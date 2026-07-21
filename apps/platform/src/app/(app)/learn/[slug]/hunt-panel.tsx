@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@qa-mastery/ui";
-import { BugReportLab } from "./lab-panel";
-import { getHuntStatus, launchSandbox, type HuntStatus } from "../actions";
+import { BugReportLab } from "@/components/bug-report-lab";
+import { getHuntStatus, launchSandbox, submitBugReport, type HuntStatus } from "../actions";
 
 /**
  * The Bug Hunt milestone surface. Reuses the bug-report form, but tracks how
@@ -13,14 +13,16 @@ import { getHuntStatus, launchSandbox, type HuntStatus } from "../actions";
 export function HuntPanel({ slug }: { slug: string }) {
   const [status, setStatus] = useState<HuntStatus | null>(null);
   const [launching, setLaunching] = useState(false);
+  const [launchError, setLaunchError] = useState<string | null>(null);
 
   async function onLaunch() {
     setLaunching(true);
+    setLaunchError(null);
     try {
       const url = await launchSandbox(slug);
       window.open(url, "_blank");
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Could not launch sandbox");
+      setLaunchError(e instanceof Error ? e.message : "Could not launch sandbox");
     } finally {
       setLaunching(false);
     }
@@ -69,6 +71,12 @@ export function HuntPanel({ slug }: { slug: string }) {
         </Button>
       </div>
 
+      {launchError && (
+        <p data-testid="launch-error" className="mb-4 text-sm text-danger-text">
+          {launchError}
+        </p>
+      )}
+
       <div
         className={
           complete
@@ -109,7 +117,7 @@ export function HuntPanel({ slug }: { slug: string }) {
       </div>
 
       <div className="mt-4">
-        <BugReportLab slug={slug} onGraded={() => void refresh()} />
+        <BugReportLab onSubmit={(report) => submitBugReport(slug, report)} onGraded={() => void refresh()} />
       </div>
     </section>
   );

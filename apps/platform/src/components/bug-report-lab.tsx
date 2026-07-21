@@ -7,18 +7,32 @@ import {
   BUG_FEATURES,
   BUG_CATEGORIES,
   SEVERITIES,
+  type BugReportInput,
   type Severity,
 } from "@qa-mastery/grading";
 import { createBrowserSupabase } from "@qa-mastery/db";
-import { submitBugReport, type BugReportResult } from "../actions";
 
 const FIELD = "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none";
 
+export interface BugReportResult {
+  matched: boolean;
+  duplicate: boolean;
+  score: number;
+  feedback: string[];
+  matchedBugId: string | null;
+}
+
+/**
+ * The bug-report form. Submission is injected rather than hardcoded, so both
+ * the lesson-bound hunt (`learn/[slug]/hunt-panel.tsx`) and the notes-chapter
+ * bug-hunt lab (`notes/bug-hunt-panel.tsx`) can reuse this ~200-line form
+ * against their own server action instead of forking it.
+ */
 export function BugReportLab({
-  slug,
+  onSubmit,
   onGraded,
 }: {
-  slug: string;
+  onSubmit: (report: BugReportInput) => Promise<BugReportResult>;
   onGraded?: (result: BugReportResult) => void;
 }) {
   const [page, setPage] = useState("");
@@ -71,12 +85,12 @@ export function BugReportLab({
     }
   }
 
-  async function onSubmit() {
+  async function handleSubmit() {
     if (!complete) return;
     setSubmitting(true);
     setError(null);
     try {
-      const graded = await submitBugReport(slug, {
+      const graded = await onSubmit({
         page,
         feature,
         category,
@@ -180,11 +194,11 @@ export function BugReportLab({
             </div>
           ) : (
             <div className="relative">
-              <input 
-                type="file" 
-                accept="image/png, image/jpeg, image/jpg" 
-                onChange={handleFileUpload} 
-                disabled={uploadingEvidence || !!result} 
+              <input
+                type="file"
+                accept="image/png, image/jpeg, image/jpg"
+                onChange={handleFileUpload}
+                disabled={uploadingEvidence || !!result}
                 className={`${FIELD} file:mr-4 file:rounded-md file:border-0 file:bg-surface-raised file:px-4 file:py-1 file:text-xs file:font-semibold file:text-foreground hover:file:bg-surface-raised`}
                 data-testid="bug-evidence"
               />
@@ -224,7 +238,7 @@ export function BugReportLab({
             File another report
           </Button>
         ) : (
-          <Button onClick={onSubmit} disabled={!complete || submitting || uploadingEvidence} data-testid="bug-submit">
+          <Button onClick={handleSubmit} disabled={!complete || submitting || uploadingEvidence} data-testid="bug-submit">
             {submitting ? "Submitting…" : "Submit report"}
           </Button>
         )}

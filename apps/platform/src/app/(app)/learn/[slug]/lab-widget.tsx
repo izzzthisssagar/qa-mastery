@@ -1,7 +1,8 @@
 "use client";
 
 import { useLessonProgress } from "./progress-context";
-import { BugReportLab } from "./lab-panel";
+import { BugReportLab } from "@/components/bug-report-lab";
+import { submitBugReport } from "../actions";
 import { HuntPanel } from "./hunt-panel";
 import { CapstonePanel } from "./capstone-panel";
 
@@ -11,7 +12,7 @@ import { CapstonePanel } from "./capstone-panel";
  */
 export function LessonLab() {
   const { slug } = useLessonProgress();
-  return <BugReportLab slug={slug} />;
+  return <BugReportLab onSubmit={(report) => submitBugReport(slug, report)} />;
 }
 
 /** The Bug Hunt milestone, mapped into the MDX as `<BugHunt />`. */
