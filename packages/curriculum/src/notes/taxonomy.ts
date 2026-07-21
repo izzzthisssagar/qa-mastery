@@ -2686,10 +2686,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "behavioral-and-scenarios",
         title: "Behavioral & scenarios",
         topics: [
-          { slug: "star-stories", title: "STAR stories", planned: true },
-          { slug: "conflict-and-priority-scenarios", title: "Conflict & priority scenarios", planned: true },
-          { slug: "questions-to-ask-them", title: "Questions to ask them", planned: true },
-          { slug: "salary-conversations", title: "Salary conversations", planned: true },
+          { slug: "star-stories", title: "STAR stories" },
+          { slug: "conflict-and-priority-scenarios", title: "Conflict & priority scenarios" },
+          { slug: "questions-to-ask-them", title: "Questions to ask them" },
+          { slug: "salary-conversations", title: "Salary conversations" },
         ],
       },
       {
