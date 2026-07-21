@@ -347,26 +347,32 @@ test.describe("learn — locator lab (B1)", () => {
 });
 
 test.describe("dashboard — progress & XP", () => {
-  test("completing a lesson shows XP and a done marker", async ({ page }) => {
-    await signUpFreshLearner(page);
-    await page.goto(`http://localhost:3000/learn/${SLUG}`);
+  // The notes wiki is the learning spine: completing a note (not a lesson) is
+  // what the dashboard reflects. This reference note lives in module
+  // `how-a-computer-works`, which is in the `foundations` track.
+  const NOTE = "http://localhost:3000/notes/how-a-computer-works/the-parts-of-a-computer/tower-and-laptop-anatomy";
 
-    // pass the BVA quiz (awards XP + marks the lesson complete)
-    for (const [qid, optionIndex] of Object.entries(CORRECT_ANSWERS)) {
-      await page.getByTestId(`quiz-opt-${qid}-${optionIndex}`).click();
-    }
-    await page.getByTestId("quiz-submit").click();
-    await expect(page.getByTestId("quiz-result-banner")).toContainText(/passed/i);
+  test("completing a note shows XP and advances its track", async ({ page }) => {
+    await signUpFreshLearner(page);
+    await page.goto(NOTE);
+
+    const complete = page.getByRole("button", { name: /mark complete/i });
+    await complete.scrollIntoViewIfNeeded();
+    await expect(async () => {
+      await complete.click();
+      await expect(
+        page.getByRole("button", { name: /completed .* xp earned/i }),
+      ).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 10_000 });
 
     // the dashboard now reflects it
     await page.goto("http://localhost:3000/dashboard");
     // .first(): hydration can transiently double-render the freshly-navigated
     // page under CI concurrency (docs/known-issues/hydration-double-render.md)
-    await expect(page.getByTestId("stat-xp").first()).toContainText("50");
+    await expect(page.getByTestId("stat-xp").first()).toContainText("10");
     await expect(page.getByTestId("stat-completed")).toContainText("1");
-    await expect(page.getByTestId(`lesson-done-${SLUG}`)).toBeVisible();
-    // BVA is in Track A, so that track's progress reflects 1 of 30
-    await expect(page.getByTestId("track-progress-track-a")).toHaveText("1 / 30");
+    // Foundations track reflects 1 completed topic.
+    await expect(page.getByTestId("track-progress-foundations")).toContainText(/^1 \//);
   });
 });
 
@@ -426,11 +432,12 @@ test.describe("capstone — graded submission", () => {
 test.describe("certificate — track completion", () => {
   test("a fresh learner sees the certificate locked until the track is done", async ({ page }) => {
     await signUpFreshLearner(page);
-    await page.goto("http://localhost:3000/certificate/track-a");
+    // `foundations` is a notes track (packages/curriculum/src/notes/tracks.ts).
+    await page.goto("http://localhost:3000/certificate/foundations");
     // .first(): hydration can transiently double-render the freshly-navigated
     // page under CI concurrency (docs/known-issues/hydration-double-render.md)
     await expect(page.getByTestId("certificate-locked").first()).toBeVisible();
-    await expect(page.getByTestId("certificate-locked").first()).toContainText(/0 \/ \d+ lessons/);
+    await expect(page.getByTestId("certificate-locked").first()).toContainText(/0 \/ \d+ notes/);
     await expect(page.getByTestId("certificate-earned")).toHaveCount(0);
   });
 });

@@ -3,25 +3,22 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Reveal } from "@/components/motion";
+import { getNotesCurriculumProgress } from "@/app/(app)/notes/actions";
 
 export const metadata: Metadata = { title: "Certificate" };
-
-interface LessonRow {
-  id: string;
-  modules: { tracks: { slug: string; title: string } | null } | null;
-}
 
 interface PageProps {
   params: Promise<{ track: string }>;
 }
 
 /**
- * A learner earns a (non-accredited, honest) certificate for a track once every
- * published lesson in it is complete. Until then the page shows progress toward
- * it — completion is computed server-side from their own RLS-scoped progress.
+ * A learner earns a (non-accredited, honest) certificate for a notes track once
+ * every backed topic in it is complete. Until then the page shows progress
+ * toward it — completion comes from getNotesCurriculumProgress, which is scored
+ * server-side from the learner's own note_progress rows.
  */
 export default async function CertificatePage({ params }: PageProps) {
-  const { track } = await params;
+  const { track: trackSlug } = await params;
   const supabase = await createSupabaseServerClient();
 
   const {
@@ -29,27 +26,19 @@ export default async function CertificatePage({ params }: PageProps) {
   } = await supabase.auth.getUser();
   if (!user) notFound(); // layout already gates (app); defensive
 
-  const [{ data: lessonRows }, { data: profile }, { data: progressRows }] = await Promise.all([
-    supabase
-      .from("lessons")
-      .select("id, modules!inner(tracks!inner(slug, title))")
-      .eq("status", "published"),
+  const [tracks, { data: profile }] = await Promise.all([
+    getNotesCurriculumProgress(),
     supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle<{
       display_name: string | null;
     }>(),
-    supabase.from("progress").select("lesson_id, status").eq("status", "completed"),
   ]);
 
-  const inTrack = ((lessonRows ?? []) as unknown as LessonRow[]).filter(
-    (l) => l.modules?.tracks?.slug === track,
-  );
-  if (inTrack.length === 0) notFound();
+  const track = tracks.find((t) => t.slug === trackSlug);
+  if (!track) notFound();
 
-  const trackTitle = inTrack[0].modules!.tracks!.title;
-  const completed = new Set((progressRows ?? []).map((p) => p.lesson_id as string));
-  const done = inTrack.filter((l) => completed.has(l.id)).length;
-  const total = inTrack.length;
-  const earned = done === total;
+  const done = track.topicsDone;
+  const total = track.topicCount;
+  const earned = track.certEarned;
   const learner = profile?.display_name || "QA learner";
   const issued = new Date().toLocaleDateString("en-US", {
     year: "numeric",
@@ -62,9 +51,9 @@ export default async function CertificatePage({ params }: PageProps) {
       <div className="mx-auto max-w-2xl py-16 text-center">
         <Reveal>
           <p className="text-xs font-semibold uppercase tracking-widest text-accent">Certificate</p>
-          <h1 className="font-display mt-2 text-3xl font-semibold tracking-tight">{trackTitle}</h1>
+          <h1 className="font-display mt-2 text-3xl font-semibold tracking-tight">{track.title}</h1>
           <p className="mt-4 text-muted-foreground" data-testid="certificate-locked">
-            Not earned yet — {done} / {total} lessons complete. Finish the track to unlock your
+            Not earned yet — {done} / {total} notes complete. Finish the track to unlock your
             certificate.
           </p>
           <Link href="/dashboard" className="mt-6 inline-block text-sm text-accent hover:text-emerald-300">
@@ -92,9 +81,9 @@ export default async function CertificatePage({ params }: PageProps) {
           <p className="font-display mt-2 text-4xl font-semibold tracking-tight text-foreground">
             {learner}
           </p>
-          <p className="mt-6 text-sm text-muted-foreground">has completed all {total} lessons of</p>
+          <p className="mt-6 text-sm text-muted-foreground">has completed all {total} notes of</p>
           <p className="font-display mt-1 text-2xl font-semibold tracking-tight text-accent">
-            {trackTitle}
+            {track.title}
           </p>
           <p className="mt-8 text-xs text-muted-foreground">Issued {issued} · QA Mastery</p>
           <p className="mt-6 text-[11px] text-muted-foreground">

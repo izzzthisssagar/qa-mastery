@@ -1,10 +1,86 @@
 "use server";
 
-import { allNoteLeaves, getNote, findNoteLeaf } from "@qa-mastery/curriculum";
+import {
+  allNoteLeaves,
+  getNote,
+  findNoteLeaf,
+  findNoteModule,
+  NOTE_TRACKS,
+} from "@qa-mastery/curriculum";
 import { createServiceClient } from "@qa-mastery/db";
 import { getAuthedUserId } from "@/lib/auth";
 
 const XP_NOTE_COMPLETED = 10;
+
+export interface NoteModuleProgress {
+  slug: string;
+  title: string;
+  done: number;
+  total: number;
+  pct: number;
+}
+
+export interface NoteTrackProgress {
+  slug: string;
+  title: string;
+  blurb: string;
+  modules: NoteModuleProgress[];
+  modulesDone: number;
+  moduleCount: number;
+  topicsDone: number;
+  topicCount: number;
+  pct: number;
+  certEarned: boolean;
+}
+
+/** Count a module's backed (non-planned) topics + how many the learner has
+ *  completed, given the set of their completed "module/chapter/topic" slugs. */
+function moduleProgress(moduleSlug: string, completed: Set<string>): NoteModuleProgress {
+  const mod = findNoteModule(moduleSlug);
+  let total = 0;
+  let done = 0;
+  for (const chapter of mod?.chapters ?? []) {
+    for (const topic of chapter.topics) {
+      if (topic.planned) continue;
+      total += 1;
+      if (completed.has(`${moduleSlug}/${chapter.slug}/${topic.slug}`)) done += 1;
+    }
+  }
+  return { slug: moduleSlug, title: mod?.title ?? moduleSlug, done, total, pct: total ? Math.round((done / total) * 100) : 0 };
+}
+
+/** The current learner's progress across the whole notes curriculum, grouped by
+ *  track — the data behind the dashboard learning home and track certificates.
+ *  A track certificate is earned when every backed topic in it is completed. */
+export async function getNotesCurriculumProgress(): Promise<NoteTrackProgress[]> {
+  const userId = await getAuthedUserId();
+  const service = createServiceClient();
+  const { data } = await service
+    .from("note_progress")
+    .select("note_slug")
+    .eq("user_id", userId);
+  const completed = new Set((data ?? []).map((r) => r.note_slug as string));
+
+  return NOTE_TRACKS.map((track) => {
+    const modules = track.moduleSlugs.map((s) => moduleProgress(s, completed));
+    const topicsDone = modules.reduce((n, m) => n + m.done, 0);
+    const topicCount = modules.reduce((n, m) => n + m.total, 0);
+    const modulesDone = modules.filter((m) => m.total > 0 && m.done === m.total).length;
+    const moduleCount = modules.filter((m) => m.total > 0).length;
+    return {
+      slug: track.slug,
+      title: track.title,
+      blurb: track.blurb,
+      modules,
+      modulesDone,
+      moduleCount,
+      topicsDone,
+      topicCount,
+      pct: topicCount ? Math.round((topicsDone / topicCount) * 100) : 0,
+      certEarned: topicCount > 0 && topicsDone === topicCount,
+    };
+  });
+}
 
 /**
  * Notes search. The corpus is small (tens of topics), so we scan it in-process

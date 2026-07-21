@@ -4,102 +4,27 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Reveal } from "@/components/motion";
 import { StatCard } from "@/components/stat-card";
 import { TrackProgressBar } from "@/components/track-progress-bar";
-import { LessonRow } from "@/components/lesson-row";
 import { talentEnabled } from "@/lib/talent/flag";
+import { getNotesCurriculumProgress } from "@/app/(app)/notes/actions";
 import { BuggyApiCard } from "./buggyapi-card";
 import { HubGrid } from "./components/hub-grid";
 import { RolePanels } from "./components/role-panels";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
-interface TrackRef {
-  slug: string;
-  title: string;
-  order_index: number;
-}
-
-/** DB row shape — renamed from LessonRow to avoid clashing with the LessonRow component. */
-interface LessonRegistryRow {
-  id: string;
-  slug: string;
-  title: string;
-  free: boolean;
-  order_index: number;
-  modules: { slug: string; title: string; order_index: number; tracks: TrackRef | null } | null;
-}
-
-interface ModuleGroup {
-  slug: string;
-  title: string;
-  order: number;
-  lessons: LessonRegistryRow[];
-}
-
-interface TrackGroup {
-  slug: string;
-  title: string;
-  order: number;
-  modules: ModuleGroup[];
-}
-
-/** Group published lessons by track, then module, each ordered. */
-function groupByTrack(rows: LessonRegistryRow[]): TrackGroup[] {
-  const tracks = new Map<string, TrackGroup>();
-  const moduleByKey = new Map<string, ModuleGroup>();
-
-  for (const row of rows) {
-    const m = row.modules;
-    const t = m?.tracks;
-    if (!m || !t) continue;
-
-    let track = tracks.get(t.slug);
-    if (!track) {
-      track = { slug: t.slug, title: t.title, order: t.order_index, modules: [] };
-      tracks.set(t.slug, track);
-    }
-
-    const moduleKey = `${t.slug}/${m.slug}`;
-    let mod = moduleByKey.get(moduleKey);
-    if (!mod) {
-      mod = { slug: m.slug, title: m.title, order: m.order_index, lessons: [] };
-      moduleByKey.set(moduleKey, mod);
-      track.modules.push(mod);
-    }
-    mod.lessons.push(row);
-  }
-
-  const trackList = [...tracks.values()].sort((a, b) => a.order - b.order);
-  for (const track of trackList) {
-    track.modules.sort((a, b) => a.order - b.order);
-    for (const mod of track.modules) mod.lessons.sort((a, b) => a.order_index - b.order_index);
-  }
-  return trackList;
-}
-
 export default async function DashboardPage() {
   const supabase = await createSupabaseServerClient();
-  const { data } = await supabase
-    .from("lessons")
-    .select(
-      "id, slug, title, free, order_index, modules!inner(slug, title, order_index, tracks!inner(slug, title, order_index))",
-    )
-    .eq("status", "published");
 
-  const rows = (data ?? []) as unknown as LessonRegistryRow[];
-  const tracks = groupByTrack(rows);
-  const lessonCount = rows.length;
+  // The notes wiki is the learning spine: progress is per-topic, grouped into
+  // tracks (see packages/curriculum/src/notes/tracks.ts).
+  const tracks = await getNotesCurriculumProgress();
+  const topicsDone = tracks.reduce((n, t) => n + t.topicsDone, 0);
+  const topicCount = tracks.reduce((n, t) => n + t.topicCount, 0);
+  const overallPct = topicCount ? Math.round((topicsDone / topicCount) * 100) : 0;
 
-  // The learner's own progress + XP (read-own RLS scopes these to them).
-  const { data: progressRows } = await supabase
-    .from("progress")
-    .select("lesson_id, status")
-    .eq("status", "completed");
-  const completed = new Set((progressRows ?? []).map((p) => p.lesson_id as string));
-
+  // XP spans lessons, tasks, and notes (all write xp_events); read-own RLS.
   const { data: xpRows } = await supabase.from("xp_events").select("amount");
   const totalXp = (xpRows ?? []).reduce((sum, x) => sum + (x.amount as number), 0);
-
-  const overallPct = lessonCount ? Math.round((completed.size / lessonCount) * 100) : 0;
 
   // Marketplace role drives the role-adaptive panels (read-own RLS on profiles).
   const { data: profile } = await supabase
@@ -129,8 +54,8 @@ export default async function DashboardPage() {
             </span>
           </h1>
           <p className="mt-2 max-w-prose text-sm leading-6 text-muted-foreground">
-            {lessonCount} lessons live across {tracks.length} track
-            {tracks.length === 1 ? "" : "s"}. Every lesson is free.
+            {topicCount} notes across {tracks.length} tracks — the whole QA arc,
+            zero to job-ready. Every note is free.
           </p>
         </Reveal>
 
@@ -144,10 +69,10 @@ export default async function DashboardPage() {
           />
           <StatCard
             testId="stat-completed"
-            value={completed.size}
-            label="lessons complete"
+            value={topicsDone}
+            label="notes complete"
             suffix={
-              <span className="font-sans text-lg font-normal text-muted-foreground"> / {lessonCount}</span>
+              <span className="font-sans text-lg font-normal text-muted-foreground"> / {topicCount}</span>
             }
             delay={0.12}
           />
@@ -222,68 +147,68 @@ export default async function DashboardPage() {
         </Reveal>
 
         <div className="mt-12 space-y-12">
-          {tracks.map((track, trackIndex) => {
-            const trackLessons = track.modules.flatMap((m) => m.lessons);
-            const trackDone = trackLessons.filter((l) => completed.has(l.id)).length;
-            const trackPct = trackLessons.length
-              ? Math.round((trackDone / trackLessons.length) * 100)
-              : 0;
-            return (
-              <Reveal key={track.slug} delay={0.05 + trackIndex * 0.04}>
-                <section data-testid={`track-${track.slug}`}>
-                  <div className="flex items-baseline justify-between gap-4">
-                    <h2 className="font-display text-xl font-semibold tracking-tight">
-                      {track.title}
-                    </h2>
-                    <span
-                      data-testid={`track-progress-${track.slug}`}
-                      className="shrink-0 font-mono text-xs text-muted-foreground"
-                    >
-                      {trackDone} / {trackLessons.length}
-                    </span>
-                  </div>
-                  <TrackProgressBar pct={trackPct} />
-                  {trackPct === 100 && (
-                    <Link
-                      href={`/certificate/${track.slug}`}
-                      data-testid={`certificate-link-${track.slug}`}
-                      className="mt-2 inline-block text-xs font-medium text-accent hover:text-emerald-300"
-                    >
-                      🏆 View your certificate →
-                    </Link>
-                  )}
+          {tracks.map((track, trackIndex) => (
+            <Reveal key={track.slug} delay={0.05 + trackIndex * 0.04}>
+              <section data-testid={`track-${track.slug}`}>
+                <div className="flex items-baseline justify-between gap-4">
+                  <h2 className="font-display text-xl font-semibold tracking-tight">
+                    {track.title}
+                  </h2>
+                  <span
+                    data-testid={`track-progress-${track.slug}`}
+                    className="shrink-0 font-mono text-xs text-muted-foreground"
+                  >
+                    {track.topicsDone} / {track.topicCount}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">{track.blurb}</p>
+                <div className="mt-3">
+                  <TrackProgressBar pct={track.pct} />
+                </div>
+                {track.certEarned && (
+                  <Link
+                    href={`/certificate/${track.slug}`}
+                    data-testid={`certificate-link-${track.slug}`}
+                    className="mt-2 inline-block text-xs font-medium text-accent hover:text-emerald-300"
+                  >
+                    🏆 View your certificate →
+                  </Link>
+                )}
 
-                  <div className="mt-5 space-y-5">
-                    {track.modules.map((module) => (
-                      <div key={module.slug} data-testid={`module-${module.slug}`}>
-                        <h3 className="text-xs font-semibold uppercase tracking-wide text-accent">
-                          {module.slug.toUpperCase()} — {module.title}
-                        </h3>
-                        <ul className="mt-2 divide-y divide-border/80 overflow-hidden rounded-2xl border border-border bg-surface/30">
-                          {module.lessons.map((lesson, lessonIndex) => (
-                            <LessonRow
-                              key={lesson.slug}
-                              slug={lesson.slug}
-                              label={`${module.slug.toUpperCase()}.${lesson.order_index}`}
-                              title={lesson.title}
-                              done={completed.has(lesson.id)}
-                              index={lessonIndex}
-                            />
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              </Reveal>
-            );
-          })}
-
-          {tracks.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              Lessons are being published — check back shortly.
-            </p>
-          )}
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  {track.modules.map((module) => {
+                    const complete = module.total > 0 && module.done === module.total;
+                    return (
+                      <Link
+                        key={module.slug}
+                        href={`/notes/${module.slug}`}
+                        data-testid={`module-card-${module.slug}`}
+                        className="group flex flex-col gap-2 rounded-2xl border border-border bg-surface/40 p-4 transition-colors hover:border-accent/50"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="text-sm font-semibold text-foreground">
+                            {module.title}
+                          </span>
+                          <span
+                            className={`shrink-0 text-xs ${complete ? "text-accent" : "text-muted-foreground"}`}
+                          >
+                            {complete ? "✓ " : ""}
+                            {module.done}/{module.total}
+                          </span>
+                        </div>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-surface-raised">
+                          <div
+                            className="h-full rounded-full bg-accent transition-[width]"
+                            style={{ width: `${module.pct}%` }}
+                          />
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </section>
+            </Reveal>
+          ))}
         </div>
       </div>
     </div>

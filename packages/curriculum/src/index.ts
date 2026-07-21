@@ -43,3 +43,10 @@ export {
   type NoteFrontmatter,
   type NoteSource,
 } from "./notes/load";
+
+export {
+  NOTE_TRACKS,
+  trackForModule,
+  findNoteTrack,
+  type NoteTrack,
+} from "./notes/tracks";
