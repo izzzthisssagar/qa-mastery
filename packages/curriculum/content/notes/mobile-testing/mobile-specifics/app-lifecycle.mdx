@@ -1,0 +1,249 @@
+---
+title: "App lifecycle"
+summary: "Foreground, background, and killed process states, the difference between cold, warm, and hot starts, and why an app forgetting what the user was doing is a state-restoration bug, not bad luck."
+tags: ["mobile-testing", "mobile-specifics", "track-c"]
+updated: "2026-07-21"
+related:
+  - "mobile-testing/mobile-specifics/permissions"
+  - "mobile-testing/mobile-specifics/battery-and-performance"
+  - "mobile-testing/gestures-interrupts-networks/interrupts"
+---
+
+<Hook>
+A user fills out a long form, switches apps to check a text message, and comes back thirty seconds later to
+find the form empty. Nothing crashed. No error appeared. The operating system simply decided it needed the
+memory back, ended the process while the app sat in the background, and started it fresh when the user
+returned — and nobody had written the two lines of state-saving code that would have made that invisible.
+</Hook>
+
+<Callout type="analogy">
+Picture a group of people playing musical chairs. Whoever is sitting when the music plays keeps their seat
+and stays fully in the game — that's the foreground. Whoever is standing near the chairs but not currently
+seated is still nearby, still recognized as a player, but not the one anyone's watching right now — that's
+the background. And whoever the game has fully removed, no chair reserved anywhere, has to walk back in from
+scratch and start over — that's a killed process. The chairs themselves are memory: when there aren't enough
+to go around, someone standing loses their spot first.
+</Callout>
+
+<Term define="An app's lifecycle is the sequence of process states an operating system moves it through -- foreground (active and visible), background (not visible but still resident in memory), and killed (removed from memory entirely) -- driven by user navigation and by the OS reclaiming memory under pressure, independent of anything the app itself decides.">App lifecycle</Term>
+
+## Backgrounded is not the same as killed
+
+The two states get confused constantly, but they behave completely differently. A backgrounded app is still
+a live process sitting in memory — switch back to it and the system simply brings it forward, with every
+view, variable, and in-progress task exactly as it was left. A killed app has no process left at all; the
+operating system removed it to reclaim memory, and switching back to it means starting a brand-new process
+from zero. From the user's point of view both can look identical — they tapped away and came back — which is
+exactly why testing has to force the killed case deliberately rather than trusting that backgrounding alone
+covers it.
+
+This split is also what defines Android's three start types. A cold start means no process exists yet: the
+system creates the process, initializes the app object, builds the first activity, and inflates its views
+before anything appears on screen — the slowest path, and the one a killed app always takes when reopened. A
+warm start means the process is already alive but the activity has to be rebuilt from `onCreate()` — for
+example, the user backed out of the app and relaunched it. A hot start is the cheapest case: the process and
+the activity are both still resident, and the system just brings the existing UI back to the front. iOS uses
+different state names — Not Running, Inactive, Active, Background, Suspended — but the same underlying
+split applies: a suspended app can be silently terminated by the system at any point to free memory, and the
+next launch after that is functionally a cold start no matter how recently the user last used it.
+
+<Callout type="tip">
+Test state restoration by forcing a real process kill, not just backgrounding. On Android, developer options
+has a "don't keep activities" setting that destroys the activity the instant it backgrounds, simulating a
+memory-pressure kill on demand. On iOS, stop the app from Xcode and relaunch rather than only swiping between
+apps in the multitasking view — a swipe alone usually just backgrounds it.
+</Callout>
+
+<Callout type="mistake">
+Do not assume backgrounding and resuming an app is equivalent to testing state restoration. Most manual test
+passes only ever background the app briefly and switch straight back, which almost always hits the cheap
+hot-start path and never exercises the code responsible for saving and restoring state after a real kill.
+</Callout>
+
+{/* IMAGE: a musical chairs game at an outdoor event -- five people seated in a front row of red plastic chairs, actively engaged and talking; a back row of red chairs where several people are seated but facing away, not part of the front-row action; a crowd of people standing near a pavilion/sound equipment, not seated at all */}
+<HotspotImage
+  src="/notes/mobile-testing/mobile-specifics/app-lifecycle.jpg"
+  alt="A musical chairs game: five people seated and actively engaged in a front row of red chairs, a back row of red chairs holding people who are seated but facing away from the action, and a crowd standing near a pavilion with sound equipment, not seated at all"
+  credit="CCPC students playing musical chairs at Bandarban — Moheen Reeyad, Wikimedia Commons, CC BY-SA 4.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:CCPC_students_playing_musical_chairs_at_Bandarban_(03).jpg"
+  pins={[
+    { x: 47, y: 70, label: "Foreground: fully in play", desc: "The front-row group is seated, engaged, and the clear center of attention right now -- the same as a foreground process: visible, receiving input, drawn every frame." },
+    { x: 45, y: 35, label: "Background: still holding a seat", desc: "The back-row group is still seated -- still claiming a chair -- but facing away from the action and not what anyone is watching. A backgrounded process is the same: still resident in memory, just not currently on screen." },
+    { x: 50, y: 12, label: "Killed: no seat reserved at all", desc: "The people standing near the pavilion hold no chair anywhere in the game. Rejoining means finding a new seat from scratch -- exactly like a killed process, which has to cold-start rather than simply resume." },
+    { x: 8, y: 25, label: "The thing deciding who keeps a seat", desc: "The sound equipment running the game -- not one of the players -- is what actually starts and stops the music and decides when a chair gets taken away. The OS's memory manager plays the same outside role: the app never chooses to be killed, the system decides when it needs the memory back." },
+  ]}
+/>
+
+<FlowAnimation title="What happens to state across a real background-then-kill cycle" intervalMs={1600} nodes={[
+  { label: "User is mid-task in the foreground", desc: "Form fields filled in, a scroll position set, a multi-step flow half completed -- all of it live in memory right now." },
+  { label: "User backgrounds the app", desc: "The process keeps running; a well-behaved app uses this moment to persist anything that would hurt to lose." },
+  { label: "The OS decides it needs the memory back", desc: "Under memory pressure, the system can end the backgrounded process entirely, with no warning delivered to the app in the moment." },
+  { label: "User returns to the app", desc: "The OS launches a brand-new process and shows the last known screen immediately, before the app has actually restored anything." },
+  { label: "The app restores saved state, or it doesn't", desc: "If the pre-kill save happened, the form reappears filled in. If it didn't, the user sees a blank form and assumes the app lost their work." },
+]}/>
+
+<CodePlayground language="python" title="Simulating background, kill, and state restoration (Python)" code={`class AppProcess:
+    def __init__(self):
+        self.state = "killed"       # killed | background | foreground
+        self.saved_state = None     # what onSaveInstanceState-style persistence holds
+        self.live_form_data = None  # in-memory only, lost on a real process kill
+
+    def cold_start(self):
+        self.state = "foreground"
+        self.live_form_data = self.saved_state  # restore from saved state, if any
+        return "cold_start"
+
+    def background(self):
+        # A well-behaved app persists here, before the OS can take the memory back.
+        self.saved_state = self.live_form_data
+        self.state = "background"
+        return "background"
+
+    def os_kill_for_memory(self):
+        # Process is gone; anything not already in saved_state is lost.
+        self.state = "killed"
+        self.live_form_data = None
+        return "killed"
+
+    def hot_start(self):
+        # Process and activity were both still resident -- nothing was lost.
+        self.state = "foreground"
+        return "hot_start"
+
+
+app = AppProcess()
+app.cold_start()
+app.live_form_data = {"name": "Priya", "notes": "draft in progress"}
+print("state=" + app.state + " form=" + str(app.live_form_data))
+
+app.background()
+print("after background, saved_state=" + str(app.saved_state))
+
+app.os_kill_for_memory()
+print("after OS kill, state=" + app.state + " live_form_data=" + str(app.live_form_data))
+
+app.cold_start()
+print("after relaunch (cold start), restored form=" + str(app.live_form_data))
+
+assert app.live_form_data == {"name": "Priya", "notes": "draft in progress"}, "state restoration must recover the pre-kill form data"
+print("RESULT=PASS")`}/>
+
+<CodePlayground language="java" title="Simulating background, kill, and state restoration (Java)" code={`import java.util.LinkedHashMap;
+import java.util.Map;
+
+public class Main {
+    static class AppProcess {
+        String state = "killed"; // killed | background | foreground
+        Map<String, String> savedState = null;
+        Map<String, String> liveFormData = null;
+
+        String coldStart() {
+            state = "foreground";
+            liveFormData = savedState; // restore from saved state, if any
+            return "cold_start";
+        }
+
+        String background() {
+            // A well-behaved app persists here, before the OS can take the memory back.
+            savedState = liveFormData;
+            state = "background";
+            return "background";
+        }
+
+        String osKillForMemory() {
+            // Process is gone; anything not already in savedState is lost.
+            state = "killed";
+            liveFormData = null;
+            return "killed";
+        }
+    }
+
+    public static void main(String[] args) {
+        AppProcess app = new AppProcess();
+        app.coldStart();
+        Map<String, String> form = new LinkedHashMap<>();
+        form.put("name", "Priya");
+        form.put("notes", "draft in progress");
+        app.liveFormData = form;
+        System.out.println("state=" + app.state + " form=" + app.liveFormData);
+
+        app.background();
+        System.out.println("after background, saved_state=" + app.savedState);
+
+        app.osKillForMemory();
+        System.out.println("after OS kill, state=" + app.state + " live_form_data=" + app.liveFormData);
+
+        app.coldStart();
+        System.out.println("after relaunch (cold start), restored form=" + app.liveFormData);
+
+        if (!form.equals(app.liveFormData)) {
+            throw new AssertionError("state restoration must recover the pre-kill form data");
+        }
+        System.out.println("RESULT=PASS");
+    }
+}`}/>
+
+<FirstTime title="Test a lifecycle-aware app the first time">
+<StepChecklist steps={[
+  { text: "Identify anything worth losing sleep over", detail: "Form input, scroll position, an in-progress multi-step flow -- list what the user would be upset to lose." },
+  { text: "Test the cheap path first: background then return immediately", detail: "This should always hit a hot start with everything intact -- confirm the baseline works before testing harder cases." },
+  { text: "Force a real process kill, not just backgrounding", detail: "Use 'don't keep activities' on Android or stop-and-relaunch from Xcode on iOS to simulate the OS reclaiming memory." },
+  { text: "Confirm restored state matches pre-kill state exactly", detail: "Not just 'the app reopened without crashing' -- the actual form data, scroll position, or flow step must come back." },
+]}/>
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "A form or in-progress flow is empty after the user switches apps and comes back.", fix: "The OS likely killed the process while backgrounded. Confirm the app saves state on backgrounding (not only on explicit save actions) and restores it on the next cold start." },
+  { symptom: "The bug only reproduces after leaving the app backgrounded for a while, never in a quick switch.", fix: "Quick switches almost always hit a hot start, which never exercises save/restore code at all. Force a real kill instead of waiting -- 'don't keep activities' or a Xcode stop-and-relaunch reproduces it on demand." },
+  { symptom: "State restores correctly on Android but not on iOS, or vice versa.", fix: "The two platforms name and structure lifecycle states differently -- confirm both platforms' save/restore hooks are implemented, not just one, since porting logic from one platform rarely covers the other automatically." },
+]}/>
+
+<WhereToCheck>
+- Android Developers' activity lifecycle guide for the full onCreate through onDestroy callback sequence and where to hook state saving.
+- Android Developers' app startup time documentation for the precise definitions of cold, warm, and hot starts.
+- [[mobile-testing/gestures-interrupts-networks/interrupts]] for how phone calls and other interruptions push an app into the background involuntarily, not just user navigation.
+- [[mobile-testing/mobile-specifics/battery-and-performance]] for how background wake locks and jobs interact with an app's process staying alive versus being reclaimed.
+- [[mobile-testing/mobile-specifics/permissions]] for why a denied-then-restored app state needs to re-check permission status rather than trusting what it cached before being killed.
+</WhereToCheck>
+
+<WorkedExample title="a checkout flow that forgets the cart after a phone call">
+1. A user is midway through checkout when an incoming phone call interrupts the app, pushing it to the
+   background.
+2. The call runs long enough that the OS reclaims the app's memory to keep the call app responsive.
+3. The user ends the call and returns to what looks like the same screen -- but the cart is empty, because
+   the checkout state lived only in memory and nothing persisted it before the kill.
+4. The fix is not "handle phone calls" specifically -- it's implementing state saving on backgrounding in
+   general, since a phone call is just one of many ways a background kill can happen.
+</WorkedExample>
+
+<Quiz question="Why does briefly backgrounding an app and switching straight back fail to test state restoration properly?" options={[
+  "Backgrounding always kills the process immediately, so it over-tests restoration",
+  "It almost always triggers a hot start, where the process and activity are still fully resident -- the save/restore code path responsible for surviving a real kill never runs",
+  "iOS and Android behave identically here, so there is nothing meaningful to test",
+  "State restoration only matters for apps that use forms"
+]} answer={1} explain="A quick background-and-return is the cheapest path -- a hot start -- and it never exercises the code that saves state before a kill or restores it after one. Only forcing a real process kill validates that path." />
+
+<Flashcards cards={[
+  { front: "Backgrounded vs killed", back: "Backgrounded: process still alive, resuming is instant and nothing was lost. Killed: process removed by the OS; the next launch is a cold start from zero." },
+  { front: "Cold start", back: "No process exists yet -- the system creates the process, builds the activity, and inflates views before anything appears." },
+  { front: "Warm start", back: "The process is alive but the activity must be rebuilt via onCreate() -- cheaper than cold, more expensive than hot." },
+  { front: "Hot start", back: "Process and activity are both still resident; the system just brings the existing UI to the front -- the cheapest path." },
+]}/>
+
+<Challenge>Pick an app with a multi-step form or flow. Fill it in partway, then force a real kill (developer options' 'don't keep activities' on Android, or stop-and-relaunch from Xcode on iOS) instead of just switching apps. Reopen it and note exactly what survived and what didn't.</Challenge>
+<AskCommunity prompt="What's an app that handled 'the OS killed me in the background' gracefully, and what did it do right that most apps get wrong?" />
+
+<Resources links={[
+  { href: "https://developer.android.com/guide/components/activities/activity-lifecycle", title: "Android Developers — The Activity Lifecycle", kind: "read" },
+  { href: "https://developer.android.com/topic/performance/vitals/launch-time", title: "Android Developers — App Startup Time (Cold, Warm, Hot)", kind: "read" },
+  { href: "https://www.youtube.com/watch?v=T88qoVIHaKc", title: "Explained — Android Activity Life Cycle", kind: "watch" },
+]}/>
+<Video href="https://www.youtube.com/watch?v=T88qoVIHaKc" title="Explained — Android Activity Life Cycle" minutes={5} />
+
+<Takeaways points={[
+  "Backgrounded means the process is still alive; killed means the OS removed it entirely -- they can look identical to a user but need different tests.",
+  "Cold, warm, and hot starts differ in exactly what already exists: nothing, just the process, or the process plus the activity.",
+  "A quick background-and-return almost always hits the cheap hot-start path and never exercises save/restore code.",
+  "Force a real process kill deliberately -- developer options or a debugger stop-and-relaunch -- to validate that state actually survives.",
+]}/>
+<Complete xp={10} />

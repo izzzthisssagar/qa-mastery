@@ -1,0 +1,271 @@
+---
+title: "Permissions"
+summary: "How runtime permission prompts for camera, location, notifications, and contacts actually behave on modern Android and iOS, and how to test grant, deny, revoke, and re-prompt paths without crashing the app."
+tags: ["mobile-testing", "mobile-specifics", "track-c"]
+updated: "2026-07-21"
+related:
+  - "mobile-testing/mobile-specifics/battery-and-performance"
+  - "mobile-testing/mobile-specifics/app-lifecycle"
+  - "mobile-testing/device-and-os-matrix/fragmentation"
+---
+
+<Hook>
+A tester grants camera access on the first run, everything works, and the build ships. Three weeks later a
+support ticket arrives: "the scan button does nothing." The user revoked camera access from system settings
+after the fact, and nobody ever wrote a test for what the app does when a permission it already had is taken
+away mid-lifetime, not just denied on first ask.
+</Hook>
+
+<Callout type="analogy">
+Think of a hotel key card. Getting one at check-in is the first ask — the front desk either hands it over or
+it doesn't. But the card can also stop working mid-stay if the hotel deactivates it, and a guest who lost
+their card has to go back to the desk and ask again rather than the door just re-issuing one automatically.
+A permission prompt is the check-in moment; a revoke is the deactivated card; re-prompting is walking back to
+the desk. An app that only ever tests the first ask has only tested check-in.
+</Callout>
+
+<Term define="A runtime permission is access to a sensitive capability — camera, precise location, notifications, contacts, and similar — that the operating system withholds until the user explicitly grants it through a system-owned prompt shown while the app is running, rather than at install time.">Runtime permission</Term>
+
+## The prompt is owned by the OS, not the app
+
+Neither Android nor iOS lets an app draw its own permission dialog. The system renders the prompt, and the
+system decides what options appear on it — the app can only trigger the request and read back the result.
+On Android, the flow is: check the current state with `checkSelfPermission`, decide whether to show a
+rationale first with `shouldShowRequestPermissionRationale`, then call `requestPermissions`. If the user taps
+Deny more than once across the app's install lifetime, Android silently treats the second denial as "don't
+ask again": no dialog appears on a third request, and the app has no way to force one — the user must go into
+system settings to change it themselves. `POST_NOTIFICATIONS` has been a runtime permission on Android since
+Android 13 (API level 33); before that, notification posting needed no explicit runtime grant at all, which
+is exactly the kind of platform-version detail a fragmentation-aware test plan has to track.
+
+iOS shows most permission prompts exactly once per install. Location is the deepest example: a user can grant
+"Allow Once," "While Using the App," or "Always," and can later be silently downgraded to an approximate
+location instead of precise. Once a user denies, iOS will not show that system dialog again on request — the
+only path back is the app sending the user to Settings via the app's own settings URL, which is itself a
+navigation the app has to build and test.
+
+<Callout type="tip">
+Test the denial path as its own first-class scenario, not a throwaway branch of the happy path. Deny the
+permission, then check that the feature that needed it fails softly: a disabled button with an explanation,
+a manual fallback, or a link to Settings — never a silent no-op or a crash on the next call that assumed the
+permission was already there.
+</Callout>
+
+<Callout type="mistake">
+Do not assume a permission granted once stays granted for the life of the app. Both platforms let a user
+revoke a permission from system settings at any point after granting it, with no notice to the app in the
+moment. A test plan that never re-checks permission state mid-session will miss the exact bug from the hook:
+a feature that silently stops working because the app cached "granted" from the first successful check and
+never asked again.
+</Callout>
+
+{/* IMAGE: TSA airport security checkpoint -- a uniformed officer at a podium checking a traveler's ID/boarding pass, the traveler standing at a "Please Wait Here" barrier, a second officer visible at another lane in the background, a Travel Advisory screen off to the side */}
+<HotspotImage
+  src="/notes/mobile-testing/mobile-specifics/permissions.jpg"
+  alt="A TSA officer at a checkpoint podium reviewing a traveler's documents while the traveler waits behind a 'Please Wait Here' barrier, with a second officer and screening lane visible in the background"
+  credit="Transportation Security Administration Checkpoint at John Glenn Columbus International Airport — Michaeltball, Wikimedia Commons, CC0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Transportation_Security_Administration_Checkpoint_at_John_Glenn_Columbus_International_Airport.jpg"
+  pins={[
+    { x: 24, y: 41, label: "The gatekeeper deciding access", desc: "The officer reviewing documents is the one authority that can grant or deny passage here — exactly like the OS-owned permission dialog, the app cannot draw this decision itself, only trigger the request and read the result." },
+    { x: 54, y: 60, label: "The request is pending, not failed", desc: "The traveler is neither through nor turned away yet — they are waiting on a decision in flight. An app mid-permission-request is in the same state and should not treat 'no answer yet' as a denial." },
+    { x: 50, y: 78, label: "An explicit hold, not a silent stall", desc: "The 'Please Wait Here' sign tells the traveler exactly what state they are in. A denied-permission UI should be just as explicit — say what is unavailable and why, instead of leaving a blank or broken-looking screen." },
+    { x: 68, y: 20, label: "A separate checkpoint, its own decision", desc: "The second lane in the background runs its own independent check. Camera, location, notifications, and contacts are the same way: each is its own grant/deny state, and getting one does not imply getting another." },
+  ]}
+/>
+
+<FlowAnimation title="One permission request, from trigger to graceful denial" intervalMs={1600} nodes={[
+  { label: "App checks current permission state", desc: "checkSelfPermission (Android) or the authorization status (iOS) — never assume; the user could have changed it since the app last checked." },
+  { label: "App shows a rationale, if the OS says one is warranted", desc: "shouldShowRequestPermissionRationale on Android, or an in-app explanation screen on iOS, shown before the system dialog to improve grant rates." },
+  { label: "The OS renders the system prompt", desc: "The app cannot skin or skip this dialog — the OS owns it entirely, including which options appear." },
+  { label: "The app reads back grant or deny", desc: "A callback delivers the result; the app must branch on it immediately rather than assuming success." },
+  { label: "On denial, the feature degrades instead of breaking", desc: "The dependent feature disables itself with an explanation or offers a manual fallback — it never crashes or silently no-ops on the next call." },
+]}/>
+
+<CodePlayground language="python" title="Simulating grant, deny, and revoke across repeated requests (Python)" code={`class PermissionState:
+    def __init__(self):
+        self.status = "not_determined"
+        self.deny_count = 0
+
+    def request(self):
+        if self.status == "granted":
+            return "granted"
+        if self.deny_count >= 2:
+            # Second denial is treated as permanent -- no dialog shown again.
+            return "denied_permanent_no_prompt"
+        # Simulated user response for this scripted run.
+        decision = SCRIPTED_DECISIONS.pop(0)
+        if decision == "grant":
+            self.status = "granted"
+            return "granted"
+        self.status = "denied"
+        self.deny_count += 1
+        return "denied"
+
+    def revoke(self):
+        # A user can revoke from system settings at any time, with no
+        # notice delivered to the app in the moment.
+        self.status = "revoked"
+
+
+def feature_available(perm):
+    return perm.status == "granted"
+
+
+SCRIPTED_DECISIONS = ["deny", "deny", "grant"]
+camera = PermissionState()
+
+results = []
+for attempt in range(1, 4):
+    outcome = camera.request()
+    results.append(outcome)
+    print("attempt " + str(attempt) + " -> " + outcome + " (feature_available=" + str(feature_available(camera)) + ")")
+
+# The third scripted attempt was "grant", but since two denials already
+# happened, the OS never shows a prompt again -- the request is silently
+# swallowed. That's why results[2] is the permanent-no-prompt case, not a grant.
+assert results == ["denied", "denied", "denied_permanent_no_prompt"], "expected the third request to hit the permanent-denial wall"
+assert feature_available(camera) is False, "a feature gated on this permission must report unavailable"
+
+# Now simulate a mid-session revoke on an unrelated, already-granted permission.
+location = PermissionState()
+SCRIPTED_DECISIONS = ["grant"]
+location.request()
+assert feature_available(location) is True, "location should be available right after a grant"
+location.revoke()
+assert feature_available(location) is False, "a revoke must flip availability even with no new request"
+
+print("RESULT=PASS")`}/>
+
+<CodePlayground language="java" title="Simulating grant, deny, and revoke across repeated requests (Java)" code={`import java.util.ArrayDeque;
+import java.util.Deque;
+
+public class Main {
+    static class PermissionState {
+        String status = "not_determined";
+        int denyCount = 0;
+
+        String request(Deque<String> scriptedDecisions) {
+            if (status.equals("granted")) return "granted";
+            if (denyCount >= 2) {
+                // Second denial is treated as permanent -- no dialog shown again.
+                return "denied_permanent_no_prompt";
+            }
+            String decision = scriptedDecisions.poll();
+            if (decision.equals("grant")) {
+                status = "granted";
+                return "granted";
+            }
+            status = "denied";
+            denyCount++;
+            return "denied";
+        }
+
+        void revoke() {
+            // A user can revoke from system settings at any time, with no
+            // notice delivered to the app in the moment.
+            status = "revoked";
+        }
+
+        boolean featureAvailable() {
+            return status.equals("granted");
+        }
+    }
+
+    public static void main(String[] args) {
+        Deque<String> scriptedDecisions = new ArrayDeque<>();
+        scriptedDecisions.add("deny");
+        scriptedDecisions.add("deny");
+        scriptedDecisions.add("grant");
+
+        PermissionState camera = new PermissionState();
+        String[] results = new String[3];
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            String outcome = camera.request(scriptedDecisions);
+            results[attempt - 1] = outcome;
+            System.out.println("attempt " + attempt + " -> " + outcome + " (feature_available=" + camera.featureAvailable() + ")");
+        }
+
+        // The third scripted decision was "grant", but two denials already
+        // happened, so the OS never shows a prompt again on the third try.
+        if (!(results[0].equals("denied") && results[1].equals("denied") && results[2].equals("denied_permanent_no_prompt"))) {
+            throw new AssertionError("expected the third request to hit the permanent-denial wall");
+        }
+        if (camera.featureAvailable()) {
+            throw new AssertionError("a feature gated on this permission must report unavailable");
+        }
+
+        Deque<String> locationDecisions = new ArrayDeque<>();
+        locationDecisions.add("grant");
+        PermissionState location = new PermissionState();
+        location.request(locationDecisions);
+        if (!location.featureAvailable()) throw new AssertionError("location should be available right after a grant");
+        location.revoke();
+        if (location.featureAvailable()) throw new AssertionError("a revoke must flip availability even with no new request");
+
+        System.out.println("RESULT=PASS");
+    }
+}`}/>
+
+<FirstTime title="Build a permission test pass before touching anything else">
+<StepChecklist steps={[
+  { text: "List every sensitive capability the app touches", detail: "Camera, precise/approximate location, notifications, contacts, microphone, and anything else gated behind a runtime prompt." },
+  { text: "Test grant, deny, and permanent-deny separately", detail: "Deny twice on Android to reach the permanent no-prompt state; confirm the app still offers a path to Settings from there." },
+  { text: "Test a mid-session revoke, not just a fresh install", detail: "Grant a permission, use the feature, then revoke it from system settings without restarting the app and confirm the feature notices." },
+  { text: "Check the re-prompt path", detail: "Confirm the app can send the user to system settings, and that returning from settings with a new grant actually re-enables the feature without a restart." },
+]}/>
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "A feature silently does nothing after the user denies a permission.", fix: "Check the code path assumes the permission was granted and never branches on the denial result — add an explicit degraded state with a visible explanation." },
+  { symptom: "The permission prompt never appears again after the user denies it twice.", fix: "This is expected platform behavior, not a bug. Confirm the app detects the permanently-denied state and routes the user to system settings instead of calling the request API again." },
+  { symptom: "A feature that worked at the start of the session breaks later with no crash and no new prompt.", fix: "The user likely revoked the permission mid-session from system settings. Confirm the app re-checks permission state at the point of use, not only at launch." },
+]}/>
+
+<WhereToCheck>
+- Android Developers' permissions guide for the exact `shouldShowRequestPermissionRationale` and `checkSelfPermission` flow.
+- Apple's Core Location authorization documentation for the When In Use / Always / One-Time distinction.
+- [[mobile-testing/mobile-specifics/app-lifecycle]] for how a denied-then-backgrounded app should restore its degraded state correctly on resume.
+- [[mobile-testing/device-and-os-matrix/fragmentation]] for why permission behavior itself (like `POST_NOTIFICATIONS`) can differ across Android OS versions in your real audience.
+</WhereToCheck>
+
+<WorkedExample title="a camera permission revoked mid-session">
+1. A user installs a scanning app, grants camera access on first launch, and successfully scans a document.
+2. Without closing the app, the user opens system settings and revokes camera access.
+3. The user returns to the app and taps "Scan" again.
+4. A well-tested app re-checks the permission at the point of use, finds it revoked, and shows "Camera access
+   was turned off — re-enable it in Settings to scan," with a button that opens Settings directly. A
+   poorly-tested app calls the camera API anyway, based on a cached "granted" flag from launch, and either
+   crashes or shows a blank frozen preview.
+</WorkedExample>
+
+<Quiz question="A user denies a permission twice on Android. What happens the third time the app requests it?" options={[
+  "The system shows the same dialog again, since three is the usual limit",
+  "The system silently does not show the dialog again; the app must detect this and route the user to system settings instead",
+  "The permission is automatically granted after the third request",
+  "The app is force-closed by the OS"
+]} answer={1} explain="Two denials are treated as a permanent 'don't ask again' on Android. A further call to request the permission returns immediately with no dialog shown, and the only way back is system settings." />
+
+<Flashcards cards={[
+  { front: "Who renders a runtime permission prompt?", back: "The operating system, never the app — the app can only trigger the request and read back the result." },
+  { front: "Android's permanent-denial trigger", back: "Two Deny taps across the app's install lifetime; the system stops showing the dialog and the app must send the user to settings." },
+  { front: "iOS location's extra option most permissions lack", back: "A three-way choice of Allow Once, While Using the App, or Always, plus a separate approximate-vs-precise toggle." },
+  { front: "The most commonly missed test case", back: "A mid-session revoke — a permission taken away from system settings while the app is already running, with no notice delivered to the app." },
+]}/>
+
+<Challenge>Pick one permission your app (or a familiar app) requests. Write out three test cases for it: first-time grant, first-time deny followed by a second deny, and a mid-session revoke after it was already granted. For each, write what the UI should show.</Challenge>
+<AskCommunity prompt="What's the worst 'permission denied' bug you've seen in a real app — silent failure, crash, or something stranger?" />
+
+<Resources links={[
+  { href: "https://developer.android.com/training/permissions/requesting", title: "Android Developers — Request Runtime Permissions", kind: "read" },
+  { href: "https://developer.apple.com/documentation/corelocation/requesting-authorization-to-use-location-services", title: "Apple Developer — Requesting Authorization to Use Location Services", kind: "read" },
+  { href: "https://www.youtube.com/watch?v=JkB_LREkByw", title: "Every Mobile Permission Explained — What 'Allow' Really Means for Each One", kind: "watch" },
+]}/>
+<Video href="https://www.youtube.com/watch?v=JkB_LREkByw" title="Every Mobile Permission Explained — What 'Allow' Really Means for Each One" minutes={14} />
+
+<Takeaways points={[
+  "The OS owns the permission dialog end to end — the app only triggers the request and reads back grant or deny.",
+  "Android treats a second denial as permanent: no further dialog, only a manual path through system settings.",
+  "iOS shows most prompts once per install, with location offering When In Use, Always, and One-Time.",
+  "A permission granted once can be revoked at any later moment with no notice to the app — always re-check at the point of use, not just at launch.",
+]}/>
+<Complete xp={10} />
