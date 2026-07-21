@@ -49,10 +49,16 @@ describe("Button", () => {
 
 describe("Badge", () => {
   it("renders each tone with its palette", () => {
-    expect(renderToStaticMarkup(<Badge tone="success">ok</Badge>)).toContain("text-emerald-300");
-    expect(renderToStaticMarkup(<Badge tone="danger">bad</Badge>)).toContain("text-red-300");
+    // Text colors are the --success/warning/info/danger-text tokens, not a
+    // fixed Tailwind shade: the literal pastel-300 classes this used to
+    // assert on measured 1.2-1.7:1 contrast on a light background (axe-
+    // caught, see e2e/tests/a11y.spec.ts) — darker per-tone shades on light,
+    // the same pastel-300s unchanged on dark (globals.css has the values).
+    expect(renderToStaticMarkup(<Badge tone="success">ok</Badge>)).toContain("text-success-text");
+    expect(renderToStaticMarkup(<Badge tone="danger">bad</Badge>)).toContain("text-danger-text");
     // The neutral tone is theme-driven, so it uses semantic tokens rather than
-    // a fixed zinc ramp — the coloured tones stay literal on purpose.
+    // a fixed zinc ramp — the tint backgrounds (bg-emerald-500/10 etc.) stay
+    // literal on purpose, only the text needed a theme-aware token.
     expect(renderToStaticMarkup(<Badge>plain</Badge>)).toContain("text-foreground");
   });
 });
