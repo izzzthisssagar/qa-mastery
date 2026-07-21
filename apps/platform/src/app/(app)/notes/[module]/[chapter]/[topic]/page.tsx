@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { MDXRemote } from "next-mdx-remote/rsc";
 import { listNoteFiles, getNote, findNoteModule, findNoteLeaf } from "@qa-mastery/curriculum";
 import { mdxComponents } from "@/app/(app)/learn/[slug]/mdx-components";
+import { getNoteCompletion } from "../../../actions";
+import { NoteProgressProvider } from "../../../note-progress-context";
 import {
   AskCommunity,
   Callout,
@@ -84,6 +86,10 @@ export default async function NoteTopicPage({
   if (!note) notFound();
   const mod = findNoteModule(moduleSlug);
 
+  // Per-learner completion state for the <Complete> button inside the MDX body.
+  const noteSlug = `${moduleSlug}/${chapterSlug}/${topicSlug}`;
+  const { done: initialDone } = await getNoteCompletion(noteSlug);
+
   // Related notes are authored as "module/chapter/topic" triples; resolve each
   // against the taxonomy + disk so a stale or planned-only reference never 404s.
   const related = note.frontmatter.related
@@ -117,17 +123,19 @@ export default async function NoteTopicPage({
         </div>
       )}
 
-      <article className="prose-notes mt-8 space-y-4 text-[15px] leading-relaxed text-foreground/90">
-        <MDXRemote
-          source={note.body}
-          components={{ ...mdxComponents, ...noteInteractiveComponents }}
-          // Notes MDX is repo-authored (trusted): allow JSX attribute
-          // expressions — next-mdx-remote v6 strips them by default, which
-          // silently emptied array props like WhenItBreaks items. The
-          // dangerous-calls guard (blockDangerousJS) stays on.
-          options={{ blockJS: false }}
-        />
-      </article>
+      <NoteProgressProvider slug={noteSlug} initialDone={initialDone}>
+        <article className="prose-notes mt-8 space-y-4 text-[15px] leading-relaxed text-foreground/90">
+          <MDXRemote
+            source={note.body}
+            components={{ ...mdxComponents, ...noteInteractiveComponents }}
+            // Notes MDX is repo-authored (trusted): allow JSX attribute
+            // expressions — next-mdx-remote v6 strips them by default, which
+            // silently emptied array props like WhenItBreaks items. The
+            // dangerous-calls guard (blockDangerousJS) stays on.
+            options={{ blockJS: false }}
+          />
+        </article>
+      </NoteProgressProvider>
 
       {related.length > 0 && (
         <div className="mt-10 border-t border-border pt-6">

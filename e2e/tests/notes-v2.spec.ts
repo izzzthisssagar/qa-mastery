@@ -140,4 +140,22 @@ test.describe("notes v2 — interactive note surface", () => {
     ).toBeVisible();
     // No click: e2e never talks to Wandbox.
   });
+
+  test("marking a note complete persists across a reload (real XP)", async ({ page }) => {
+    const complete = page.getByRole("button", { name: /mark complete/i });
+    await complete.scrollIntoViewIfNeeded();
+    await expect(async () => {
+      await complete.click();
+      await expect(
+        page.getByRole("button", { name: /completed .* xp earned/i }),
+      ).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 10_000 });
+
+    // Reload: completion is server-persisted (note_progress), so the button
+    // renders already-completed rather than resetting to its client demo state.
+    await page.reload();
+    await expect(
+      page.getByRole("button", { name: /completed .* xp earned/i }),
+    ).toBeVisible();
+  });
 });

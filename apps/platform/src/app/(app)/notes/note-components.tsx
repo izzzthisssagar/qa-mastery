@@ -12,6 +12,8 @@ import { useEffect, useRef, useState, useTransition, type ReactNode } from "reac
 import Link from "next/link";
 import { Spinner } from "@qa-mastery/ui";
 import { runSimulatorCode } from "@/app/(app)/simulator/actions";
+import { completeNote } from "./actions";
+import { useNoteProgress } from "./note-progress-context";
 
 /* ── Hook: the curiosity opener ─────────────────────────────────────────────*/
 export function Hook({ children }: { children: ReactNode }) {
@@ -205,9 +207,11 @@ export function Takeaways({ points }: { points: string[] }) {
   );
 }
 
-/* ── Complete: mark done + XP burst (client demo; wires to xp_events later) ──*/
+/* ── Complete: mark done + XP burst — persists via completeNote server action ─*/
 export function Complete({ xp = 10 }: { xp?: number }) {
-  const [done, setDone] = useState(false);
+  const { slug, initialDone } = useNoteProgress();
+  const [done, setDone] = useState(initialDone);
+  const [pending, startTransition] = useTransition();
   const btnRef = useRef<HTMLButtonElement>(null);
 
   function burst() {
@@ -239,14 +243,26 @@ export function Complete({ xp = 10 }: { xp?: number }) {
       <button
         ref={btnRef}
         type="button"
-        disabled={done}
+        disabled={done || pending}
         onClick={() => {
-          setDone(true);
-          burst();
+          if (done || pending) return;
+          startTransition(async () => {
+            try {
+              const res = await completeNote(slug);
+              setDone(true);
+              if (!res.alreadyDone) burst();
+            } catch {
+              // Leave the button enabled so the learner can retry.
+            }
+          });
         }}
-        className={`rounded-2xl px-8 py-3.5 text-base font-bold transition ${done ? "cursor-default border border-accent/40 bg-surface text-accent" : "bg-accent text-accent-foreground hover:brightness-105"}`}
+        className={`rounded-2xl px-8 py-3.5 text-base font-bold transition disabled:opacity-70 ${done ? "cursor-default border border-accent/40 bg-surface text-accent" : "bg-accent text-accent-foreground hover:brightness-105"}`}
       >
-        {done ? `✓ Completed · +${xp} XP earned` : `Mark complete · +${xp} XP`}
+        {done
+          ? `✓ Completed · +${xp} XP earned`
+          : pending
+            ? "Saving…"
+            : `Mark complete · +${xp} XP`}
       </button>
     </div>
   );
