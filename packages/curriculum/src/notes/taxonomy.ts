@@ -2733,10 +2733,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "growing-from-here",
         title: "Growing from here",
         topics: [
-          { slug: "junior-to-mid-roadmap", title: "Junior → mid roadmap", planned: true },
-          { slug: "specializing", title: "Specializing", planned: true },
-          { slug: "keeping-a-brag-doc", title: "Keeping a brag doc", planned: true },
-          { slug: "continued-learning", title: "Continued learning", planned: true },
+          { slug: "junior-to-mid-roadmap", title: "Junior → mid roadmap" },
+          { slug: "specializing", title: "Specializing" },
+          { slug: "keeping-a-brag-doc", title: "Keeping a brag doc" },
+          { slug: "continued-learning", title: "Continued learning" },
         ],
       },
       {
