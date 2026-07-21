@@ -42,6 +42,20 @@ async function expectNoSeriousViolations(page: Page): Promise<void> {
   const serious = results.violations.filter(
     (v) => v.impact === "serious" || v.impact === "critical",
   );
+  // Not a failure gate — axe puts color-contrast here (not violations) when a
+  // semi-transparent background over a busy/gradient parent makes the
+  // composited color unreliable to compute, rather than silently passing it.
+  // That's real: apps/platform/src/app/(app)/dashboard/buggyapi-card.tsx's
+  // bg-cyan-500/[0.05] hid a genuine 1.7:1 bug this way — 0 violations, but
+  // it was there. Logged so it stays visible in CI output instead of
+  // vanishing the way it did before this comment existed.
+  const incompleteContrast = results.incomplete.filter((v) => v.id === "color-contrast");
+  if (incompleteContrast.length > 0) {
+    console.warn(
+      `axe: ${incompleteContrast.length} color-contrast check(s) on ${page.url()} could not be auto-verified (transparent/composited background) — manual review needed:\n` +
+        incompleteContrast.map((v) => v.nodes.map((n) => n.target.join(" ")).join(", ")).join("\n"),
+    );
+  }
   expect(serious, JSON.stringify(serious, null, 2)).toEqual([]);
 }
 
