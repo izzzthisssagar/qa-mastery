@@ -57,7 +57,7 @@ function Row({ a }: { a: Applicant }) {
           </button>
         ))}
       </div>
-      {error && <p className="text-xs text-red-300">{error}</p>}
+      {error && <p className="text-xs text-danger-text">{error}</p>}
     </li>
   );
 }

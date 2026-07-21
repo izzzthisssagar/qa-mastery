@@ -87,7 +87,7 @@ export function ExperienceEditor({ initial }: { initial: ExperienceRow[] }) {
                   aria-label={`Remove ${e.role} at ${e.company}`}
                   onClick={() => remove(e.id)}
                   disabled={pending}
-                  className="text-muted-foreground hover:text-red-300"
+                  className="text-muted-foreground hover:text-danger-text"
                 >
                   ×
                 </button>
@@ -138,7 +138,7 @@ export function ExperienceEditor({ initial }: { initial: ExperienceRow[] }) {
           placeholder="What you did there (optional)."
           aria-label="Summary"
         />
-        {error && <p className="text-sm text-red-300">{error}</p>}
+        {error && <p className="text-sm text-danger-text">{error}</p>}
         <Button
           variant="secondary"
           onClick={add}

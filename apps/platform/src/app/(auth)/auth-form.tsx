@@ -108,7 +108,7 @@ export function AuthForm({
                 data-testid="form-error"
                 initial={{ opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300"
+                className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-danger-text"
               >
                 {state.error}
               </motion.p>

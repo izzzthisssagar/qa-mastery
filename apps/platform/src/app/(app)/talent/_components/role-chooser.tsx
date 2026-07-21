@@ -66,7 +66,7 @@ export function RoleChooser() {
           </button>
         ))}
       </div>
-      {error && <p className="text-sm text-red-300">{error}</p>}
+      {error && <p className="text-sm text-danger-text">{error}</p>}
     </div>
   );
 }

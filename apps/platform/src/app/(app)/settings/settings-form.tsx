@@ -72,7 +72,7 @@ export function SettingsForm({
           {pending ? "Saving…" : "Save changes"}
         </Button>
         {state.error ? (
-          <span role="alert" data-testid="form-error" className="text-sm text-red-300">
+          <span role="alert" data-testid="form-error" className="text-sm text-danger-text">
             {state.error}
           </span>
         ) : null}

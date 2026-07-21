@@ -115,7 +115,7 @@ export function ConversationThread({
         <div ref={bottomRef} />
       </div>
 
-      {error && <p className="text-sm text-red-300">{error}</p>}
+      {error && <p className="text-sm text-danger-text">{error}</p>}
 
       <div className="flex items-end gap-2">
         <textarea

@@ -31,7 +31,7 @@ export function AssetDownload({ itemId }: { itemId: string }) {
       >
         {pending ? "Preparing…" : "View attached file →"}
       </button>
-      {error && <span className="text-xs text-red-300">{error}</span>}
+      {error && <span className="text-xs text-danger-text">{error}</span>}
     </span>
   );
 }

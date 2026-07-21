@@ -259,7 +259,7 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
         />
       </div>
 
-      {error && <p className="text-sm text-red-300">{error}</p>}
+      {error && <p className="text-sm text-danger-text">{error}</p>}
       {saved && !error && <p className="text-sm text-emerald-300">Saved.</p>}
 
       <div className="flex flex-wrap items-center gap-3">

@@ -43,7 +43,7 @@ export function ApplyButton({ projectId, applied }: { projectId: string; applied
         <Button onClick={open ? apply : () => setOpen(true)} loading={pending}>
           {pending ? "Applying…" : open ? "Submit application" : "Apply"}
         </Button>
-        {error && <span className="text-sm text-red-300">{error}</span>}
+        {error && <span className="text-sm text-danger-text">{error}</span>}
       </div>
     </div>
   );

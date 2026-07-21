@@ -30,7 +30,7 @@ export function CvDownload({ handle }: { handle: string }) {
       >
         {pending ? "Preparing…" : "Download CV"}
       </button>
-      {error && <span className="text-xs text-red-300">{error}</span>}
+      {error && <span className="text-xs text-danger-text">{error}</span>}
     </span>
   );
 }

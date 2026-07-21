@@ -68,7 +68,7 @@ export function ReportButton({
         <button type="button" onClick={() => setOpen(false)} className="text-xs text-muted-foreground hover:text-muted-foreground">
           Cancel
         </button>
-        {error && <span className="text-xs text-red-300">{error}</span>}
+        {error && <span className="text-xs text-danger-text">{error}</span>}
       </div>
     </div>
   );

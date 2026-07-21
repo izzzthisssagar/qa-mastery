@@ -68,7 +68,7 @@ export function DeviceEditor({ initial }: { initial: DeviceRow[] }) {
                 aria-label={`Remove ${d.device}`}
                 onClick={() => remove(d.id)}
                 disabled={pending}
-                className="text-muted-foreground hover:text-red-300"
+                className="text-muted-foreground hover:text-danger-text"
               >
                 ×
               </button>
@@ -110,7 +110,7 @@ export function DeviceEditor({ initial }: { initial: DeviceRow[] }) {
           Add device
         </Button>
       </div>
-      {error && <p className="text-sm text-red-300">{error}</p>}
+      {error && <p className="text-sm text-danger-text">{error}</p>}
     </div>
   );
 }

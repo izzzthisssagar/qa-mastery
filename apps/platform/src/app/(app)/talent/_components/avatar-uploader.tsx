@@ -73,7 +73,7 @@ export function AvatarUploader({
           disabled={pending}
         />
       </label>
-      {error && <span className="text-sm text-red-300">{error}</span>}
+      {error && <span className="text-sm text-danger-text">{error}</span>}
     </div>
   );
 }

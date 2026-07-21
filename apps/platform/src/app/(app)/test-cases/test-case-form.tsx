@@ -27,7 +27,12 @@ export function TestCaseForm() {
       </div>
       <textarea name="steps" rows={3} placeholder="Steps — one per line" className={field} />
       <div className="flex items-center gap-3">
-        <select name="priority" defaultValue="medium" className={`${field} w-auto`}>
+        <select
+          name="priority"
+          aria-label="Priority"
+          defaultValue="medium"
+          className={`${field} w-auto`}
+        >
           <option value="low">Low</option>
           <option value="medium">Medium</option>
           <option value="high">High</option>
@@ -36,7 +41,7 @@ export function TestCaseForm() {
           {pending ? "Saving…" : "Add test case"}
         </Button>
         {state.error ? (
-          <span role="alert" className="text-sm text-red-300">
+          <span role="alert" className="text-sm text-danger-text">
             {state.error}
           </span>
         ) : null}

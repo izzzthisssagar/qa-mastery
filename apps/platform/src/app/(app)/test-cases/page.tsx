@@ -115,7 +115,7 @@ export default async function TestCasesPage() {
                         <input type="hidden" name="id" value={r.id} />
                         <button
                           type="submit"
-                          className="rounded-md border border-red-500/30 px-2 py-1 text-xs text-red-300 transition-colors hover:bg-red-500/10"
+                          className="rounded-md border border-red-500/30 px-2 py-1 text-xs text-danger-text transition-colors hover:bg-red-500/10"
                         >
                           Delete
                         </button>

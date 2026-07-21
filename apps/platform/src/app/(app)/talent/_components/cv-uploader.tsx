@@ -52,7 +52,7 @@ export function CvUploader({ userId, hasCv }: { userId: string; hasCv: boolean }
         />
       </label>
       {done && !error && <span className="text-sm text-emerald-300">CV attached ✓</span>}
-      {error && <span className="text-sm text-red-300">{error}</span>}
+      {error && <span className="text-sm text-danger-text">{error}</span>}
     </div>
   );
 }

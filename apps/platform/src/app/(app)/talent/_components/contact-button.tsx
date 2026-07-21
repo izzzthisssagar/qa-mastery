@@ -36,7 +36,7 @@ export function ContactButton({ handle }: { handle: string }) {
           "Contact"
         )}
       </Button>
-      {error && <span className="text-xs text-red-300">{error}</span>}
+      {error && <span className="text-xs text-danger-text">{error}</span>}
     </div>
   );
 }

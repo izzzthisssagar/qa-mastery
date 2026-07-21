@@ -160,7 +160,7 @@ export function PostProjectForm() {
         NDA required
       </label>
 
-      {error && <p className="text-sm text-red-300">{error}</p>}
+      {error && <p className="text-sm text-danger-text">{error}</p>}
 
       <Button onClick={submit} loading={pending} disabled={title.trim().length < 3}>
         {pending ? "Posting…" : "Post project"}
