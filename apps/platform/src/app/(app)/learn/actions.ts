@@ -396,7 +396,9 @@ export async function launchSandbox(slug: string): Promise<string> {
     sandboxId = newSbx.id;
 
     // Seed data via the deny-all service-role RPC
-    const { error: resetError } = await service.rpc("reset_sandbox", { p_sandbox_id: sandboxId });
+    const { error: resetError } = await service
+      .schema("buggyshop")
+      .rpc("reset_sandbox", { p_sandbox_id: sandboxId });
     if (resetError) throw new Error(`Sandbox seeding failed: ${resetError.message}`);
   }
 
