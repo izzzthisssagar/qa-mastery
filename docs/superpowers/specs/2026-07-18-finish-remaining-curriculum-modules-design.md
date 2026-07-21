@@ -73,6 +73,21 @@ Every new topic must follow the established rich-note anatomy:
 8. Quiz, flashcards, challenge, community prompt, live primary resources, exact-title embeddable video,
    takeaways, and `<Complete xp={10} />`.
 
+### Documented exceptions (legacy foundational corpus)
+
+- **Beginner Track-A modules are Python-only by design.** The seven foundational modules
+  `how-a-computer-works`, `operating-systems-and-files`, `the-internet-and-the-web`,
+  `digital-literacy-and-safety`, `the-web-platform-for-testers`, `programming-basics`, and
+  `qa-foundations` (95 notes) predate the "one Python + one Java playground" rule. A runnable
+  Java program is contrived for topics like "email" or "spreadsheets", so these keep their single
+  Python playground. Item 5 (parity Java) does **not** apply retroactively to them; new modules
+  still follow point 5 above.
+
+**Enforcement note:** related-link and prose `[[wikilink]]` *resolvability* is now a hard gate —
+`packages/curriculum/scripts/check-note-links.mjs` and a case in `test/notes.test.ts` fail on any
+link whose `module/chapter/topic` target is not a real note. The zod schema only ever checked link
+*shape*; this closes that gap.
+
 Technical topics require current primary documentation. Medical, legal, security, accessibility,
 privacy, AI, and employment claims require scope-safe language and current authoritative sources.
 Unsafe security examples must use authorized local/test/training targets, synthetic data, minimal proof,

@@ -37,6 +37,7 @@ Every module task uses this exact cycle for each chapter:
 5. Run:
 
 ```bash
+node packages/curriculum/scripts/check-note-links.mjs
 node packages/curriculum/scripts/check-note-mdx-compile.mjs
 (cd packages/curriculum && python3 scripts/check-note-components.py)
 (cd packages/curriculum && python3 scripts/check-note-images.py)
