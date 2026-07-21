@@ -20,6 +20,16 @@ export default defineConfig({
   forbidOnly: CI,
   retries: CI ? 2 : 0,
   reporter: CI ? [["list"], ["html", { open: "never" }]] : "list",
+  // Visual regression (visual.spec.ts) only produces stable diffs when every
+  // run — baseline capture AND every comparison after — happens inside the
+  // same pinned environment (see docs/known-issues/visual-regression-baselines.md).
+  // CI runs the whole e2e job in mcr.microsoft.com/playwright:v1.60.0-noble
+  // specifically for this; running it on a bare/host Playwright install
+  // re-introduces font drift. A small tolerance absorbs harmless sub-pixel
+  // anti-aliasing noise without hiding a real visual change.
+  expect: {
+    toHaveScreenshot: { maxDiffPixelRatio: 0.01 },
+  },
   use: {
     // retain-on-failure, not on-first-retry: the latter records only the
     // retry, so a first attempt that fails and then retry-passes leaves no

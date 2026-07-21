@@ -76,16 +76,35 @@ jobs:
           fi
           echo "No manifest fields in client bundles."
 
-      - name: Install Playwright browsers
-        run: pnpm --filter @qa-mastery/e2e exec playwright install --with-deps chromium webkit
+      # visual.spec.ts baselines are only meaningful compared inside the exact
+      # environment they were captured in (font rendering drifts across OS/
+      # package versions — see docs/known-issues/visual-regression-baselines.md).
+      # Running the whole E2E stage in the pinned image, not just installing
+      # browsers on whatever ubuntu-latest happens to have today, is what
+      # makes that hold run over run — and it ships browsers preinstalled, so
+      # there's no separate "Install Playwright browsers" step anymore.
+      - name: Write env for containerized E2E
+        run: |
+          env | grep -E '^(NEXT_PUBLIC_|SUPABASE_|SANDBOX_JWT_SECRET|BILLING_ENABLED)=' > /tmp/e2e.env
+          echo "CI=true" >> /tmp/e2e.env
 
-      - name: E2E (production builds + live DB, Chromium + WebKit)
-        run: pnpm e2e
+      - name: E2E (production builds + live DB, Chromium + WebKit, pinned image)
+        run: |
+          docker run --rm --network host \
+            --env-file /tmp/e2e.env \
+            -v "$GITHUB_WORKSPACE":/work -w /work \
+            mcr.microsoft.com/playwright:v1.60.0-noble \
+            bash -c "corepack enable && corepack prepare pnpm@11.6.0 --activate && pnpm install --frozen-lockfile && pnpm --filter @qa-mastery/e2e exec playwright test"
 
       # Separate invocation with its own webServer — keeps a third Next server
       # out of the main run (2-core runners flake under that contention).
-      - name: E2E BuggyAPI (contract suite)
-        run: pnpm --filter @qa-mastery/e2e exec playwright test --config=playwright.buggyapi.config.ts
+      - name: E2E BuggyAPI (contract suite, pinned image)
+        run: |
+          docker run --rm --network host \
+            --env-file /tmp/e2e.env \
+            -v "$GITHUB_WORKSPACE":/work -w /work \
+            mcr.microsoft.com/playwright:v1.60.0-noble \
+            bash -c "corepack enable && corepack prepare pnpm@11.6.0 --activate && pnpm --filter @qa-mastery/e2e exec playwright test --config=playwright.buggyapi.config.ts"
 
       - name: Upload Playwright report on failure
         if: failure()

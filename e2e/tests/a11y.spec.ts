@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { signUpFreshLearner } from "./signup-helper";
+import { setTheme, waitForTheme } from "./theme-helper";
 
 /**
  * WCAG smoke pass, both themes. Not exhaustive (that's a manual a11y-testing
@@ -11,10 +12,6 @@ import { signUpFreshLearner } from "./signup-helper";
  */
 
 const BASE = process.env.PW_BASE_URL ?? "http://localhost:3000";
-
-async function setTheme(page: Page, theme: "light" | "dark"): Promise<void> {
-  await page.addInitScript(`localStorage.setItem("theme", "${theme}")`);
-}
 
 async function expectNoSeriousViolations(page: Page): Promise<void> {
   const results = await new AxeBuilder({ page })
@@ -31,12 +28,14 @@ for (const theme of ["light", "dark"] as const) {
     test("marketing homepage", async ({ page }) => {
       await setTheme(page, theme);
       await page.goto(BASE);
+      await waitForTheme(page, theme);
       await expectNoSeriousViolations(page);
     });
 
     test("dashboard (authenticated app chrome)", async ({ page }) => {
       await setTheme(page, theme);
       await signUpFreshLearner(page, `a11y-${theme}`);
+      await waitForTheme(page, theme);
       await expectNoSeriousViolations(page);
     });
 
@@ -44,6 +43,7 @@ for (const theme of ["light", "dark"] as const) {
       await setTheme(page, theme);
       await signUpFreshLearner(page, `a11y-${theme}`);
       await page.goto(`${BASE}/notes/qa-foundations/what-is-qa/qa-vs-qc-vs-testing`);
+      await waitForTheme(page, theme);
       await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
       await expectNoSeriousViolations(page);
     });
