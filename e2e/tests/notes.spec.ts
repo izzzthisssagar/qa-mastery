@@ -22,11 +22,11 @@ test.describe("notes wiki", () => {
     await page.goto("http://localhost:3000/notes");
     await expect(page.getByRole("heading", { name: /notes wiki/i })).toBeVisible();
 
-    // Drill into Foundations → a written topic.
-    await page.getByTestId("notes-module-foundations").click();
-    await expect(page).toHaveURL(/\/notes\/foundations/);
-    await page.getByTestId("notes-topic-what-is-qa").click();
-    await expect(page.getByRole("heading", { name: /what is qa\?/i })).toBeVisible();
+    // Drill into QA foundations → a written topic.
+    await page.getByTestId("notes-module-qa-foundations").click();
+    await expect(page).toHaveURL(/\/notes\/qa-foundations/);
+    await page.getByTestId("notes-topic-qa-vs-qc-vs-testing").click();
+    await expect(page.getByRole("heading", { name: /qa vs qc vs testing/i })).toBeVisible();
     await expect(page.getByText(/quality assurance/i).first()).toBeVisible();
 
     // Search finds a topic by keyword.
