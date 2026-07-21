@@ -2508,10 +2508,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "docs-and-communication",
         title: "Docs & communication",
         topics: [
-          { slug: "confluence-and-wikis", title: "Confluence / wikis", planned: true },
-          { slug: "writing-for-developers", title: "Writing for developers", planned: true },
-          { slug: "status-updates", title: "Status updates", planned: true },
-          { slug: "async-communication", title: "Async communication", planned: true },
+          { slug: "confluence-and-wikis", title: "Confluence / wikis" },
+          { slug: "writing-for-developers", title: "Writing for developers" },
+          { slug: "status-updates", title: "Status updates" },
+          { slug: "async-communication", title: "Async communication" },
         ],
       },
       {
