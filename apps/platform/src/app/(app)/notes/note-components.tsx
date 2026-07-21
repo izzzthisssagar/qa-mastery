@@ -518,7 +518,7 @@ export function FlowAnimation({
       </div>
 
       <div className="mt-4 min-h-14 rounded-xl border border-accent/25 bg-background px-4 py-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-accent">
+        <p className="text-xs font-semibold uppercase tracking-wide text-accent-text">
           Stage {active + 1} of {nodes.length}
         </p>
         <p className="mt-1 text-sm text-foreground/90">{nodes[active].desc}</p>
@@ -670,7 +670,7 @@ export function HotspotImage({
           👆 Tap each numbered dot to explore the parts
         </p>
       )}
-      <p className={`mt-2 text-center text-xs font-medium ${done ? "text-accent" : "text-muted-foreground"}`}>
+      <p className={`mt-2 text-center text-xs font-medium ${done ? "text-accent-text" : "text-muted-foreground"}`}>
         {done ? "✓ All parts explored!" : `Explored ${seen.size} / ${pins.length}`}
       </p>
       <Credit credit={credit} creditHref={creditHref} />
@@ -732,7 +732,7 @@ export function PartsQuest({
           <p className="mt-1 text-sm text-muted-foreground">{parts[active].desc}</p>
         </div>
       )}
-      <p className={`mt-2 text-center text-xs font-medium ${done ? "text-accent" : "text-muted-foreground"}`}>
+      <p className={`mt-2 text-center text-xs font-medium ${done ? "text-accent-text" : "text-muted-foreground"}`}>
         {seen.size} / {parts.length} parts met
       </p>
       <Credit credit={credit} creditHref={creditHref} />
@@ -787,7 +787,7 @@ export function StepChecklist({ steps }: { steps: { text: string; detail?: strin
           </li>
         ))}
       </ol>
-      <p className={`mt-2 text-center text-xs font-medium ${pct === 100 ? "text-accent" : "text-muted-foreground"}`}>
+      <p className={`mt-2 text-center text-xs font-medium ${pct === 100 ? "text-accent-text" : "text-muted-foreground"}`}>
         {pct === 100 ? "✓ Mission complete — you know your machine!" : `${checked.size} / ${steps.length} done`}
       </p>
     </div>

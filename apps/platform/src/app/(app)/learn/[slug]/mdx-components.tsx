@@ -24,7 +24,7 @@ export const mdxComponents = {
     <strong className="font-semibold text-foreground" {...props} />
   ),
   a: (props: ComponentProps<"a">) => (
-    <a className="text-accent underline underline-offset-2 hover:text-emerald-300" {...props} />
+    <a className="text-accent-text underline underline-offset-2 hover:opacity-80" {...props} />
   ),
   blockquote: (props: ComponentProps<"blockquote">) => (
     <blockquote
@@ -34,7 +34,7 @@ export const mdxComponents = {
   ),
   code: (props: ComponentProps<"code">) => (
     <code
-      className="rounded bg-surface-raised px-1.5 py-0.5 text-[0.85em] text-emerald-300"
+      className="rounded bg-surface-raised px-1.5 py-0.5 text-[0.85em] text-accent-text"
       {...props}
     />
   ),
