@@ -50,3 +50,12 @@ export {
   findNoteTrack,
   type NoteTrack,
 } from "./notes/tracks";
+
+export {
+  NOTE_LABS,
+  labForChapter,
+  labsForModule,
+  chapterForLab,
+  type NoteLab,
+  type NoteLabKind,
+} from "./notes/labs";

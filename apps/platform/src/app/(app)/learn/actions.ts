@@ -16,10 +16,10 @@ import {
   type RunResult,
   type RunnerProvider,
 } from "@qa-mastery/grading";
-import { Judge0Runner, DockerPlaywrightRunner, WandboxRunner } from "@qa-mastery/grading/runners";
 import { DEFAULT_RELEASE, isRelease, mintHandoffToken } from "@qa-mastery/shared";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAuthedUserId } from "@/lib/auth";
+import { assertCodeRunQuota, getCodeRunner } from "@/lib/code-runs";
 
 type Step = "see" | "try" | "do" | "prove";
 
@@ -460,37 +460,15 @@ export async function submitCapstone(
   return result;
 }
 
-const judge0 = new Judge0Runner();
-const playwright = new DockerPlaywrightRunner();
-const wandbox = new WandboxRunner();
-
 function getRunnerForLesson(slug: string): RunnerProvider {
   const lesson = findLessonBySlug(slug);
   if (!lesson) throw new Error("Lesson not found");
 
-  // Track B (automation) uses Playwright; plain-code lessons run on Wandbox
-  // (synchronous, free) with Judge0 as the fallback when the operator sets
-  // USE_JUDGE0 (e.g. a private Wandbox is down).
-  if (lesson.frontmatter.module !== "B0" && lesson.frontmatter.track === "track-b") {
-    return playwright;
-  }
-  return process.env.USE_JUDGE0 ? judge0 : wandbox;
-}
-
-/** Code execution is compute-heavy and paid; cap a learner's runs per UTC day. */
-const MAX_CODE_RUNS_PER_DAY = 100;
-
-async function assertCodeRunQuota(service: SupabaseClient, userId: string): Promise<void> {
-  const startOfDay = new Date();
-  startOfDay.setUTCHours(0, 0, 0, 0);
-  const { count } = await service
-    .from("code_runs")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .gte("created_at", startOfDay.toISOString());
-  if ((count ?? 0) >= MAX_CODE_RUNS_PER_DAY) {
-    throw new Error(`Daily code-run limit reached (${MAX_CODE_RUNS_PER_DAY}). Try again tomorrow.`);
-  }
+  // Track B (automation) drives a real browser; everything else is plain code.
+  // The ladder itself lives in @/lib/code-runs so note labs share it.
+  const browser =
+    lesson.frontmatter.module !== "B0" && lesson.frontmatter.track === "track-b";
+  return getCodeRunner({ browser });
 }
 
 export async function submitCodeLab(slug: string, code: string): Promise<{ runId: string }> {

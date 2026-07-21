@@ -51,6 +51,8 @@ describe("Badge", () => {
   it("renders each tone with its palette", () => {
     expect(renderToStaticMarkup(<Badge tone="success">ok</Badge>)).toContain("text-emerald-300");
     expect(renderToStaticMarkup(<Badge tone="danger">bad</Badge>)).toContain("text-red-300");
-    expect(renderToStaticMarkup(<Badge>plain</Badge>)).toContain("text-zinc-300");
+    // The neutral tone is theme-driven, so it uses semantic tokens rather than
+    // a fixed zinc ramp — the coloured tones stay literal on purpose.
+    expect(renderToStaticMarkup(<Badge>plain</Badge>)).toContain("text-foreground");
   });
 });
