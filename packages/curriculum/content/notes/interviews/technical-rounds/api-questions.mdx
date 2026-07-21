@@ -1,0 +1,198 @@
+---
+title: "API questions"
+summary: "A dumbwaiter carries a tray between floors through a fixed opening - press a button, something defined comes back, and nobody upstairs ever sees the kitchen. An API interview question tests whether a candidate actually understands that boundary, not just the words request and response."
+tags: ["interviews", "technical-rounds", "track-c"]
+updated: "2026-07-21"
+related:
+  - "interviews/technical-rounds/automation-and-coding-questions"
+  - "api-testing-fundamentals/status-codes-and-rest/status-code-families"
+  - "api-and-modern-security/rest-api-attacks/mass-assignment"
+---
+
+<Hook>
+"GET retrieves, POST creates" is the kind of answer a candidate can recite without ever having noticed
+that a GET request with side effects, or a POST that's actually idempotent by design, breaks the tidy
+rule. An API interview question exists to find out whether the concepts were actually used to test
+something real, or just memorized as a clean list of definitions.
+</Hook>
+
+<Callout type="analogy">
+A dumbwaiter connects a kitchen to a dining room through exactly one opening: press a call button, and
+a tray comes back holding precisely what was requested - nobody upstairs sees the kitchen, the cook, or
+how the dish was prepared, and nobody in the kitchen sees who's asking. That fixed, defined interface is
+the entire point - the two sides never touch directly, they only exchange through the opening's agreed
+contract. An API works exactly the same way: a request goes in, a defined response comes back, and the
+internal implementation on either side stays invisible to the other.
+</Callout>
+
+<Term define="An API interview question checks whether a candidate understands the client-server contract in practice - HTTP methods and their real semantics, status codes and what they actually signal, and how to design a test that verifies the contract rather than just the happy path - not just the ability to recite REST terminology.">An API interview question</Term>
+
+## Status codes are tested as signals, not trivia
+
+A common weak answer lists status codes like a memorized table - 200, 404, 500 - with no sense of what
+each one actually signals a client should do next. A stronger answer treats them as instructions: a 401
+means retry with authentication, a 403 means don't retry with different credentials because the
+identity is known and still forbidden, a 429 means back off and retry later, a 500 means the problem is
+server-side and retrying immediately probably won't help. Interviewers often probe the boundary cases
+specifically - the difference between 401 and 403, or why a 200 with an error message in the response
+body is worse than an honest 4xx, because it forces every client to parse the body just to know if the
+call actually succeeded.
+
+## Idempotency is the concept that separates surface knowledge from real understanding
+
+Whether a repeated identical request produces the same end state is one of the most reliable signals an
+interviewer has for real API understanding. GET, PUT, and DELETE are specified as idempotent - calling
+DELETE on an already-deleted resource should still leave it deleted, not error unpredictably. POST is
+not idempotent by the spec - calling it twice can create two resources instead of one. A candidate who
+can explain why this matters for testing (a flaky network causing an automatic retry on a non-idempotent
+POST can silently double-charge a payment) demonstrates the exact kind of judgment a technical round is
+trying to surface.
+
+<Callout type="tip">
+When asked to design a test for an endpoint, always include at least one negative and one boundary
+case out loud - a missing required field, an invalid auth token, a duplicate submission - not just the
+happy path. Interviewers frequently judge this instinct as much as the happy-path answer itself.
+</Callout>
+
+<Callout type="mistake">
+Treating REST as a strict specification everyone follows exactly. Most real-world APIs deviate from
+pure REST in some way - a "RESTful" API using POST for what should be a GET, or returning 200 with an
+error payload instead of a proper status code. A candidate who rigidly insists on textbook REST purity
+without acknowledging real-world variation reads as inexperienced, not principled.
+</Callout>
+
+{/* IMAGE: a wood-paneled antique dumbwaiter compartment with a tray of tableware inside and a numbered call-button panel mounted on the wall beside it */}
+<HotspotImage
+  src="/notes/interviews/technical-rounds/api-questions.jpg"
+  alt="An antique wood-paneled dumbwaiter with a tray of tableware inside and a numbered call-button panel"
+  credit="Dumbwaiter at Biltmore House — Comtesse d'Autodidactica, CC BY-SA 4.0, via Wikimedia Commons"
+  creditHref="https://commons.wikimedia.org/wiki/File:Dumbwaiter_at_Biltmore_House,_Asheville,_North_Carolina.jpg"
+  pins={[
+    { x: 13, y: 62, label: "The numbered call panel", desc: "A fixed set of defined actions - press button 2, get floor 2, nothing else. An API's set of endpoints and methods works the same way: a defined, limited contract, not an open-ended conversation." },
+    { x: 60, y: 82, label: "The tray, holding exactly what was requested", desc: "The response - nothing more, nothing less than what the request's contract promised. A candidate who understands an API deeply can describe exactly what should and shouldn't be in that tray for a given call." },
+    { x: 50, y: 25, label: "The closed wooden doors above", desc: "Everything happening on the other side - the kitchen, the implementation - stays completely invisible. Neither side of an API call needs to know how the other is built, only what the contract promises." },
+    { x: 85, y: 55, label: "The frame around the opening itself", desc: "A fixed boundary that never changes shape, even as what's inside the tray changes call to call. The HTTP contract - methods, status codes, headers - is exactly this kind of stable frame around a variable payload." },
+  ]}
+/>
+
+<FlowAnimation title="Answering a live API design or diagnosis question" intervalMs={1700} nodes={[
+  { label: "Confirm the actual contract being asked about", desc: "Which method, which resource, what's the expected success and failure shape - stated explicitly before proposing a test or a fix." },
+  { label: "Reason about idempotency for the specific method", desc: "Would a retry on this exact call be safe, or would it double an effect - GET/PUT/DELETE generally yes, POST generally no." },
+  { label: "Name the status codes that actually apply, as signals", desc: "Not a recited list - what should a client do differently on a 401 versus a 403 versus a 429." },
+  { label: "Include a negative or boundary case, out loud, unprompted", desc: "A missing field, bad auth, a duplicate call - demonstrating the instinct to test past the happy path without being asked." },
+]}/>
+
+<CodePlayground language="python" title="Modeling idempotency for retry-safety decisions (Python)" code={`IDEMPOTENT_METHODS = {"GET", "PUT", "DELETE", "HEAD", "OPTIONS"}
+
+calls = [
+    {"method": "POST", "path": "/payments", "desc": "charge a card"},
+    {"method": "PUT", "path": "/users/42", "desc": "replace user 42's profile"},
+    {"method": "DELETE", "path": "/sessions/99", "desc": "log out session 99"},
+    {"method": "POST", "path": "/orders", "desc": "create a new order"},
+]
+
+for c in calls:
+    safe_to_retry = c["method"] in IDEMPOTENT_METHODS
+    verdict = "SAFE to auto-retry on network failure" if safe_to_retry \\
+        else "UNSAFE to auto-retry - could duplicate the effect (" + c["desc"] + ")"
+    print(c["method"] + " " + c["path"] + " -> " + verdict)`}/>
+
+<CodePlayground language="java" title="Modeling idempotency for retry-safety decisions (Java)" code={`import java.util.*;
+
+public class Main {
+    static class ApiCall {
+        String method, path, desc;
+        ApiCall(String method, String path, String desc) {
+            this.method = method; this.path = path; this.desc = desc;
+        }
+    }
+
+    public static void main(String[] args) {
+        Set<String> idempotentMethods = new HashSet<>(
+                Arrays.asList("GET", "PUT", "DELETE", "HEAD", "OPTIONS"));
+
+        List<ApiCall> calls = new ArrayList<>();
+        calls.add(new ApiCall("POST", "/payments", "charge a card"));
+        calls.add(new ApiCall("PUT", "/users/42", "replace user 42's profile"));
+        calls.add(new ApiCall("DELETE", "/sessions/99", "log out session 99"));
+        calls.add(new ApiCall("POST", "/orders", "create a new order"));
+
+        for (ApiCall c : calls) {
+            boolean safeToRetry = idempotentMethods.contains(c.method);
+            String verdict = safeToRetry
+                    ? "SAFE to auto-retry on network failure"
+                    : "UNSAFE to auto-retry - could duplicate the effect (" + c.desc + ")";
+            System.out.println(c.method + " " + c.path + " -> " + verdict);
+        }
+    }
+}`}/>
+
+<FirstTime title="Practice a live API test-design question">
+<StepChecklist steps={[
+  { text: "Pick a real or imagined endpoint - e.g. POST /orders", detail: "Something with an obvious happy path." },
+  { text: "State the happy-path test out loud first", detail: "Valid input, expected status code, expected response shape." },
+  { text: "Add at least one negative case and one boundary case, unprompted", detail: "Missing required field, invalid auth, a duplicate submission, an empty array where one item is expected." },
+  { text: "State whether the method is idempotent and what that implies for retries", detail: "Confirm you can explain the retry-safety consequence, not just recite the definition." },
+]}/>
+</FirstTime>
+
+<WhenItBreaks items={[
+  { symptom: "A candidate lists status codes correctly but can't explain what a client should do differently for each.", fix: "Practice explaining status codes as instructions to the caller, not just numbers - 429 means back off and retry later, 403 means don't retry with different credentials, and so on." },
+  { symptom: "A test-design answer covers only the happy path even when asked to 'design tests' broadly.", fix: "Build the habit of stating at least one negative and one boundary case unprompted, every time - interviewers frequently judge this instinct specifically." },
+  { symptom: "A candidate insists a real API 'is wrong' for not following strict REST conventions.", fix: "Acknowledge that most production APIs deviate from textbook REST in some way, and reason about the actual contract in front of you rather than insisting on purity." },
+]}/>
+
+<WhereToCheck>
+- Any API test-design answer, specifically for at least one negative or boundary case stated without being prompted.
+- Status code explanations, checked for whether they describe client behavior, not just a memorized number-to-meaning table.
+- [[interviews/technical-rounds/automation-and-coding-questions]] for the same live-reasoning discipline applied to UI automation instead of an API contract.
+- [[api-testing-fundamentals/status-codes-and-rest/status-code-families]] for the underlying status-code semantics a technical round question assumes are already solid.
+- [[api-and-modern-security/rest-api-attacks/mass-assignment]] for a security-flavored API question type that tests a related but distinct skill - trust boundaries, not just correctness.
+</WhereToCheck>
+
+<WorkedExample title="an idempotency question that separated a strong answer from a weak one">
+1. An interviewer asks: "a mobile client's network drops right after it sends POST /payments, and the
+   app automatically retries the request - what could go wrong, and how would you test for it?"
+2. A weak answer stops at "the payment might fail and need a retry," missing the actual risk entirely.
+3. A stronger answer identifies that POST is not idempotent - if the original request actually reached
+   the server and succeeded before the network dropped, the automatic retry could create a second
+   charge for the same purchase.
+4. The candidate proposes a concrete test: send the same POST twice in a row with an identical
+   idempotency key (if supported) or payload, and assert only one payment record was created - plus a
+   variant with no idempotency key to confirm the double-charge risk is real without one.
+5. The interviewer notes this answer demonstrated actual API design understanding, not just REST
+   vocabulary - the kind of judgment a purely definitional answer about HTTP methods wouldn't reveal.
+</WorkedExample>
+
+<Quiz question="According to this note, why does idempotency matter specifically for automatic retries on a flaky network?" options={[
+  "It doesn't matter in practice - modern APIs handle all retries safely by default",
+  "A retry on a non-idempotent method like POST can produce a second, unintended effect (like a duplicate charge) if the original request actually succeeded before the network failure was detected",
+  "Idempotency only affects how fast a request completes, not its correctness",
+  "It only matters for GET requests, which are the only method ever retried automatically"
+]} answer={1} explain="Idempotent methods (GET, PUT, DELETE) are safe to retry because repeating them produces the same end state either way. POST is not idempotent by specification - if a client's retry logic can't tell whether the original request actually succeeded before the network dropped, blindly retrying a non-idempotent POST risks creating a second, unintended effect, like charging a payment twice for what the user experienced as a single action." />
+
+<Flashcards cards={[
+  { front: "An API interview question", back: "Checks whether a candidate understands the client-server contract in practice - HTTP semantics, status codes as signals, and test design beyond the happy path - not just REST terminology recall." },
+  { front: "Idempotent methods", back: "GET, PUT, DELETE, HEAD, and OPTIONS are specified as idempotent - repeating the same call produces the same end state. POST is not, making it risky to auto-retry blindly." },
+  { front: "Status codes as instructions, not trivia", back: "401 means retry with authentication; 403 means don't retry with different credentials; 429 means back off and retry later; 500 means the problem is server-side. Each implies different client behavior." },
+  { front: "Why test-design answers should include a negative case unprompted", back: "Interviewers frequently judge this instinct specifically - a happy-path-only answer, even if technically correct, signals the candidate isn't naturally thinking past the successful case." },
+]}/>
+
+<Challenge>Pick a real or imagined API endpoint. State its happy-path test, then add one negative case and one boundary case out loud, and explain whether the method is safe to auto-retry on a flaky network.</Challenge>
+<AskCommunity prompt="I can explain idempotency and status codes fine in the abstract, but during a live interview I default to happy-path-only test design unless the interviewer specifically prompts me for edge cases. How do you build the habit of volunteering negative cases without it feeling forced or rehearsed?" />
+
+<Resources links={[
+  { href: "https://www.geeksforgeeks.org/software-testing/api-testing-interview-questions/", title: "GeeksforGeeks — Top API Testing Interview Questions and Answers", kind: "read" },
+  { href: "https://katalon.com/resources-center/blog/web-api-testing-interview-questions", title: "Katalon — Top API Testing Interview Questions", kind: "read" },
+  { href: "https://www.youtube.com/watch?v=Qgxkx2IzUDM", title: "API Testing Interview Questions & Answers || Part 1 (Watch This Before Interview)", kind: "watch" },
+]}/>
+<Video href="https://www.youtube.com/watch?v=Qgxkx2IzUDM" title="API Testing Interview Questions & Answers || Part 1 (Watch This Before Interview)" minutes={13} />
+
+<Takeaways points={[
+  "An API interview question tests whether REST concepts were actually used to verify something real, not just memorized as definitions.",
+  "Status codes are instructions to the client, not trivia - explain what a caller should do differently for a 401 vs. 403 vs. 429.",
+  "Idempotency is a reliable signal of real understanding - GET/PUT/DELETE are safe to retry, POST generally is not, and that matters for retry logic.",
+  "Always volunteer a negative and a boundary case when asked to design a test - interviewers judge this instinct as much as the happy-path answer.",
+  "Most real-world APIs deviate from strict REST somewhere - reason about the actual contract in front of you rather than insisting on textbook purity.",
+]}/>
+<Complete xp={10} />

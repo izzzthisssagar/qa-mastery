@@ -2676,10 +2676,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "technical-rounds",
         title: "Technical rounds",
         topics: [
-          { slug: "automation-and-coding-questions", title: "Automation & coding questions", planned: true },
-          { slug: "sql-questions", title: "SQL questions", planned: true },
-          { slug: "api-questions", title: "API questions", planned: true },
-          { slug: "take-home-assignments", title: "Take-home assignments", planned: true },
+          { slug: "automation-and-coding-questions", title: "Automation & coding questions" },
+          { slug: "sql-questions", title: "SQL questions" },
+          { slug: "api-questions", title: "API questions" },
+          { slug: "take-home-assignments", title: "Take-home assignments" },
         ],
       },
       {
