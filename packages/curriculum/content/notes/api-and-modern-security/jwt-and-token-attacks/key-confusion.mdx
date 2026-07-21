@@ -1,0 +1,485 @@
+---
+title: "Key confusion"
+summary: "RS256 signs with a private key and verifies with a public one - two different keys, two different powers. A verifier that lets the token's own alg header switch it into HMAC mode can be fed the (often public) RSA key as an HMAC secret, forging a valid signature."
+tags: ["api-and-modern-security", "jwt-and-token-attacks", "track-c"]
+updated: "2026-07-21"
+related:
+  - "api-and-modern-security/jwt-and-token-attacks/alg-none-and-weak-secrets"
+  - "api-testing-fundamentals/auth-manually/bearer-and-jwt"
+  - "api-and-modern-security/owasp-api-security-top-10-2023/broken-auth-for-apis"
+---
+
+<Hook>
+RS256 and HS256 are both valid JWT signing algorithms, and both produce a signature that looks, structurally,
+identical - a base64url blob after the second dot. But the two algorithms rest on a completely different
+kind of secret. HS256 is symmetric: one shared key both signs and verifies, and that key must never leave
+the server. RS256 is asymmetric: a PRIVATE key signs, and a completely different PUBLIC key verifies -
+and that public key is often meant to be shared freely, published at a `/.well-known/jwks.json` endpoint or
+baked into a mobile app. Key confusion happens when a server's generic verification function trusts the
+token's own header to decide HOW to check the signature, and an attacker sets that header to HS256 on a
+server that only ever configured an RSA key pair. The verifier, following the token's instructions, treats
+the RSA PUBLIC key - the one it was fine handing out - as if it were a symmetric HMAC secret. Anyone who
+has that public key, which is to say potentially anyone at all, can now forge a validly-signed token.
+</Hook>
+
+<Callout type="analogy">
+The photo below shows a wax seal being pressed, next to two envelopes already sealed with it. Look at what
+each part of this scene actually proves. The metal die at the head of the stamp is the one piece nobody else
+has - only whoever holds this specific, physically unique die can press a genuinely NEW seal into fresh wax.
+That is the private key: it signs, and nothing else can reproduce a new, valid signature without it. The
+finished impression on each envelope is a completely different thing - a pattern that anyone who has ever
+received a sealed letter has already seen, freely recognizable, meant to be looked at and compared. That is
+the public key: shared on purpose, useful for confirming a seal LOOKS right, never capable of producing a
+new one on its own. Now picture a careless clerk whose entire authentication process is "does this wax match
+the pattern I have on file" - never checking who pressed it, just comparing the visible design. That clerk
+has confused the public, freely-recognizable pattern for the private, one-of-a-kind die - and anyone who
+has ever seen a genuine seal can now press a passable fake with nothing more than candle wax and a memory of
+what the pattern looks like.
+</Callout>
+
+<Term define="Key confusion (also called algorithm confusion) is a JWT forgery technique that exploits a verifier which lets the token's OWN alg header select between fundamentally different verification mechanisms, when the server was actually configured for only one of them. RS256 is an asymmetric algorithm: a PRIVATE key signs a token, and a mathematically related but distinct PUBLIC key verifies it - the public key is commonly meant to be shared or published, since possessing it only allows verification, never signing. HS256 is a symmetric algorithm: ONE key both signs and verifies, and it must remain secret on the server. A generic verify() implementation that inspects the token's alg header to decide which code path to run - RSA verification for RS256, HMAC computation for HS256 - and is configured with a single piece of key material intended only for RS256 verification, can be attacked by an adversary who sets alg to HS256: the verifier's HMAC branch then uses that RSA PUBLIC key text directly as the HMAC secret. Since the public key is, by design, not actually secret, anyone who has obtained it - from a JWKS endpoint, a mobile app binary, or any place it was legitimately published - can compute a valid-looking HMAC signature over a forged payload, with no knowledge of the real RSA private key at all.">Key confusion</Term>
+
+## Why this is not a weak-secret problem wearing an RS256 label
+
+- **The bug is entirely in verifier logic, not in the strength of either key.** The RSA private key can be
+  4096 bits and genuinely never leave the server; the bug still exists if the verify function lets the
+  token's header pick HMAC mode and hands that function the public key as its secret. No amount of RSA key
+  strength defends against this, because RSA verification never actually runs.
+- **The public key being public is not the mistake - using it as if it were not public is.** RS256 is
+  designed around the public key being shareable. The vulnerability only appears when a piece of code
+  written for one purpose (verify an RSA signature using this as a public key) gets reused for a different
+  purpose (verify an HMAC signature using this as a secret) because the token itself was allowed to choose
+  which purpose applies.
+- **This is a real, catalogued class of bug, not a theoretical exercise.** It has appeared in production JWT
+  libraries and real applications, and it is well-documented enough that PortSwigger's Web Security Academy
+  runs dedicated labs on exactly this failure mode under the name "algorithm confusion."
+- **The fix has nothing to do with picking a "better" algorithm.** RS256 and HS256 are both legitimate,
+  secure choices. The fix is pinning each configured key to exactly the one algorithm it was issued for,
+  checked server-side, so the token's own header can never select a different verification mode than the
+  one this specific key material was meant for.
+
+<Callout type="tip">
+Test for key confusion on this platform's own sandbox by first locating any publicly available signing key -
+a JWKS endpoint, a key embedded in a mobile app or SPA bundle - for a service using RS256. Take a legitimate
+token, change its header's alg to HS256, and compute an HMAC-SHA256 signature over the header and payload
+using the exact text of that public key as the HMAC secret. If the server accepts the result, you have
+confirmed the verifier lets the token's own header switch verification modes - a critical finding, since the
+public key needed to reproduce it may already be available to anyone.
+</Callout>
+
+<Callout type="mistake">
+A team hears "key confusion" and assumes the fix is choosing HS256 over RS256, or vice versa, as if one
+algorithm were simply safer. Both are legitimate, well-understood algorithms when used correctly - the bug
+is never about which one was chosen, it is about a verifier that lets the TOKEN pick which one to run,
+against key material that was only ever configured for one of them. A server using RS256 exclusively, with a
+verifier that has an allow-list of exactly `["RS256"]` and refuses anything else regardless of what a
+token's header claims, is not vulnerable to this - not because RS256 is inherently safer, but because the
+algorithm selection was pinned server-side instead of left to the token.
+</Callout>
+
+{/* IMAGE: a wax seal stamp with a metal die being pressed near melted wax, next to two envelopes already closed with matching red and green wax seal impressions, and a lit candle in the background */}
+<HotspotImage
+  src="/notes/api-and-modern-security/jwt-and-token-attacks/key-confusion.jpg"
+  alt="A wooden-handled wax seal stamp with a metal die near a stick of melted sealing wax and a lit candle, beside two envelopes already closed with red and green wax seal impressions"
+  credit="Sealing wax on letters - Simon A. Eugster (LivingShadow), Wikimedia Commons, CC BY-SA 3.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Sealing_wax_on_letters.jpg"
+  pins={[
+    { x: 75, y: 52, label: "The metal die - the one piece nobody else has", desc: "Only the holder of this exact engraved die can press a genuinely NEW, valid seal. This is what an RS256 private key is: it signs, and nothing else can reproduce a new valid signature without it." },
+    { x: 28, y: 58, label: "The finished impression - recognizable by anyone, reproducible by no one who lacks the die", desc: "Everyone who has ever received a sealed letter has seen this exact pattern. Recognizing it is not the same as being able to make a new one - which is exactly how an RS256 public key is meant to work: freely shareable, useful only for checking, never for signing." },
+    { x: 60, y: 56, label: "The soft wax before stamping - where the confusion attack actually lives", desc: "A seal only means something at the moment the die presses into wax the die-holder controls. A verifier that instead compares 'does this look like the known pattern' - treating a publicly-seen design as if it were the secret ingredient - is exactly the RS256-to-HS256 confusion bug: a server's own public key, fed back in as an HMAC secret." },
+    { x: 22, y: 70, label: "A second, different-colored seal - one visible pattern, multiple hands", desc: "Two envelopes here each carry a wax seal. To anyone glancing at either, the visible pattern alone is what reads as 'authentic' - which is precisely the asymmetric-key rule a key-confusion bug throws away: looking right and being genuinely signed are not the same fact." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Testing an RS256 endpoint for algorithm confusion - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Confirm authorization and locate a publicly available signing key", desc: "A JWKS endpoint, a key baked into a mobile app or web bundle - for an RS256-signed service in this platform's own sandbox." },
+    { label: "Take a legitimate RS256 token and change its header's alg to HS256", desc: "Keep the payload; only the algorithm name changes. This is the request the token's own header will make of the verifier." },
+    { label: "Sign it with HMAC-SHA256, using the public key's exact text as the secret", desc: "Compute this entirely offline - no server contact needed until the final submission." },
+    { label: "Submit the forged token and observe the result", desc: "Acceptance confirms the verifier let the token's header switch it into HMAC mode against key material that was only ever meant for RSA verification - a critical finding." },
+  ]}
+/>
+
+Here is that same attack in runnable form - real RSA math needs a crypto library we deliberately do not
+pull in here, so the ONE property that actually matters is modeled honestly instead: an RS256 signature can
+only be produced by whoever holds the private key, and the public key is meant to be freely shareable.
+
+<CodePlayground
+  language="python"
+  title="Run it - the RS256-to-HS256 key confusion forgery (Python)"
+  code={`# RS256-vs-HS256 algorithm confusion, modeled with standard-library HMAC only.
+# Real RSA math needs a crypto library we deliberately don't pull in here; the
+# ONE property that actually matters for this bug is modeled honestly instead:
+# an RS256 signature can only be produced by whoever holds PRIVATE_KEY, and
+# PUBLIC_KEY is - by design, in real RS256 - freely shareable and often
+# published (a JWKS endpoint, a mobile app's embedded config).
+
+import base64, hashlib, hmac, json
+
+def b64url(data):
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+def decode_part(part):
+    padded = part + "=" * (-len(part) % 4)
+    return json.loads(base64.urlsafe_b64decode(padded))
+
+PRIVATE_KEY = "RSA-PRIVATE-KEY-NEVER-LEAVES-THE-AUTH-SERVER"
+PUBLIC_KEY = "-----BEGIN PUBLIC KEY-----MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A-----END PUBLIC KEY-----"
+
+def rs256_sign(private_key, message):
+    # Toy stand-in for real RSA signing: only computable with the private
+    # key. A real implementation uses RSA math; this uses a keyed hash of
+    # the private key material as a stand-in for "only the private key
+    # holder could have produced this exact value."
+    return hashlib.sha256((private_key + "|" + message).encode()).hexdigest()
+
+def build_rs256_token(payload):
+    header = {"alg": "RS256", "typ": "JWT"}
+    h = b64url(json.dumps(header, separators=(",", ":")).encode())
+    p = b64url(json.dumps(payload, separators=(",", ":")).encode())
+    sig = rs256_sign(PRIVATE_KEY, h + "." + p)
+    return h + "." + p + "." + sig, h + "." + p, sig
+
+def build_hs256_token(payload, secret):
+    header = {"alg": "HS256", "typ": "JWT"}
+    h = b64url(json.dumps(header, separators=(",", ":")).encode())
+    p = b64url(json.dumps(payload, separators=(",", ":")).encode())
+    sig = b64url(hmac.new(secret.encode(), (h + "." + p).encode(), hashlib.sha256).digest())
+    return h + "." + p + "." + sig
+
+def generic_verify_vulnerable(token, key_material, rs256_registry):
+    h, p, s = token.split(".")
+    alg = decode_part(h).get("alg")
+    message = h + "." + p
+    if alg == "HS256":
+        # BUG: whatever key material this endpoint was configured with
+        # (here, the RSA PUBLIC key - meant only for RS256 verification)
+        # gets used directly as an HMAC secret, because the token's OWN
+        # header picked this code branch.
+        expected = b64url(hmac.new(key_material.encode(), message.encode(), hashlib.sha256).digest())
+        return hmac.compare_digest(expected, s), "checked as HMAC using the configured key material as the secret"
+    if alg == "RS256":
+        ok = rs256_registry.get(message) == s
+        return ok, "checked against the registry of signatures the real private key produced"
+    return False, "unknown alg"
+
+def generic_verify_secure(token, key_material, rs256_registry, allowed_algs):
+    h, p, s = token.split(".")
+    alg = decode_part(h).get("alg")
+    if alg not in allowed_algs:
+        return False, "rejected - alg '" + str(alg) + "' not on this endpoint's allow-list (RS256 only)"
+    message = h + "." + p
+    ok = rs256_registry.get(message) == s
+    return ok, ("accepted - genuine RSA signature" if ok else "rejected - signature not in registry")
+
+
+def run():
+    rs256_registry = {}
+
+    print("Setup: the auth server issues a normal, correctly-signed RS256 token:")
+    legit_token, legit_message, legit_sig = build_rs256_token({"sub": "user_9", "role": "viewer"})
+    rs256_registry[legit_message] = legit_sig
+    print("  " + legit_token)
+    print()
+
+    print("Part 1 - the endpoint verifies its own legitimate token (expected to work):")
+    ok1, msg1 = generic_verify_vulnerable(legit_token, PUBLIC_KEY, rs256_registry)
+    print("  vulnerable verify(): " + str(ok1) + " - " + msg1)
+    print()
+
+    print("Part 2 - the attack: PUBLIC_KEY is meant to be shared, so an attacker already has it.")
+    print("Forge a token with role=admin, but set alg to HS256 and sign with PUBLIC_KEY as the")
+    print("HMAC secret - no knowledge of PRIVATE_KEY required at all:")
+    forged_token = build_hs256_token({"sub": "user_9", "role": "admin"}, PUBLIC_KEY)
+    print("  " + forged_token)
+    ok2, msg2 = generic_verify_vulnerable(forged_token, PUBLIC_KEY, rs256_registry)
+    print("  vulnerable verify(): " + str(ok2) + " - " + msg2)
+    print("    -> the token's own alg header switched the verifier into HMAC mode, and the")
+    print("       'secret' it used was the RSA PUBLIC key - which was never a secret at all.")
+    print()
+
+    print("Part 3 - the fix: pin the algorithm to what this key was actually configured for.")
+    ok3, msg3 = generic_verify_secure(forged_token, PUBLIC_KEY, rs256_registry, {"RS256"})
+    print("  secure verify() on the forged token: " + str(ok3) + " - " + msg3)
+    ok4, msg4 = generic_verify_secure(legit_token, PUBLIC_KEY, rs256_registry, {"RS256"})
+    print("  secure verify() on the legitimate token: " + str(ok4) + " - " + msg4)
+    print()
+    print("The vulnerability was never about a weak secret - it was letting the token's own")
+    print("header decide HOW to verify it. Pin each key to exactly one algorithm, server-side,")
+    print("and a public key can never be replayed back as if it were a symmetric secret.")
+
+run()`}
+/>
+
+The same forgery and the same fix in Java - identical keys, identical outcome:
+
+<CodePlayground
+  language="java"
+  title="Run it - the RS256-to-HS256 key confusion forgery (Java)"
+  code={`import java.util.*;
+import java.security.MessageDigest;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
+public class Main {
+    static final String PRIVATE_KEY = "RSA-PRIVATE-KEY-NEVER-LEAVES-THE-AUTH-SERVER";
+    static final String PUBLIC_KEY = "-----BEGIN PUBLIC KEY-----MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A-----END PUBLIC KEY-----";
+
+    static String b64url(byte[] data) {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(data);
+    }
+
+    static String sha256Hex(String s) throws Exception {
+        MessageDigest md = MessageDigest.getInstance("SHA-256");
+        byte[] digest = md.digest(s.getBytes("UTF-8"));
+        StringBuilder sb = new StringBuilder();
+        for (byte b : digest) sb.append(String.format("%02x", b));
+        return sb.toString();
+    }
+
+    static byte[] hmacSha256(String secret, String message) throws Exception {
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(secret.getBytes("UTF-8"), "HmacSHA256"));
+        return mac.doFinal(message.getBytes("UTF-8"));
+    }
+
+    // Toy stand-in for real RSA signing: only computable with the private
+    // key. A real implementation uses RSA math; this uses a keyed hash of
+    // the private key material as a stand-in for "only the private key
+    // holder could have produced this exact value."
+    static String rs256Sign(String privateKey, String message) throws Exception {
+        return sha256Hex(privateKey + "|" + message);
+    }
+
+    static String[] buildRs256Token(String payloadJson) throws Exception {
+        String headerJson = "{\\"alg\\":\\"RS256\\",\\"typ\\":\\"JWT\\"}";
+        String h = b64url(headerJson.getBytes("UTF-8"));
+        String p = b64url(payloadJson.getBytes("UTF-8"));
+        String sig = rs256Sign(PRIVATE_KEY, h + "." + p);
+        return new String[]{h + "." + p + "." + sig, h + "." + p, sig};
+    }
+
+    static String buildHs256Token(String payloadJson, String secret) throws Exception {
+        String headerJson = "{\\"alg\\":\\"HS256\\",\\"typ\\":\\"JWT\\"}";
+        String h = b64url(headerJson.getBytes("UTF-8"));
+        String p = b64url(payloadJson.getBytes("UTF-8"));
+        String sig = b64url(hmacSha256(secret, h + "." + p));
+        return h + "." + p + "." + sig;
+    }
+
+    static String algOf(String token) {
+        String h = token.split("\\\\.")[0];
+        return h.equals(b64urlSafe("{\\"alg\\":\\"RS256\\",\\"typ\\":\\"JWT\\"}")) ? "RS256" : "HS256";
+    }
+
+    static String b64urlSafe(String s) {
+        try { return b64url(s.getBytes("UTF-8")); } catch (Exception e) { return ""; }
+    }
+
+    static boolean constantTimeEquals(String a, String b) {
+        return MessageDigest.isEqual(a.getBytes(), b.getBytes());
+    }
+
+    static class Result { boolean ok; String msg; Result(boolean ok, String msg) { this.ok = ok; this.msg = msg; } }
+
+    static Result genericVerifyVulnerable(String token, String keyMaterial, Map<String, String> rs256Registry) throws Exception {
+        String[] parts = token.split("\\\\.", -1);
+        String h = parts[0], p = parts[1], s = parts[2];
+        String alg = algOf(token);
+        String message = h + "." + p;
+        if (alg.equals("HS256")) {
+            // BUG: whatever key material this endpoint was configured with
+            // (here, the RSA PUBLIC key - meant only for RS256 verification)
+            // gets used directly as an HMAC secret, because the token's OWN
+            // header picked this code branch.
+            String expected = b64url(hmacSha256(keyMaterial, message));
+            return new Result(constantTimeEquals(expected, s), "checked as HMAC using the configured key material as the secret");
+        }
+        if (alg.equals("RS256")) {
+            boolean ok = s.equals(rs256Registry.get(message));
+            return new Result(ok, "checked against the registry of signatures the real private key produced");
+        }
+        return new Result(false, "unknown alg");
+    }
+
+    static Result genericVerifySecure(String token, String keyMaterial, Map<String, String> rs256Registry, Set<String> allowedAlgs) {
+        String[] parts = token.split("\\\\.", -1);
+        String h = parts[0], p = parts[1], s = parts[2];
+        String alg = algOf(token);
+        if (!allowedAlgs.contains(alg)) {
+            return new Result(false, "rejected - alg '" + alg + "' not on this endpoint's allow-list (RS256 only)");
+        }
+        String message = h + "." + p;
+        boolean ok = s.equals(rs256Registry.get(message));
+        return new Result(ok, ok ? "accepted - genuine RSA signature" : "rejected - signature not in registry");
+    }
+
+    public static void main(String[] args) throws Exception {
+        Map<String, String> rs256Registry = new HashMap<>();
+
+        System.out.println("Setup: the auth server issues a normal, correctly-signed RS256 token:");
+        String[] legit = buildRs256Token("{\\"sub\\":\\"user_9\\",\\"role\\":\\"viewer\\"}");
+        String legitToken = legit[0], legitMessage = legit[1], legitSig = legit[2];
+        rs256Registry.put(legitMessage, legitSig);
+        System.out.println("  " + legitToken);
+        System.out.println();
+
+        System.out.println("Part 1 - the endpoint verifies its own legitimate token (expected to work):");
+        Result r1 = genericVerifyVulnerable(legitToken, PUBLIC_KEY, rs256Registry);
+        System.out.println("  vulnerable verify(): " + (r1.ok ? "True" : "False") + " - " + r1.msg);
+        System.out.println();
+
+        System.out.println("Part 2 - the attack: PUBLIC_KEY is meant to be shared, so an attacker already has it.");
+        System.out.println("Forge a token with role=admin, but set alg to HS256 and sign with PUBLIC_KEY as the");
+        System.out.println("HMAC secret - no knowledge of PRIVATE_KEY required at all:");
+        String forgedToken = buildHs256Token("{\\"sub\\":\\"user_9\\",\\"role\\":\\"admin\\"}", PUBLIC_KEY);
+        System.out.println("  " + forgedToken);
+        Result r2 = genericVerifyVulnerable(forgedToken, PUBLIC_KEY, rs256Registry);
+        System.out.println("  vulnerable verify(): " + (r2.ok ? "True" : "False") + " - " + r2.msg);
+        System.out.println("    -> the token's own alg header switched the verifier into HMAC mode, and the");
+        System.out.println("       'secret' it used was the RSA PUBLIC key - which was never a secret at all.");
+        System.out.println();
+
+        System.out.println("Part 3 - the fix: pin the algorithm to what this key was actually configured for.");
+        Result r3 = genericVerifySecure(forgedToken, PUBLIC_KEY, rs256Registry, new HashSet<>(Arrays.asList("RS256")));
+        System.out.println("  secure verify() on the forged token: " + (r3.ok ? "True" : "False") + " - " + r3.msg);
+        Result r4 = genericVerifySecure(legitToken, PUBLIC_KEY, rs256Registry, new HashSet<>(Arrays.asList("RS256")));
+        System.out.println("  secure verify() on the legitimate token: " + (r4.ok ? "True" : "False") + " - " + r4.msg);
+        System.out.println();
+        System.out.println("The vulnerability was never about a weak secret - it was letting the token's own");
+        System.out.println("header decide HOW to verify it. Pin each key to exactly one algorithm, server-side,");
+        System.out.println("and a public key can never be replayed back as if it were a symmetric secret.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: attempt an algorithm-confusion forgery in an authorized sandbox">
+<StepChecklist
+  steps={[
+    { text: "Get written authorization and locate a publicly available signing key", detail: "This platform's own sandbox, an RS256-signed service - check for a JWKS endpoint or a key embedded in a client bundle." },
+    { text: "Take a legitimate token and change its header's alg to HS256", detail: "Keep the payload intact; only the algorithm name in the header changes." },
+    { text: "Compute the HMAC-SHA256 signature using the public key's exact text as the secret", detail: "Entirely offline - no server contact needed until you submit the final forged token." },
+    { text: "Submit it and observe the result", detail: "Acceptance is a critical finding: the verifier let the token pick its own verification mode against key material only ever meant for one specific algorithm." },
+  ]}
+/>
+You can now test the one JWT attack that defeats even a perfectly strong, perfectly private RSA key - because
+it never actually uses that key at all.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A token with alg changed to HS256, signed using an RS256 service's public key as the HMAC secret, is accepted.",
+      fix: "The verifier lets the token's own header select its verification mode. Fix by pinning each configured key to exactly the algorithm it was issued for - an explicit, server-side allow-list (for example, only RS256) that the token's header can never override, checked before any signature logic runs.",
+    },
+    {
+      symptom: "A team responds to this finding by rotating the RSA key pair.",
+      fix: "Rotating the key does not fix a verifier-logic bug - a new key pair is just as vulnerable to the same confusion if the verify function still branches on the token's own alg claim. The fix is the allow-list, not a new key.",
+    },
+    {
+      symptom: "A team asks whether switching from RS256 to HS256 (or the reverse) would resolve this.",
+      fix: "Neither algorithm is the problem - both are secure when the verifier enforces exactly one of them server-side. Switching algorithms without also pinning the allow-list simply moves the same bug to a different label.",
+    },
+    {
+      symptom: "The public key needed to reproduce this attack turns out to be published (a JWKS endpoint, a mobile app bundle) - and the team treats that publication itself as the vulnerability.",
+      fix: "Publishing an RS256 public key is normal, intended behavior - that is what asymmetric verification is for. The actual bug is entirely server-side: a verifier willing to use that same key as an HMAC secret when the token's header says to. Do not recommend un-publishing the key; recommend pinning the algorithm.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Any RS256-signed service with a discoverable public key** - a JWKS endpoint, a key embedded in a
+  client bundle - is a candidate for this exact forgery; confirm the verifier does not honor an alg
+  switch to HS256.
+- **The verifier's algorithm allow-list, if you can inspect server config or source** - a correct fix pins
+  exactly one algorithm per key; a generic verify() call that accepts whatever the token's header names is
+  the vulnerable shape.
+- **The exact rejection reason on a fixed endpoint** - a correctly pinned verifier names the disallowed
+  algorithm in its rejection; confirm it fails closed rather than falling through to some other check.
+- **[[api-and-modern-security/jwt-and-token-attacks/alg-none-and-weak-secrets]]** - a different way a
+  verifier's own algorithm-trusting logic gets exploited, this time by skipping signature checking
+  entirely rather than switching verification modes.
+- **[[api-testing-fundamentals/auth-manually/bearer-and-jwt]]** - the decode-and-tamper basics this note
+  assumes: how to read and edit a token's header before attempting this forgery.
+</WhereToCheck>
+
+<WorkedExample title="forging an admin token from a published public key on BuggyAPI">
+1. A tester, authorized to test this platform's own BuggyAPI sandbox, finds that its auth service signs
+   tokens with RS256 and publishes its public key at a JWKS-style endpoint - normal, intended behavior for
+   asymmetric verification.
+2. Using a tester-issued token as a template, they change the header's `alg` from `RS256` to `HS256`, keep
+   the payload, but edit `role` from `viewer` to `admin`.
+3. They compute an HMAC-SHA256 signature over the new header and payload, using the exact published public
+   key text as the HMAC secret - entirely offline, no server contact needed for this step.
+4. They submit the forged token as a bearer credential. The endpoint responds `200`, treating the request as
+   an authenticated admin - the verifier's HMAC branch matched the signature against the same public key
+   text used to forge it.
+5. The finding is filed precisely: "RS256-to-HS256 algorithm confusion - the verifier's algorithm is
+   selected by the token's own header rather than pinned server-side to RS256, allowing a token forged with
+   the service's own published public key as an HMAC secret," with the forged token, the exact public key
+   source, and the accepted admin response as evidence.
+</WorkedExample>
+
+<Quiz
+  question="A service uses RS256 and publishes its public key at a JWKS endpoint - completely normal for asymmetric verification. A tester forges a token by setting alg to HS256 and signing it with that published public key as the HMAC secret, and the server accepts it. What is the actual root cause?"
+  options={[
+    "Publishing the public key was itself the mistake - RS256 public keys should never be shared",
+    "The verifier lets the token's own alg header choose its verification mode, so it ran an HMAC check using key material that was only ever meant for RSA verification - the fix is pinning the algorithm server-side, not un-publishing the key",
+    "RS256 is an inherently insecure algorithm and the service should switch to HS256",
+    "The public key was too short, and a longer RSA key would have prevented this"
+  ]}
+  answer={1}
+  explain="Publishing an RS256 public key is normal and intended - that is precisely what asymmetric verification is designed to allow, since the public key can only verify, never sign. The actual vulnerability is entirely server-side: a generic verify() function that inspects the token's own alg header and branches into an HMAC code path using whatever key material it has, even when that material (the RSA public key) was only ever configured for RSA verification. The fix is pinning each key to the one algorithm it was issued for, checked server-side, independent of what the token's header claims. Option one incorrectly blames normal, intended key publication; option three misdiagnoses the bug as an algorithm-strength problem when both algorithms are secure when correctly enforced; option four is irrelevant, since the attack never uses RSA math at all - the public key is only ever used as literal HMAC secret bytes."
+/>
+
+<Flashcards
+  cards={[
+    { front: "RS256 (asymmetric)", back: "A PRIVATE key signs; a different PUBLIC key verifies. The public key is commonly meant to be shared or published - possessing it only allows verification, never signing." },
+    { front: "HS256 (symmetric)", back: "ONE key both signs and verifies. That key must remain secret on the server - if it is ever used as though it were public, forgery becomes trivial." },
+    { front: "Key confusion / algorithm confusion", back: "A verifier lets the token's own alg header select its verification mode. Setting alg to HS256 against a server configured only for RS256 can make the verifier use the (often published) RSA public key as an HMAC secret." },
+    { front: "Why this is not a weak-secret bug", back: "The RSA key pair can have arbitrary strength - the bug is entirely in verifier logic letting the token pick HOW to verify, not in how guessable any secret is. RSA verification never actually runs in the exploited path." },
+    { front: "The correct fix", back: "Pin each configured key to exactly the one algorithm it was issued for, as a server-side allow-list checked before any signature logic runs - never let the token's own header select the verification mode." },
+  ]}
+/>
+
+<Challenge>
+On this platform's own BuggyAPI sandbox, using a tester-issued token from an RS256-signed service: locate
+the service's public key (a JWKS-style endpoint, or a key embedded in a client bundle, if the sandbox
+exposes one). Take a legitimate token, change its header's alg to HS256, edit a claim to something you
+should not be able to claim (an elevated role), and compute an HMAC-SHA256 signature using the exact public
+key text as the secret. Submit the forged token and record whether it is accepted. Write up the result
+precisely, naming the verifier's algorithm-selection logic as the root cause rather than blaming the RSA
+key's strength or the fact that the public key was discoverable at all.
+</Challenge>
+
+<AskCommunity prompt="I've started testing RS256 services specifically for algorithm confusion: locating a published public key, forging a token with alg switched to HS256 and signed using that public key as the HMAC secret, and checking whether the server accepts it. For people who test JWT-based auth regularly: how often have you actually found this in the wild versus in deliberately vulnerable labs, and which JWT libraries or configurations have you seen make this mistake most often?">
+I would like a better sense of how common this actually is outside of dedicated training labs like
+PortSwigger's Web Security Academy, and whether there are specific library defaults or migration patterns
+(for example, a service switching from HS256 to RS256 without updating its verify() call) that tend to
+introduce this bug in practice.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://datatracker.ietf.org/doc/html/rfc7519", title: "RFC 7519 - JSON Web Token (JWT)", kind: "read" },
+    { href: "https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_Cheat_Sheet.html", title: "OWASP - JSON Web Token Cheat Sheet", kind: "read" },
+    { href: "https://portswigger.net/web-security/jwt/algorithm-confusion", title: "PortSwigger Web Security Academy - JWT algorithm confusion attacks", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=d-X9CmpnJdE" title="Intigriti - JWT Authentication Bypass via Algorithm Confusion" minutes={9} />
+
+<Takeaways
+  points={[
+    "RS256 is asymmetric (a private key signs, a different public key verifies); HS256 is symmetric (one secret key does both) - they are not interchangeable, and neither is inherently 'more secure' than the other when correctly enforced.",
+    "Key confusion happens when a verifier lets the token's own alg header choose its verification mode, and an attacker switches a service's alg to HS256, feeding its (often published) RSA public key back in as an HMAC secret.",
+    "The RSA private key's strength is irrelevant to this bug - RSA verification never actually runs in the exploited path, which is why this is a verifier-logic bug, not a cryptography-strength bug.",
+    "Publishing an RS256 public key is normal, intended behavior - the fix is never to hide the key, it is pinning the server-side verifier to exactly the algorithm each key was configured for.",
+    "This is a real, catalogued vulnerability class (PortSwigger's Web Security Academy runs dedicated labs on it), not a theoretical exercise - it has appeared in production JWT libraries.",
+    "Test only systems you own or are explicitly, in writing, authorized to test, with tester-issued tokens - never a real target, and stop at the minimal proof needed to demonstrate a finding.",
+  ]}
+/>
+
+<Complete xp={10} />

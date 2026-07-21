@@ -1,0 +1,408 @@
+---
+title: "Scope & audience abuse"
+summary: "aud says which service a token is FOR; scope says what it may DO there. A valid, unexpired, correctly-signed token can still be the wrong token for this call on either axis - and a server that never checks either accepts it anyway."
+tags: ["api-and-modern-security", "jwt-and-token-attacks", "track-c"]
+updated: "2026-07-21"
+related:
+  - "api-and-modern-security/owasp-api-security-top-10-2023/bola-and-bfla"
+  - "api-and-modern-security/jwt-and-token-attacks/expiry-and-replay"
+  - "api-testing-fundamentals/auth-manually/bearer-and-jwt"
+---
+
+<Hook>
+A token can pass every check a tester usually thinks to run - the signature verifies, `exp` has not passed,
+the `sub` claim names a real, authorized user - and still be the wrong token for the exact request it is
+riding on. Two claims exist specifically to answer the two questions signature and expiry never touch:
+`aud` (audience) asks WHICH service this token was actually issued for, and `scope` asks WHAT that service is
+allowed to let it do. A token minted for a read-only booking API, with a `scope` of `read:bookings`, can be
+cryptographically perfect and still have no business being accepted by an admin API, or being allowed to
+call a `delete:bookings` action it was never granted. A server that verifies the signature and checks `exp`
+and stops there has done real work - and skipped the two checks that actually decide whether THIS token
+belongs on THIS call.
+</Hook>
+
+<Callout type="analogy">
+The photo below is a NYC MetroCard, mid-swipe at a subway turnstile. Look at what the card itself actually
+guarantees and what the reader is supposed to check. The card's magnetic stripe carries a specific fare
+product - maybe a single ride, maybe an unlimited weekly pass, maybe a discounted student fare - and that
+detail is exactly what decides what this rider is allowed to do: which gates it should open, which it
+should not. Nothing about the card's outward appearance shows that; a student pass and an unlimited pass
+look identical from across the platform. Now consider a second, completely separate fact: this exact card
+is only meaningful inside ONE transit system. It works at this turnstile because this turnstile belongs to
+the same network the card was issued for - present the identical card, in identical condition, to a
+turnstile in a different city's subway, and it means nothing there, not because the card is invalid, but
+because it was never for that system at all. A turnstile that only checks "is this a well-formed card" and
+skips both of those questions - what fare product is loaded, which system issued it - would wave through
+far more than it should.
+</Callout>
+
+<Term define="aud (audience) and scope are two independent JWT claims that answer two different questions a signature check and an exp check never touch. aud, defined in RFC 7519, identifies the intended recipient(s) of a token - each principal (a specific API, a specific service) that is meant to process it is expected to identify itself against this claim's value, and the token should be rejected by any service that does not find itself listed there. scope, an OAuth 2.0 convention rather than a JWT-spec claim, is typically a space-separated string of granted permissions (read:bookings, delete:bookings) that names what actions the token's holder was actually authorized to perform, independent of which specific object (if any) a request names. A token can have a perfectly valid signature, an exp claim safely in the future, and a legitimate sub identifying a real user, and still be the WRONG token for a given call on either axis: aud abuse is presenting a token to a service it was never issued for, and scope abuse is using a token to invoke an action beyond what it was actually granted - and a server that verifies signature and expiry but never explicitly compares aud and scope against what the current endpoint requires will accept both.">Scope and audience abuse</Term>
+
+## Two claims, two independent questions, one common gap
+
+- **aud answers "is this token even for me."** A token minted by a shared or centralized identity provider,
+  intended for one specific downstream API, should carry that API's identifier in `aud`. Any OTHER service
+  receiving the same token - even one operated by the same company, sharing the same signing key - is
+  expected to check that its own identifier appears in `aud` and reject the token if it does not.
+- **scope answers "what was this token actually granted, once it is for me."** Passing the audience check
+  says a token belongs at this service at all; it says nothing about which of this service's actions the
+  token's holder was authorized to invoke. A token scoped for `read:bookings` clearing the audience check
+  for `booking-api` still has no business succeeding against a `delete:bookings` endpoint on that same API.
+- **A shared signing key across services makes aud abuse trivially easy to miss.** If several internal
+  services all verify tokens with the same key (a common microservices pattern), a token minted for ANY of
+  them will pass signature verification at ALL of them. Without an explicit `aud` check, the fact that
+  verification succeeded gets mistaken for proof the token belongs there.
+- **Scope abuse hides behind a working signature just as easily.** A valid signature proves the token was
+  genuinely issued by the real authorization server - it says nothing at all about what that authorization
+  server actually granted. Only reading and comparing `scope` against what the specific endpoint requires
+  answers that.
+
+<Callout type="tip">
+Test audience abuse by taking a token issued for one service in this platform's own sandbox (BuggyAPI's
+booking endpoints, for example) and presenting that exact, unmodified token to a DIFFERENT service or
+endpoint family that a shared signing key would still cryptographically verify. Test scope abuse separately,
+on a single service: take a token with a narrow, low-privilege scope and call an endpoint that should require
+a broader or different scope than what was granted. Run both as explicit, separate tests on every
+service boundary and every privileged action - a token passing one says nothing about the other.
+</Callout>
+
+<Callout type="mistake">
+A team confirms every incoming token has a valid signature and an unexpired exp, and calls that "full
+authorization enforcement" for a service. Signature and expiry answer "was this genuinely issued by our
+identity provider, and is it still within its time window" - neither one answers "was this token actually
+meant for THIS service" or "was this token actually granted the specific permission this endpoint requires."
+A microservices architecture where several services share one signing key makes this mistake especially
+dangerous: a token minted for a low-privilege, narrowly-scoped internal tool will pass signature and expiry
+checks at every other service sharing that key, and only an explicit aud and scope comparison - checked
+independently, on every service - closes the gap.
+</Callout>
+
+{/* IMAGE: a close-up of a hand swiping a commemorative NYC MetroCard at a subway turnstile card reader */}
+<HotspotImage
+  src="/notes/api-and-modern-security/jwt-and-token-attacks/scope-and-audience-abuse.jpg"
+  alt="A close-up of a hand swiping a NYC MetroCard through a subway turnstile card reader"
+  credit="Swiping a MetroCard - Marc A. Hermann / Metropolitan Transportation Authority, Wikimedia Commons, CC BY 2.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Swiping_a_MetroCard.jpg"
+  pins={[
+    { x: 54, y: 46, label: "The card itself - issued for ONE fare product, not a blank pass", desc: "This exact card was sold as a specific fare product. Nothing about its physical shape says whether it is an unlimited pass, a discounted fare, or a single ride - that detail is data, exactly like a token's scope claim lives in the payload, not in the fact that it 'looks like a valid token.'" },
+    { x: 54, y: 62, label: "The magnetic stripe - where the actual scope is encoded", desc: "Everything the turnstile is willing to grant is written here, not on the card's printed artwork. A reader that only checks 'stripe is present and valid' without reading which fare product it authorizes makes exactly the scope-blind mistake this note is about." },
+    { x: 25, y: 60, label: "The turnstile reader - the one place BOTH scope and audience should be checked", desc: "This specific reader belongs to one specific transit system - the 'audience.' A valid card from a different fare tier, or a similar-looking farecard from an entirely different city's system, should both fail here - one on scope, one on audience - and a reader that only confirms 'recognized card format' catches neither." },
+    { x: 63, y: 25, label: "The rider's hand - trusting possession, same as a bearer token", desc: "Whoever holds this card gets whatever it is encoded to allow, no identity check. That is the exact bearer mechanic every JWT shares - which is why scope and audience, not mere possession of a valid-looking token, have to be what the server actually enforces." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Testing one service for both failures - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Confirm authorization and get tokens scoped for different services", desc: "This platform's own sandbox, tester-owned accounts - ideally one token narrowly scoped for a low-privilege service, one for a higher-privilege one." },
+    { label: "Audience swap: present a token to a DIFFERENT service than it was issued for", desc: "Especially where services share a signing key. A denial is correct; acceptance is an audience-abuse finding." },
+    { label: "Scope swap: use a narrowly-scoped token on a broader action, same service", desc: "Call an endpoint that should require a scope this token was never granted. A denial is correct; success is a scope-abuse finding." },
+    { label: "Report each on its own mechanism", desc: "An audience leak and a scope leak are different root causes, even on the same signing key or the same service - name which comparison was missing." },
+  ]}
+/>
+
+Here is that same pair of independent checks in runnable form - a vulnerable verifier that stops at
+signature and expiry, and a fixed one that also compares aud and scope against what each call requires.
+
+<CodePlayground
+  language="python"
+  title="Run it - an audience checker and a scope checker, side by side (Python)"
+  code={`# aud (audience) and scope claim enforcement - modeled with plain dicts.
+# A token can have a perfectly valid signature and still be unexpired and
+# STILL be the wrong token for this call, on two independent axes: aud says
+# WHICH service it is for, scope says WHAT it is allowed to do there.
+
+def vulnerable_check(claims, now, service_name, required_scope):
+    if now >= claims["exp"]:
+        return False, "rejected - expired"
+    # BUG: a valid signature and an unexpired exp are treated as "fully
+    # authorized here" - aud and scope are never actually read.
+    return True, "accepted - signature valid and not expired (aud/scope never checked)"
+
+def secure_check(claims, now, service_name, required_scope):
+    if now >= claims["exp"]:
+        return False, "rejected - expired"
+    aud = claims.get("aud", [])
+    if isinstance(aud, str):
+        aud = [aud]
+    if service_name not in aud:
+        return False, "rejected - token audience " + str(aud) + " does not include '" + service_name + "'"
+    scopes = claims.get("scope", "").split()
+    if required_scope not in scopes:
+        return False, "rejected - token scope " + str(scopes) + " does not include '" + required_scope + "'"
+    return True, "accepted - audience and scope both match"
+
+
+def run():
+    T0 = 1_900_000_000
+
+    traveler_token = {
+        "sub": "user_77",
+        "aud": ["booking-api"],
+        "scope": "read:bookings write:bookings",
+        "exp": T0 + 3600,
+    }
+
+    admin_token = {
+        "sub": "staff_12",
+        "aud": ["admin-api"],
+        "scope": "read:bookings delete:bookings",
+        "exp": T0 + 3600,
+    }
+
+    print("Scenario 1 - traveler token, on the API it was actually issued for, doing something it's scoped for:")
+    ok, msg = vulnerable_check(traveler_token, T0, "booking-api", "read:bookings")
+    print("  vulnerable check: " + msg)
+    ok2, msg2 = secure_check(traveler_token, T0, "booking-api", "read:bookings")
+    print("  secure check:     " + msg2)
+    print()
+
+    print("Scenario 2 - SAME traveler token, presented to a DIFFERENT service (audience abuse):")
+    ok3, msg3 = vulnerable_check(traveler_token, T0, "admin-api", "read:bookings")
+    print("  vulnerable check: " + msg3)
+    ok4, msg4 = secure_check(traveler_token, T0, "admin-api", "read:bookings")
+    print("  secure check:     " + msg4)
+    print()
+
+    print("Scenario 3 - SAME traveler token, right service, but a scope it was never granted (scope abuse):")
+    ok5, msg5 = vulnerable_check(traveler_token, T0, "booking-api", "delete:bookings")
+    print("  vulnerable check: " + msg5)
+    ok6, msg6 = secure_check(traveler_token, T0, "booking-api", "delete:bookings")
+    print("  secure check:     " + msg6)
+    print()
+
+    print("Scenario 4 - a genuine admin token, right service, right scope:")
+    ok7, msg7 = secure_check(admin_token, T0, "admin-api", "delete:bookings")
+    print("  secure check: " + msg7)
+    print()
+    print("aud answers 'is this token even for me' - scope answers 'what did the issuer actually")
+    print("grant it, once it is'. A signature check and an exp check prove neither one; both need")
+    print("their own explicit comparison against what this specific endpoint requires.")
+
+run()`}
+/>
+
+The same audience and scope checks in Java - identical tokens, identical verdicts:
+
+<CodePlayground
+  language="java"
+  title="Run it - an audience checker and a scope checker, side by side (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    static class Token {
+        String sub;
+        List<String> aud;
+        String scope;
+        long exp;
+    }
+
+    static class Result { boolean ok; String msg; Result(boolean ok, String msg) { this.ok = ok; this.msg = msg; } }
+
+    // Matches Python's str(list_of_str) exactly: ['a', 'b'] - single-quoted,
+    // comma-space separated - so both languages print byte-identical text.
+    static String pyList(List<String> items) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < items.size(); i++) {
+            if (i > 0) sb.append(", ");
+            sb.append("'").append(items.get(i)).append("'");
+        }
+        return sb.append("]").toString();
+    }
+
+    static Result vulnerableCheck(Token t, long now, String serviceName, String requiredScope) {
+        if (now >= t.exp) return new Result(false, "rejected - expired");
+        // BUG: a valid signature and an unexpired exp are treated as "fully
+        // authorized here" - aud and scope are never actually read.
+        return new Result(true, "accepted - signature valid and not expired (aud/scope never checked)");
+    }
+
+    static Result secureCheck(Token t, long now, String serviceName, String requiredScope) {
+        if (now >= t.exp) return new Result(false, "rejected - expired");
+        if (!t.aud.contains(serviceName)) {
+            return new Result(false, "rejected - token audience " + pyList(t.aud) + " does not include '" + serviceName + "'");
+        }
+        List<String> scopes = Arrays.asList(t.scope.split(" "));
+        if (!scopes.contains(requiredScope)) {
+            return new Result(false, "rejected - token scope " + pyList(scopes) + " does not include '" + requiredScope + "'");
+        }
+        return new Result(true, "accepted - audience and scope both match");
+    }
+
+    public static void main(String[] args) {
+        final long T0 = 1_900_000_000L;
+
+        Token travelerToken = new Token();
+        travelerToken.sub = "user_77";
+        travelerToken.aud = Arrays.asList("booking-api");
+        travelerToken.scope = "read:bookings write:bookings";
+        travelerToken.exp = T0 + 3600;
+
+        Token adminToken = new Token();
+        adminToken.sub = "staff_12";
+        adminToken.aud = Arrays.asList("admin-api");
+        adminToken.scope = "read:bookings delete:bookings";
+        adminToken.exp = T0 + 3600;
+
+        System.out.println("Scenario 1 - traveler token, on the API it was actually issued for, doing something it's scoped for:");
+        Result r1 = vulnerableCheck(travelerToken, T0, "booking-api", "read:bookings");
+        System.out.println("  vulnerable check: " + r1.msg);
+        Result r2 = secureCheck(travelerToken, T0, "booking-api", "read:bookings");
+        System.out.println("  secure check:     " + r2.msg);
+        System.out.println();
+
+        System.out.println("Scenario 2 - SAME traveler token, presented to a DIFFERENT service (audience abuse):");
+        Result r3 = vulnerableCheck(travelerToken, T0, "admin-api", "read:bookings");
+        System.out.println("  vulnerable check: " + r3.msg);
+        Result r4 = secureCheck(travelerToken, T0, "admin-api", "read:bookings");
+        System.out.println("  secure check:     " + r4.msg);
+        System.out.println();
+
+        System.out.println("Scenario 3 - SAME traveler token, right service, but a scope it was never granted (scope abuse):");
+        Result r5 = vulnerableCheck(travelerToken, T0, "booking-api", "delete:bookings");
+        System.out.println("  vulnerable check: " + r5.msg);
+        Result r6 = secureCheck(travelerToken, T0, "booking-api", "delete:bookings");
+        System.out.println("  secure check:     " + r6.msg);
+        System.out.println();
+
+        System.out.println("Scenario 4 - a genuine admin token, right service, right scope:");
+        Result r7 = secureCheck(adminToken, T0, "admin-api", "delete:bookings");
+        System.out.println("  secure check: " + r7.msg);
+        System.out.println();
+        System.out.println("aud answers 'is this token even for me' - scope answers 'what did the issuer actually");
+        System.out.println("grant it, once it is'. A signature check and an exp check prove neither one; both need");
+        System.out.println("their own explicit comparison against what this specific endpoint requires.");
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: test one service for both audience and scope abuse">
+<StepChecklist
+  steps={[
+    { text: "Get tester-issued tokens scoped for different services or privilege levels", detail: "This platform's own sandbox - ideally one narrowly-scoped token and one broader or differently-audienced token, from accounts you own." },
+    { text: "Run the audience swap", detail: "Present a token issued for one service to a different service, especially if you suspect a shared signing key. Expect a denial; note the exact response either way." },
+    { text: "Run the scope swap", detail: "On a single service, use a narrowly-scoped token against an action that should require a broader or different scope. Expect a denial regardless of which service issued it correctly." },
+    { text: "Write up each finding on its own mechanism", detail: "Name it as an audience-abuse finding if a wrong-service token was accepted, a scope-abuse finding if an under-privileged token performed an over-privileged action - the two fixes are different." },
+  ]}
+/>
+You can now test the two claim checks that a signature and an exp check never cover - and tell a developer
+precisely which comparison (audience, or scope) was missing, not just that "the token shouldn't have
+worked here."
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A token issued for one internal service is accepted by a completely different service, especially where several services share one signing key.",
+      fix: "The receiving service verified the signature and stopped there - it never checked its own identifier against the token's aud claim. Add an explicit, service-side aud comparison that runs independently of signature verification, on every service that shares a key with any other.",
+    },
+    {
+      symptom: "A narrowly-scoped token successfully calls an action that should require a broader or different scope.",
+      fix: "The endpoint checked that the token was validly signed and unexpired, but never compared its scope claim against what this specific action requires. Add a server-side scope check, per endpoint or per action, independent of whatever the client-side UI shows or hides.",
+    },
+    {
+      symptom: "A team treats 'the signature verifies' as proof a token is fully authorized for the call it is making.",
+      fix: "Signature verification proves the token was genuinely issued by the real authorization server - nothing more. It says nothing about whether this token was meant for this service (aud) or granted this specific permission (scope). Both need their own explicit, independent check.",
+    },
+    {
+      symptom: "aud and scope checks pass on one endpoint, and the team marks the whole service as fully covered.",
+      fix: "Both checks are per-request, not per-service - a service can correctly enforce aud and scope on one endpoint and skip the check entirely on another added later. Re-verify on every endpoint that accepts a bearer token, not just the ones tested first.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Every service that shares a signing key with another** - each one needs its own explicit aud check;
+  a shared key means signature verification alone cannot distinguish which service a token was meant for.
+- **Every privileged or narrowly-scoped action** - refunds, deletions, admin-only reads - each is a
+  scope-abuse candidate: confirm the server compares the token's actual scope against what this specific
+  action requires, not merely that the token is validly signed.
+- **The response to a denied request on either axis** - a consistent, non-revealing denial is correct for
+  both audience and scope failures; note if either produces an inconsistent or overly detailed error.
+- **[[api-and-modern-security/owasp-api-security-top-10-2023/bola-and-bfla]]** - the same "passing one
+  independent check proves nothing about the other" pattern, tested against object ownership and function
+  role instead of audience and scope.
+- **[[api-testing-fundamentals/auth-manually/bearer-and-jwt]]** - the decode-and-tamper basics this note
+  assumes: how to read a token's claims, including aud and scope, before testing their enforcement.
+</WhereToCheck>
+
+<WorkedExample title="one shared signing key, two independent findings across BuggyAPI">
+1. A tester, authorized to test this platform's own BuggyAPI sandbox with two tester-issued tokens, notices
+   that the booking service and the admin service both verify tokens using the same signing key - a common
+   setup when both trust one central identity provider.
+2. Audience test: using a token issued with `aud: ["booking-api"]` and a narrow traveler scope, the tester
+   calls an admin-only endpoint on the admin service directly. The signature verifies cleanly, since both
+   services share the key, and the request succeeds. Finding one is filed: "booking-api token accepted by
+   admin-api - no aud claim check on the receiving service," with both the token's claims and the accepted
+   admin response as evidence.
+3. Separately, staying entirely within the booking service, the tester uses that same token - correctly
+   audienced for `booking-api`, scoped only for `read:bookings` - against a `delete:bookings` endpoint on
+   that same service. It succeeds too.
+4. Finding two is filed independently: "read-scoped token permitted a delete action on booking-api - no
+   scope comparison on the delete endpoint," evidenced by the token's actual scope claim next to the
+   successful delete response.
+5. Two findings, two missing comparisons, one shared root cause worth naming for the developer: the
+   verification code checked the signature and stopped, when aud and scope each needed their own explicit,
+   per-request check.
+</WorkedExample>
+
+<Quiz
+  question="A token has a valid signature, an exp claim safely in the future, and a scope of read:bookings. It successfully calls a delete:bookings endpoint on the same API the token's aud claim correctly names. What is the most precise way to describe this finding?"
+  options={[
+    "This is not a real finding, since the token's signature and audience were both correct",
+    "This is a scope-abuse finding - the token was granted read:bookings only, and the endpoint never compared the token's actual scope against what a delete action requires, independent of the fact that its audience and signature were correct",
+    "This is an audience-abuse finding, since aud and scope are the same underlying check",
+    "This can only be fixed by shortening the token's exp value"
+  ]}
+  answer={1}
+  explain="Audience and scope are independent checks answering different questions - aud asks whether a token is meant for this service at all, scope asks what it was granted once it is. Here the audience was correct (the token was for the right API), which rules out an audience-abuse finding, but the scope (read:bookings) did not match what a delete action requires, and the endpoint let the call through anyway. That is a scope-abuse finding specifically, with the fix being a server-side scope comparison on the delete endpoint. Option one is wrong because a correct signature and audience say nothing about scope, which is exactly what failed here; option three collapses two independent mechanisms into one, the same mistake this note warns against; option four is irrelevant, since exp was never the failing check."
+/>
+
+<Flashcards
+  cards={[
+    { front: "aud (audience)", back: "Identifies the intended recipient(s) of a token (RFC 7519). Each service is expected to check its own identifier appears in aud and reject the token otherwise - answers 'is this token even for me.'" },
+    { front: "scope", back: "An OAuth 2.0 convention naming what actions a token's holder was actually granted (read:bookings, delete:bookings) - answers 'what was this token granted, once it is for me,' independent of which object it targets." },
+    { front: "Why a shared signing key makes audience abuse easy to miss", back: "If multiple services verify tokens with the same key, a token minted for ANY of them passes signature verification at ALL of them - only an explicit, service-side aud check catches a token that was never meant for this particular service." },
+    { front: "Why signature + exp is not enough", back: "A valid signature proves genuine issuance; exp proves the time window is current. Neither says whether this token was meant for this service (aud) or was granted this specific permission (scope) - both need their own explicit comparison." },
+    { front: "The two swaps", back: "Audience swap: present a token to a different service than it was issued for, especially under a shared signing key. Scope swap: use a narrowly-scoped token against an action requiring a broader or different scope, on the correct service." },
+  ]}
+/>
+
+<Challenge>
+On this platform's own BuggyAPI sandbox, using tester-issued tokens: first, if you can identify two services
+sharing a signing key (or two audience-distinct token types), present a token issued for one to the other
+directly and record whether it is accepted. Second, on a single service, use a narrowly-scoped token against
+an action that should require a broader or different scope, and record that result too. Write up whichever
+of the two actually leaks as its own finding, naming the specific missing comparison (audience, or scope)
+rather than one vague "token was accepted somewhere it shouldn't be" report.
+</Challenge>
+
+<AskCommunity prompt="I've started running two separate claim checks on every token-accepting endpoint I test: an audience swap (presenting a token to a service other than the one it was issued for, especially under a shared signing key) and a scope swap (using a narrowly-granted token against an action that should need a broader scope). For people who test microservices or OAuth-based APIs regularly: how common is a shared signing key across services in what you've tested, and how do you keep scope checks systematic across a large number of endpoints without missing entire action categories?">
+Figuring out which endpoints even warrant a scope-swap test, and doing it consistently across a large API
+surface without a fully manual pass on every single action, is the part I would like to get more systematic
+about - curious how other testers scope this in practice.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://datatracker.ietf.org/doc/html/rfc7519", title: "RFC 7519 - JSON Web Token (JWT)", kind: "read" },
+    { href: "https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_Cheat_Sheet.html", title: "OWASP - JSON Web Token Cheat Sheet", kind: "read" },
+    { href: "https://oauth.net/2/scope/", title: "OAuth 2.0 Scope - oauth.net reference", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=LdyeC9Il3Cs" title="Nat Sakimura - The Audience of Tokens (2 min. OAuth #10)" minutes={2} />
+
+<Takeaways
+  points={[
+    "aud (audience) answers 'is this token even for me' - each service is expected to check its own identifier against the claim and reject tokens that do not name it.",
+    "scope answers 'what was this token actually granted, once it is for me' - independent of which object, if any, a request names.",
+    "A valid signature and a correct exp prove genuine issuance and a current time window - neither says anything about audience or scope, which need their own explicit, per-request checks.",
+    "A shared signing key across services makes audience abuse easy to miss: a token minted for any service sharing the key passes signature verification at all of them.",
+    "Test both as independent swaps: present a token to a different service than it was issued for (audience), and use a narrowly-scoped token against a broader action on the correct service (scope).",
+    "Test only systems you own or are explicitly, in writing, authorized to test, with tester-issued tokens across accounts you control, and report each mechanism separately with minimal proof.",
+  ]}
+/>
+
+<Complete xp={10} />

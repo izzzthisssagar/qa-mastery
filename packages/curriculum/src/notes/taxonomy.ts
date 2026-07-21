@@ -2320,10 +2320,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "jwt-and-token-attacks",
         title: "JWT & token attacks",
         topics: [
-          { slug: "alg-none-and-weak-secrets", title: "alg:none & weak secrets", planned: true },
-          { slug: "expiry-and-replay", title: "Expiry & replay", planned: true },
-          { slug: "scope-and-audience-abuse", title: "Scope & audience abuse", planned: true },
-          { slug: "key-confusion", title: "Key confusion", planned: true },
+          { slug: "alg-none-and-weak-secrets", title: "alg:none & weak secrets" },
+          { slug: "expiry-and-replay", title: "Expiry & replay" },
+          { slug: "scope-and-audience-abuse", title: "Scope & audience abuse" },
+          { slug: "key-confusion", title: "Key confusion" },
         ],
       },
       {
