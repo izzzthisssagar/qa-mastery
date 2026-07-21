@@ -7,13 +7,13 @@ import { Button } from "@qa-mastery/ui";
  */
 export function EmptyState({ filtered }: { filtered: boolean }) {
   return (
-    <div className="bg-grid grain relative overflow-hidden rounded-2xl border border-zinc-800 px-6 py-16 text-center">
+    <div className="bg-grid grain relative overflow-hidden rounded-2xl border border-border px-6 py-16 text-center">
       <div className="bg-glow pointer-events-none absolute inset-0" />
       <div className="relative space-y-3">
-        <h2 className="font-display text-xl font-semibold text-zinc-100">
+        <h2 className="font-display text-xl font-semibold text-foreground">
           {filtered ? "No testers match those filters" : "The directory is just getting started"}
         </h2>
-        <p className="mx-auto max-w-md text-sm text-zinc-400">
+        <p className="mx-auto max-w-md text-sm text-muted-foreground">
           {filtered
             ? "Try widening your specialty or availability filters."
             : "QA Mastery graduates are publishing profiles now. Check back soon — or, if you test, claim your spot."}

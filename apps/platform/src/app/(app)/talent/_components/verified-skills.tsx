@@ -37,7 +37,7 @@ export function VerifiedSkills({ initial }: { initial: VerifiedSkill[] }) {
           ))}
         </div>
       ) : (
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-muted-foreground">
           No verified skills yet — pass graded labs on QA Mastery, then refresh to earn badges.
         </p>
       )}

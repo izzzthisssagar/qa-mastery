@@ -58,7 +58,7 @@ export function AuthForm({
           </Reveal>
 
           <Reveal delay={0.12}>
-            <h1 className="font-display mt-3 text-3xl font-bold tracking-tight text-zinc-50 sm:text-4xl">
+            <h1 className="font-display mt-3 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
               {title}
             </h1>
           </Reveal>
@@ -94,7 +94,7 @@ export function AuthForm({
                 <div className="-mt-2 text-right">
                   <Link
                     href="/forgot-password"
-                    className="text-xs font-medium text-zinc-400 underline-offset-4 transition-colors hover:text-accent hover:underline"
+                    className="text-xs font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-accent hover:underline"
                   >
                     Forgot password?
                   </Link>
@@ -149,7 +149,7 @@ export function AuthForm({
           </form>
 
           <Reveal delay={0.42}>
-            <p className="mt-8 border-t border-zinc-800/70 pt-6 text-sm text-zinc-500">
+            <p className="mt-8 border-t border-border/70 pt-6 text-sm text-muted-foreground">
               {altText}{" "}
               <Link
                 href={altHref}

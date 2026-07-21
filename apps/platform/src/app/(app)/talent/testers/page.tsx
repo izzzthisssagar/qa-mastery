@@ -37,7 +37,7 @@ export default async function TestersPage({ searchParams }: { searchParams: Prom
     <div className="space-y-6 py-2">
       <header className="space-y-1">
         <h1 className="font-display text-2xl font-bold tracking-tight">Find a QA tester</h1>
-        <p className="text-sm text-zinc-400">
+        <p className="text-sm text-muted-foreground">
           Filter on real testing signals — specialty, availability, lab-verified skills.
         </p>
       </header>
@@ -61,7 +61,7 @@ export default async function TestersPage({ searchParams }: { searchParams: Prom
                 <div className="flex justify-center">
                   <Link
                     href={`/talent/testers?${nextParams.toString()}`}
-                    className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-500"
+                    className="rounded-lg border border-border px-4 py-2 text-sm text-foreground hover:border-border"
                   >
                     Load more
                   </Link>

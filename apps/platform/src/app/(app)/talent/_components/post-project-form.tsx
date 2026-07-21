@@ -13,7 +13,7 @@ import {
 import { postProject, type ProjectInput } from "@/app/(app)/talent/actions";
 
 const field =
-  "w-full rounded-lg border border-zinc-700 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-100 outline-none focus-visible:border-zinc-500";
+  "w-full rounded-lg border border-border bg-surface/60 px-3 py-2 text-sm text-foreground outline-none focus-visible:border-border";
 
 function Chips({
   options,
@@ -38,7 +38,7 @@ function Chips({
               "rounded-full border px-3 py-1 text-xs transition-colors " +
               (on
                 ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-200"
-                : "border-zinc-700 text-zinc-400 hover:border-zinc-500")
+                : "border-border text-muted-foreground hover:border-border")
             }
           >
             {labelFor(o)}
@@ -90,7 +90,7 @@ export function PostProjectForm() {
     return (
       <div className="space-y-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-6">
         <h2 className="font-medium text-emerald-200">Project posted.</h2>
-        <p className="text-sm text-zinc-400">Now find testers who match what you need.</p>
+        <p className="text-sm text-muted-foreground">Now find testers who match what you need.</p>
         <Link href="/talent/testers">
           <Button>Browse testers</Button>
         </Link>
@@ -101,7 +101,7 @@ export function PostProjectForm() {
   return (
     <div className="space-y-5">
       <label className="block text-sm">
-        <span className="mb-1 block text-zinc-400">Title</span>
+        <span className="mb-1 block text-muted-foreground">Title</span>
         <input
           className={field}
           value={title}
@@ -112,7 +112,7 @@ export function PostProjectForm() {
       </label>
 
       <label className="block text-sm">
-        <span className="mb-1 block text-zinc-400">Description</span>
+        <span className="mb-1 block text-muted-foreground">Description</span>
         <textarea
           className={field + " min-h-24 resize-y"}
           value={description}
@@ -124,7 +124,7 @@ export function PostProjectForm() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block text-sm">
-          <span className="mb-1 block text-zinc-400">Project type</span>
+          <span className="mb-1 block text-muted-foreground">Project type</span>
           <select className={field} value={projectType} onChange={(e) => setProjectType(e.target.value)}>
             {PROJECT_TYPES.map((t) => (
               <option key={t} value={t}>
@@ -134,7 +134,7 @@ export function PostProjectForm() {
           </select>
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block text-zinc-400">Engagement</span>
+          <span className="mb-1 block text-muted-foreground">Engagement</span>
           <select className={field} value={engagement} onChange={(e) => setEngagement(e.target.value)}>
             {ENGAGEMENTS.map((en) => (
               <option key={en} value={en}>
@@ -146,16 +146,16 @@ export function PostProjectForm() {
       </div>
 
       <div className="space-y-2 text-sm">
-        <span className="block text-zinc-400">Required testing types</span>
+        <span className="block text-muted-foreground">Required testing types</span>
         <Chips options={SPECIALTIES} selected={requiredTypes} onToggle={toggle(requiredTypes, setRequiredTypes)} />
       </div>
 
       <div className="space-y-2 text-sm">
-        <span className="block text-zinc-400">Tech stack</span>
+        <span className="block text-muted-foreground">Tech stack</span>
         <Chips options={STACK} selected={stack} onToggle={toggle(stack, setStack)} />
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-zinc-400">
+      <label className="flex items-center gap-2 text-sm text-muted-foreground">
         <input type="checkbox" checked={ndaRequired} onChange={(e) => setNdaRequired(e.target.checked)} />
         NDA required
       </label>

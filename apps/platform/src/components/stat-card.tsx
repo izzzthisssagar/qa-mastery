@@ -64,7 +64,7 @@ export function StatCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, delay, ease: EASE }}
       whileHover={reduce ? undefined : { y: -3 }}
-      className="group relative flex-1 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/40 px-5 py-4 transition-colors hover:border-zinc-700"
+      className="group relative flex-1 overflow-hidden rounded-2xl border border-border bg-surface/40 px-5 py-4 transition-colors hover:border-border"
     >
       <div
         aria-hidden
@@ -72,13 +72,13 @@ export function StatCard({
       />
       <div
         className={`font-display text-3xl font-semibold tabular-nums ${
-          accent ? "text-accent" : "text-zinc-100"
+          accent ? "text-accent" : "text-foreground"
         }`}
       >
         {count}
         {suffix}
       </div>
-      <div className="mt-1 text-xs uppercase tracking-wide text-zinc-500">{label}</div>
+      <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
     </motion.div>
   );
 }

@@ -370,7 +370,7 @@ test.describe("dashboard — progress & XP", () => {
   });
 });
 
-test.describe("entitlements — Pro gating", () => {
+test.describe("capstone — open to all (no paywall)", () => {
   const CAPSTONE = "capstone-full-test-cycle";
   const answerAll = async (page: Page) => {
     for (const i of [1, 2, 3, 4, 5]) {
@@ -378,34 +378,14 @@ test.describe("entitlements — Pro gating", () => {
     }
   };
 
-  test("the dashboard flags gated lessons with a Pro lock until upgrade", async ({ page }) => {
+  test("the capstone lesson shows no Pro lock on the dashboard", async ({ page }) => {
     await signUpFreshLearner(page);
-
-    // a free learner sees the Pro lock on the gated capstone lesson
-    await expect(page.getByTestId(`lesson-locked-${CAPSTONE}`)).toBeVisible();
-
-    // upgrading removes the lock
-    await page.getByTestId("upgrade-pro").click();
-    await expect(page.getByTestId("pro-badge")).toBeVisible();
     await expect(page.getByTestId(`lesson-locked-${CAPSTONE}`)).toHaveCount(0);
   });
 
-  test("the Pro capstone is gated until upgrade", async ({ page }) => {
+  test("a fresh learner can grade the capstone quiz directly", async ({ page }) => {
     await signUpFreshLearner(page);
 
-    // non-Pro: submitting the capstone quiz is refused
-    await page.goto(`http://localhost:3000/learn/${CAPSTONE}`);
-    await answerAll(page);
-    await page.getByTestId("quiz-submit").click();
-    await expect(page.getByTestId("quiz-error")).toContainText(/Pro/i);
-
-    // upgrade on the dashboard
-    await page.goto("http://localhost:3000/dashboard");
-    await expect(page.getByTestId("upgrade-pro")).toBeVisible();
-    await page.getByTestId("upgrade-pro").click();
-    await expect(page.getByTestId("pro-badge")).toBeVisible();
-
-    // now the capstone quiz grades normally
     await page.goto(`http://localhost:3000/learn/${CAPSTONE}`);
     await answerAll(page);
     await page.getByTestId("quiz-submit").click();
@@ -414,12 +394,8 @@ test.describe("entitlements — Pro gating", () => {
 });
 
 test.describe("capstone — graded submission", () => {
-  test("a Pro learner submits the test plan and gets a rubric", async ({ page }) => {
+  test("a learner submits the test plan and gets a rubric", async ({ page }) => {
     await signUpFreshLearner(page);
-    // capstone is Pro — upgrade first
-    await page.goto("http://localhost:3000/dashboard");
-    await page.getByTestId("upgrade-pro").click();
-    await expect(page.getByTestId("pro-badge")).toBeVisible();
 
     await page.goto("http://localhost:3000/learn/capstone-full-test-cycle");
     await expect(page.getByTestId("capstone-panel")).toBeVisible();

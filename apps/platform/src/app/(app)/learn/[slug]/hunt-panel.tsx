@@ -61,8 +61,8 @@ export function HuntPanel({ slug }: { slug: string }) {
     <section data-testid="bug-hunt" className="my-6">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-zinc-100">Practice Lab</h2>
-          <p className="text-sm text-zinc-400">Launch your sandbox and hunt for the seeded bugs.</p>
+          <h2 className="text-lg font-semibold text-foreground">Practice Lab</h2>
+          <p className="text-sm text-muted-foreground">Launch your sandbox and hunt for the seeded bugs.</p>
         </div>
         <Button onClick={onLaunch} disabled={launching} data-testid="launch-sandbox-btn">
           {launching ? "Provisioning..." : "Launch BuggyShop Sandbox"}
@@ -73,16 +73,16 @@ export function HuntPanel({ slug }: { slug: string }) {
         className={
           complete
             ? "rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-5"
-            : "rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5"
+            : "rounded-2xl border border-border bg-surface/40 p-5"
         }
       >
         <div className="flex items-baseline justify-between">
-          <span className="text-sm font-semibold text-zinc-100">Bug Hunt progress</span>
-          <span data-testid="hunt-count" className="text-sm text-zinc-400">
+          <span className="text-sm font-semibold text-foreground">Bug Hunt progress</span>
+          <span data-testid="hunt-count" className="text-sm text-muted-foreground">
             {found} of {total} seeded bugs found
           </span>
         </div>
-        <div className="mt-3 h-2 w-full overflow-hidden rounded bg-zinc-800">
+        <div className="mt-3 h-2 w-full overflow-hidden rounded bg-surface-raised">
           <div
             className={complete ? "h-2 bg-emerald-400" : "h-2 bg-accent"}
             style={{ width: `${pct}%` }}

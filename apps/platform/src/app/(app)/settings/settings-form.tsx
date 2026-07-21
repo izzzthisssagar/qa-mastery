@@ -7,8 +7,8 @@ import { updateProfile, type ProfileState } from "./actions";
 const INITIAL: ProfileState = { error: null };
 
 const field =
-  "w-full rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none transition-colors focus:border-accent/70";
-const label = "mb-1.5 block text-[0.7rem] font-medium uppercase tracking-[0.18em] text-zinc-500";
+  "w-full rounded-lg border border-border bg-background/60 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-accent/70";
+const label = "mb-1.5 block text-[0.7rem] font-medium uppercase tracking-[0.18em] text-muted-foreground";
 
 export function SettingsForm({
   displayName,
@@ -48,7 +48,7 @@ export function SettingsForm({
           placeholder="your-handle"
           className={field}
         />
-        <p className="mt-1 text-xs text-zinc-600">
+        <p className="mt-1 text-xs text-muted-foreground">
           3–30 chars: letters, numbers, hyphen or underscore. Used for your public profile.
         </p>
       </div>

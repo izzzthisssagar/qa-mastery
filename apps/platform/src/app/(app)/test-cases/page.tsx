@@ -44,10 +44,10 @@ export default async function TestCasesPage() {
     <div className="mx-auto max-w-5xl">
       <header className="mb-8">
         <p className="font-mono text-xs uppercase tracking-[0.28em] text-accent/80">Test cases</p>
-        <h1 className="font-display mt-2 text-3xl font-bold tracking-tight text-zinc-50">
+        <h1 className="font-display mt-2 text-3xl font-bold tracking-tight text-foreground">
           Your test cases
         </h1>
-        <p className="mt-2 text-sm text-zinc-400">
+        <p className="mt-2 text-sm text-muted-foreground">
           Write and manage your own test cases — the same artifact you&apos;ll author on the job.
         </p>
       </header>
@@ -58,14 +58,14 @@ export default async function TestCasesPage() {
       </Card>
 
       {rows.length === 0 ? (
-        <Card className="text-center text-zinc-400">
+        <Card className="text-center text-muted-foreground">
           No test cases yet. Write your first one above.
         </Card>
       ) : (
         <Card className="overflow-x-auto p-0">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-zinc-800 text-xs uppercase tracking-wide text-zinc-500">
+              <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="px-5 py-3 font-medium">Title</th>
                 <th className="px-5 py-3 font-medium">Steps</th>
                 <th className="px-5 py-3 font-medium">Priority</th>
@@ -75,14 +75,14 @@ export default async function TestCasesPage() {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-b border-zinc-800/60 align-top last:border-0">
+                <tr key={r.id} className="border-b border-border/60 align-top last:border-0">
                   <td className="px-5 py-4">
-                    <div className="font-medium text-zinc-100">{r.title}</div>
+                    <div className="font-medium text-foreground">{r.title}</div>
                     {r.expected ? (
-                      <div className="mt-1 text-xs text-zinc-500">Expected: {r.expected}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">Expected: {r.expected}</div>
                     ) : null}
                   </td>
-                  <td className="px-5 py-4 text-zinc-400">{r.steps?.length ?? 0}</td>
+                  <td className="px-5 py-4 text-muted-foreground">{r.steps?.length ?? 0}</td>
                   <td className="px-5 py-4">
                     <Badge tone={priorityTone(r.priority)}>{r.priority}</Badge>
                   </td>
@@ -96,7 +96,7 @@ export default async function TestCasesPage() {
                         <select
                           name="status"
                           defaultValue={r.status}
-                          className="rounded-md border border-zinc-800 bg-zinc-950/60 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-accent/70"
+                          className="rounded-md border border-border bg-background/60 px-2 py-1 text-xs text-foreground outline-none focus:border-accent/70"
                         >
                           {STATUSES.map((s) => (
                             <option key={s} value={s}>
@@ -106,7 +106,7 @@ export default async function TestCasesPage() {
                         </select>
                         <button
                           type="submit"
-                          className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-300 transition-colors hover:border-zinc-500 hover:text-zinc-50"
+                          className="rounded-md border border-border px-2 py-1 text-xs text-foreground transition-colors hover:border-border hover:text-foreground"
                         >
                           Set
                         </button>

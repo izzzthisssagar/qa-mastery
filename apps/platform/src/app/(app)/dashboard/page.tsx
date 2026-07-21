@@ -5,7 +5,6 @@ import { Reveal } from "@/components/motion";
 import { StatCard } from "@/components/stat-card";
 import { TrackProgressBar } from "@/components/track-progress-bar";
 import { LessonRow } from "@/components/lesson-row";
-import { UpgradeButton } from "@/components/upgrade-button";
 import { talentEnabled } from "@/lib/talent/flag";
 import { BuggyApiCard } from "./buggyapi-card";
 import { HubGrid } from "./components/hub-grid";
@@ -100,12 +99,6 @@ export default async function DashboardPage() {
   const { data: xpRows } = await supabase.from("xp_events").select("amount");
   const totalXp = (xpRows ?? []).reduce((sum, x) => sum + (x.amount as number), 0);
 
-  const { count: proCount } = await supabase
-    .from("entitlements")
-    .select("*", { count: "exact", head: true })
-    .eq("kind", "pro");
-  const isPro = (proCount ?? 0) > 0;
-
   const overallPct = lessonCount ? Math.round((completed.size / lessonCount) * 100) : 0;
 
   // Marketplace role drives the role-adaptive panels (read-own RLS on profiles).
@@ -128,16 +121,6 @@ export default async function DashboardPage() {
         <Reveal>
           <div className="flex items-start justify-between gap-4">
             <p className="text-xs font-medium uppercase tracking-widest text-accent">Dashboard</p>
-            {isPro ? (
-              <span
-                data-testid="pro-badge"
-                className="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent/10 px-3 py-1 text-xs font-semibold text-accent"
-              >
-                ★ Pro
-              </span>
-            ) : (
-              <UpgradeButton />
-            )}
           </div>
           <h1 className="font-display mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
             Your{" "}
@@ -145,10 +128,9 @@ export default async function DashboardPage() {
               learning
             </span>
           </h1>
-          <p className="mt-2 max-w-prose text-sm leading-6 text-zinc-400">
+          <p className="mt-2 max-w-prose text-sm leading-6 text-muted-foreground">
             {lessonCount} lessons live across {tracks.length} track
-            {tracks.length === 1 ? "" : "s"}.{" "}
-            {isPro ? "Pro unlocked." : "Pro lessons unlock the capstone."}
+            {tracks.length === 1 ? "" : "s"}. Every lesson is free.
           </p>
         </Reveal>
 
@@ -165,7 +147,7 @@ export default async function DashboardPage() {
             value={completed.size}
             label="lessons complete"
             suffix={
-              <span className="font-sans text-lg font-normal text-zinc-500"> / {lessonCount}</span>
+              <span className="font-sans text-lg font-normal text-muted-foreground"> / {lessonCount}</span>
             }
             delay={0.12}
           />
@@ -173,7 +155,7 @@ export default async function DashboardPage() {
             testId="stat-overall"
             value={overallPct}
             label="overall progress"
-            suffix={<span className="font-sans text-lg font-normal text-zinc-500">%</span>}
+            suffix={<span className="font-sans text-lg font-normal text-muted-foreground">%</span>}
             delay={0.19}
           />
         </div>
@@ -198,14 +180,14 @@ export default async function DashboardPage() {
                 <p className="text-xs font-medium uppercase tracking-widest text-accent">
                   QA Mastery Talent
                 </p>
-                <p className="mt-1 font-medium text-zinc-100">
+                <p className="mt-1 font-medium text-foreground">
                   Turn your progress into work — get hired or hire testers →
                 </p>
-                <p className="mt-0.5 text-sm text-zinc-400">
+                <p className="mt-0.5 text-sm text-muted-foreground">
                   Publish a proof-forward profile, or post a project and find QA.
                 </p>
               </div>
-              <span className="hidden shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-zinc-950 transition group-hover:opacity-90 sm:inline">
+              <span className="hidden shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground transition group-hover:opacity-90 sm:inline">
                 Open
               </span>
             </Link>
@@ -226,14 +208,14 @@ export default async function DashboardPage() {
               <p className="text-xs font-medium uppercase tracking-widest text-violet-400">
                 Coding simulator
               </p>
-              <p className="mt-1 font-medium text-zinc-100">
+              <p className="mt-1 font-medium text-foreground">
                 Run Java, Python, JS, TS &amp; C# in the browser →
               </p>
-              <p className="mt-0.5 text-sm text-zinc-400">
+              <p className="mt-0.5 text-sm text-muted-foreground">
                 A free scratchpad for practising automation logic — no setup.
               </p>
             </div>
-            <span className="hidden shrink-0 rounded-lg bg-violet-400 px-4 py-2 text-sm font-semibold text-zinc-950 transition group-hover:opacity-90 sm:inline">
+            <span className="hidden shrink-0 rounded-lg bg-violet-400 px-4 py-2 text-sm font-semibold text-accent-foreground transition group-hover:opacity-90 sm:inline">
               Open
             </span>
           </Link>
@@ -255,7 +237,7 @@ export default async function DashboardPage() {
                     </h2>
                     <span
                       data-testid={`track-progress-${track.slug}`}
-                      className="shrink-0 font-mono text-xs text-zinc-500"
+                      className="shrink-0 font-mono text-xs text-muted-foreground"
                     >
                       {trackDone} / {trackLessons.length}
                     </span>
@@ -277,7 +259,7 @@ export default async function DashboardPage() {
                         <h3 className="text-xs font-semibold uppercase tracking-wide text-accent">
                           {module.slug.toUpperCase()} — {module.title}
                         </h3>
-                        <ul className="mt-2 divide-y divide-zinc-800/80 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/30">
+                        <ul className="mt-2 divide-y divide-border/80 overflow-hidden rounded-2xl border border-border bg-surface/30">
                           {module.lessons.map((lesson, lessonIndex) => (
                             <LessonRow
                               key={lesson.slug}
@@ -285,7 +267,6 @@ export default async function DashboardPage() {
                               label={`${module.slug.toUpperCase()}.${lesson.order_index}`}
                               title={lesson.title}
                               done={completed.has(lesson.id)}
-                              locked={!lesson.free && !isPro}
                               index={lessonIndex}
                             />
                           ))}
@@ -299,7 +280,7 @@ export default async function DashboardPage() {
           })}
 
           {tracks.length === 0 && (
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-muted-foreground">
               Lessons are being published — check back shortly.
             </p>
           )}

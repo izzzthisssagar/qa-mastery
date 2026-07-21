@@ -28,7 +28,7 @@ function Panel({
       <p className="mt-1 text-sm text-muted-foreground">{desc}</p>
       <Link
         href={href}
-        className="mt-3 inline-block rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:opacity-90"
+        className="mt-3 inline-block rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground transition hover:opacity-90"
       >
         {cta}
       </Link>

@@ -58,9 +58,9 @@ export default async function PublicProfilePage({ params }: Params) {
           {(profile.verification_status as string) === "verified" && <Badge tone="success">Verified</Badge>}
         </div>
         {(profile.headline as string) && (
-          <p className="max-w-2xl text-lg text-zinc-300">{profile.headline as string}</p>
+          <p className="max-w-2xl text-lg text-foreground">{profile.headline as string}</p>
         )}
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-muted-foreground">
           {[
             profile.location as string | null,
             years != null ? `${years} yr${years === 1 ? "" : "s"} experience` : null,
@@ -97,7 +97,7 @@ export default async function PublicProfilePage({ params }: Params) {
 
       {badges.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-sm font-medium text-zinc-400">Verified skills</h2>
+          <h2 className="text-sm font-medium text-muted-foreground">Verified skills</h2>
           <div className="flex flex-wrap gap-2">
             {badges.map((b) => (
               <Badge key={b.id as string} tone="success">
@@ -110,7 +110,7 @@ export default async function PublicProfilePage({ params }: Params) {
 
       {specialties.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-sm font-medium text-zinc-400">Specialties</h2>
+          <h2 className="text-sm font-medium text-muted-foreground">Specialties</h2>
           <div className="flex flex-wrap gap-2">
             {specialties.map((s) => (
               <Badge key={s} tone="info">
@@ -123,10 +123,10 @@ export default async function PublicProfilePage({ params }: Params) {
 
       {stack.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-sm font-medium text-zinc-400">Automation stack</h2>
-          <div className="flex flex-wrap gap-2 font-mono text-xs text-zinc-300">
+          <h2 className="text-sm font-medium text-muted-foreground">Automation stack</h2>
+          <div className="flex flex-wrap gap-2 font-mono text-xs text-foreground">
             {stack.map((s) => (
-              <span key={s} className="rounded-md border border-zinc-800 bg-zinc-900/60 px-2 py-1">
+              <span key={s} className="rounded-md border border-border bg-surface/60 px-2 py-1">
                 {labelFor(s)}
               </span>
             ))}
@@ -136,12 +136,12 @@ export default async function PublicProfilePage({ params }: Params) {
 
       {devices.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-sm font-medium text-zinc-400">Device matrix</h2>
-          <div className="flex flex-wrap gap-2 font-mono text-xs text-zinc-300">
+          <h2 className="text-sm font-medium text-muted-foreground">Device matrix</h2>
+          <div className="flex flex-wrap gap-2 font-mono text-xs text-foreground">
             {devices.map((d) => (
               <span
                 key={d.id as string}
-                className="rounded-md border border-zinc-800 bg-zinc-900/60 px-2 py-1"
+                className="rounded-md border border-border bg-surface/60 px-2 py-1"
               >
                 {(d.device as string)}
                 {d.os ? ` · ${d.os as string}` : ""}
@@ -154,22 +154,22 @@ export default async function PublicProfilePage({ params }: Params) {
 
       {experience.length > 0 && (
         <section className="space-y-3">
-          <h2 className="text-sm font-medium text-zinc-400">Experience</h2>
+          <h2 className="text-sm font-medium text-muted-foreground">Experience</h2>
           <ul className="space-y-3">
             {experience.map((e) => (
               <li
                 key={e.id as string}
-                className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4"
+                className="rounded-xl border border-border bg-surface/40 p-4"
               >
-                <p className="font-medium text-zinc-100">
+                <p className="font-medium text-foreground">
                   {e.role as string} ·{" "}
-                  <span className="text-zinc-300">{e.company as string}</span>
+                  <span className="text-foreground">{e.company as string}</span>
                 </p>
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-muted-foreground">
                   {e.start_year as number} – {(e.end_year as number | null) ?? "present"}
                 </p>
                 {(e.summary as string) && (
-                  <p className="mt-1 text-sm text-zinc-400">{e.summary as string}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{e.summary as string}</p>
                 )}
               </li>
             ))}
@@ -178,15 +178,15 @@ export default async function PublicProfilePage({ params }: Params) {
       )}
 
       <section className="space-y-3">
-        <h2 className="text-sm font-medium text-zinc-400">Portfolio</h2>
+        <h2 className="text-sm font-medium text-muted-foreground">Portfolio</h2>
         {portfolio.length === 0 ? (
-          <p className="text-sm text-zinc-500">No portfolio items yet.</p>
+          <p className="text-sm text-muted-foreground">No portfolio items yet.</p>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
             {portfolio.map((item) => (
               <article
                 key={item.id as string}
-                className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4"
+                className="rounded-xl border border-border bg-surface/40 p-4"
               >
                 <div className="mb-2 flex items-center gap-2">
                   <Badge tone={portfolioTypeTone[item.type as string] ?? "default"}>
@@ -194,9 +194,9 @@ export default async function PublicProfilePage({ params }: Params) {
                   </Badge>
                   {Boolean(item.is_nda) && <Badge tone="info">NDA</Badge>}
                 </div>
-                <h3 className="font-medium text-zinc-100">{item.title as string}</h3>
+                <h3 className="font-medium text-foreground">{item.title as string}</h3>
                 {(item.body as string) && (
-                  <p className="mt-1 line-clamp-4 text-sm text-zinc-400">{item.body as string}</p>
+                  <p className="mt-1 line-clamp-4 text-sm text-muted-foreground">{item.body as string}</p>
                 )}
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                   {(item.repo_url as string) && (
@@ -217,7 +217,7 @@ export default async function PublicProfilePage({ params }: Params) {
         )}
       </section>
 
-      <footer className="border-t border-zinc-900 pt-4">
+      <footer className="border-t border-border pt-4">
         <ReportButton targetType="profile" targetId={profile.id as string} />
       </footer>
     </div>

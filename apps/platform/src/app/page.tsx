@@ -35,16 +35,16 @@ const STATS = [
   { value: "∞", label: "reps on a real practice app" },
 ];
 
-// The full QA-lead arc — the first two are live today, the rest chart the path.
+// The full QA-lead arc — every discipline now has a full notes curriculum.
 const DISCIPLINES = [
   { name: "Manual", live: true },
   { name: "Automation", live: true },
-  { name: "API", live: false },
-  { name: "Performance", live: false },
-  { name: "Security", live: false },
-  { name: "Database", live: false },
-  { name: "CI/CD", live: false },
-  { name: "Git", live: false },
+  { name: "API", live: true },
+  { name: "Performance", live: true },
+  { name: "Security", live: true },
+  { name: "Database", live: true },
+  { name: "CI/CD", live: true },
+  { name: "Git", live: true },
 ];
 
 export default function HomePage() {
@@ -61,12 +61,12 @@ export default function HomePage() {
           QA<span className="text-accent">Mastery</span>
         </span>
         <nav className="flex items-center gap-5 text-sm">
-          <Link href="/login" className="text-zinc-300 transition-colors hover:text-zinc-50">
+          <Link href="/login" className="text-foreground transition-colors hover:text-foreground">
             Log in
           </Link>
           <Link
             href="/signup"
-            className="rounded-lg bg-accent px-4 py-2 font-semibold text-zinc-950 transition hover:opacity-90"
+            className="rounded-lg bg-accent px-4 py-2 font-semibold text-accent-foreground transition hover:opacity-90"
           >
             Start learning
           </Link>
@@ -89,7 +89,7 @@ export default function HomePage() {
             <Reveal delay={0.08} fade={false}>
               <h1 className="font-display mt-5 text-5xl font-extrabold leading-[1.02] tracking-tight sm:text-6xl lg:text-7xl">
                 Don&apos;t{" "}
-                <span className="font-serif-accent font-normal text-zinc-500">
+                <span className="font-serif-accent font-normal text-muted-foreground">
                   watch
                 </span>
                 <br />
@@ -102,7 +102,7 @@ export default function HomePage() {
             </Reveal>
 
             <Reveal delay={0.16} fade={false}>
-              <p className="mt-6 max-w-xl text-lg leading-8 text-zinc-400">
+              <p className="mt-6 max-w-xl text-lg leading-8 text-muted-foreground">
                 Learn every QA concept on interactive visuals, hunt real seeded
                 bugs in a live practice app, and get your work graded like
                 you&apos;re already on the job — from manual testing all the way
@@ -120,13 +120,13 @@ export default function HomePage() {
             </Reveal>
 
             <Reveal delay={0.32}>
-              <dl className="mt-12 grid max-w-md grid-cols-3 gap-6 border-t border-zinc-800 pt-6">
+              <dl className="mt-12 grid max-w-md grid-cols-3 gap-6 border-t border-border pt-6">
                 {STATS.map((s) => (
                   <div key={s.label}>
-                    <dt className="font-display text-2xl font-bold text-zinc-100">
+                    <dt className="font-display text-2xl font-bold text-foreground">
                       {s.value}
                     </dt>
-                    <dd className="mt-1 text-xs leading-snug text-zinc-500">
+                    <dd className="mt-1 text-xs leading-snug text-muted-foreground">
                       {s.label}
                     </dd>
                   </div>
@@ -141,10 +141,10 @@ export default function HomePage() {
         </section>
 
         {/* ── Discipline spectrum band ───────────────────────────── */}
-        <section className="border-y border-zinc-800/60 bg-zinc-900/20">
+        <section className="border-y border-border/60 bg-surface/20">
           <div className="mx-auto w-full max-w-6xl px-6 py-9 sm:px-10">
             <RevealOnView>
-              <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-zinc-500">
+              <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted-foreground">
                 One path · every discipline
               </p>
               <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-2">
@@ -153,7 +153,7 @@ export default function HomePage() {
                     key={d.name}
                     className="font-display text-xl font-bold tracking-tight sm:text-2xl"
                   >
-                    <span className={d.live ? "text-zinc-100" : "text-zinc-600"}>
+                    <span className={d.live ? "text-foreground" : "text-muted-foreground"}>
                       {d.name}
                     </span>
                     {i < DISCIPLINES.length - 1 && (
@@ -162,11 +162,12 @@ export default function HomePage() {
                   </span>
                 ))}
               </div>
-              <p className="mt-4 max-w-2xl text-sm leading-6 text-zinc-500">
-                Manual and automation are{" "}
-                <span className="text-accent">live today</span>. The road keeps
-                going — API, performance, security, database, CI/CD — everything a{" "}
-                <span className="font-serif-accent text-zinc-300">QA lead</span>{" "}
+              <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
+                Every discipline is{" "}
+                <span className="text-accent">live today</span> — manual,
+                automation, API, performance, security, database, CI/CD, and Git.
+                The whole arc a{" "}
+                <span className="font-serif-accent text-foreground">QA lead</span>{" "}
                 owns.
               </p>
             </RevealOnView>
@@ -194,24 +195,24 @@ export default function HomePage() {
               return (
                 <RevealOnView key={p.no} delay={i * 0.08}>
                   <article
-                    className={`group h-full rounded-2xl border border-zinc-800 bg-zinc-900/30 p-6 transition-colors duration-300 ${isBug ? "hover:border-bug/40" : "hover:border-accent/40"}`}
+                    className={`group h-full rounded-2xl border border-border bg-surface/30 p-6 transition-colors duration-300 ${isBug ? "hover:border-bug/40" : "hover:border-accent/40"}`}
                   >
                     <div className="flex items-center justify-between">
                       <span
-                        className={`font-display text-2xl font-bold text-zinc-700 transition-colors ${isBug ? "group-hover:text-bug/80" : "group-hover:text-accent/70"}`}
+                        className={`font-display text-2xl font-bold text-muted-foreground transition-colors ${isBug ? "group-hover:text-bug/80" : "group-hover:text-accent/70"}`}
                       >
                         {p.no}
                       </span>
                       <span
-                        className={`rounded-full border px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-widest ${isBug ? "border-bug/30 text-bug/80" : "border-zinc-800 text-zinc-500"}`}
+                        className={`rounded-full border px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-widest ${isBug ? "border-bug/30 text-bug/80" : "border-border text-muted-foreground"}`}
                       >
                         {p.meta}
                       </span>
                     </div>
-                    <h3 className="font-display mt-5 text-xl font-bold text-zinc-100">
+                    <h3 className="font-display mt-5 text-xl font-bold text-foreground">
                       {p.title}
                     </h3>
-                    <p className="mt-3 text-sm leading-6 text-zinc-400">{p.body}</p>
+                    <p className="mt-3 text-sm leading-6 text-muted-foreground">{p.body}</p>
                   </article>
                 </RevealOnView>
               );
@@ -231,7 +232,7 @@ export default function HomePage() {
                 <br />
                 Graduate to automation.
               </h2>
-              <p className="mt-5 max-w-md text-base leading-7 text-zinc-400">
+              <p className="mt-5 max-w-md text-base leading-7 text-muted-foreground">
                 You don&apos;t jump straight to code. You learn to test by hand,
                 then watch those same skills become a Selenium + Java suite that
                 runs itself. Switch the panel to see each path.
@@ -260,7 +261,7 @@ export default function HomePage() {
                       <span className="font-serif-accent font-normal text-accent">Get hired</span>{" "}
                       for it.
                     </h2>
-                    <p className="mt-5 max-w-lg text-base leading-7 text-zinc-400">
+                    <p className="mt-5 max-w-lg text-base leading-7 text-muted-foreground">
                       The hiring layer for testers. Show real proof — bug reports, automation
                       scripts, your device matrix, lab-verified skill badges — and let developers
                       and teams find and contact you. Need testing done? Post a project and filter
@@ -273,7 +274,7 @@ export default function HomePage() {
                       </CtaLink>
                     </div>
                   </div>
-                  <ul className="space-y-3 text-sm text-zinc-300">
+                  <ul className="space-y-3 text-sm text-foreground">
                     {[
                       "Proof-forward profiles — artifacts, not buzzwords",
                       "Lab-verified skill badges you can’t fake",
@@ -295,7 +296,7 @@ export default function HomePage() {
         {/* ── Closing CTA ────────────────────────────────────────── */}
         <section className="mx-auto w-full max-w-6xl px-6 pb-24 pt-10 sm:px-10">
           <RevealOnView>
-            <div className="relative overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/40 px-8 py-16 text-center sm:px-16">
+            <div className="relative overflow-hidden rounded-3xl border border-border bg-surface/40 px-8 py-16 text-center sm:px-16">
               <div className="bg-glow pointer-events-none absolute inset-x-0 bottom-0 h-2/3 rotate-180" />
               <div className="relative">
                 <h2 className="font-display mx-auto max-w-2xl text-3xl font-bold tracking-tight sm:text-5xl">
@@ -305,7 +306,7 @@ export default function HomePage() {
                   </span>
                   .
                 </h2>
-                <p className="mx-auto mt-5 max-w-lg text-base leading-7 text-zinc-400">
+                <p className="mx-auto mt-5 max-w-lg text-base leading-7 text-muted-foreground">
                   Make an account, open the practice app, and file your first bug
                   in minutes. No card, no fluff.
                 </p>
@@ -319,13 +320,13 @@ export default function HomePage() {
       </main>
 
       {/* ── Footer ───────────────────────────────────────────────── */}
-      <footer className="relative z-10 border-t border-zinc-800/60 px-6 py-8 sm:px-10">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 text-xs text-zinc-600 sm:flex-row">
-          <span className="font-display text-sm font-bold tracking-tight text-zinc-400">
+      <footer className="relative z-10 border-t border-border/60 px-6 py-8 sm:px-10">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 text-xs text-muted-foreground sm:flex-row">
+          <span className="font-display text-sm font-bold tracking-tight text-muted-foreground">
             QA<span className="text-accent">Mastery</span>
           </span>
           <span>
-            Built in public · BuggyShop and the first lessons are on their way.
+            Built in public · Learn QA by doing — free, forever.
           </span>
         </div>
       </footer>

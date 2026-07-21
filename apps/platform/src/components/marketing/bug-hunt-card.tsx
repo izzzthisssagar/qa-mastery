@@ -45,13 +45,13 @@ export function BugHuntCard() {
   const [active, setActive] = useState<Hotspot | null>(null);
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/40 shadow-2xl shadow-black/40">
+    <div className="relative overflow-hidden rounded-2xl border border-border bg-surface/40 shadow-2xl shadow-black/40">
       {/* faux browser chrome */}
-      <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-3">
-        <span className="size-2.5 rounded-full bg-zinc-700" />
-        <span className="size-2.5 rounded-full bg-zinc-700" />
-        <span className="size-2.5 rounded-full bg-zinc-700" />
-        <span className="ml-3 truncate font-mono text-xs text-zinc-500">
+      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+        <span className="size-2.5 rounded-full bg-surface-raised" />
+        <span className="size-2.5 rounded-full bg-surface-raised" />
+        <span className="size-2.5 rounded-full bg-surface-raised" />
+        <span className="ml-3 truncate font-mono text-xs text-muted-foreground">
           buggyshop.local / cart
         </span>
         <span className="ml-auto flex items-center gap-1.5 rounded-full border border-accent/30 bg-accent/10 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-widest text-accent">
@@ -61,20 +61,20 @@ export function BugHuntCard() {
       </div>
 
       {/* faux product viewport */}
-      <div className="relative aspect-[4/3] bg-zinc-950/60">
+      <div className="relative aspect-[4/3] bg-background/60">
         <div className="bg-grid absolute inset-0 opacity-40" />
 
         {/* skeleton UI lines so it reads as a real screen */}
         <div className="absolute inset-0 flex flex-col gap-3 p-6">
-          <div className="h-5 w-2/5 rounded bg-zinc-800/80" />
-          <div className="mt-1 h-3 w-4/5 rounded bg-zinc-800/50" />
-          <div className="h-3 w-3/5 rounded bg-zinc-800/50" />
+          <div className="h-5 w-2/5 rounded bg-surface-raised/80" />
+          <div className="mt-1 h-3 w-4/5 rounded bg-surface-raised/50" />
+          <div className="h-3 w-3/5 rounded bg-surface-raised/50" />
           <div className="mt-auto flex items-end justify-between">
             <div className="space-y-2">
-              <div className="h-3 w-24 rounded bg-zinc-800/50" />
-              <div className="h-6 w-28 rounded bg-zinc-800/80" />
+              <div className="h-3 w-24 rounded bg-surface-raised/50" />
+              <div className="h-6 w-28 rounded bg-surface-raised/80" />
             </div>
-            <div className="h-9 w-32 rounded-lg bg-zinc-800/80" />
+            <div className="h-9 w-32 rounded-lg bg-surface-raised/80" />
           </div>
         </div>
 
@@ -115,8 +115,8 @@ export function BugHuntCard() {
           transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
           className="pointer-events-none absolute inset-x-3 bottom-3"
         >
-          <div className="rounded-lg border border-accent/30 bg-zinc-950/90 px-3.5 py-2.5 backdrop-blur">
-            <p className="text-sm font-medium text-zinc-100">
+          <div className="rounded-lg border border-accent/30 bg-background/90 px-3.5 py-2.5 backdrop-blur">
+            <p className="text-sm font-medium text-foreground">
               {active?.label ?? "Hover a marker to log a finding"}
             </p>
             <p className="mt-0.5 font-mono text-[11px] text-accent/80">

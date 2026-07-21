@@ -15,7 +15,7 @@ export function ProseH2(props: ComponentProps<"h2">) {
   const reduce = useReducedMotion();
   return (
     <motion.h2
-      className="group relative mt-12 flex items-center gap-3 text-xl font-semibold tracking-tight text-zinc-100"
+      className="group relative mt-12 flex items-center gap-3 text-xl font-semibold tracking-tight text-foreground"
       initial={reduce ? false : { opacity: 0, y: 12 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-60px" }}

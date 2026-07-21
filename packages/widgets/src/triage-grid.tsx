@@ -82,26 +82,26 @@ export default function TriageGrid({ onMilestone }: WidgetProps) {
   return (
     <div
       data-testid="widget-triage-grid"
-      className="rounded-xl border border-zinc-700 bg-zinc-900/70 p-5"
+      className="rounded-xl border border-border bg-surface/70 p-5"
     >
-      <p className="text-sm font-semibold text-zinc-100">Triage this bug</p>
-      <p data-testid="triage-bug" className="mt-1 text-sm text-zinc-300">
+      <p className="text-sm font-semibold text-foreground">Triage this bug</p>
+      <p data-testid="triage-bug" className="mt-1 text-sm text-foreground">
         {bug.desc}
       </p>
-      <p className="mt-3 text-xs text-zinc-500">
+      <p className="mt-3 text-xs text-muted-foreground">
         Pick the cell: severity (impact) down, priority (order to fix) across.
       </p>
 
       <div className="mt-3 grid grid-cols-[auto_repeat(3,1fr)] gap-1 text-xs">
         <div />
         {LEVELS.map((p) => (
-          <div key={p} className="px-2 py-1 text-center font-medium text-zinc-500">
+          <div key={p} className="px-2 py-1 text-center font-medium text-muted-foreground">
             Pri: {LABEL[p]}
           </div>
         ))}
         {[...LEVELS].reverse().map((sev) => (
           <div key={sev} className="contents">
-            <div className="px-2 py-1 font-medium text-zinc-500">Sev: {LABEL[sev]}</div>
+            <div className="px-2 py-1 font-medium text-muted-foreground">Sev: {LABEL[sev]}</div>
             {LEVELS.map((pri) => {
               const isPick = pick?.severity === sev && pick?.priority === pri;
               const isExpected = pick && bug.severity === sev && bug.priority === pri;
@@ -109,7 +109,7 @@ export default function TriageGrid({ onMilestone }: WidgetProps) {
                 ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-200"
                 : isPick
                   ? "border-red-500/60 bg-red-500/15 text-red-200"
-                  : "border-zinc-700 text-zinc-500 hover:border-zinc-500";
+                  : "border-border text-muted-foreground hover:border-border";
               return (
                 <button
                   key={pri}
@@ -140,12 +140,12 @@ export default function TriageGrid({ onMilestone }: WidgetProps) {
             {correct ? "Spot on." : "Not quite."} Severity {LABEL[bug.severity]}, Priority{" "}
             {LABEL[bug.priority]}.
           </p>
-          <p className="mt-1 text-xs text-zinc-300">{bug.why}</p>
+          <p className="mt-1 text-xs text-foreground">{bug.why}</p>
           <button
             type="button"
             data-testid="triage-next"
             onClick={next}
-            className="mt-2 rounded-md border border-zinc-600 px-2.5 py-1 text-xs text-zinc-200 hover:border-zinc-400"
+            className="mt-2 rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:border-border"
           >
             Next bug →
           </button>

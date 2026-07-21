@@ -34,11 +34,11 @@ export function AuthField({ id, name, label, type, ...inputProps }: AuthFieldPro
     <div className="group relative">
       <label
         htmlFor={id}
-        className="mb-2 flex items-center gap-2 text-[0.7rem] font-medium uppercase tracking-[0.18em] text-zinc-500 transition-colors group-focus-within:text-accent"
+        className="mb-2 flex items-center gap-2 text-[0.7rem] font-medium uppercase tracking-[0.18em] text-muted-foreground transition-colors group-focus-within:text-accent"
       >
         <span
           aria-hidden
-          className="inline-block h-1 w-1 rounded-full bg-zinc-700 transition-colors group-focus-within:bg-accent"
+          className="inline-block h-1 w-1 rounded-full bg-surface-raised transition-colors group-focus-within:bg-accent"
         />
         {label}
       </label>
@@ -51,7 +51,7 @@ export function AuthField({ id, name, label, type, ...inputProps }: AuthFieldPro
           aria-describedby={hintId}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          className={`peer w-full rounded-xl border border-zinc-800 bg-zinc-950/60 py-3 pl-4 font-mono text-sm text-zinc-100 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)] outline-none transition-[border-color,box-shadow,background-color] duration-300 placeholder:text-zinc-600 focus:border-accent/70 focus:bg-zinc-900/70 focus:shadow-[0_0_0_4px_color-mix(in_oklab,var(--accent)_14%,transparent)] ${
+          className={`peer w-full rounded-xl border border-border bg-background/60 py-3 pl-4 font-mono text-sm text-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)] outline-none transition-[border-color,box-shadow,background-color] duration-300 placeholder:text-muted-foreground focus:border-accent/70 focus:bg-surface/70 focus:shadow-[0_0_0_4px_color-mix(in_oklab,var(--accent)_14%,transparent)] ${
             isPassword ? "pr-12" : "pr-4"
           }`}
           {...inputProps}
@@ -70,7 +70,7 @@ export function AuthField({ id, name, label, type, ...inputProps }: AuthFieldPro
             title={reveal ? "Hide password" : "Show password"}
             aria-pressed={reveal}
             tabIndex={-1}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-zinc-500 transition-colors hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             {reveal ? (
               /* eye-off */

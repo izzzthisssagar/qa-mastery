@@ -21,8 +21,8 @@ export function CtaLink({
     "inline-flex items-center justify-center rounded-lg px-6 py-3 text-sm font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/60";
   const styles =
     variant === "primary"
-      ? "bg-accent text-zinc-950 shadow-lg shadow-accent/20 hover:shadow-accent/30"
-      : "border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-zinc-50";
+      ? "bg-accent text-accent-foreground shadow-lg shadow-accent/20 hover:shadow-accent/30"
+      : "border border-border text-foreground hover:border-border hover:text-foreground";
 
   return (
     <motion.div

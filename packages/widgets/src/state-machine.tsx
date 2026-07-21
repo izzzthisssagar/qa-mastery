@@ -53,7 +53,7 @@ export default function StateMachine({ onMilestone }: WidgetProps) {
   return (
     <div
       data-testid="widget-state-machine"
-      className="rounded-xl border border-zinc-700 bg-zinc-900/70 p-5"
+      className="rounded-xl border border-border bg-surface/70 p-5"
     >
       <div className="flex flex-wrap items-center gap-2">
         {STATES.map((s) => (
@@ -62,8 +62,8 @@ export default function StateMachine({ onMilestone }: WidgetProps) {
             data-testid={`state-${s}`}
             className={
               s === state
-                ? "rounded-md border border-accent bg-accent/15 px-2.5 py-1 text-sm font-semibold text-zinc-50"
-                : "rounded-md border border-zinc-700 px-2.5 py-1 text-sm text-zinc-500"
+                ? "rounded-md border border-accent bg-accent/15 px-2.5 py-1 text-sm font-semibold text-foreground"
+                : "rounded-md border border-border px-2.5 py-1 text-sm text-muted-foreground"
             }
           >
             {s}
@@ -71,8 +71,8 @@ export default function StateMachine({ onMilestone }: WidgetProps) {
         ))}
       </div>
 
-      <p className="mt-3 text-sm text-zinc-400">
-        Current state: <span data-testid="current-state" className="font-semibold text-zinc-100">{state}</span>
+      <p className="mt-3 text-sm text-muted-foreground">
+        Current state: <span data-testid="current-state" className="font-semibold text-foreground">{state}</span>
       </p>
 
       <div className="mt-4 flex flex-wrap gap-2">
@@ -82,7 +82,7 @@ export default function StateMachine({ onMilestone }: WidgetProps) {
             type="button"
             data-testid={`event-${e}`}
             onClick={() => fire(e)}
-            className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:border-zinc-500 hover:text-zinc-50"
+            className="rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:border-border hover:text-foreground"
           >
             {e}
           </button>
@@ -91,7 +91,7 @@ export default function StateMachine({ onMilestone }: WidgetProps) {
           type="button"
           data-testid="event-reset"
           onClick={reset}
-          className="rounded-md px-3 py-1.5 text-sm text-zinc-500 hover:text-zinc-300"
+          className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           Reset
         </button>
@@ -107,7 +107,7 @@ export default function StateMachine({ onMilestone }: WidgetProps) {
           BS-014) lets it through. This is exactly what state-transition tests catch.
         </p>
       ) : (
-        <p data-testid="transition-hint" className="mt-4 text-xs text-zinc-500">
+        <p data-testid="transition-hint" className="mt-4 text-xs text-muted-foreground">
           Walk the happy path (Pay → Ship → Deliver), then try an event that shouldn&apos;t be
           allowed — like Cancel after Shipped.
         </p>

@@ -25,7 +25,7 @@ export default async function TalentHubPage() {
         <h1 className="font-display text-3xl font-bold tracking-tight">
           QA Mastery <span className="text-accent">Talent</span>
         </h1>
-        <p className="max-w-xl text-zinc-400">
+        <p className="max-w-xl text-muted-foreground">
           The hiring layer for QA. Show real proof — bug reports, automation scripts, your device
           matrix, lab-verified skills — and let teams find you.
         </p>
@@ -34,25 +34,25 @@ export default async function TalentHubPage() {
       <div className="flex flex-wrap gap-3">
         <Link
           href="/talent/testers"
-          className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-200 hover:border-zinc-500"
+          className="rounded-lg border border-border px-4 py-2 text-sm text-foreground hover:border-border"
         >
           Find testers
         </Link>
         <Link
           href="/talent/post"
-          className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-200 hover:border-zinc-500"
+          className="rounded-lg border border-border px-4 py-2 text-sm text-foreground hover:border-border"
         >
           Post a project
         </Link>
         <Link
           href="/talent/projects"
-          className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-200 hover:border-zinc-500"
+          className="rounded-lg border border-border px-4 py-2 text-sm text-foreground hover:border-border"
         >
           Browse projects
         </Link>
         <Link
           href="/talent/inbox"
-          className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-200 hover:border-zinc-500"
+          className="rounded-lg border border-border px-4 py-2 text-sm text-foreground hover:border-border"
         >
           Inbox
         </Link>
@@ -61,17 +61,17 @@ export default async function TalentHubPage() {
       <div className="grid gap-4 sm:grid-cols-2">
         <Link
           href="/talent/profile"
-          className="group rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 transition-colors hover:border-zinc-600"
+          className="group rounded-xl border border-border bg-surface/40 p-5 transition-colors hover:border-border"
         >
-          <h2 className="font-medium text-zinc-100">
+          <h2 className="font-medium text-foreground">
             {handle ? "Edit your tester profile" : "Create your tester profile"}
           </h2>
-          <p className="mt-1 text-sm text-zinc-400">
+          <p className="mt-1 text-sm text-muted-foreground">
             Skills, device matrix and portfolio proof.{" "}
             {isPublic ? (
               <span className="text-accent">Live</span>
             ) : (
-              <span className="text-zinc-500">Draft</span>
+              <span className="text-muted-foreground">Draft</span>
             )}
           </p>
         </Link>
@@ -79,15 +79,15 @@ export default async function TalentHubPage() {
         {handle ? (
           <Link
             href={`/talent/u/${handle}`}
-            className="group rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 transition-colors hover:border-zinc-600"
+            className="group rounded-xl border border-border bg-surface/40 p-5 transition-colors hover:border-border"
           >
-            <h2 className="font-medium text-zinc-100">View your public profile</h2>
-            <p className="mt-1 text-sm text-zinc-400">
+            <h2 className="font-medium text-foreground">View your public profile</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
               /talent/u/{handle} — share it anywhere.
             </p>
           </Link>
         ) : (
-          <div className="rounded-xl border border-dashed border-zinc-800 p-5 text-sm text-zinc-500">
+          <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
             Your public profile appears here once you pick a handle.
           </div>
         )}

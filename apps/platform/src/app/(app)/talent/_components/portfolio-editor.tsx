@@ -16,7 +16,7 @@ const PORTFOLIO_BUCKET = "talent-portfolio";
 export type PortfolioRow = { id: string; type: string; title: string; is_nda?: boolean };
 
 const field =
-  "w-full rounded-lg border border-zinc-700 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-100 outline-none focus-visible:border-zinc-500";
+  "w-full rounded-lg border border-border bg-surface/60 px-3 py-2 text-sm text-foreground outline-none focus-visible:border-border";
 
 export function PortfolioEditor({
   initial,
@@ -99,10 +99,10 @@ export function PortfolioEditor({
           {rows.map((p) => (
             <li
               key={p.id}
-              className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2 text-sm"
+              className="flex items-center gap-2 rounded-lg border border-border bg-surface/40 px-3 py-2 text-sm"
             >
               <Badge tone={portfolioTypeTone[p.type] ?? "default"}>{labelFor(p.type)}</Badge>
-              <span className="text-zinc-200">{p.title}</span>
+              <span className="text-foreground">{p.title}</span>
               {p.is_nda && <Badge tone="info">NDA</Badge>}
             </li>
           ))}
@@ -111,7 +111,7 @@ export function PortfolioEditor({
 
       {reusable.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-muted-foreground">
             Reuse proof you already built on QA Mastery (one click → linked):
           </p>
           <div className="flex flex-wrap gap-2">
@@ -120,21 +120,21 @@ export function PortfolioEditor({
                 key={`${a.source_table}-${a.source_id}`}
                 type="button"
                 onClick={() => prefillFromArtifact(a)}
-                className="rounded-md border border-zinc-700 px-2 py-1 text-left text-xs text-zinc-300 hover:border-emerald-500/50 hover:text-emerald-200"
+                className="rounded-md border border-border px-2 py-1 text-left text-xs text-foreground hover:border-emerald-500/50 hover:text-emerald-200"
               >
                 <span className="font-medium">{a.title}</span>{" "}
-                <span className="text-zinc-500">· {a.meta}</span>
+                <span className="text-muted-foreground">· {a.meta}</span>
               </button>
             ))}
           </div>
         </div>
       )}
 
-      <div className="space-y-3 rounded-xl border border-zinc-800 p-4">
+      <div className="space-y-3 rounded-xl border border-border p-4">
         {link && (
           <p className="text-xs text-emerald-300">
             Linked to your {link.source_table === "bug_reports" ? "bug report" : "test case"}.{" "}
-            <button type="button" className="text-zinc-400 underline" onClick={() => setLink(null)}>
+            <button type="button" className="text-muted-foreground underline" onClick={() => setLink(null)}>
               unlink
             </button>
           </p>
@@ -169,7 +169,7 @@ export function PortfolioEditor({
           placeholder="https://github.com/… (optional)"
           aria-label="Repo URL"
         />
-        <label className="block text-sm text-zinc-400">
+        <label className="block text-sm text-muted-foreground">
           <span className="mb-1 block">
             Attach a file — bug-report sheet, test plan, coverage report (PDF, Excel, Word,
             CSV or image — optional)
@@ -178,10 +178,10 @@ export function PortfolioEditor({
             type="file"
             accept=".pdf,.csv,.txt,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.docx,.doc,application/pdf,text/csv,text/plain,image/png,image/jpeg,image/webp,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
             onChange={onFile}
-            className="block w-full text-xs text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-zinc-200"
+            className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-md file:border file:border-border file:bg-surface file:px-3 file:py-1.5 file:text-foreground"
           />
         </label>
-        <label className="flex items-center gap-2 text-sm text-zinc-400">
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
           <input type="checkbox" checked={isNda} onChange={(e) => setIsNda(e.target.checked)} />
           Under NDA — hide details from public view
         </label>

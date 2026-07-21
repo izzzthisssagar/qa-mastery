@@ -57,7 +57,7 @@ export default async function TalentProfilePage() {
     <div className="space-y-10 py-2">
       <header className="space-y-1">
         <h1 className="font-display text-2xl font-bold tracking-tight">Your tester profile</h1>
-        <p className="text-sm text-zinc-400">Proof first — this is what teams see when they search.</p>
+        <p className="text-sm text-muted-foreground">Proof first — this is what teams see when they search.</p>
       </header>
 
       <AvatarUploader userId={user.id} initialPath={(profile?.avatar_path as string | null) ?? null} />
@@ -79,8 +79,8 @@ export default async function TalentProfilePage() {
       />
 
       <section className="space-y-3">
-        <h2 className="text-sm font-medium text-zinc-300">Experience &amp; CV</h2>
-        <p className="text-xs text-zinc-500">
+        <h2 className="text-sm font-medium text-foreground">Experience &amp; CV</h2>
+        <p className="text-xs text-muted-foreground">
           Real-world track record — for pros who didn&apos;t come through the labs, this is your proof.
         </p>
         <CvUploader userId={user.id} hasCv={Boolean(profile?.cv_path)} />
@@ -88,23 +88,23 @@ export default async function TalentProfilePage() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-medium text-zinc-300">Verified skills</h2>
-        <p className="text-xs text-zinc-500">
+        <h2 className="text-sm font-medium text-foreground">Verified skills</h2>
+        <p className="text-xs text-muted-foreground">
           Auto-earned from your graded QA Mastery labs — the trust signal teams can&apos;t fake.
         </p>
         <VerifiedSkills initial={badges} />
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-medium text-zinc-300">Device matrix</h2>
-        <p className="text-xs text-zinc-500">
+        <h2 className="text-sm font-medium text-foreground">Device matrix</h2>
+        <p className="text-xs text-muted-foreground">
           Real devices you can test on — a top filter for clients, rare on other marketplaces.
         </p>
         <DeviceEditor initial={(devices as DeviceRow[] | null) ?? []} />
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-medium text-zinc-300">Portfolio</h2>
+        <h2 className="text-sm font-medium text-foreground">Portfolio</h2>
         <PortfolioEditor
           initial={(portfolio as PortfolioRow[] | null) ?? []}
           reusable={reusable}

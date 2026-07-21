@@ -29,7 +29,7 @@ export default async function ConversationPage({ params }: Params) {
 
   return (
     <div className="space-y-4 py-2">
-      <Link href="/talent/inbox" className="text-sm text-zinc-400 hover:text-zinc-200">
+      <Link href="/talent/inbox" className="text-sm text-muted-foreground hover:text-foreground">
         ← Inbox
       </Link>
       <ConversationThreadLazy conversationId={id} currentUserId={user.id} initial={messages} />

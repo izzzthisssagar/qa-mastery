@@ -2,30 +2,20 @@ import { expect, test, type Page } from "@playwright/test";
 import { signUpFreshLearner as sharedSignUp } from "./signup-helper";
 
 /**
- * Track A6 — Advanced Test Design (pairwise + use-case testing). Both lessons
- * are Pro-gated (`free: false`), so the learner upgrades before the pages
- * render. Mirrors the signup helper used across the learn specs.
- *
- * (Promoted from a root-level scratch script: the original visited the lessons
- * without upgrading, which a free learner can't do.)
+ * Track A6 — Advanced Test Design (pairwise + use-case testing). Every lesson is
+ * free (no paywall), so a fresh learner opens the pages directly. Mirrors the
+ * signup helper used across the learn specs.
  */
 
 async function signUpFreshLearner(page: Page): Promise<void> {
   await sharedSignUp(page, "learner");
 }
 
-async function upgradeToPro(page: Page): Promise<void> {
-  await page.goto("http://localhost:3000/dashboard");
-  await page.getByTestId("upgrade-pro").click();
-  await expect(page.getByTestId("pro-badge")).toBeVisible();
-}
-
-test.describe("learn — A6 Advanced Test Design (Pro)", () => {
-  test("a Pro learner can open the pairwise and use-case lessons and see their widgets", async ({
+test.describe("learn — A6 Advanced Test Design", () => {
+  test("a learner can open the pairwise and use-case lessons and see their widgets", async ({
     page,
   }) => {
     await signUpFreshLearner(page);
-    await upgradeToPro(page);
 
     // Pairwise (All-Pairs) — renders the PairwiseVisualizer (its parameter
     // grid heading is unique to the widget, unlike the section prose).

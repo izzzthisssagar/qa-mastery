@@ -41,7 +41,7 @@ export function CvUploader({ userId, hasCv }: { userId: string; hasCv: boolean }
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <label className="cursor-pointer rounded-lg border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:border-zinc-500">
+      <label className="cursor-pointer rounded-lg border border-border px-3 py-1.5 text-sm text-foreground hover:border-border">
         {pending ? "Uploading…" : done ? "Replace CV" : "Upload CV / résumé (PDF or Word)"}
         <input
           type="file"

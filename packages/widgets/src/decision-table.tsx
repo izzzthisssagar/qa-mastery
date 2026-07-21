@@ -57,10 +57,10 @@ export default function DecisionTable({ onMilestone }: WidgetProps) {
   return (
     <div
       data-testid="widget-decision-table"
-      className="rounded-xl border border-zinc-700 bg-zinc-900/70 p-5"
+      className="rounded-xl border border-border bg-surface/70 p-5"
     >
-      <p className="text-sm font-semibold text-zinc-100">Free-shipping rule</p>
-      <p className="mt-1 text-xs text-zinc-500">
+      <p className="text-sm font-semibold text-foreground">Free-shipping rule</p>
+      <p className="mt-1 text-xs text-muted-foreground">
         Toggle the conditions and watch the action. Free shipping = Cart over $999 AND Member AND
         Promo.
       </p>
@@ -75,8 +75,8 @@ export default function DecisionTable({ onMilestone }: WidgetProps) {
             onClick={() => toggle(i)}
             className={
               vals[i]
-                ? "rounded-md border border-accent bg-accent/15 px-3 py-1.5 text-sm font-medium text-zinc-50"
-                : "rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:border-zinc-500"
+                ? "rounded-md border border-accent bg-accent/15 px-3 py-1.5 text-sm font-medium text-foreground"
+                : "rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:border-border"
             }
           >
             {label}: {vals[i] ? "Yes" : "No"}
@@ -88,7 +88,7 @@ export default function DecisionTable({ onMilestone }: WidgetProps) {
         Action:{" "}
         <span
           data-testid="dt-action"
-          className={action ? "font-semibold text-emerald-400" : "font-semibold text-zinc-300"}
+          className={action ? "font-semibold text-emerald-400" : "font-semibold text-foreground"}
         >
           {action ? "Free shipping" : "Standard shipping"}
         </span>
@@ -96,7 +96,7 @@ export default function DecisionTable({ onMilestone }: WidgetProps) {
 
       <table className="mt-4 w-full border-collapse text-left text-xs">
         <thead>
-          <tr className="text-zinc-500">
+          <tr className="text-muted-foreground">
             <th className="py-1 pr-3 font-medium">Cart&gt;$999</th>
             <th className="py-1 pr-3 font-medium">Member</th>
             <th className="py-1 pr-3 font-medium">Promo</th>
@@ -112,7 +112,7 @@ export default function DecisionTable({ onMilestone }: WidgetProps) {
               <tr
                 key={key}
                 data-testid={`dt-row-${key}`}
-                className={isCurrent ? "bg-accent/10 text-zinc-100" : "text-zinc-500"}
+                className={isCurrent ? "bg-accent/10 text-foreground" : "text-muted-foreground"}
               >
                 <td className="py-1 pr-3">{tick(combo[0])}</td>
                 <td className="py-1 pr-3">{tick(combo[1])}</td>

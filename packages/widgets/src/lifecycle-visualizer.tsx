@@ -54,50 +54,50 @@ export function LifecycleVisualizer({ onMilestone }: { onMilestone?: (m: string)
   };
 
   return (
-    <div className="my-8 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/30 p-6 backdrop-blur-xl">
+    <div className="my-8 overflow-hidden rounded-2xl border border-border bg-surface/30 p-6 backdrop-blur-xl">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
         <div>
-          <h3 className="text-lg font-semibold text-zinc-100">TestNG Execution Lifecycle</h3>
-          <p className="text-sm text-zinc-400">Step through to see exactly when each annotation fires.</p>
+          <h3 className="text-lg font-semibold text-foreground">TestNG Execution Lifecycle</h3>
+          <p className="text-sm text-muted-foreground">Step through to see exactly when each annotation fires.</p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={reset}
-            className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:bg-zinc-700"
+            className="rounded-lg bg-surface-raised px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-raised"
           >
             Reset
           </button>
           <button
             onClick={stepForward}
             disabled={isPlaying || currentStep >= LIFECYCLE_STEPS.length - 1}
-            className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:bg-zinc-700 disabled:opacity-50"
+            className="rounded-lg bg-surface-raised px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-raised disabled:opacity-50"
           >
             Step
           </button>
           <button
             onClick={playAll}
             disabled={isPlaying || currentStep >= LIFECYCLE_STEPS.length - 1}
-            className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-accent/90 disabled:opacity-50 shadow-lg shadow-accent/20"
+            className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-foreground hover:bg-accent/90 disabled:opacity-50 shadow-lg shadow-accent/20"
           >
             Play Animation
           </button>
         </div>
       </div>
 
-      <div className="relative border-l-2 border-zinc-800 ml-4 py-4 pl-6 space-y-4">
+      <div className="relative border-l-2 border-border ml-4 py-4 pl-6 space-y-4">
         {LIFECYCLE_STEPS.map((step, idx) => {
           const isPast = idx < currentStep;
           const isActive = idx === currentStep;
           const isTest = step.label.includes("@Test");
           
-          let colorClass = "text-zinc-600 border-zinc-800";
-          let bgClass = "bg-zinc-900/50";
+          let colorClass = "text-muted-foreground border-border";
+          let bgClass = "bg-surface/50";
           
           if (isActive) {
             colorClass = isTest ? "text-emerald-400 border-emerald-500" : "text-accent border-accent";
             bgClass = isTest ? "bg-emerald-500/10" : "bg-accent/10";
           } else if (isPast) {
-            colorClass = "text-zinc-400 border-zinc-600";
+            colorClass = "text-muted-foreground border-border";
           }
 
           return (
@@ -115,7 +115,7 @@ export function LifecycleVisualizer({ onMilestone }: { onMilestone?: (m: string)
               {/* Timeline dot */}
               <div 
                 className={`absolute -left-[31px] top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border-2 transition-colors duration-300 ${
-                  isActive ? "bg-current border-current" : isPast ? "bg-zinc-600 border-zinc-600" : "bg-zinc-900 border-zinc-800"
+                  isActive ? "bg-current border-current" : isPast ? "bg-muted-foreground border-border" : "bg-surface border-border"
                 }`}
               />
               
@@ -128,7 +128,7 @@ export function LifecycleVisualizer({ onMilestone }: { onMilestone?: (m: string)
                     <motion.span
                       initial={{ opacity: 0, filter: "blur(4px)" }}
                       animate={{ opacity: 1, filter: "blur(0px)" }}
-                      className="text-xs sm:text-sm text-zinc-300"
+                      className="text-xs sm:text-sm text-foreground"
                     >
                       {step.desc}
                     </motion.span>

@@ -60,7 +60,7 @@ export function FeedbackWidget() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Send feedback"
-        className="fixed bottom-4 left-4 z-50 inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-900/80 px-4 py-2.5 text-sm font-medium text-zinc-200 shadow-lg backdrop-blur transition-colors hover:border-accent/60 hover:text-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 sm:left-6"
+        className="fixed bottom-4 left-4 z-50 inline-flex items-center gap-2 rounded-full border border-border bg-surface/80 px-4 py-2.5 text-sm font-medium text-foreground shadow-lg backdrop-blur transition-colors hover:border-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 sm:left-6"
       >
         <span aria-hidden className="text-accent">✦</span> Feedback
       </button>
@@ -68,9 +68,9 @@ export function FeedbackWidget() {
   }
 
   return (
-    <div className="fixed bottom-4 left-4 z-50 w-[min(92vw,22rem)] rounded-2xl border border-zinc-800 bg-zinc-950/95 p-4 shadow-2xl backdrop-blur sm:left-6">
+    <div className="fixed bottom-4 left-4 z-50 w-[min(92vw,22rem)] rounded-2xl border border-border bg-background/95 p-4 shadow-2xl backdrop-blur sm:left-6">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-zinc-100">
+        <h2 className="text-sm font-semibold text-foreground">
           Tell us what to build next
         </h2>
         <button
@@ -80,7 +80,7 @@ export function FeedbackWidget() {
             reset();
           }}
           aria-label="Close feedback"
-          className="rounded-md px-1.5 text-zinc-500 transition-colors hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="rounded-md px-1.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           ✕
         </button>
@@ -88,14 +88,14 @@ export function FeedbackWidget() {
 
       {done ? (
         <div className="space-y-3 py-2">
-          <p className="text-sm text-zinc-300">
+          <p className="text-sm text-foreground">
             <span className="text-accent">Got it.</span> We read every one — and
             a lot of them turn into things we ship.
           </p>
           <button
             type="button"
             onClick={reset}
-            className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-zinc-950 shadow-lg shadow-accent/20 transition-shadow hover:shadow-accent/30"
+            className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-accent-foreground shadow-lg shadow-accent/20 transition-shadow hover:shadow-accent/30"
           >
             Send another
           </button>
@@ -110,8 +110,8 @@ export function FeedbackWidget() {
                 onClick={() => setType(t.value)}
                 className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                   type === t.value
-                    ? "bg-accent text-zinc-950"
-                    : "border border-zinc-700 text-zinc-300 hover:border-zinc-500"
+                    ? "bg-accent text-accent-foreground"
+                    : "border border-border text-foreground hover:border-border"
                 }`}
               >
                 {t.label}
@@ -129,11 +129,11 @@ export function FeedbackWidget() {
                 ? "What did you love?"
                 : "What do you want, or what went wrong?"
             }
-            className="w-full resize-none rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus-visible:border-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+            className="w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
           />
 
           <div className="flex items-center gap-1.5" role="radiogroup" aria-label="Rating">
-            <span className="mr-1 text-xs text-zinc-500">Rate (optional):</span>
+            <span className="mr-1 text-xs text-muted-foreground">Rate (optional):</span>
             {[1, 2, 3, 4, 5].map((n) => (
               <button
                 key={n}
@@ -143,7 +143,7 @@ export function FeedbackWidget() {
                 aria-label={`${n} star${n > 1 ? "s" : ""}`}
                 onClick={() => setRating(rating === n ? undefined : n)}
                 className={`text-base leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                  rating && n <= rating ? "text-bug" : "text-zinc-600 hover:text-zinc-400"
+                  rating && n <= rating ? "text-bug" : "text-muted-foreground hover:text-muted-foreground"
                 }`}
               >
                 ★
@@ -157,7 +157,7 @@ export function FeedbackWidget() {
             type="button"
             onClick={send}
             disabled={pending || message.trim().length === 0}
-            className="w-full rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-zinc-950 shadow-lg shadow-accent/20 transition-shadow hover:shadow-accent/30 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-accent-foreground shadow-lg shadow-accent/20 transition-shadow hover:shadow-accent/30 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {pending ? "Sending…" : "Send feedback"}
           </button>

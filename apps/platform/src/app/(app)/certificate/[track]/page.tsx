@@ -63,7 +63,7 @@ export default async function CertificatePage({ params }: PageProps) {
         <Reveal>
           <p className="text-xs font-semibold uppercase tracking-widest text-accent">Certificate</p>
           <h1 className="font-display mt-2 text-3xl font-semibold tracking-tight">{trackTitle}</h1>
-          <p className="mt-4 text-zinc-400" data-testid="certificate-locked">
+          <p className="mt-4 text-muted-foreground" data-testid="certificate-locked">
             Not earned yet — {done} / {total} lessons complete. Finish the track to unlock your
             certificate.
           </p>
@@ -83,21 +83,21 @@ export default async function CertificatePage({ params }: PageProps) {
       <Reveal>
         <article
           data-testid="certificate-earned"
-          className="rounded-3xl border border-accent/30 bg-zinc-900/60 px-10 py-14 text-center shadow-2xl shadow-black/40 backdrop-blur"
+          className="rounded-3xl border border-accent/30 bg-surface/60 px-10 py-14 text-center shadow-2xl shadow-black/40 backdrop-blur"
         >
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
             Certificate of Completion
           </p>
-          <p className="mt-8 text-sm text-zinc-500">This certifies that</p>
-          <p className="font-display mt-2 text-4xl font-semibold tracking-tight text-zinc-50">
+          <p className="mt-8 text-sm text-muted-foreground">This certifies that</p>
+          <p className="font-display mt-2 text-4xl font-semibold tracking-tight text-foreground">
             {learner}
           </p>
-          <p className="mt-6 text-sm text-zinc-500">has completed all {total} lessons of</p>
+          <p className="mt-6 text-sm text-muted-foreground">has completed all {total} lessons of</p>
           <p className="font-display mt-1 text-2xl font-semibold tracking-tight text-accent">
             {trackTitle}
           </p>
-          <p className="mt-8 text-xs text-zinc-500">Issued {issued} · QA Mastery</p>
-          <p className="mt-6 text-[11px] text-zinc-600">
+          <p className="mt-8 text-xs text-muted-foreground">Issued {issued} · QA Mastery</p>
+          <p className="mt-6 text-[11px] text-muted-foreground">
             A non-accredited certificate of completion — proof of the work you did, not a formal
             qualification.
           </p>

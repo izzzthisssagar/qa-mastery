@@ -138,11 +138,11 @@ export function LocatorLab() {
   return (
     <div
       data-testid="locator-lab"
-      className="mt-6 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/40"
+      className="mt-6 overflow-hidden rounded-xl border border-border bg-surface/40"
     >
       <style>{`.${RING}{outline:2px solid var(--color-accent);outline-offset:2px;border-radius:3px;}`}</style>
 
-      <div className="border-b border-zinc-800 px-5 py-4">
+      <div className="border-b border-border px-5 py-4">
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-accent">
             Locator Lab · challenge {index + 1} / {CHALLENGES.length}
@@ -150,7 +150,7 @@ export function LocatorLab() {
           <div
             role="group"
             aria-label="Locator language"
-            className="flex gap-1 rounded-lg bg-zinc-800 p-0.5 text-xs"
+            className="flex gap-1 rounded-lg bg-surface-raised p-0.5 text-xs"
           >
             {(["css", "xpath"] as const).map((m) => (
               <button
@@ -160,7 +160,7 @@ export function LocatorLab() {
                 aria-pressed={mode === m}
                 onClick={() => setMode(m)}
                 className={`rounded-md px-2.5 py-1 font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                  mode === m ? "bg-accent text-zinc-950" : "text-zinc-400 hover:text-zinc-200"
+                  mode === m ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {m === "css" ? "CSS" : "XPath"}
@@ -168,21 +168,21 @@ export function LocatorLab() {
             ))}
           </div>
         </div>
-        <p className="mt-2 text-sm text-zinc-300" data-testid="locator-prompt">
+        <p className="mt-2 text-sm text-foreground" data-testid="locator-prompt">
           {challenge.prompt}
         </p>
       </div>
 
       {/* The page under test — real DOM, queried by ref. */}
       <div className="px-5 py-4">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Page under test
         </p>
         <div
           ref={stageRef}
-          className="rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300"
+          className="rounded-lg border border-border bg-background p-4 text-sm text-foreground"
         >
-          <nav className="flex gap-4 border-b border-zinc-800 pb-3 text-zinc-400">
+          <nav className="flex gap-4 border-b border-border pb-3 text-muted-foreground">
             <a href="#home" className="hover:text-accent">
               Home
             </a>
@@ -199,28 +199,28 @@ export function LocatorLab() {
               type="email"
               placeholder="you@example.com"
               readOnly
-              className="block w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-300"
+              className="block w-full rounded border border-border bg-surface px-2 py-1 text-foreground"
             />
             <input
               name="password"
               type="password"
               placeholder="••••••••"
               readOnly
-              className="block w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-300"
+              className="block w-full rounded border border-border bg-surface px-2 py-1 text-foreground"
             />
             <button
               id="login-btn"
               type="button"
-              className="rounded bg-accent px-3 py-1 font-medium text-zinc-950"
+              className="rounded bg-accent px-3 py-1 font-medium text-accent-foreground"
             >
               Sign in
             </button>
           </form>
-          <p className="mt-3 text-xs text-zinc-500">Forgot password?</p>
+          <p className="mt-3 text-xs text-muted-foreground">Forgot password?</p>
         </div>
       </div>
 
-      <div className="border-t border-zinc-800 px-5 py-4">
+      <div className="border-t border-border px-5 py-4">
         <div className="flex flex-col gap-2 sm:flex-row">
           <input
             data-testid="locator-input"
@@ -234,13 +234,13 @@ export function LocatorLab() {
             spellCheck={false}
             autoCapitalize="off"
             autoCorrect="off"
-            className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-sm text-accent outline-none focus:border-accent"
+            className="flex-1 rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm text-accent outline-none focus:border-accent"
           />
           <button
             type="button"
             data-testid="locator-run"
             onClick={run}
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground transition hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             Run locator
           </button>
@@ -256,7 +256,7 @@ export function LocatorLab() {
                 ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
                 : result.ok
                   ? "border-accent/40 bg-accent/10 text-accent"
-                  : "border-zinc-700 bg-zinc-800/50 text-zinc-300"
+                  : "border-border bg-surface-raised/50 text-foreground"
             }`}
           >
             {result.error ? (
@@ -287,7 +287,7 @@ export function LocatorLab() {
             type="button"
             data-testid="locator-reveal"
             onClick={() => setShowReveal((s) => !s)}
-            className="text-zinc-400 underline underline-offset-2 hover:text-zinc-200"
+            className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
           >
             {showReveal ? "Hide answer" : "Show answer"}
           </button>
@@ -303,7 +303,7 @@ export function LocatorLab() {
           )}
         </div>
         {showReveal && (
-          <p className="mt-2 font-mono text-xs text-zinc-400" data-testid="locator-answer">
+          <p className="mt-2 font-mono text-xs text-muted-foreground" data-testid="locator-answer">
             {challenge.reveal}
           </p>
         )}

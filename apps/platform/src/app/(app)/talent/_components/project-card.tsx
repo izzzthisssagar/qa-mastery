@@ -7,10 +7,10 @@ export function ProjectCard({ project }: { project: ProjectCardData }) {
   return (
     <Link
       href={`/talent/projects/${project.id}`}
-      className="group flex flex-col gap-3 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 transition-colors hover:border-emerald-500/40"
+      className="group flex flex-col gap-3 rounded-xl border border-border bg-surface/40 p-4 transition-colors hover:border-emerald-500/40"
     >
       <div className="flex items-start justify-between gap-2">
-        <h3 className="font-medium text-zinc-100">{project.title}</h3>
+        <h3 className="font-medium text-foreground">{project.title}</h3>
         {project.nda_required && <Badge tone="info">NDA</Badge>}
       </div>
       <div className="flex flex-wrap gap-1.5 text-xs">

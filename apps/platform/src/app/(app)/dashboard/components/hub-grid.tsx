@@ -2,8 +2,7 @@ import Link from "next/link";
 
 /**
  * The master hub grid — every destination that used to clutter the navbar now
- * lives here as a card. Any `soon` card renders disabled until its phase lands;
- * Talent is gated by the feature flag from the server.
+ * lives here as a card. Talent is gated by the feature flag from the server.
  */
 
 interface HubCard {
@@ -12,7 +11,6 @@ interface HubCard {
   desc: string;
   icon: string;
   accent: string;
-  soon?: boolean;
 }
 
 export function HubGrid({ showTalent }: { showTalent: boolean }) {
@@ -30,34 +28,18 @@ export function HubGrid({ showTalent }: { showTalent: boolean }) {
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-      {cards.map((c) =>
-        c.soon ? (
-          <div
-            key={c.label}
-            data-testid={`hub-card-${c.label.toLowerCase().split(" ")[0]}`}
-            aria-disabled
-            className="flex cursor-not-allowed flex-col gap-1 rounded-2xl border border-border bg-surface/50 p-4 opacity-60"
-          >
-            <span className="text-xl" aria-hidden>{c.icon}</span>
-            <span className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-foreground">
-              {c.label}
-              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">Soon</span>
-            </span>
-            <span className="text-xs text-muted-foreground">{c.desc}</span>
-          </div>
-        ) : (
-          <Link
-            key={c.label}
-            href={c.href}
-            data-testid={`hub-card-${c.label.toLowerCase().split(" ")[0]}`}
-            className="group flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4 transition-colors hover:border-accent/50"
-          >
-            <span className="text-xl" aria-hidden>{c.icon}</span>
-            <span className={`mt-1 text-sm font-semibold text-foreground`}>{c.label}</span>
-            <span className="text-xs text-muted-foreground">{c.desc}</span>
-          </Link>
-        ),
-      )}
+      {cards.map((c) => (
+        <Link
+          key={c.label}
+          href={c.href}
+          data-testid={`hub-card-${c.label.toLowerCase().split(" ")[0]}`}
+          className="group flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4 transition-colors hover:border-accent/50"
+        >
+          <span className="text-xl" aria-hidden>{c.icon}</span>
+          <span className={`mt-1 text-sm font-semibold text-foreground`}>{c.label}</span>
+          <span className="text-xs text-muted-foreground">{c.desc}</span>
+        </Link>
+      ))}
     </div>
   );
 }

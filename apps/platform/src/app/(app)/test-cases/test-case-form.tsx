@@ -7,7 +7,7 @@ import { createTestCase, type TestCaseActionState } from "./actions";
 const INITIAL: TestCaseActionState = { error: null };
 
 const field =
-  "w-full rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none transition-colors focus:border-accent/70";
+  "w-full rounded-lg border border-border bg-background/60 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-accent/70";
 
 export function TestCaseForm() {
   const [state, action, pending] = useActionState(createTestCase, INITIAL);

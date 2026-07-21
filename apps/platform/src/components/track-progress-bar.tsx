@@ -12,7 +12,7 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 export function TrackProgressBar({ pct }: { pct: number }) {
   const reduce = useReducedMotion();
   return (
-    <div className="relative mt-3 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800/80">
+    <div className="relative mt-3 h-1.5 w-full overflow-hidden rounded-full bg-surface-raised/80">
       <motion.div
         aria-hidden
         className="h-full rounded-full bg-gradient-to-r from-accent-soft to-accent"

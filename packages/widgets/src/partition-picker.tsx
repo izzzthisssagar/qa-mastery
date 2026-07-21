@@ -57,12 +57,12 @@ export default function PartitionPicker({ onMilestone }: WidgetProps) {
   return (
     <div
       data-testid="widget-partition-picker"
-      className="rounded-xl border border-zinc-700 bg-zinc-900/70 p-5"
+      className="rounded-xl border border-border bg-surface/70 p-5"
     >
-      <p className="text-sm font-semibold text-zinc-100">
-        Age field <span className="font-normal text-zinc-500">(accepted: 18-60)</span>
+      <p className="text-sm font-semibold text-foreground">
+        Age field <span className="font-normal text-muted-foreground">(accepted: 18-60)</span>
       </p>
-      <p className="mt-1 text-xs text-zinc-500">
+      <p className="mt-1 text-xs text-muted-foreground">
         Build a test set. Click values to add them and watch which classes you cover — aim to cover
         all three with as few tests as possible.
       </p>
@@ -79,7 +79,7 @@ export default function PartitionPicker({ onMilestone }: WidgetProps) {
               aria-pressed={on}
               onClick={() => toggle(value)}
               className={`rounded-md border px-3 py-1.5 text-sm ${
-                on ? PART_CLASS[part] : "border-zinc-700 text-zinc-300 hover:border-zinc-500"
+                on ? PART_CLASS[part] : "border-border text-foreground hover:border-border"
               }`}
             >
               {value}
@@ -98,7 +98,7 @@ export default function PartitionPicker({ onMilestone }: WidgetProps) {
               className={
                 covered
                   ? "rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-emerald-200"
-                  : "rounded border border-zinc-700 px-2 py-1 text-zinc-500"
+                  : "rounded border border-border px-2 py-1 text-muted-foreground"
               }
             >
               {covered ? "✓" : "○"} {PART_LABEL[p]}
@@ -107,7 +107,7 @@ export default function PartitionPicker({ onMilestone }: WidgetProps) {
         })}
       </div>
 
-      <p className="mt-3 text-xs text-zinc-500">
+      <p className="mt-3 text-xs text-muted-foreground">
         Tests selected: <span data-testid="selected-count">{selected.length}</span> · classes
         covered: {coveredSet.size}/3
       </p>

@@ -36,7 +36,7 @@ export function ApplyButton({ projectId, applied }: { projectId: string; applied
           rows={3}
           placeholder="Optional: why you're a fit (your relevant proof)."
           aria-label="Application note"
-          className="w-full resize-y rounded-lg border border-zinc-700 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-100 outline-none focus-visible:border-zinc-500"
+          className="w-full resize-y rounded-lg border border-border bg-surface/60 px-3 py-2 text-sm text-foreground outline-none focus-visible:border-border"
         />
       )}
       <div className="flex items-center gap-3">

@@ -26,13 +26,13 @@ export default async function ProjectDetailPage({ params }: Params) {
           {Boolean(project.nda_required) && <Badge tone="info">NDA</Badge>}
         </div>
         {(project.description as string) && (
-          <p className="max-w-2xl whitespace-pre-wrap text-zinc-300">{project.description as string}</p>
+          <p className="max-w-2xl whitespace-pre-wrap text-foreground">{project.description as string}</p>
         )}
       </header>
 
       {requiredTypes.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-sm font-medium text-zinc-400">Required testing types</h2>
+          <h2 className="text-sm font-medium text-muted-foreground">Required testing types</h2>
           <div className="flex flex-wrap gap-2">
             {requiredTypes.map((t) => (
               <Badge key={t} tone="info">
@@ -45,10 +45,10 @@ export default async function ProjectDetailPage({ params }: Params) {
 
       {stack.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-sm font-medium text-zinc-400">Tech stack</h2>
-          <div className="flex flex-wrap gap-2 font-mono text-xs text-zinc-300">
+          <h2 className="text-sm font-medium text-muted-foreground">Tech stack</h2>
+          <div className="flex flex-wrap gap-2 font-mono text-xs text-foreground">
             {stack.map((s) => (
-              <span key={s} className="rounded-md border border-zinc-800 bg-zinc-900/60 px-2 py-1">
+              <span key={s} className="rounded-md border border-border bg-surface/60 px-2 py-1">
                 {labelFor(s)}
               </span>
             ))}
@@ -59,12 +59,12 @@ export default async function ProjectDetailPage({ params }: Params) {
       <section className="space-y-3">
         {isOwner ? (
           <>
-            <h2 className="text-sm font-medium text-zinc-300">Applicants</h2>
+            <h2 className="text-sm font-medium text-foreground">Applicants</h2>
             <ApplicantsList applicants={applications as unknown as Applicant[]} />
           </>
         ) : (
           <>
-            <h2 className="text-sm font-medium text-zinc-300">Interested?</h2>
+            <h2 className="text-sm font-medium text-foreground">Interested?</h2>
             <ApplyButton projectId={id} applied={myApplication != null} />
           </>
         )}

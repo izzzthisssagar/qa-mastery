@@ -59,7 +59,7 @@ export function FeedClient({ initial }: { initial: FeedPost[] }) {
               data-testid={`feed-tab-${t.id}`}
               onClick={() => switchTab(t.id)}
               className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                tab === t.id ? "bg-accent text-zinc-950" : "text-muted-foreground hover:text-foreground"
+                tab === t.id ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {t.label}
@@ -80,7 +80,7 @@ export function FeedClient({ initial }: { initial: FeedPost[] }) {
         <Link
           href="/community/new"
           data-testid="community-new"
-          className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:opacity-90"
+          className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground transition hover:opacity-90"
         >
           New post
         </Link>

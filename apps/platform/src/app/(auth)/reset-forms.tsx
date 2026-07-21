@@ -39,13 +39,13 @@ function Shell({
             <p className="font-mono text-xs uppercase tracking-[0.28em] text-accent/80">{eyebrow}</p>
           </Reveal>
           <Reveal delay={0.12}>
-            <h1 className="font-display mt-3 text-3xl font-bold tracking-tight text-zinc-50 sm:text-4xl">
+            <h1 className="font-display mt-3 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
               {title}
             </h1>
           </Reveal>
           {children}
           <Reveal delay={0.42}>
-            <p className="mt-8 border-t border-zinc-800/70 pt-6 text-sm text-zinc-500">{footer}</p>
+            <p className="mt-8 border-t border-border/70 pt-6 text-sm text-muted-foreground">{footer}</p>
           </Reveal>
         </div>
       </section>

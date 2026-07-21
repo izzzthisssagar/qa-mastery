@@ -51,7 +51,7 @@ function Chips({
               "rounded-full border px-3 py-1 text-xs transition-colors " +
               (on
                 ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-200"
-                : "border-zinc-700 text-zinc-400 hover:border-zinc-500")
+                : "border-border text-muted-foreground hover:border-border")
             }
           >
             {labelFor(o)}
@@ -63,7 +63,7 @@ function Chips({
 }
 
 const field =
-  "w-full rounded-lg border border-zinc-700 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-100 outline-none focus-visible:border-zinc-500";
+  "w-full rounded-lg border border-border bg-surface/60 px-3 py-2 text-sm text-foreground outline-none focus-visible:border-border";
 
 export function ProfileEditor({ initial }: { initial: Initial }) {
   const [handle, setHandle] = useState(initial.handle ?? "");
@@ -144,7 +144,7 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
   return (
     <div className="space-y-6">
       <div>
-        <div className="mb-1 flex items-center justify-between text-xs text-zinc-400">
+        <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
           <span>Profile strength</span>
           <span>{strength}%</span>
         </div>
@@ -153,7 +153,7 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
           aria-valuenow={strength}
           aria-valuemin={0}
           aria-valuemax={100}
-          className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800"
+          className="h-1.5 w-full overflow-hidden rounded-full bg-surface-raised"
         >
           <div className="h-full bg-emerald-400 transition-all" style={{ width: `${strength}%` }} />
         </div>
@@ -161,7 +161,7 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block text-sm">
-          <span className="mb-1 block text-zinc-400">Handle</span>
+          <span className="mb-1 block text-muted-foreground">Handle</span>
           <input
             className={field}
             value={handle}
@@ -171,7 +171,7 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
           />
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block text-zinc-400">Location</span>
+          <span className="mb-1 block text-muted-foreground">Location</span>
           <input
             className={field}
             value={location}
@@ -183,7 +183,7 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
       </div>
 
       <label className="block text-sm">
-        <span className="mb-1 block text-zinc-400">Headline</span>
+        <span className="mb-1 block text-muted-foreground">Headline</span>
         <input
           className={field}
           value={headline}
@@ -194,7 +194,7 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
       </label>
 
       <label className="block text-sm">
-        <span className="mb-1 block text-zinc-400">Bio</span>
+        <span className="mb-1 block text-muted-foreground">Bio</span>
         <textarea
           className={field + " min-h-24 resize-y"}
           value={bio}
@@ -206,7 +206,7 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
 
       <div className="grid gap-4 sm:grid-cols-[1fr_1fr_8rem]">
         <label className="block text-sm">
-          <span className="mb-1 block text-zinc-400">LinkedIn</span>
+          <span className="mb-1 block text-muted-foreground">LinkedIn</span>
           <input
             className={field}
             value={linkedinUrl}
@@ -216,7 +216,7 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
           />
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block text-zinc-400">GitHub</span>
+          <span className="mb-1 block text-muted-foreground">GitHub</span>
           <input
             className={field}
             value={githubUrl}
@@ -226,7 +226,7 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
           />
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block text-zinc-400">Years exp.</span>
+          <span className="mb-1 block text-muted-foreground">Years exp.</span>
           <input
             type="number"
             min={0}
@@ -241,17 +241,17 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
       </div>
 
       <div className="space-y-2 text-sm">
-        <span className="block text-zinc-400">Specialties</span>
+        <span className="block text-muted-foreground">Specialties</span>
         <Chips options={SPECIALTIES} selected={specialties} onToggle={toggle(specialties, setSpecialties)} />
       </div>
 
       <div className="space-y-2 text-sm">
-        <span className="block text-zinc-400">Automation stack</span>
+        <span className="block text-muted-foreground">Automation stack</span>
         <Chips options={STACK} selected={stack} onToggle={toggle(stack, setStack)} />
       </div>
 
       <div className="space-y-2 text-sm">
-        <span className="block text-zinc-400">Availability</span>
+        <span className="block text-muted-foreground">Availability</span>
         <Chips
           options={AVAILABILITY}
           selected={[availability]}
@@ -274,7 +274,7 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
         >
           {isPublic ? "Unpublish" : "Publish"}
         </Button>
-        <span className="text-xs text-zinc-500">
+        <span className="text-xs text-muted-foreground">
           {isPublic ? "Your profile is live in the directory." : "Draft — only you can see it."}
         </span>
       </div>

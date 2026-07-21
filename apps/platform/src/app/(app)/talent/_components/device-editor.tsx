@@ -14,7 +14,7 @@ export type DeviceRow = {
 };
 
 const field =
-  "rounded-lg border border-zinc-700 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-100 outline-none focus-visible:border-zinc-500";
+  "rounded-lg border border-border bg-surface/60 px-3 py-2 text-sm text-foreground outline-none focus-visible:border-border";
 
 export function DeviceEditor({ initial }: { initial: DeviceRow[] }) {
   const [rows, setRows] = useState<DeviceRow[]>(initial);
@@ -58,7 +58,7 @@ export function DeviceEditor({ initial }: { initial: DeviceRow[] }) {
           {rows.map((d) => (
             <li
               key={d.id}
-              className="inline-flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/60 px-2 py-1 font-mono text-xs text-zinc-300"
+              className="inline-flex items-center gap-2 rounded-md border border-border bg-surface/60 px-2 py-1 font-mono text-xs text-foreground"
             >
               {d.device}
               {d.os ? ` · ${d.os}` : ""}
@@ -68,7 +68,7 @@ export function DeviceEditor({ initial }: { initial: DeviceRow[] }) {
                 aria-label={`Remove ${d.device}`}
                 onClick={() => remove(d.id)}
                 disabled={pending}
-                className="text-zinc-500 hover:text-red-300"
+                className="text-muted-foreground hover:text-red-300"
               >
                 ×
               </button>

@@ -18,7 +18,7 @@ export function ReportButton({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  if (done) return <span className="text-xs text-zinc-500">Reported — thanks.</span>;
+  if (done) return <span className="text-xs text-muted-foreground">Reported — thanks.</span>;
 
   function submit() {
     const r = reason.trim();
@@ -39,7 +39,7 @@ export function ReportButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-xs text-zinc-600 hover:text-zinc-400"
+        className="text-xs text-muted-foreground hover:text-muted-foreground"
       >
         Report
       </button>
@@ -54,18 +54,18 @@ export function ReportButton({
         rows={2}
         placeholder="What's wrong with this?"
         aria-label="Report reason"
-        className="w-full resize-y rounded-lg border border-zinc-700 bg-zinc-900/60 px-2 py-1.5 text-xs text-zinc-100 outline-none focus-visible:border-zinc-500"
+        className="w-full resize-y rounded-lg border border-border bg-surface/60 px-2 py-1.5 text-xs text-foreground outline-none focus-visible:border-border"
       />
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={submit}
           disabled={pending || !reason.trim()}
-          className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-zinc-500 disabled:opacity-40"
+          className="rounded-md border border-border px-2 py-1 text-xs text-foreground hover:border-border disabled:opacity-40"
         >
           Submit report
         </button>
-        <button type="button" onClick={() => setOpen(false)} className="text-xs text-zinc-600 hover:text-zinc-400">
+        <button type="button" onClick={() => setOpen(false)} className="text-xs text-muted-foreground hover:text-muted-foreground">
           Cancel
         </button>
         {error && <span className="text-xs text-red-300">{error}</span>}
