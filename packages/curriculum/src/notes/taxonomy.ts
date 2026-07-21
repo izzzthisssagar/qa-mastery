@@ -2424,10 +2424,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "appium-intro",
         title: "Appium intro",
         topics: [
-          { slug: "what-appium-is", title: "What Appium is", planned: true },
-          { slug: "setup", title: "Setup", planned: true },
-          { slug: "first-mobile-test", title: "First mobile test", planned: true },
-          { slug: "mobile-locators", title: "Mobile locators", planned: true },
+          { slug: "what-appium-is", title: "What Appium is" },
+          { slug: "setup", title: "Setup" },
+          { slug: "first-mobile-test", title: "First mobile test" },
+          { slug: "mobile-locators", title: "Mobile locators" },
         ],
       },
       {
