@@ -10,11 +10,13 @@ const VARIANT_CLASSES: Record<Variant, string> = {
   primary:
     "bg-gradient-to-b from-emerald-300 to-emerald-400 text-accent-foreground " +
     "shadow-[0_1px_0_0_rgba(255,255,255,0.35)_inset,0_10px_30px_-12px_color-mix(in_oklab,var(--accent)_70%,transparent)] " +
-    "hover:from-emerald-200 hover:to-emerald-300 active:translate-y-px focus-visible:outline-emerald-400",
+    "hover:from-emerald-200 hover:to-emerald-300 focus-visible:outline-emerald-400",
   secondary:
-    "border border-border text-foreground hover:border-border hover:bg-surface-raised/80 active:translate-y-px focus-visible:outline-border",
+    "border border-border text-foreground hover:border-border hover:bg-surface-raised/80 focus-visible:outline-border",
   ghost: "text-foreground hover:bg-surface-raised focus-visible:outline-border",
-  danger: "bg-red-500 text-white hover:bg-red-400 focus-visible:outline-red-500",
+  // red-600, not -500: white-on-red-500 measures 3.76:1, under AA's 4.5:1 for
+  // this button's 14px semibold label (too small to count as "large text").
+  danger: "bg-red-600 text-white hover:bg-red-500 focus-visible:outline-red-500",
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -40,6 +42,7 @@ export function Button({
       aria-busy={loading || undefined}
       className={cn(
         "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition duration-200",
+        "hover:-translate-y-px active:translate-y-0",
         "focus-visible:outline-2 focus-visible:outline-offset-2 disabled:pointer-events-none disabled:opacity-50",
         VARIANT_CLASSES[variant],
         className,
