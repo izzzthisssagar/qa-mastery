@@ -1,0 +1,404 @@
+---
+title: "Batching & alias abuse"
+summary: "GraphQL's alias syntax lets a single HTTP request carry dozens of logically distinct operations - like a hundred separate login attempts with different passwords. A rate limiter that counts requests, not operations, waves the whole batch through as one."
+tags: ["api-and-modern-security", "graphql-security", "track-c"]
+updated: "2026-07-21"
+related:
+  - "api-and-modern-security/graphql-security/query-depth-and-complexity-dos"
+  - "api-and-modern-security/rest-api-attacks/rate-limit-and-abuse-testing"
+  - "api-and-modern-security/graphql-security/field-level-auth-and-mutation-mass-assignment"
+---
+
+<Hook>
+Authorized to test TaskFlight's login mutation, you send it a wrong password once, then again, then a
+third time - and on the third try the server denies you outright, rate-limited exactly as it should be.
+So you stop guessing one at a time. Instead, one single HTTP POST goes out containing the SAME login
+mutation, aliased a hundred different ways, each with a different candidate password. The rate limiter
+sees one request. The server executes all hundred logins inside it. One of the aliases comes back with a
+valid session token.
+</Hook>
+
+<Callout type="analogy">
+Picture a bank teller who is very strict about one thing: only one transaction slip per customer per
+visit to the counter. A customer who tries to hand over five separate slips gets turned away after the
+first - "one per visit, come back tomorrow for the rest." So instead, a customer staples one hundred
+transaction requests together onto a single physical form, each one filled out under its own numbered
+box, and hands over that ONE form. The teller, whose rule only ever counted forms handed across the
+counter - never the boxes filled out on them - processes every single box on it without objection. One
+visit to the counter. One hundred transactions completed. The rule was never wrong about what it counted;
+it simply never occurred to anyone that "one form" and "one transaction" might not be the same thing.
+</Callout>
+
+<Term define="GraphQL aliases let a client rename a field or operation in a single request so the same field or mutation can be invoked more than once with different arguments and still produce distinct, individually-labeled results - a spec-defined, ordinary capability meant for legitimate use cases like fetching two different users' profiles in one round trip. Batching extends this further: a single HTTP request can carry an entire array of separate GraphQL operations, or one operation that repeats a mutation many times under different aliases, and the server executes every one of them before returning a single combined response. Batching and alias abuse is what happens when this capability is used to smuggle many logically independent operations - most commonly many login attempts with different candidate passwords, or many one-time-code guesses - inside one HTTP request, specifically to defeat a rate limiter or brute-force protection that was only ever designed to count HTTP requests, not the number of operations inside each one. The server-side execution is completely legitimate GraphQL - the request parses cleanly, every alias is valid syntax, and the mutation itself may be correctly implemented - the defect is entirely in a rate-limiting or throttling layer that assumes one request equals one attempt, an assumption GraphQL's own aliasing feature was never built to preserve.">Batching and alias abuse</Term>
+
+## Why request-count throttling misses this completely
+
+- **The rate limiter and the GraphQL executor are looking at different things.** A gateway or middleware
+  rate limiter typically counts requests - one POST to `/graphql` is one increment, regardless of what's
+  inside its body. The GraphQL server underneath resolves every operation and every aliased mutation in
+  that body, one by one, with no concept that a request-counting limiter upstream is only seeing "1."
+- **Aliasing is not a workaround or a bug in GraphQL - it's a documented feature.** Nothing about sending
+  `attempt0: login(...)`, `attempt1: login(...)`, `attempt2: login(...)` inside one query is malformed or
+  unusual GraphQL; every alias is valid syntax doing exactly what aliases are for. That is precisely what
+  makes this hard to distinguish from legitimate use at the protocol level - the abuse is in the intent
+  and the count, not the syntax.
+- **It targets exactly the endpoints that most need throttling.** Login, password reset, OTP verification,
+  and coupon-code redemption are the classic targets - anywhere a low per-attempt success probability
+  makes volume the attacker's whole strategy, and where correctly-working rate limiting is the only thing
+  standing between "guess" and "guess a hundred at once."
+- **It compounds with cost-based attacks, not just count-based ones.** A hundred aliased mutations in one
+  request is also a hundred times the resolver work of one - the same single-request cost explosion
+  covered in [[api-and-modern-security/graphql-security/query-depth-and-complexity-dos]], applied here to
+  breadth (many aliased operations) rather than depth of nesting.
+
+<Callout type="tip">
+When you test whether a mutation is vulnerable to batching abuse, don't just confirm that per-request rate
+limiting exists - confirm what it actually counts. Send three single, separate requests with wrong
+credentials first and note exactly when the limiter kicks in (after request N). Then send one single
+request containing N or more aliased attempts and see whether it is treated as one increment against that
+same limit or rejected outright. If the batched version sails through the same N-attempt threshold that
+stopped the separate requests, the limiter is counting HTTP requests, not operations - and that gap is
+the finding.
+</Callout>
+
+<Callout type="mistake">
+Concluding a login endpoint is brute-force safe because individual, separate requests get rate-limited
+correctly after a handful of attempts. A tester confirms this, sees the expected 429 or lockout behavior,
+and marks brute-force protection as verified. But that test only proves the limiter counts separate HTTP
+requests correctly - it says nothing about what happens when the exact same volume of attempts arrives
+aliased inside ONE request instead. The two tests are answering different questions, and a mutation can
+pass the first completely while failing the second wide open; both need to be run before brute-force
+protection can be called verified.
+</Callout>
+
+{/* IMAGE: a black-and-white vertical photo booth strip showing four separate sequential portrait photographs of the same person in one continuous strip */}
+<HotspotImage
+  src="/notes/api-and-modern-security/graphql-security/batching-and-alias-abuse.jpg"
+  alt="A black-and-white vertical photo booth strip with four separate sequential portrait photographs of the same person printed on one continuous strip"
+  credit="Photo booth strip - leafar, Wikimedia Commons, CC BY-SA 2.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Photo_booth_strip_00001.jpg"
+  pins={[
+    { x: 50, y: 8, label: "One coin, one machine cycle - the ONE HTTP request", desc: "A single insertion of coins starts a single machine cycle. That one cycle is the whole request - everything the strip contains happens inside that one paid-for session, the same as everything inside one POST to a GraphQL endpoint." },
+    { x: 50, y: 24, label: "Frame one - alias attempt0", desc: "The first exposure on the strip is its own distinct, individually-labeled result - exactly like the first aliased login attempt in a batched mutation, with its own response under its own alias name." },
+    { x: 50, y: 62, label: "Frame three - a separate, independent attempt", desc: "Each frame is a genuinely separate exposure with its own pose and moment, not a repeat of the one before it - the same way each aliased mutation carries its own distinct arguments (its own candidate password), not a duplicate request." },
+    { x: 50, y: 95, label: "Frame four - the batch's last operation, same single session", desc: "By the final frame, four independent results have been produced, and only one coin was ever spent. A machine or a rate limiter that only counts 'sessions started' has counted exactly one - a hundred-alias GraphQL request produces the identical mismatch, at far greater scale." },
+    { x: 12, y: 50, label: "The whole strip, uncut - what the limiter actually sees", desc: "The booth's own throttle (one strip per coin) has no visibility into how many frames end up on that strip. A request-counting rate limiter is in exactly the same position: it sees one request, never the number of operations packed inside it." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Testing a mutation for batching/alias abuse - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Confirm authorization and find the per-request limit", desc: "As a tester-owned account, send single, separate wrong-credential requests to the target mutation and note exactly how many are allowed before the limiter engages." },
+    { label: "Build one request with that many (or more) aliased attempts", desc: "Same mutation, same field, repeated under distinct alias names (attempt0, attempt1, ...) with different candidate values, all inside ONE HTTP request body." },
+    { label: "Send the batched request and compare it to the separate-request baseline", desc: "If every aliased attempt inside the one request resolves - rather than the whole request being rejected as if it were N separate attempts - the limiter is counting requests, not operations." },
+    { label: "Report the exact bypass, not just 'rate limiting is weak'", desc: "Name the mechanism: the limiter counts HTTP requests while GraphQL allows many operations per request. Recommend counting attempts (aliased operations against the same field) rather than requests." },
+  ]}
+/>
+
+Here is that same mismatch in runnable form - a toy request-counting limiter (what most naive setups do) next to
+an operation-counting one, run against a single batched login attempt containing several aliased tries.
+
+<CodePlayground
+  language="python"
+  title="Run it - a toy request-counting vs operation-counting rate limiter (Python)"
+  code={`# A toy simulation of batching/alias abuse against rate limiting - no real
+# GraphQL server or HTTP layer involved. A "request" is a list of aliased
+# login attempts, modeling one HTTP POST that batches several operations.
+
+CORRECT_PASSWORD = "hunter2-correct"
+
+def try_login(username, password):
+    return password == CORRECT_PASSWORD
+
+# One incoming HTTP request, containing five aliased login attempts batched
+# together - the same shape as: { attempt0: login(...) attempt1: login(...) ... }
+BATCHED_REQUEST = {
+    "attempt0": ("carol", "password123"),
+    "attempt1": ("carol", "letmein"),
+    "attempt2": ("carol", "qwerty"),
+    "attempt3": ("carol", "hunter2-correct"),
+    "attempt4": ("carol", "dragon"),
+}
+
+REQUEST_LIMIT_PER_MINUTE = 3  # the limiter's configured threshold
+
+class RequestCountingLimiter:
+    # BUG: increments once per HTTP request, regardless of operations inside.
+    def __init__(self, limit):
+        self.limit = limit
+        self.count = 0
+
+    def handle(self, batched_request):
+        self.count += 1  # ONE request in, regardless of how many aliases it contains
+        if self.count > self.limit:
+            return {"executed": False, "reason": "rate limited (request count)"}
+        results = {alias: try_login(u, p) for alias, (u, p) in batched_request.items()}
+        return {"executed": True, "results": results}
+
+class OperationCountingLimiter:
+    # Fixed: increments once per aliased login operation inside the request.
+    def __init__(self, limit):
+        self.limit = limit
+        self.count = 0
+
+    def handle(self, batched_request):
+        incoming = len(batched_request)
+        if self.count + incoming > self.limit:
+            return {"executed": False, "reason": "rate limited (operation count: " + str(self.count) + " + " + str(incoming) + " > " + str(self.limit) + ")"}
+        self.count += incoming
+        results = {alias: try_login(u, p) for alias, (u, p) in batched_request.items()}
+        return {"executed": True, "results": results}
+
+def run():
+    print("Sending ONE HTTP request containing " + str(len(BATCHED_REQUEST)) + " aliased login attempts.")
+    print("Configured limit: " + str(REQUEST_LIMIT_PER_MINUTE) + " per minute.")
+    print()
+
+    print("-- request-counting limiter (counts HTTP requests only) --")
+    req_limiter = RequestCountingLimiter(REQUEST_LIMIT_PER_MINUTE)
+    outcome = req_limiter.handle(BATCHED_REQUEST)
+    if outcome["executed"]:
+        print("ALLOWED - all " + str(len(outcome["results"])) + " aliased attempts executed in this ONE request:")
+        for alias, success in outcome["results"].items():
+            print("  " + alias + ": " + ("SUCCESS - valid credentials found" if success else "denied"))
+    else:
+        print("BLOCKED - " + outcome["reason"])
+    print()
+
+    print("-- operation-counting limiter (counts every aliased attempt) --")
+    op_limiter = OperationCountingLimiter(REQUEST_LIMIT_PER_MINUTE)
+    outcome = op_limiter.handle(BATCHED_REQUEST)
+    if outcome["executed"]:
+        print("ALLOWED - all attempts executed")
+    else:
+        print("BLOCKED - " + outcome["reason"])
+
+run()`}
+/>
+
+The same two limiters in Java - identical batched request, identical five aliased attempts, identical verdicts:
+
+<CodePlayground
+  language="java"
+  title="Run it - a toy request-counting vs operation-counting rate limiter (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    // A toy simulation of batching/alias abuse against rate limiting - no
+    // real GraphQL server or HTTP layer involved. A "request" is a list of
+    // aliased login attempts, modeling one HTTP POST batching several ops.
+
+    static final String CORRECT_PASSWORD = "hunter2-correct";
+
+    static boolean tryLogin(String username, String password) {
+        return password.equals(CORRECT_PASSWORD);
+    }
+
+    // alias -> [username, password]
+    static LinkedHashMap<String, String[]> batchedRequest() {
+        LinkedHashMap<String, String[]> req = new LinkedHashMap<>();
+        req.put("attempt0", new String[]{"carol", "password123"});
+        req.put("attempt1", new String[]{"carol", "letmein"});
+        req.put("attempt2", new String[]{"carol", "qwerty"});
+        req.put("attempt3", new String[]{"carol", "hunter2-correct"});
+        req.put("attempt4", new String[]{"carol", "dragon"});
+        return req;
+    }
+
+    static final int REQUEST_LIMIT_PER_MINUTE = 3;
+
+    static class RequestCountingLimiter {
+        int limit, count = 0;
+        RequestCountingLimiter(int limit) { this.limit = limit; }
+
+        // BUG: increments once per HTTP request, regardless of operations inside.
+        Object handle(LinkedHashMap<String, String[]> batched) {
+            count += 1;
+            if (count > limit) return "BLOCKED - rate limited (request count)";
+            LinkedHashMap<String, Boolean> results = new LinkedHashMap<>();
+            for (Map.Entry<String, String[]> e : batched.entrySet()) {
+                results.put(e.getKey(), tryLogin(e.getValue()[0], e.getValue()[1]));
+            }
+            return results;
+        }
+    }
+
+    static class OperationCountingLimiter {
+        int limit, count = 0;
+        OperationCountingLimiter(int limit) { this.limit = limit; }
+
+        // Fixed: increments once per aliased login operation inside the request.
+        Object handle(LinkedHashMap<String, String[]> batched) {
+            int incoming = batched.size();
+            if (count + incoming > limit) {
+                return "BLOCKED - rate limited (operation count: " + count + " + " + incoming + " > " + limit + ")";
+            }
+            count += incoming;
+            LinkedHashMap<String, Boolean> results = new LinkedHashMap<>();
+            for (Map.Entry<String, String[]> e : batched.entrySet()) {
+                results.put(e.getKey(), tryLogin(e.getValue()[0], e.getValue()[1]));
+            }
+            return results;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public static void main(String[] args) {
+        LinkedHashMap<String, String[]> batched = batchedRequest();
+        System.out.println("Sending ONE HTTP request containing " + batched.size() + " aliased login attempts.");
+        System.out.println("Configured limit: " + REQUEST_LIMIT_PER_MINUTE + " per minute.");
+        System.out.println();
+
+        System.out.println("-- request-counting limiter (counts HTTP requests only) --");
+        Object reqOutcome = new RequestCountingLimiter(REQUEST_LIMIT_PER_MINUTE).handle(batched);
+        if (reqOutcome instanceof String) {
+            System.out.println(reqOutcome);
+        } else {
+            LinkedHashMap<String, Boolean> results = (LinkedHashMap<String, Boolean>) reqOutcome;
+            System.out.println("ALLOWED - all " + results.size() + " aliased attempts executed in this ONE request:");
+            for (Map.Entry<String, Boolean> e : results.entrySet()) {
+                System.out.println("  " + e.getKey() + ": " + (e.getValue() ? "SUCCESS - valid credentials found" : "denied"));
+            }
+        }
+        System.out.println();
+
+        System.out.println("-- operation-counting limiter (counts every aliased attempt) --");
+        Object opOutcome = new OperationCountingLimiter(REQUEST_LIMIT_PER_MINUTE).handle(batched);
+        if (opOutcome instanceof String) {
+            System.out.println(opOutcome);
+        } else {
+            System.out.println("ALLOWED - all attempts executed");
+        }
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: test one TaskFlight mutation for batching/alias abuse">
+<StepChecklist
+  steps={[
+    { text: "Confirm authorization and use tester-owned credentials", detail: "TaskFlight's own sandbox or another system you are explicitly authorized to test, using a test account and password guesses you control - never a real account you don't own." },
+    { text: "Baseline the limiter with separate requests", detail: "Send single, separate wrong-credential requests and note exactly which attempt number the limiter starts rejecting." },
+    { text: "Build one batched request with that many aliased attempts", detail: "Same mutation, repeated under distinct aliases with different candidate values, all inside one HTTP request body." },
+    { text: "Compare and report the exact mechanism", detail: "If the batched request executes every alias where separate requests would have been blocked, report it as counting requests instead of operations - not as a vague 'rate limiting is weak' finding." },
+  ]}
+/>
+You now know how to prove, not just suspect, that a rate limiter is counting the wrong thing - and you can
+describe the fix precisely: count operations against a sensitive field, not HTTP requests.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "Separate requests get rate-limited correctly, but a single request with many aliased attempts executes every one of them.",
+      fix: "The rate limiter counts HTTP requests, not GraphQL operations. Fix it to count aliased invocations of the same sensitive field/mutation within a request, in addition to (not instead of) counting requests overall.",
+    },
+    {
+      symptom: "A team disables aliasing or batching entirely as the fix, breaking legitimate multi-field requests.",
+      fix: "Aliasing has real, non-abusive uses. A more targeted fix caps the number of times a specific sensitive field (login, verifyOtp, redeemCoupon) can be aliased per request, or moves rate limiting to count operations against that field specifically rather than removing the feature outright.",
+    },
+    {
+      symptom: "The finding gets written up as 'no rate limiting exists,' but separate-request testing showed it clearly does.",
+      fix: "Name the actual gap: rate limiting exists and works for separate requests, but does not account for multiple operations batched into one request. That distinction changes what a developer needs to fix.",
+    },
+    {
+      symptom: "A batching test against a shared sandbox account gets that account locked out entirely.",
+      fix: "Use the smallest number of aliased attempts needed to prove the mechanism - enough to exceed the observed per-request-count threshold, not an unbounded flood - and use a tester-owned account you don't mind temporarily locking.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Every mutation that gates a low-probability guess** - login, password reset, OTP/2FA verification,
+  coupon or promo code redemption - these are where volume is the entire point of an attack, and where a
+  batching bypass has the most direct impact.
+- **What the rate limiter actually counts, not just whether one exists** - confirm request-count behavior
+  and operation-count behavior as two separate tests against the same endpoint.
+- **The response shape of a batched request itself** - a response listing individual results per alias
+  confirms the server executed each one; that response is itself evidence for the finding.
+- **[[api-and-modern-security/rest-api-attacks/rate-limit-and-abuse-testing]]** - the REST-side counterpart
+  for rate-limit testing methodology; this note is the GraphQL-specific way that methodology gets bypassed.
+- **[[api-and-modern-security/graphql-security/query-depth-and-complexity-dos]]** - a batched request is
+  also N times the resolver cost of one operation; the two issues compound on the same single request.
+- **[[api-and-modern-security/graphql-security/field-level-auth-and-mutation-mass-assignment]]** - if a
+  batched mutation also accepts fields it shouldn't, both issues can be demonstrated together on one
+  request.
+</WhereToCheck>
+
+<WorkedExample title="proving a batching bypass on TaskFlight's login mutation">
+1. A tester, authorized to test TaskFlight's staging sandbox, sends three separate, single wrong-password
+   requests to the `login` mutation using a tester-owned username. The fourth separate request is
+   rejected with a 429 - confirming the limiter engages after three attempts per minute.
+2. The tester then builds ONE request containing five aliased `login` calls (`attempt0` through
+   `attempt4`), each with a different candidate password for the same username, all inside a single HTTP
+   POST body.
+3. The response returns success for all five aliases - including one alias whose candidate happened to be
+   the correct password - meaning all five executed inside the one request that the limiter counted as a
+   single increment.
+4. The finding is filed as batching/alias abuse bypassing per-request rate limiting, with both the
+   separate-request baseline (proving the limiter's normal threshold) and the batched request (proving the
+   bypass) included as evidence, along with the recommendation to count operations against the `login`
+   field specifically.
+</WorkedExample>
+
+<Quiz
+  question="A login mutation correctly returns a 429 after three separate, single-attempt requests with wrong passwords. A tester then sends ONE request containing ten aliased login attempts with different passwords, and all ten execute successfully (as denials or one success). What is the most accurate way to describe this finding?"
+  options={[
+    "No finding - the rate limiter is working correctly, since it engaged after exactly three separate requests as configured",
+    "The rate limiter counts HTTP requests rather than GraphQL operations, so a single request can batch many aliased attempts past a threshold that separate requests correctly respect - report the specific mechanism, not just 'weak rate limiting'",
+    "This proves GraphQL itself has no rate limiting capability and REST APIs should be used instead for any endpoint needing brute-force protection",
+    "The finding should be dismissed unless the tester can demonstrate a full account takeover using the ten attempts"
+  ]}
+  answer={1}
+  explain="The evidence shows the limiter correctly counts separate requests but has no visibility into multiple aliased operations packed into one request - that is a request-counting versus operation-counting gap, not an absence of rate limiting (ruling out A). Option C is wrong: this is a configuration/implementation gap, not a limitation of GraphQL as a technology, and REST APIs can have equivalent rate-limiting gaps of their own. Option D sets an unnecessarily high bar - demonstrating the bypass mechanism itself (all aliases executing where separate requests would have been blocked) is sufficient evidence without needing to complete a full takeover."
+/>
+
+<Flashcards
+  cards={[
+    { front: "GraphQL alias", back: "A spec-defined way to rename a field or operation in a request so the same field can be invoked more than once with different arguments, each producing its own labeled result." },
+    { front: "Batching/alias abuse", back: "Using aliases (or an array-of-operations batch) to smuggle many logically distinct operations - most often many login/OTP attempts - inside one HTTP request, specifically to defeat request-count-based rate limiting." },
+    { front: "Why request-count rate limiting misses it", back: "A gateway limiter typically counts HTTP requests, not the operations inside each one - a hundred aliased attempts in one request can register as a single increment." },
+    { front: "The two-part test", back: "Baseline with separate, single requests to find the limiter's real threshold, then send a batched request with that many (or more) aliased attempts and compare - proving the mismatch, not just suspecting it." },
+    { front: "Common targets", back: "Login, password reset, OTP/2FA verification, coupon/promo code redemption - anywhere a low per-attempt success rate makes volume the whole attack strategy." },
+    { front: "The correct fix", back: "Count operations against a sensitive field per request (not just requests overall) - disabling aliasing/batching entirely breaks legitimate uses and is broader than the actual gap." },
+  ]}
+/>
+
+<Challenge>
+On TaskFlight's own sandbox (or another system you are explicitly authorized to test), using a
+tester-owned account: first send three or four separate, single wrong-credential requests to a
+rate-limited mutation and record exactly when the limiter engages. Then build ONE request that batches
+that same number of aliased attempts with different candidate values, and record whether every alias
+executes despite the earlier threshold. Write up the result naming the specific mechanism (request-count
+versus operation-count), using the minimum number of aliased attempts needed to prove it - and be mindful
+of not exhausting or locking a shared sandbox account other learners may also be using.
+</Challenge>
+
+<AskCommunity prompt="I've started proving batching/alias rate-limit bypasses with a two-step comparison - a separate-request baseline to find the real threshold, then a single batched request with an equal or greater number of aliased attempts - rather than just asserting 'rate limiting seems weak.' For people who test GraphQL APIs regularly: how do you cap the number of aliased attempts you send during testing to stay minimally invasive on a shared or production-adjacent target, and what operation-counting fixes have you actually seen hold up under a determined batching attempt in practice?">
+Keeping a batching-abuse test minimally invasive while still proving the mechanism conclusively, and
+knowing which operation-counting fixes genuinely close the gap versus just narrowing it, are both things
+I'd like other testers' experience on.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html", title: "OWASP GraphQL Cheat Sheet", kind: "read" },
+    { href: "https://graphql.org/learn/queries/#aliases", title: "GraphQL Foundation - Queries and aliases", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=r-O5aok8TeM" title="Bypassing GraphQL Brute-Force Protections" minutes={12} />
+
+<Takeaways
+  points={[
+    "GraphQL aliases are a legitimate, spec-defined feature that let one HTTP request carry many logically distinct operations, each with its own labeled result.",
+    "Batching/alias abuse packs many sensitive attempts (commonly logins, OTP guesses, coupon redemptions) into one request specifically to defeat request-count-based rate limiting.",
+    "A rate limiter that counts HTTP requests has no visibility into how many operations were batched inside one request - it can register a hundred-attempt batch as a single increment.",
+    "Prove the bypass with a two-step comparison: baseline the limiter's threshold with separate requests, then send a batched request with an equal number of aliased attempts and compare outcomes.",
+    "The correct fix counts operations against the sensitive field per request, not disabling aliasing/batching entirely, which breaks legitimate multi-field use cases.",
+    "Only test systems you own or are explicitly, in writing, authorized to test, with tester-owned accounts, using the minimum number of attempts needed to prove the mechanism.",
+  ]}
+/>
+
+<Complete xp={10} />

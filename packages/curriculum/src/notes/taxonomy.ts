@@ -2330,10 +2330,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "graphql-security",
         title: "GraphQL security",
         topics: [
-          { slug: "introspection-leakage", title: "Introspection leakage", planned: true },
-          { slug: "query-depth-and-complexity-dos", title: "Query depth & complexity DoS", planned: true },
-          { slug: "batching-and-alias-abuse", title: "Batching & alias abuse", planned: true },
-          { slug: "field-level-auth-and-mutation-mass-assignment", title: "Field-level auth & mutation mass assignment", planned: true },
+          { slug: "introspection-leakage", title: "Introspection leakage" },
+          { slug: "query-depth-and-complexity-dos", title: "Query depth & complexity DoS" },
+          { slug: "batching-and-alias-abuse", title: "Batching & alias abuse" },
+          { slug: "field-level-auth-and-mutation-mass-assignment", title: "Field-level auth & mutation mass assignment" },
         ],
       },
       {

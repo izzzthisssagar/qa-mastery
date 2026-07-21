@@ -1,0 +1,404 @@
+---
+title: "Field-level auth & mutation mass assignment"
+summary: "GraphQL has no per-endpoint gate like REST - every field and every mutation needs its own authorization check, and a resolver that skips just one leaves it wide open. Mutations that bind every input field straight onto a record let a caller set role or isAdmin themselves."
+tags: ["api-and-modern-security", "graphql-security", "track-c"]
+updated: "2026-07-21"
+related:
+  - "api-and-modern-security/rest-api-attacks/mass-assignment"
+  - "api-and-modern-security/owasp-api-security-top-10-2023/bola-and-bfla"
+  - "api-and-modern-security/graphql-security/introspection-leakage"
+---
+
+<Hook>
+Authorized to test TaskFlight's GraphQL API as a plain traveler account, you check the obvious things
+first: booking queries correctly deny another traveler's data, admin-only queries correctly reject your
+role. Everything you probe returns a clean denial - until you reach one specific field on one specific
+mutation, `updateProfile`, buried among a dozen others the team clearly did protect. That one resolver
+never checks role at all. And its input type accepts a `role` argument nobody built a UI for, but nothing
+stops you from sending it anyway.
+</Hook>
+
+<Callout type="analogy">
+Picture a building where, unlike a normal office with one guard at the one front door, every single room
+has its own separate lock, checked by its own separate guard, because the architects deliberately built it
+that way - no single choke point, dozens of independent doors. A security review walks the whole floor,
+tests every door, and every guard correctly asks for the right badge - except one, at the end of a
+corridor, who was apparently never told this room needed checking at all and waves anyone through. Right
+next to that same door sits an intake tray where visitors fill out a form to update their own desk
+assignment. The form has boxes for "preferred desk" and "phone extension" - ordinary, self-service fields.
+It also happens to have a box printed on it labeled "security clearance level," which was only ever meant
+to be filled in by the badge office - and the clerk at that tray, it turns out, copies every box on the
+form verbatim, including that one, without ever checking who is allowed to write in it.
+</Callout>
+
+<Term define="Field-level authorization in GraphQL means that because a single query or mutation can traverse many independent fields and resolvers in one request, authorization cannot be enforced once at a single endpoint the way REST typically enforces it per-route - every resolver that returns or mutates sensitive data needs its own explicit check, and a schema can be almost entirely protected while exactly one resolver was never wired up to check anything beyond 'is this caller logged in.' Mutation mass assignment is a related but distinct failure: a mutation's input type is a struct of fields a client can set, and if the resolver blindly writes every field present in that input straight onto the underlying record - rather than binding only an explicit, server-approved allowlist of fields - a caller can include fields the input type technically accepts but that a UI never exposes, such as role, isAdmin, accountBalance, or verified, and have the resolver write them exactly as if they were legitimate self-service fields. The two failures often appear together on the same mutation because both stem from the same root cause: treating 'this input type has a field for it' as equivalent to 'this caller is allowed to set it,' when GraphQL's flexible, per-field execution model requires that permission be checked explicitly, field by field and mutation by mutation, rather than assumed from the shape of the schema alone.">Field-level authorization and mutation mass assignment</Term>
+
+## Why "the rest of the schema is protected" proves nothing about one field
+
+- **REST's per-endpoint shape gives authorization a natural home; GraphQL's doesn't.** A REST API often
+  centralizes a check in middleware keyed to a route (`POST /admin/users` gets an admin check applied
+  once, for the whole route). GraphQL's single endpoint resolves many independent fields per request, so
+  that same centralization has nowhere obvious to live - each resolver has to opt in to its own check.
+- **Coverage is not binary across a schema - it's per-resolver.** A team can correctly protect forty
+  resolvers and miss the forty-first, and nothing about the schema's overall shape reveals which one. The
+  only way to know is to test each sensitive field and mutation on its own, the same discipline
+  [[api-and-modern-security/owasp-api-security-top-10-2023/bola-and-bfla]] describes for REST endpoints,
+  applied at finer grain.
+- **An input type is a list of what CAN be set, not what SHOULD be.** GraphQL's schema defines an input
+  type's shape for validation and tooling purposes - it says nothing on its own about which of those
+  fields a given caller is authorized to populate. That authorization has to be enforced in the resolver,
+  explicitly, separate from whatever the input type's structure allows.
+- **Introspection maps this input surface for free.** Anyone who can read the schema - which
+  [[api-and-modern-security/graphql-security/introspection-leakage]] covers - can already see every field
+  an input type accepts, including ones like `role` or `isAdmin` that a real UI never renders a form
+  control for. The field being undocumented in the product does not mean it's undiscoverable.
+
+<Callout type="tip">
+Test field-level authorization and mass assignment as two separate questions on the same mutation, not
+one. First: as a low-privilege account, does this specific mutation correctly deny you, independent of
+whether the rest of the schema is protected? Second, once you're allowed to call it at all (as yourself,
+on your own record): does its input type accept fields beyond what the UI exposes, and if you include one
+of them - like `role` - does the resolver actually write it? A mutation can fail either test independently
+of the other; run both.
+</Callout>
+
+<Callout type="mistake">
+Auditing a GraphQL schema's authorization by sampling a handful of representative mutations, finding them
+all correctly protected, and concluding the schema is safe. Unlike a REST API where a shared middleware
+layer often really does apply uniformly across routes, GraphQL resolvers are commonly wired up
+individually - a sample proves nothing about the resolver that was never sampled. The one mutation left
+out of the sample is exactly the one most likely to have been left out of the original security review
+too, for the same reason: someone assumed a shared pattern would cover it, when GraphQL's model never
+guaranteed that in the first place.
+</Callout>
+
+{/* IMAGE: a dense aircraft cockpit overhead circuit breaker panel with rows of individually labeled, color-ringed breaker switches grouped under section headers like FLIGHT, WEATHER, ELECTRICAL, ENVIRONMENTAL, and FURNISHING */}
+<HotspotImage
+  src="/notes/api-and-modern-security/graphql-security/field-level-auth-and-mutation-mass-assignment.jpg"
+  alt="A dense aircraft cockpit overhead circuit breaker panel with rows of individually labeled, color-ringed breaker switches grouped under section headers including FLIGHT, WEATHER, ELECTRICAL, ENVIRONMENTAL, and FURNISHING"
+  credit="Colour coded circuit breakers - Shawn from Airdrie, Canada, Wikimedia Commons, CC BY-SA 2.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Colour_coded_circuit_breakers_(369347205).jpg"
+  pins={[
+    { x: 46, y: 30, label: "ELECTRICAL, GEN, RESET - each breaker gated on its own", desc: "There is no single master switch for this whole panel - every circuit, however small, gets its own individually labeled breaker. That is field-level authorization: no shared endpoint gate, every resolver checked on its own." },
+    { x: 14, y: 62, label: "FURNISHING - the mundane controls sit on the same grid", desc: "A cabin light or a cigar lighter circuit is wired with exactly the same individual breaker discipline as a flight-critical one. Nothing here is auto-trusted just because it looks unimportant - the same way an ordinary-looking profile field deserves the same check as an obviously sensitive one." },
+    { x: 84, y: 14, label: "Isolated breakers, far from any labeled section header", desc: "These switches sit apart from the labeled groups on the left - easy to overlook in a quick visual sweep of the panel, the same way one unprotected resolver can sit unnoticed among dozens of correctly protected ones in a large schema." },
+    { x: 50, y: 55, label: "One panel, dozens of independent gates", desc: "This density is the point: authorization here cannot be centralized into one switch, because the whole design intentionally isolates each circuit. GraphQL resolvers work the same way - centralizing a check at 'the endpoint' does not exist as an option." },
+    { x: 30, y: 90, label: "BRAKE DEICE - specific, easy to mistake for self-explanatory", desc: "A control this specifically named looks obviously important, which is exactly why teams sometimes protect the obviously-named ones carefully and skip the plainer-looking neighbor beside it - a coverage gap that isn't visible from the labels alone." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Testing one mutation for both failures - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Confirm authorization and inspect the mutation's input type", desc: "Via the schema (introspection, if open, or docs) or another authorized method, list every field the mutation's input type accepts - not just the ones a UI form renders." },
+    { label: "Field-level auth test: call it as a low-privilege account", desc: "As a plain, low-privilege tester-owned account, call the mutation targeting your own record. A correct resolver denies or restricts based on role even here, independent of whether other resolvers are protected." },
+    { label: "Mass assignment test: include an undocumented input field", desc: "As yourself, call the mutation again including a field the UI never exposes - role, isAdmin, verified - alongside the normal ones, and check whether the response or a follow-up read shows it was actually written." },
+    { label: "Report each finding on its own mechanism", desc: "A missing role check on one resolver and an over-permissive input binding are two different root causes, even on the same mutation - name which one you found, or if both, report them as two findings." },
+  ]}
+/>
+
+Here is that same pair of independent checks in runnable form - one simulator that models a per-field
+authorization gate and a mutation input binder side by side, with vulnerable versions of each and fixed
+versions that check the thing that actually matters.
+
+<CodePlayground
+  language="python"
+  title="Run it - a field-level auth checker and a mutation input binder (Python)"
+  code={`# Field-level auth vs mutation mass assignment: two DIFFERENT GraphQL
+# authorization failures, modeled side by side. No real GraphQL server or
+# library involved - this simulates resolver behavior directly.
+
+USERS = {"alice": "user", "bob": "user", "dave": "admin"}
+
+# Simulated user records: what's actually stored server-side per account.
+RECORDS = {
+    "alice": {"displayName": "Alice A.", "role": "user", "isAdmin": False},
+    "bob":   {"displayName": "Bob B.",   "role": "user", "isAdmin": False},
+}
+
+# Fields a client's updateProfile input is ALLOWED to set - the allowlist a
+# correct resolver should bind against, instead of trusting the input as-is.
+ALLOWED_PROFILE_FIELDS = {"displayName"}
+
+def vulnerable_update_profile(actor, input_fields):
+    # BUG 1 (field-level auth): no role/ownership check on the resolver at all.
+    # BUG 2 (mass assignment): writes EVERY field present in the input, unfiltered.
+    record = RECORDS[actor]
+    for field, value in input_fields.items():
+        record[field] = value
+    return dict(record)
+
+def fixed_update_profile(actor, input_fields):
+    # FIX 1: explicit check that the actor may only update their own record.
+    if actor not in RECORDS:
+        raise PermissionError(actor + " is not a known user")
+    # FIX 2: bind only the server-approved allowlist, ignore everything else.
+    record = RECORDS[actor]
+    rejected = []
+    for field, value in input_fields.items():
+        if field in ALLOWED_PROFILE_FIELDS:
+            record[field] = value
+        else:
+            rejected.append(field)
+    return dict(record), rejected
+
+REQUESTS = [
+    ("alice", {"displayName": "Alice Updated"}),                       # legitimate self-service edit
+    ("bob",   {"displayName": "Bob Updated", "role": "admin", "isAdmin": True}),  # mass-assignment attempt
+]
+
+def run():
+    print("VULNERABLE resolver (no auth check, binds every input field):")
+    for actor, fields in REQUESTS:
+        # reset records between vulnerable/fixed runs so the demo is order-independent
+        RECORDS["alice"] = {"displayName": "Alice A.", "role": "user", "isAdmin": False}
+        RECORDS["bob"] = {"displayName": "Bob B.", "role": "user", "isAdmin": False}
+        result = vulnerable_update_profile(actor, fields)
+        print("  " + actor + " sends " + str(fields))
+        print("  -> record is now " + str(result))
+    print()
+
+    print("FIXED resolver (ownership-checked, allowlist-bound):")
+    for actor, fields in REQUESTS:
+        RECORDS["alice"] = {"displayName": "Alice A.", "role": "user", "isAdmin": False}
+        RECORDS["bob"] = {"displayName": "Bob B.", "role": "user", "isAdmin": False}
+        result, rejected = fixed_update_profile(actor, fields)
+        print("  " + actor + " sends " + str(fields))
+        print("  -> record is now " + str(result) + (", rejected fields: " + str(rejected) if rejected else ""))
+
+run()`}
+/>
+
+The same two checks in Java - identical records, identical requests, identical verdicts:
+
+<CodePlayground
+  language="java"
+  title="Run it - a field-level auth checker and a mutation input binder (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    // Field-level auth vs mutation mass assignment: two DIFFERENT GraphQL
+    // authorization failures, modeled side by side. No real GraphQL server
+    // or library involved - this simulates resolver behavior directly.
+
+    static final Set<String> KNOWN_USERS = new LinkedHashSet<>(Arrays.asList("alice", "bob", "dave"));
+
+    // Fields a client's updateProfile input is ALLOWED to set - the allowlist
+    // a correct resolver should bind against, instead of trusting input as-is.
+    static final Set<String> ALLOWED_PROFILE_FIELDS = new LinkedHashSet<>(Arrays.asList("displayName"));
+
+    static LinkedHashMap<String, Object> freshRecord(String displayName) {
+        LinkedHashMap<String, Object> r = new LinkedHashMap<>();
+        r.put("displayName", displayName);
+        r.put("role", "user");
+        r.put("isAdmin", false);
+        return r;
+    }
+
+    // BUG 1 (field-level auth): no role/ownership check on the resolver at all.
+    // BUG 2 (mass assignment): writes EVERY field present in the input, unfiltered.
+    static LinkedHashMap<String, Object> vulnerableUpdateProfile(LinkedHashMap<String, Object> record, LinkedHashMap<String, Object> inputFields) {
+        for (Map.Entry<String, Object> e : inputFields.entrySet()) {
+            record.put(e.getKey(), e.getValue());
+        }
+        return record;
+    }
+
+    static class FixedResult {
+        LinkedHashMap<String, Object> record;
+        List<String> rejected;
+        FixedResult(LinkedHashMap<String, Object> record, List<String> rejected) {
+            this.record = record; this.rejected = rejected;
+        }
+    }
+
+    static FixedResult fixedUpdateProfile(String actor, LinkedHashMap<String, Object> record, LinkedHashMap<String, Object> inputFields) {
+        // FIX 1: explicit check that the actor is a known, valid user.
+        if (!KNOWN_USERS.contains(actor)) {
+            throw new IllegalStateException(actor + " is not a known user");
+        }
+        // FIX 2: bind only the server-approved allowlist, ignore everything else.
+        List<String> rejected = new ArrayList<>();
+        for (Map.Entry<String, Object> e : inputFields.entrySet()) {
+            if (ALLOWED_PROFILE_FIELDS.contains(e.getKey())) {
+                record.put(e.getKey(), e.getValue());
+            } else {
+                rejected.add(e.getKey());
+            }
+        }
+        return new FixedResult(record, rejected);
+    }
+
+    public static void main(String[] args) {
+        LinkedHashMap<String, Object> aliceInput = new LinkedHashMap<>();
+        aliceInput.put("displayName", "Alice Updated");
+
+        LinkedHashMap<String, Object> bobInput = new LinkedHashMap<>();
+        bobInput.put("displayName", "Bob Updated");
+        bobInput.put("role", "admin");
+        bobInput.put("isAdmin", true);
+
+        Object[][] requests = {
+            {"alice", aliceInput},
+            {"bob", bobInput},
+        };
+
+        System.out.println("VULNERABLE resolver (no auth check, binds every input field):");
+        for (Object[] req : requests) {
+            String actor = (String) req[0];
+            @SuppressWarnings("unchecked")
+            LinkedHashMap<String, Object> fields = (LinkedHashMap<String, Object>) req[1];
+            LinkedHashMap<String, Object> record = freshRecord(actor.equals("alice") ? "Alice A." : "Bob B.");
+            LinkedHashMap<String, Object> result = vulnerableUpdateProfile(record, fields);
+            System.out.println("  " + actor + " sends " + fields);
+            System.out.println("  -> record is now " + result);
+        }
+        System.out.println();
+
+        System.out.println("FIXED resolver (ownership-checked, allowlist-bound):");
+        for (Object[] req : requests) {
+            String actor = (String) req[0];
+            @SuppressWarnings("unchecked")
+            LinkedHashMap<String, Object> fields = (LinkedHashMap<String, Object>) req[1];
+            LinkedHashMap<String, Object> record = freshRecord(actor.equals("alice") ? "Alice A." : "Bob B.");
+            FixedResult result = fixedUpdateProfile(actor, record, fields);
+            String rejectedNote = result.rejected.isEmpty() ? "" : ", rejected fields: " + result.rejected;
+            System.out.println("  " + actor + " sends " + fields);
+            System.out.println("  -> record is now " + result.record + rejectedNote);
+        }
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: test one TaskFlight mutation for both failures">
+<StepChecklist
+  steps={[
+    { text: "Confirm authorization and pick one mutation with a self-service input", detail: "TaskFlight's own GraphQL sandbox (or another system you are explicitly authorized to test), using a tester-owned account - a profile-update or similar self-service mutation is the classic target." },
+    { text: "List the input type's full field set", detail: "Via introspection if open, or documentation, or schema source if available - note every field the input type accepts, not just the ones a UI form actually renders." },
+    { text: "Field-level auth test: call it as a low-privilege account", detail: "As yourself, on your own record. If it should require a higher role and doesn't, that's a field-level authorization finding, independent of the rest of the schema." },
+    { text: "Mass assignment test: include an undocumented field", detail: "As yourself, resend the mutation including a field like role or isAdmin alongside the normal ones. Read your own record back afterward to confirm whether it was actually written." },
+  ]}
+/>
+You can now test one GraphQL mutation for two independent failure mechanisms - a missing per-resolver check
+and an over-permissive input binding - and report whichever (or both) you find with the exact evidence
+each needs.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A low-privilege account can successfully call a mutation that should require a higher role, even though most of the schema correctly enforces roles.",
+      fix: "That resolver was never wired up with its own check - GraphQL has no shared endpoint gate to fall back on. Add an explicit authorization check to that specific resolver; do not assume schema-wide middleware exists just because other resolvers behave as if it does.",
+    },
+    {
+      symptom: "Sending an extra field like role or isAdmin in a mutation's input actually changes the stored record, even though no UI ever exposes a control for it.",
+      fix: "The resolver is binding the input struct directly onto the record instead of an explicit allowlist. Fix it to write only server-approved fields regardless of what the input type's schema technically accepts - the schema's shape is not an authorization boundary.",
+    },
+    {
+      symptom: "A schema audit samples a dozen mutations, finds them all correctly protected, and the team calls authorization coverage complete.",
+      fix: "GraphQL resolvers are typically wired individually, so a sample proves nothing about resolvers not sampled. Coverage needs to be tracked per-resolver (a checklist against the full schema), not inferred from a handful of spot checks.",
+    },
+    {
+      symptom: "A finding gets written up as generic 'broken authorization' or 'mass assignment' without saying which mutation or field.",
+      fix: "Name the exact mutation, the exact field, and which of the two mechanisms failed (missing per-resolver check, or unfiltered input binding) - a developer fixing one needs to know which resolver and which line, not that 'GraphQL security' in general needs attention.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Every mutation individually, not a representative sample** - GraphQL's per-resolver model means
+  coverage has to be verified resolver by resolver; a clean sample says nothing about the one left out.
+- **Every field in a mutation's input type, not just what the UI renders** - introspection or schema docs
+  show the true accepted field set; treat every field not exposed in the product UI as a mass-assignment
+  candidate worth testing explicitly.
+- **Fields that mirror privilege or trust state** - `role`, `isAdmin`, `verified`, `accountBalance`,
+  `permissions` - these are the highest-value fields to test for unfiltered binding on any mutation that
+  touches a user or account record.
+- **[[api-and-modern-security/rest-api-attacks/mass-assignment]]** - the REST-side version of the same
+  root cause (binding a whole request body instead of an allowlist); this note is the GraphQL-specific,
+  field-level expression of it.
+- **[[api-and-modern-security/owasp-api-security-top-10-2023/bola-and-bfla]]** - the same object-versus-function
+  distinction applies here at resolver granularity: does this field check ownership, does this mutation
+  check role, tested independently.
+- **[[api-and-modern-security/graphql-security/introspection-leakage]]** - the schema exposure that maps
+  every mutation's full input surface, including the undocumented fields worth testing for mass assignment.
+</WhereToCheck>
+
+<WorkedExample title="two findings on TaskFlight's updateProfile mutation">
+1. A tester, authorized to test TaskFlight's staging sandbox with a tester-owned account, reviews the
+   schema (via introspection, confirmed open on this sandbox) and finds `updateProfile`'s input type
+   accepts `displayName`, `role`, and `isAdmin` - though the product UI's profile form only ever renders a
+   display-name field.
+2. As their own low-privilege account, the tester calls `updateProfile` targeting their own record,
+   including `role: "admin"` and `isAdmin: true` alongside a normal `displayName` change.
+3. A follow-up query of their own profile shows `role` and `isAdmin` were both written exactly as sent.
+   Finding one is filed as mutation mass assignment - the resolver bound the full input struct instead of
+   an allowlist - with the request and the confirmed write as evidence.
+4. Separately, the tester notices a second mutation, `mergeDuplicateAccount`, that the product only exposes
+   to support staff in its internal tooling. Calling it directly as the same low-privilege account
+   succeeds with no role check at all. Finding two is filed as field-level authorization failure - a
+   distinct resolver, a distinct missing check, reported separately from the mass-assignment finding even
+   though both surfaced in the same testing session.
+</WorkedExample>
+
+<Quiz
+  question="A GraphQL schema audit confirms that thirty of thirty-one mutations correctly enforce role-based authorization when tested individually. What can be concluded about the thirty-first, untested mutation?"
+  options={[
+    "It is very likely also protected, since GraphQL applies authorization consistently across a schema the way REST middleware often does",
+    "Nothing - GraphQL has no schema-wide authorization gate equivalent to REST route middleware, so each resolver's coverage has to be verified on its own; the untested mutation could easily be the one left unprotected",
+    "It must be an admin-only mutation, since those are the ones teams typically forget to test",
+    "It is safe by default, since GraphQL's type system enforces input validation which is equivalent to authorization"
+  ]}
+  answer={1}
+  explain="GraphQL resolvers are typically wired up individually, with no shared endpoint-level gate to fall back on the way REST route middleware often provides - so authorization coverage on thirty tested mutations says nothing about an untested thirty-first one (ruling out A). Option C assumes a pattern with no basis - under-protected mutations are just as likely to be ordinary self-service ones as admin-only ones. Option D conflates two unrelated concerns: GraphQL's type system validates that input MATCHES the expected shape, which is completely independent of whether the caller is AUTHORIZED to submit it."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Field-level authorization (GraphQL)", back: "Because GraphQL has no single per-route gate like REST, every resolver needs its own explicit authorization check - a schema can be almost entirely protected while one resolver was never wired up to check anything." },
+    { front: "Mutation mass assignment (GraphQL)", back: "A resolver that binds every field present in a mutation's input directly onto the record, instead of an explicit server-approved allowlist - letting a caller set fields like role or isAdmin that a UI never exposes." },
+    { front: "Why GraphQL differs from REST here", back: "REST commonly centralizes a check in per-route middleware; GraphQL's single endpoint resolves many independent fields per request, so that centralization has no natural home - each resolver opts in on its own." },
+    { front: "Why an input type's shape isn't an authorization boundary", back: "A GraphQL input type defines what fields CAN be set for validation and tooling purposes - it says nothing about which fields a given caller is authorized to set. That check has to happen explicitly in the resolver." },
+    { front: "The two-part test on one mutation", back: "Field-level auth: call it as a low-privilege account targeting your own record - does it correctly deny or restrict? Mass assignment: include an undocumented input field like role - does a follow-up read confirm it was written?" },
+    { front: "Why a sample audit isn't sufficient coverage", back: "GraphQL resolvers are typically wired individually, so a clean sample of tested mutations proves nothing about mutations left out of the sample - coverage needs to be tracked resolver by resolver." },
+  ]}
+/>
+
+<Challenge>
+On TaskFlight's own GraphQL sandbox (or another system you are explicitly authorized to test), using a
+tester-owned account: pick one mutation with a self-service input (a profile or settings update is a good
+candidate), list its full input field set via introspection or docs, and run both tests separately - a
+field-level authorization check (call it as a low-privilege account) and a mass-assignment check (include
+one undocumented field like `role` and verify with a follow-up read whether it was written). Write up
+whichever of the two (or both) actually succeed as separate findings, each naming the exact mutation, the
+exact field, and the specific mechanism that failed.
+</Challenge>
+
+<AskCommunity prompt="I'm now testing GraphQL mutations for two separate failure mechanisms - a per-resolver authorization check and an input-binding allowlist - rather than assuming one implies the other, since GraphQL has no shared endpoint gate like REST route middleware. For people who audit GraphQL schemas regularly: how do you track per-resolver authorization coverage systematically across a large schema without re-testing all of it by hand every release, and what's the cleanest way you've found to enumerate a mutation's full input field set when introspection is correctly disabled in the environment you're testing?">
+Tracking per-resolver coverage at scale without a full manual re-test every time the schema changes, and
+enumerating a mutation's real input surface when introspection is correctly locked down, are both real
+friction points I'd like other testers' approaches to.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html", title: "OWASP GraphQL Cheat Sheet", kind: "read" },
+    { href: "https://graphql.org/learn/mutations/", title: "GraphQL Foundation - Mutations", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=lMdw9lK5RK4" title="GraphQL Resolver Authorization" minutes={14} />
+
+<Takeaways
+  points={[
+    "GraphQL has no schema-wide authorization gate equivalent to REST route middleware - every resolver needs its own explicit check, and a schema can be almost entirely protected while one resolver was never wired up at all.",
+    "A mutation's input type defines what fields CAN be set for validation purposes - it says nothing about which fields a given caller is authorized to set; that check belongs in the resolver, explicitly.",
+    "Mass assignment happens when a resolver binds every input field straight onto a record instead of an explicit, server-approved allowlist - letting a caller set fields like role or isAdmin a UI never exposes.",
+    "Test field-level authorization and mass assignment as two independent questions on the same mutation - a resolver can fail either one without failing the other.",
+    "A sample audit of several mutations proves nothing about mutations left untested - GraphQL resolver coverage has to be tracked individually, not inferred from a representative check.",
+    "Only test systems you own or are explicitly, in writing, authorized to test, using tester-owned accounts and fields you set on your own record, never another user's.",
+  ]}
+/>
+
+<Complete xp={10} />

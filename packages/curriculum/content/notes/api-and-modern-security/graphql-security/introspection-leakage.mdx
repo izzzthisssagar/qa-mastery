@@ -1,0 +1,374 @@
+---
+title: "Introspection leakage"
+summary: "GraphQL's introspection system can answer one question - what does this schema look like - in complete detail: every type, every field, every mutation, even ones marked deprecated but still callable. Left open outside dev, that answer is a recon map handed straight to an attacker."
+tags: ["api-and-modern-security", "graphql-security", "track-c"]
+updated: "2026-07-21"
+related:
+  - "api-and-modern-security/owasp-api-security-top-10-2023/the-full-api-list"
+  - "api-and-modern-security/graphql-security/query-depth-and-complexity-dos"
+  - "api-test-automation/graphql-and-soap-testing/graphql-vs-rest"
+---
+
+<Hook>
+Authorized to test TaskFlight's GraphQL endpoint, you send exactly one request - not a crafted exploit,
+just the standard `__schema` introspection query every GraphQL client library builds automatically - and
+the response comes back with the entire schema: every type, every field, every mutation, including one
+named `adminOverridePricing` that the product team swears nobody uses anymore. You never guessed a single
+field name. The server just told you all of them, unprompted, because nothing ever told it not to.
+</Hook>
+
+<Callout type="analogy">
+Picture a library where every book, patron record, and staff-only ledger has been re-catalogued onto one
+shared shelf, and a visitor only has to ask the desk "give me the FULL catalogue" to receive a single
+printout listing every entry - not just what's on public display, but the staff-restricted volumes, the
+withdrawn titles still technically shelvable, and the private borrower files, all cross-referenced and
+labeled by exactly what they contain. Nothing was hacked to get that printout. The visitor asked a
+completely ordinary, built-in question - "what do you have?" - and the desk, having never been told that
+question needs a badge check, answered it in full. That single printout is worth more to someone casing
+the building than an hour of wandering the aisles guessing what might be behind the staff door.
+</Callout>
+
+<Term define="GraphQL introspection is a built-in, spec-defined capability - not an add-on - that lets any client query the schema itself through meta-fields like __schema and __type: every object type, every field and its arguments, every query and mutation, every enum value, and every field's description and deprecation status. It exists so tooling (IDEs, API explorers, codegen) can work against any GraphQL API without hand-written documentation, and every mainstream GraphQL client library sends an introspection query by default the first time it connects. Introspection leakage is what happens when that same capability is left reachable outside development - anonymously, in production - so a caller who has never seen the codebase can retrieve the complete, authoritative shape of the API in one request: type names that reveal internal domain concepts, field names that reveal what data exists even if a UI never surfaces it, argument names and types that remove all guesswork from crafting a request, and deprecated-but-still-resolvable fields that a UI stopped calling but the server never actually removed. None of this is a bug in the GraphQL specification - introspection is deliberately part of it - the vulnerability is entirely in leaving it reachable to anyone, unauthenticated, past the point where a schema is meant to be public.">GraphQL introspection leakage</Term>
+
+## Why "it's just docs" undersells it
+
+- **It removes the guessing that normally slows reconnaissance down.** Against a REST API, an attacker
+  without documentation has to probe endpoint by endpoint, parameter by parameter, inferring shape from
+  responses. Introspection skips all of that - the schema names every type, every field, and every
+  argument's exact expected type, in one authoritative response.
+- **Deprecated does not mean gone.** A field marked `@deprecated(reason: "use newEndpointField")` still
+  fully resolves unless someone also removed the resolver. Introspection reports the deprecation reason
+  right alongside the field name - often explaining exactly what replaced it, and confirming the old path
+  is still live for anyone who calls it directly.
+- **Internal naming leaks internal intent.** A field like `internalRiskScore` or a mutation like
+  `forceCancelWithoutAudit` tells a tester - or an attacker - which parts of the schema the team considers
+  sensitive, purely from how they were named. Nobody had to leak a design doc; the schema did it for free.
+- **It maps the mutation surface, not just the read surface.** Introspection lists every mutation and its
+  input type with the same completeness as queries - so an attacker mapping what can be *written*, not
+  just read, gets the same complete picture, which matters directly for testing
+  [[api-and-modern-security/graphql-security/field-level-auth-and-mutation-mass-assignment]].
+
+<Callout type="tip">
+When testing whether introspection is actually closed off, don't just check that a GraphQL IDE (like
+GraphiQL) is disabled in the UI - a hidden or removed IDE says nothing about whether the endpoint itself
+still answers a raw `__schema` query sent directly. Send the introspection query yourself, straight to the
+API endpoint, with no special headers, and check whether it returns type data or a clean denial. The IDE
+and the introspection capability are two independent things to verify.
+</Callout>
+
+<Callout type="mistake">
+Treating introspection as purely a documentation convenience with no security weight, because "it's just
+the schema, not real data." A tester runs the introspection query, gets a large JSON response, and files
+nothing because no actual user data came back. But the schema itself is the reconnaissance step, not the
+payload - it is what turns a blind attacker into one who knows exactly which mutation to target, which
+field name to guess correctly on the first try, and which deprecated-but-live path skips whatever
+protection was added to its replacement. Introspection being open is worth its own finding even when the
+response contains zero rows of real data.
+</Callout>
+
+{/* IMAGE: an open library card catalog cabinet, three columns of small wooden drawers each with a brass label holder showing an alphabetical range, photographed close-up */}
+<HotspotImage
+  src="/notes/api-and-modern-security/graphql-security/introspection-leakage.jpg"
+  alt="An open library card catalog cabinet with rows of wooden drawers, each labeled with a brass holder showing an alphabetical range of entries"
+  credit="Card catalog, Olin Library, Wesleyan University - Joe Mabel, Wikimedia Commons, CC BY-SA 3.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Wesleyan_University_-_Olin_Library_card_catalog_01.jpg"
+  pins={[
+    { x: 22, y: 25, label: "One labeled drawer - one type in the schema", desc: "A normal visitor pulls the ONE drawer relevant to what they're looking for. That is what a well-scoped API caller does too: reach the one type or field their task actually needs." },
+    { x: 50, y: 45, label: "The full catalogue, all at once - the introspection query", desc: "Asking the desk for every drawer's contents in one printout is the equivalent of __schema: not one lookup, but the complete index of every type, field, and cross-reference the system holds, delivered in a single response." },
+    { x: 78, y: 30, label: "Every label, however small the range", desc: "Even a narrow, easy-to-overlook drawer label still fully identifies its contents. The same is true of a small, easy-to-miss field or deprecated mutation buried in a large schema response - introspection reports it exactly as completely as the obvious ones." },
+    { x: 50, y: 82, label: "No badge check at the desk", desc: "Nothing about asking 'what do you have' is inherently privileged - it is an ordinary, expected question. The failure is not that the question exists; it is that no one ever gated who is allowed to ask it in this environment." },
+    { x: 12, y: 70, label: "Withdrawn but still on the shelf", desc: "A catalogue can list a title long after it was meant to be pulled from circulation. That is a deprecated field: still described in full by introspection, still resolvable, unless the underlying resolver was actually removed - not just marked as retired." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Confirming introspection exposure on an endpoint - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Confirm authorization and target the raw GraphQL endpoint", desc: "Only on TaskFlight's sandbox or a system you are explicitly authorized to test - send requests to the endpoint directly, not just through a UI." },
+    { label: "Send a standard __schema introspection query", desc: "The same query every GraphQL client library sends automatically - no crafted payload, no special headers, just the spec-defined introspection request." },
+    { label: "Check whether types, fields, and mutations come back in full", desc: "A response listing every type, field, argument, and mutation - including any marked deprecated - means introspection is reachable at this endpoint, in this environment." },
+    { label: "Report exposure as its own finding, separate from any data leak", desc: "Even with zero real data in the response, a fully answered introspection query in a non-dev environment is reconnaissance handed over for free - worth reporting on its own." },
+  ]}
+/>
+
+Here is that same distinction in runnable form - a toy schema registry that simulates what an introspection
+query returns, with a vulnerable server that answers it unconditionally and a fixed one that gates it by
+environment, the same way a real GraphQL server's introspection setting would.
+
+<CodePlayground
+  language="python"
+  title="Run it - a toy introspection-exposure simulator (Python)"
+  code={`# A toy simulation of GraphQL introspection exposure - no real GraphQL
+# server or library involved. A small "schema" stands in for __schema,
+# and two servers answer an introspection request differently depending
+# on whether introspection is gated by environment.
+
+SCHEMA = {
+    "types": ["User", "Booking", "Payment", "AdminAuditLog"],
+    "queries": ["booking(id)", "myBookings", "searchFlights(origin, dest)"],
+    "mutations": [
+        {"name": "cancelBooking", "deprecated": False},
+        {"name": "updateProfile", "deprecated": False},
+        {"name": "adminOverridePricing", "deprecated": False},
+        {"name": "legacyRefund", "deprecated": True, "reason": "use cancelBooking(refund: true)"},
+    ],
+}
+
+class VulnerableServer:
+    # BUG: answers introspection unconditionally, in every environment.
+    def __init__(self, environment):
+        self.environment = environment
+
+    def handle_introspection_query(self):
+        return {"allowed": True, "schema": SCHEMA}
+
+class FixedServer:
+    # Introspection is only ever answered outside production.
+    def __init__(self, environment):
+        self.environment = environment
+
+    def handle_introspection_query(self):
+        if self.environment == "production":
+            return {"allowed": False, "schema": None}
+        return {"allowed": True, "schema": SCHEMA}
+
+def summarize(response):
+    if not response["allowed"]:
+        return "DENIED - introspection is closed in this environment"
+    schema = response["schema"]
+    lines = []
+    lines.append(str(len(schema["types"])) + " types, " + str(len(schema["queries"])) + " queries, " + str(len(schema["mutations"])) + " mutations exposed")
+    for m in schema["mutations"]:
+        tag = " (DEPRECATED but still resolvable: " + m.get("reason", "") + ")" if m["deprecated"] else ""
+        lines.append("  mutation " + m["name"] + tag)
+    return "\\n".join(lines)
+
+def run():
+    for env in ["development", "production"]:
+        print("== environment: " + env + " ==")
+        print("-- vulnerable server (no environment gate) --")
+        vuln = VulnerableServer(env)
+        print(summarize(vuln.handle_introspection_query()))
+        print("-- fixed server (introspection gated to non-prod) --")
+        fixed = FixedServer(env)
+        print(summarize(fixed.handle_introspection_query()))
+        print()
+
+run()`}
+/>
+
+The same simulator in Java - identical schema, identical two servers, identical verdicts:
+
+<CodePlayground
+  language="java"
+  title="Run it - a toy introspection-exposure simulator (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    // A toy simulation of GraphQL introspection exposure - no real GraphQL
+    // server or library involved. A small "schema" stands in for __schema,
+    // and two servers answer an introspection request differently depending
+    // on whether introspection is gated by environment.
+
+    static class MutationDef {
+        String name;
+        boolean deprecated;
+        String reason;
+        MutationDef(String name, boolean deprecated, String reason) {
+            this.name = name; this.deprecated = deprecated; this.reason = reason;
+        }
+    }
+
+    static final List<String> TYPES = Arrays.asList("User", "Booking", "Payment", "AdminAuditLog");
+    static final List<String> QUERIES = Arrays.asList("booking(id)", "myBookings", "searchFlights(origin, dest)");
+    static final List<MutationDef> MUTATIONS = Arrays.asList(
+        new MutationDef("cancelBooking", false, null),
+        new MutationDef("updateProfile", false, null),
+        new MutationDef("adminOverridePricing", false, null),
+        new MutationDef("legacyRefund", true, "use cancelBooking(refund: true)")
+    );
+
+    interface Server { String[] handleIntrospectionQuery(); }
+    // returns {"ALLOWED"/"DENIED", summaryOrEmpty}
+
+    static class VulnerableServer implements Server {
+        String environment;
+        VulnerableServer(String environment) { this.environment = environment; }
+        // BUG: answers introspection unconditionally, in every environment.
+        public String[] handleIntrospectionQuery() {
+            return new String[]{"ALLOWED", summarize()};
+        }
+    }
+
+    static class FixedServer implements Server {
+        String environment;
+        FixedServer(String environment) { this.environment = environment; }
+        public String[] handleIntrospectionQuery() {
+            if (environment.equals("production")) return new String[]{"DENIED", ""};
+            return new String[]{"ALLOWED", summarize()};
+        }
+    }
+
+    static String summarize() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(TYPES.size()).append(" types, ").append(QUERIES.size()).append(" queries, ")
+          .append(MUTATIONS.size()).append(" mutations exposed\\n");
+        for (MutationDef m : MUTATIONS) {
+            String tag = m.deprecated ? " (DEPRECATED but still resolvable: " + m.reason + ")" : "";
+            sb.append("  mutation ").append(m.name).append(tag).append("\\n");
+        }
+        return sb.toString().stripTrailing();
+    }
+
+    static void printResult(String[] result) {
+        if (result[0].equals("DENIED")) {
+            System.out.println("DENIED - introspection is closed in this environment");
+        } else {
+            System.out.println(result[1]);
+        }
+    }
+
+    public static void main(String[] args) {
+        for (String env : new String[]{"development", "production"}) {
+            System.out.println("== environment: " + env + " ==");
+            System.out.println("-- vulnerable server (no environment gate) --");
+            printResult(new VulnerableServer(env).handleIntrospectionQuery());
+            System.out.println("-- fixed server (introspection gated to non-prod) --");
+            printResult(new FixedServer(env).handleIntrospectionQuery());
+            System.out.println();
+        }
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: check TaskFlight's GraphQL endpoint for open introspection">
+<StepChecklist
+  steps={[
+    { text: "Confirm authorization and identify the raw endpoint", detail: "This platform's own TaskFlight/BuggyAPI GraphQL sandbox, or another system you are explicitly authorized to test - target the endpoint URL directly, not a UI wrapper around it." },
+    { text: "Send a standard __schema introspection query", detail: "No crafted payload needed - the same introspection query any GraphQL client library sends by default. Note whether it is answered at all." },
+    { text: "If it answers, scan the response for what it reveals", detail: "Look specifically for internally-named types or fields, any mutation whose name suggests elevated privilege, and any field marked deprecated that is still present (meaning still resolvable)." },
+    { text: "Write up exposure as its own finding", detail: "Report open introspection outside a development environment as a finding on its own - reconnaissance value, not just 'no real data was returned' - and separately flag any deprecated-but-live field you found through it." },
+  ]}
+/>
+You can now tell the difference between introspection existing (expected, spec-defined, useful in dev) and
+introspection being reachable somewhere it shouldn't be - and you can back that up with the exact query and
+response that proves it.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A raw __schema query against a production-looking endpoint returns the full type and mutation list.",
+      fix: "Introspection is open outside development. The fix is a server-side environment gate (most GraphQL server libraries expose an introspection on/off setting) - report the exact query and the exposed schema, without needing to also prove a downstream data leak to justify the finding.",
+    },
+    {
+      symptom: "GraphiQL or a similar in-browser explorer is disabled, so the team considers introspection closed.",
+      fix: "The IDE and the raw introspection capability are separate. Send the __schema query directly to the endpoint with no browser tooling involved - a disabled IDE with an endpoint that still answers introspection is still a finding.",
+    },
+    {
+      symptom: "A mutation shows up in the introspection response marked @deprecated, and the team assumes deprecated means inactive.",
+      fix: "Deprecation is a label on the schema, not a removal of the resolver. Call the deprecated mutation directly to confirm whether it still executes - if it does, report it as a live, still-reachable action, with the deprecation reason as evidence it was meant to be retired.",
+    },
+    {
+      symptom: "A finding gets dismissed because the introspection response contained 'just schema, no user data.'",
+      fix: "Reframe the impact: the schema is the map an attacker needs to target every other finding precisely - field names, argument types, and the full mutation surface, handed over in one request. Score it as reconnaissance exposure, which is real impact on its own.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **The raw endpoint, not just the UI** - always send `__schema` directly to the GraphQL endpoint URL, since
+  a hidden or disabled in-browser explorer proves nothing about whether the endpoint itself still answers.
+- **Every environment the API is reachable from** - staging and any publicly-routable non-production
+  environment deserve the same check as production; introspection left open in a "just staging" environment
+  is still real reconnaissance if that environment is internet-reachable.
+- **Deprecated fields and mutations specifically** - introspection lists them right alongside active ones;
+  treat every `@deprecated` entry as a candidate for a direct call to confirm whether it still resolves.
+- **[[api-and-modern-security/graphql-security/query-depth-and-complexity-dos]]** - once the schema's shape
+  is known from introspection, an attacker also knows exactly which nested relations exist to target with a
+  deep or expensive query - the two issues compound.
+- **[[api-and-modern-security/graphql-security/field-level-auth-and-mutation-mass-assignment]]** - introspection
+  maps the full mutation input surface, including fields that later turn out to accept more than they should.
+- **[[api-test-automation/graphql-and-soap-testing/graphql-vs-rest]]** - for the baseline difference in how
+  GraphQL exposes its shape compared with REST, which is what makes introspection leakage GraphQL-specific.
+</WhereToCheck>
+
+<WorkedExample title="one query, three separate findings on TaskFlight's sandbox">
+1. A tester, authorized to test TaskFlight's staging GraphQL sandbox, sends a single standard `__schema`
+   introspection query directly to the endpoint - no authentication header included.
+2. The response returns in full: every type, every query, and every mutation, including
+   `adminOverridePricing` and a mutation named `legacyRefund` marked `@deprecated(reason: "use
+   cancelBooking(refund: true)")`.
+3. Finding one: introspection is open on a non-dev, internet-reachable endpoint with no authentication -
+   filed with the exact request and a summary of what the schema revealed, not the full raw dump.
+4. The tester then calls `legacyRefund` directly, as their own tester-owned account, targeting only their
+   own booking. It executes successfully. Finding two: a deprecated mutation is still live, discovered
+   only because introspection named it and explained what replaced it.
+5. Separately, the tester notes `adminOverridePricing`'s name and argument shape from the same
+   introspection response, and flags it for a follow-up authorization test rather than calling it -
+   because confirming who can invoke a pricing-override mutation is a distinct question, covered in
+   [[api-and-modern-security/graphql-security/field-level-auth-and-mutation-mass-assignment]].
+</WorkedExample>
+
+<Quiz
+  question="A tester finds that a GraphQL endpoint answers introspection queries in production, but the response contains only schema metadata - no actual user records, bookings, or payment data. How should this be reported?"
+  options={[
+    "Not a finding - introspection only reveals structure, and no real data was ever returned",
+    "A finding on its own - open introspection outside development hands over the complete type, field, and mutation map an attacker needs to target every other request precisely, independent of whether any real data was included",
+    "A finding only if the schema happens to contain a field literally named 'password' or 'secret'",
+    "Not worth reporting unless the tester can also demonstrate a follow-on data leak in the same session"
+  ]}
+  answer={1}
+  explain="Introspection's value to an attacker is reconnaissance, not the schema metadata being 'real data' itself - it removes the guesswork of probing field by field and hands over the exact shape of every type, query, and mutation, including deprecated-but-still-live ones. That is real impact on its own and should be reported as such, without needing a chained data leak to justify it (ruling out options A and D). Option C is too narrow - sensitive intent can leak through ordinary-looking names just as easily as obviously-named ones."
+/>
+
+<Flashcards
+  cards={[
+    { front: "GraphQL introspection", back: "A spec-defined capability (__schema, __type meta-fields) that lets any client query the schema itself - every type, field, argument, query, and mutation - by default, used by tooling like IDEs and codegen." },
+    { front: "Introspection leakage", back: "Introspection left reachable outside development, anonymously, so any caller can retrieve the complete schema in one request - not a spec bug, but a configuration failure to gate it by environment." },
+    { front: "Why it's more than 'just docs'", back: "It removes the field-by-field guessing an attacker would otherwise need, reveals internal naming/intent, and maps the full mutation (write) surface with the same completeness as the read surface." },
+    { front: "Deprecated fields in introspection", back: "@deprecated is a label on the schema, not proof the resolver was removed - a deprecated field can still fully execute; confirm by calling it directly." },
+    { front: "How to verify exposure correctly", back: "Send a standard __schema query directly to the raw endpoint - checking only whether an in-browser IDE like GraphiQL is disabled proves nothing about the endpoint itself." },
+    { front: "How to report it", back: "As its own finding - open introspection outside dev, evidenced by the request and a summary of what it revealed - even with zero real data rows in the response." },
+  ]}
+/>
+
+<Challenge>
+On TaskFlight's own GraphQL sandbox (or another system you are explicitly authorized to test), using a
+tester-owned account or no authentication at all if the endpoint allows it: send a standard `__schema`
+introspection query directly to the endpoint and record whether it is answered. If it is, identify one
+type or mutation name that suggests elevated privilege or internal-only intent, and one field or mutation
+marked `@deprecated` - then note (without necessarily calling it, unless further testing is explicitly
+in scope) what its deprecation reason implies about what replaced it. Write up the exposure as a finding
+with the exact request and a summary of what the response revealed, independent of whether any real data
+was present.
+</Challenge>
+
+<AskCommunity prompt="I've started treating open GraphQL introspection outside dev as its own reportable finding - reconnaissance value, not requiring a chained data leak to justify it - and I check the raw endpoint directly rather than just whether an IDE like GraphiQL is disabled. For people who test GraphQL APIs regularly: how do you handle a schema that reveals dozens of deprecated-but-still-live fields at once without turning that into an unbounded testing sprawl, and how do you convince a team that 'it's just the schema' still deserves a real fix?">
+Prioritizing which deprecated-but-live fields are worth a direct follow-up call versus just flagging in the
+report, and getting teams to treat introspection exposure as a real finding rather than a documentation
+detail, are both recurring friction points worth comparing notes on.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://graphql.org/learn/introspection/", title: "GraphQL Foundation - Introspection", kind: "read" },
+    { href: "https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html", title: "OWASP GraphQL Cheat Sheet", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=Ic-eqZ-C_ZA" title="GraphQL Security for Beginners" minutes={13} />
+
+<Takeaways
+  points={[
+    "GraphQL introspection is a spec-defined, deliberate capability - the vulnerability is leaving it reachable outside development, not the capability itself.",
+    "An open introspection query hands over the complete type, field, argument, query, and mutation map in one request - eliminating the field-by-field guessing an attacker would otherwise need.",
+    "Deprecated fields and mutations still appear in full in introspection responses, and a deprecation label does not mean the resolver was actually removed.",
+    "Verify exposure against the raw endpoint directly - a disabled in-browser IDE like GraphiQL says nothing about whether the endpoint itself still answers a __schema query.",
+    "Report introspection exposure as its own finding based on reconnaissance value, even when the response contains no real user data.",
+    "Only test systems you own or are explicitly, in writing, authorized to test, using tester-owned accounts and synthetic data.",
+  ]}
+/>
+
+<Complete xp={10} />

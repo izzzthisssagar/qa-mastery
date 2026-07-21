@@ -1,0 +1,416 @@
+---
+title: "Query depth & complexity DoS"
+summary: "A GraphQL endpoint that never caps how deep a query can nest, or how expensive its fields are to resolve, lets one syntactically valid request expand into an enormous, resource-exhausting workload - a denial-of-service that needs no volume of traffic, just one crafted query."
+tags: ["api-and-modern-security", "graphql-security", "track-c"]
+updated: "2026-07-21"
+related:
+  - "api-and-modern-security/graphql-security/introspection-leakage"
+  - "api-and-modern-security/owasp-api-security-top-10-2023/unrestricted-resource-consumption"
+  - "performance-testing/load-vs-stress-vs-soak/goals"
+---
+
+<Hook>
+Authorized to test TaskFlight's GraphQL endpoint, you send a single request - one HTTP call, one query,
+no botnet, no flood of traffic. Inside that one query, `booking` asks for its `passenger`, who has
+`pastBookings`, each with its own `passenger`, each with their own `pastBookings`, nested a dozen levels
+deep before the closing braces finally stop. The server accepts it as perfectly valid GraphQL syntax and
+starts resolving - and CPU on the box climbs past what a thousand ordinary requests would ever cost, from
+one request, sent once.
+</Hook>
+
+<Callout type="analogy">
+Picture a photocopier with a single, innocent-looking instruction sheet taped above it: "for a copy of a
+document, also attach a copy of its cover memo." Fine for one document. But someone feeds it a document
+whose own cover memo is itself a bound document with a cover memo, which has a cover memo, twelve layers
+deep - and the machine, following its one simple instruction literally and exactly, obediently copies the
+whole nested stack, memo after memo after memo, without ever asking "should I really keep going this
+far?" One person, one request, one push of the button - and the copier grinds through paper and toner at
+a rate the office never planned for, not because the instruction was wrong, but because nothing ever told
+the machine where "attach a copy of the cover memo" has to stop.
+</Callout>
+
+<Term define="Query depth and query complexity are two related but distinct GraphQL denial-of-service vectors, both stemming from the same root cause: a schema that lets fields reference other objects of the same or related types, combined with a server that never bounds how far a single query is allowed to exploit that. Query depth is how many levels of nested selection sets a query contains - a query that asks for a booking, whose passenger has pastBookings, whose passenger has pastBookings, and so on, can nest arbitrarily deep as long as the schema's types form a cycle or a long chain, and each additional level multiplies the resolver work the server must perform to satisfy it. Query complexity (sometimes called query cost) is a broader measure that also accounts for the estimated expense of each field - a field that fetches a single scalar costs little, but a field that fetches a paginated list of 10,000 related records, especially one nested inside another list, can be far more expensive than raw nesting depth alone would suggest, since cost compounds multiplicatively across nested list fields rather than adding up linearly. Both are denial-of-service vectors because a single syntactically valid query - no authentication bypass, no injection, nothing the schema's type system actually forbids - can force the server to perform an amount of work wildly disproportionate to one HTTP request, exhausting CPU, memory, or downstream database capacity, and because GraphQL's single endpoint means this attack surface exists behind one URL rather than being spread across many REST routes with their own independent limits.">Query depth and query complexity DoS</Term>
+
+## Why one query can outweigh a flood of requests
+
+- **Depth multiplies, it does not add.** Each additional level of nesting through a cyclical relationship
+  (a booking's passenger has bookings, who have passengers) does not cost a little more than the level
+  before it - it can cost exponentially more, because the server resolves every branch at every level.
+  A handful of extra nesting levels can turn a cheap query into one that never finishes.
+- **Complexity hides in list fields, not just nesting.** A query that is only three levels deep but
+  requests a list field inside a list field inside a list field can still be enormously expensive - depth
+  alone does not capture that. Complexity analysis (assigning each field an estimated cost, and summing or
+  multiplying across the query) is what actually catches this, where a bare depth limit does not.
+- **It bypasses request-count-based defenses entirely.** A rate limiter that caps requests per minute sees
+  exactly one request here - it has no concept of what that one request costs to resolve. The same blind
+  spot that lets [[api-and-modern-security/graphql-security/batching-and-alias-abuse]] slip past
+  per-request throttles is at work here too, from a different angle: cost per request, not count of
+  requests.
+- **The schema itself is often the map an attacker needs.** A cyclical or deeply-relational schema shape
+  is exactly what
+  [[api-and-modern-security/graphql-security/introspection-leakage]] can hand over in advance - knowing a
+  `Booking.passenger.pastBookings.passenger` chain exists at all is most of the work of exploiting it.
+
+<Callout type="tip">
+When you test depth or complexity limits, don't stop at confirming a deeply nested query gets rejected -
+also confirm what a legitimate, reasonably nested query still returns successfully. A limit set too
+aggressively breaks real product features (a booking page that needs passenger, then flight, then seat
+map, is already three or four levels deep by itself); a limit set too loosely does nothing. The useful
+test proves both the ceiling exists and that it sits above genuine product usage, not just that
+*something* eventually gets denied.
+</Callout>
+
+<Callout type="mistake">
+Adding a depth limit and considering query-cost DoS solved. A team caps nesting at, say, six levels deep,
+tests it against an obviously nested attack query, watches it get rejected, and closes the ticket. But a
+query that stays at three levels deep while requesting three separate list fields, each returning
+thousands of records, each themselves requesting a nested list, can still be enormously expensive - depth
+alone never measures that. Depth limiting and complexity analysis are two different controls catching two
+different shapes of expensive query; a fix that only adds one of them leaves the other wide open.
+</Callout>
+
+{/* IMAGE: a close group of Russian matryoshka nesting dolls in various painted patterns, photographed close-up in a market display */}
+<HotspotImage
+  src="/notes/api-and-modern-security/graphql-security/query-depth-and-complexity-dos.jpg"
+  alt="A close group of painted Russian matryoshka nesting dolls of varying patterns and sizes, displayed together"
+  credit="Army of Matryoshka dolls - Marcos Leal, Wikimedia Commons, CC BY 2.0"
+  creditHref="https://commons.wikimedia.org/wiki/File:Army_of_Matryoshka_dolls_(2995294027).jpg"
+  pins={[
+    { x: 45, y: 55, label: "One doll, one query - opening it is one request", desc: "A single matryoshka doll, opened once, is a normal, cheap operation - the same way a shallow, sensibly-scoped GraphQL query is meant to be one lightweight request." },
+    { x: 45, y: 30, label: "Each doll contains another - each nesting level resolves the next", desc: "Opening a doll reveals another doll inside, which reveals another - exactly how each nested selection set in a query triggers another round of resolver work, one level deeper, from the same single request." },
+    { x: 78, y: 45, label: "Every doll in the group is its own nested chain", desc: "This is not one doll but a whole cluster, each with its own interior depth. A query with several sibling list fields, each itself nested, multiplies cost across every branch, not just down one chain." },
+    { x: 18, y: 60, label: "No doll here says 'stop opening after N layers'", desc: "Nothing in the set itself enforces a limit on how many times you can keep opening - that has to be a rule imposed from outside, the same way depth and complexity limits have to be configured into the GraphQL server; the schema's type system alone will not stop it." },
+    { x: 60, y: 78, label: "Painted detail on every layer, however deep", desc: "Even the smallest, innermost dolls are fully painted, fully resolved objects - a server does exactly this work at every nesting level too, in full, regardless of how deep the query goes." },
+  ]}
+/>
+
+<FlowAnimation
+  title="Testing an endpoint for missing depth and complexity limits - press Play"
+  intervalMs={1800}
+  nodes={[
+    { label: "Confirm authorization and find a cyclical or list-heavy relationship", desc: "Look for a schema shape where a type can reach back to itself or a related type repeatedly (booking to passenger to bookings), only on TaskFlight's sandbox or a system you are explicitly authorized to test." },
+    { label: "Send a deeply nested query and note the response time and status", desc: "Nest through that relationship several levels beyond normal product usage. A correct server rejects it with a validation error before resolving; a vulnerable one starts resolving and visibly slows." },
+    { label: "Separately, send a shallow but list-heavy query", desc: "Keep nesting low but request several list fields, each nested one level, each with a large page size. This tests complexity analysis specifically, independent of raw depth." },
+    { label: "Confirm a legitimate, normally-nested query still succeeds", desc: "Run a query that matches genuine product usage at its deepest normal point. A correct limit rejects the attack shapes while still allowing this - proving the ceiling is calibrated, not just present." },
+  ]}
+/>
+
+Here is that same distinction in runnable form - a toy query-cost estimator that scores a query by depth and
+by a per-field complexity weight, with a vulnerable server that resolves anything and a fixed one that
+enforces both a depth ceiling and a complexity budget.
+
+<CodePlayground
+  language="python"
+  title="Run it - a toy query depth/complexity estimator (Python)"
+  code={`# A toy simulation of GraphQL query depth and complexity limiting - no real
+# GraphQL server or parser involved. A query is represented as a small nested
+# structure: each node names a field, an estimated per-item cost, and how
+# many items it returns (1 for a single object, more for a list field).
+
+def query_depth(node, current=1):
+    if not node.get("children"):
+        return current
+    return max(query_depth(child, current + 1) for child in node["children"])
+
+def query_complexity(node):
+    # Cost multiplies down through list fields - a list field's own cost is
+    # paid once per returned item, compounding with whatever it contains.
+    own_cost = node.get("cost", 1) * node.get("count", 1)
+    if not node.get("children"):
+        return own_cost
+    children_cost = sum(query_complexity(child) for child in node["children"])
+    return own_cost + node.get("count", 1) * children_cost
+
+NORMAL_QUERY = {
+    "field": "booking", "cost": 1, "count": 1,
+    "children": [
+        {"field": "passenger", "cost": 1, "count": 1, "children": [
+            {"field": "name", "cost": 1, "count": 1},
+        ]},
+        {"field": "flight", "cost": 1, "count": 1, "children": [
+            {"field": "seatMap", "cost": 2, "count": 1},
+        ]},
+    ],
+}
+
+DEEP_ATTACK_QUERY = {
+    "field": "booking", "cost": 1, "count": 1,
+    "children": [{"field": "passenger", "cost": 1, "count": 1, "children": [
+        {"field": "pastBookings", "cost": 1, "count": 1, "children": [
+            {"field": "passenger", "cost": 1, "count": 1, "children": [
+                {"field": "pastBookings", "cost": 1, "count": 1, "children": [
+                    {"field": "passenger", "cost": 1, "count": 1, "children": [
+                        {"field": "pastBookings", "cost": 1, "count": 1},
+                    ]},
+                ]},
+            ]},
+        ]},
+    ]}],
+}
+
+WIDE_ATTACK_QUERY = {
+    # Shallow (depth 3) but expensive: three sibling list fields, each
+    # returning many items, one of them nested one level further.
+    "field": "searchFlights", "cost": 1, "count": 1,
+    "children": [
+        {"field": "results", "cost": 1, "count": 5000, "children": [
+            {"field": "seatMap", "cost": 3, "count": 200},
+        ]},
+    ],
+}
+
+DEPTH_LIMIT = 6
+COMPLEXITY_LIMIT = 10000
+
+def vulnerable_check(query):
+    return {"allowed": True}  # BUG: no depth or complexity check at all.
+
+def fixed_check(query):
+    depth = query_depth(query)
+    complexity = query_complexity(query)
+    if depth > DEPTH_LIMIT:
+        return {"allowed": False, "reason": "depth " + str(depth) + " exceeds limit " + str(DEPTH_LIMIT)}
+    if complexity > COMPLEXITY_LIMIT:
+        return {"allowed": False, "reason": "complexity " + str(complexity) + " exceeds limit " + str(COMPLEXITY_LIMIT)}
+    return {"allowed": True, "reason": "depth " + str(depth) + ", complexity " + str(complexity) + " within limits"}
+
+def run():
+    queries = [("normal product query", NORMAL_QUERY), ("deep attack query", DEEP_ATTACK_QUERY), ("wide/expensive attack query", WIDE_ATTACK_QUERY)]
+    for label, q in queries:
+        depth = query_depth(q)
+        complexity = query_complexity(q)
+        print(label + " -> depth=" + str(depth) + " complexity=" + str(complexity))
+        vuln = vulnerable_check(q)
+        fixed = fixed_check(q)
+        print("  vulnerable server (no limits):  ALLOW (always resolves)")
+        print("  fixed server (depth+complexity): " + ("ALLOW" if fixed["allowed"] else "DENY") + " - " + fixed["reason"])
+        print()
+
+run()`}
+/>
+
+The same estimator in Java - identical queries, identical cost math, identical verdicts:
+
+<CodePlayground
+  language="java"
+  title="Run it - a toy query depth/complexity estimator (Java)"
+  code={`import java.util.*;
+
+public class Main {
+    // A toy simulation of GraphQL query depth and complexity limiting - no
+    // real GraphQL server or parser involved. A query is a small nested
+    // structure: each node names a field, an estimated per-item cost, and
+    // how many items it returns (1 for a single object, more for a list).
+
+    static class Node {
+        String field;
+        int cost;
+        int count;
+        List<Node> children;
+        Node(String field, int cost, int count, List<Node> children) {
+            this.field = field; this.cost = cost; this.count = count;
+            this.children = children == null ? new ArrayList<>() : children;
+        }
+    }
+
+    static int queryDepth(Node node, int current) {
+        if (node.children.isEmpty()) return current;
+        int max = current;
+        for (Node child : node.children) max = Math.max(max, queryDepth(child, current + 1));
+        return max;
+    }
+
+    static long queryComplexity(Node node) {
+        long ownCost = (long) node.cost * node.count;
+        if (node.children.isEmpty()) return ownCost;
+        long childrenCost = 0;
+        for (Node child : node.children) childrenCost += queryComplexity(child);
+        return ownCost + (long) node.count * childrenCost;
+    }
+
+    static Node normalQuery() {
+        Node name = new Node("name", 1, 1, null);
+        Node passenger = new Node("passenger", 1, 1, List.of(name));
+        Node seatMap = new Node("seatMap", 2, 1, null);
+        Node flight = new Node("flight", 1, 1, List.of(seatMap));
+        return new Node("booking", 1, 1, List.of(passenger, flight));
+    }
+
+    static Node deepAttackQuery() {
+        Node l3 = new Node("pastBookings", 1, 1, null);
+        Node p3 = new Node("passenger", 1, 1, List.of(l3));
+        Node l2 = new Node("pastBookings", 1, 1, List.of(p3));
+        Node p2 = new Node("passenger", 1, 1, List.of(l2));
+        Node l1 = new Node("pastBookings", 1, 1, List.of(p2));
+        Node p1 = new Node("passenger", 1, 1, List.of(l1));
+        return new Node("booking", 1, 1, List.of(p1));
+    }
+
+    static Node wideAttackQuery() {
+        Node seatMap = new Node("seatMap", 3, 200, null);
+        Node results = new Node("results", 1, 5000, List.of(seatMap));
+        return new Node("searchFlights", 1, 1, List.of(results));
+    }
+
+    static final int DEPTH_LIMIT = 6;
+    static final long COMPLEXITY_LIMIT = 10000;
+
+    static boolean vulnerableCheck(Node query) {
+        return true; // BUG: no depth or complexity check at all.
+    }
+
+    static String fixedCheck(Node query) {
+        int depth = queryDepth(query, 1);
+        long complexity = queryComplexity(query);
+        if (depth > DEPTH_LIMIT) return "DENY - depth " + depth + " exceeds limit " + DEPTH_LIMIT;
+        if (complexity > COMPLEXITY_LIMIT) return "DENY - complexity " + complexity + " exceeds limit " + COMPLEXITY_LIMIT;
+        return "ALLOW - depth " + depth + ", complexity " + complexity + " within limits";
+    }
+
+    public static void main(String[] args) {
+        Object[][] queries = {
+            {"normal product query", normalQuery()},
+            {"deep attack query", deepAttackQuery()},
+            {"wide/expensive attack query", wideAttackQuery()},
+        };
+        for (Object[] entry : queries) {
+            String label = (String) entry[0];
+            Node q = (Node) entry[1];
+            int depth = queryDepth(q, 1);
+            long complexity = queryComplexity(q);
+            System.out.println(label + " -> depth=" + depth + " complexity=" + complexity);
+            System.out.println("  vulnerable server (no limits):  ALLOW (always resolves)");
+            System.out.println("  fixed server (depth+complexity): " + fixedCheck(q));
+            System.out.println();
+        }
+    }
+}`}
+/>
+
+<FirstTime title="Your mission: probe TaskFlight's GraphQL endpoint for missing depth/complexity limits">
+<StepChecklist
+  steps={[
+    { text: "Confirm authorization and find a self-referencing or list-heavy relationship", detail: "Use TaskFlight's own GraphQL sandbox (or another system you are explicitly authorized to test) and locate a type chain like booking to passenger to pastBookings that can nest repeatedly." },
+    { text: "Send a deeply nested query beyond normal product usage", detail: "Nest several levels past what any real screen in the product needs, and note whether it is rejected with a validation error or actually starts resolving." },
+    { text: "Send a shallow but list-heavy query separately", detail: "Keep nesting minimal but request large page sizes across sibling list fields, to test complexity analysis independent of raw depth." },
+    { text: "Confirm a normal, product-realistic query still succeeds", detail: "Run the deepest query a real feature actually needs. A correctly calibrated limit blocks the attack shapes while still returning this one successfully." },
+  ]}
+/>
+You can now distinguish a missing depth limit from a missing complexity limit, test for each independently,
+and confirm any fix you find doesn't accidentally break legitimate product usage in the process.
+</FirstTime>
+
+<WhenItBreaks
+  items={[
+    {
+      symptom: "A deeply nested query through a cyclical relationship is accepted and the server visibly slows or times out.",
+      fix: "No depth limit is enforced. Most GraphQL server libraries support a maximum-depth validation rule applied before execution - report the exact query, its nesting depth, and the observed resolution time or timeout as evidence.",
+    },
+    {
+      symptom: "A shallow query with large list fields is just as expensive as a deeply nested one, but a depth limit alone does not catch it.",
+      fix: "Depth and complexity are different controls. Add complexity/cost analysis that weighs list field size and per-field cost, not just nesting depth - and test both independently rather than assuming one implies the other.",
+    },
+    {
+      symptom: "A newly added depth or complexity limit also rejects a normal, deepest-in-the-product query.",
+      fix: "The limit is calibrated too aggressively. Re-test against real product usage at its deepest legitimate point and raise the ceiling to sit just above it, rather than picking an arbitrary round number.",
+    },
+    {
+      symptom: "Rate limiting is in place per HTTP request, and the team assumes that covers this class of DoS.",
+      fix: "A request-count limiter has no visibility into what a single request costs to resolve - one query can still exhaust resources within the request-count budget. Depth and complexity limits are a separate control operating on cost per request, not count of requests.",
+    },
+  ]}
+/>
+
+<WhereToCheck>
+- **Any self-referencing or cyclical type chain** - a type that can reach a related instance of itself
+  (booking to passenger to bookings) is the clearest depth-DoS candidate in any schema.
+- **List fields nested inside list fields** - even at low depth, this is where complexity analysis earns
+  its place; test it with large page sizes specifically, separate from any depth test.
+- **The gap between "accepted" and "resolved quickly"** - a query that validates successfully but takes
+  drastically longer than a comparable shallow query is worth timing and reporting even before it fully
+  times out.
+- **[[api-and-modern-security/owasp-api-security-top-10-2023/unrestricted-resource-consumption]]** - the
+  broader API4:2023 category this sits inside; query cost is one of several ceilings (alongside payload
+  size, rows returned, and requests per minute) that an API needs.
+- **[[api-and-modern-security/graphql-security/introspection-leakage]]** - the schema shape that makes a
+  cyclical relationship exploitable is often visible directly from an open introspection query.
+- **[[api-and-modern-security/graphql-security/batching-and-alias-abuse]]** - a different way a single
+  HTTP request can carry far more cost than a per-request control expects; worth testing together.
+</WhereToCheck>
+
+<WorkedExample title="proving both a depth gap and a complexity gap on TaskFlight's sandbox">
+1. A tester, authorized to test TaskFlight's staging GraphQL sandbox with a tester-owned account, notices
+   from a prior introspection check that `Booking.passenger` and `Passenger.pastBookings` form a cycle.
+2. They send a query nesting that cycle eight levels deep. The server accepts it as valid GraphQL and
+   begins resolving; response time climbs past 30 seconds before the tester cancels the request. No depth
+   limit is enforced. Finding one is filed with the exact query and the observed resolution time.
+3. Separately, they send a shallow, three-level query requesting `searchFlights.results` (page size 5000)
+   with a nested `seatMap` on each result. It resolves in under a second but the response payload and CPU
+   time are both disproportionate to a normal search request. Finding two is filed as a missing complexity
+   limit, distinct from finding one - proving depth alone would not have caught this second query.
+4. To confirm neither fix would break the product, the tester also runs the deepest query the real booking
+   detail screen issues (four levels) and confirms it still resolves quickly - establishing a safe ceiling
+   for whatever limit gets added.
+</WorkedExample>
+
+<Quiz
+  question="A team adds a maximum query depth of 6 to their GraphQL server and confirms a deeply nested attack query is now rejected. Is query-cost denial-of-service now fully mitigated?"
+  options={[
+    "Yes - depth is the only dimension a GraphQL query's cost can grow along",
+    "No - a shallow query with large, nested list fields can still be extremely expensive; complexity/cost analysis is a separate control that a depth limit alone does not provide",
+    "Yes, as long as the depth limit number is large enough to never block a legitimate query",
+    "No, because depth limits are only effective against REST APIs, not GraphQL"
+  ]}
+  answer={1}
+  explain="Depth and complexity are independent dimensions of query cost. A query can stay shallow while still being enormously expensive through large list fields nested even one or two levels - depth limiting alone has no visibility into page sizes or per-field cost, so it does not catch that shape of attack (ruling out A and C, which both assume depth is sufficient). Option D is simply wrong - depth and complexity limiting are GraphQL-specific controls addressing a GraphQL-specific attack surface."
+/>
+
+<Flashcards
+  cards={[
+    { front: "Query depth", back: "How many levels of nested selection sets a GraphQL query contains - resolver work can grow exponentially with each additional level through a cyclical relationship." },
+    { front: "Query complexity (query cost)", back: "An estimated cost that also accounts for per-field expense and list field size, not just nesting depth - catches expensive-but-shallow queries that depth limiting alone misses." },
+    { front: "Why one query can outweigh many requests", back: "GraphQL's single endpoint and flexible nesting let one syntactically valid query trigger a disproportionate amount of resolver work - no authentication bypass or injection needed." },
+    { front: "Why request-count rate limiting doesn't catch this", back: "A rate limiter counting requests per minute sees one request either way - it has no concept of what that one request costs the server to resolve." },
+    { front: "The two separate controls needed", back: "A maximum depth limit (caps nesting) and a complexity/cost analysis (caps estimated total cost including list sizes) - a fix that adds only one leaves the other attack shape open." },
+    { front: "How to test a limit is calibrated correctly", back: "Confirm both that attack-shaped queries are rejected AND that the deepest legitimate product query still succeeds - a limit that blocks real usage is as much a problem as no limit at all." },
+  ]}
+/>
+
+<Challenge>
+On TaskFlight's own GraphQL sandbox (or another system you are explicitly authorized to test), using a
+tester-owned account: find one self-referencing or cyclical relationship in the schema and send a query
+nesting it well beyond normal product usage, recording whether it is rejected and how long it takes if
+not. Separately, construct one shallow query (three levels or fewer) that requests a large list field
+nested inside another list field, and record its cost. For whichever of the two actually goes through
+unbounded, write up the finding naming the specific missing control (depth limit or complexity analysis),
+with the exact query and observed timing as evidence - and confirm your test does not exhaust the shared
+sandbox for other learners.
+</Challenge>
+
+<AskCommunity prompt="I've started testing GraphQL DoS as two separate questions - a deeply nested query through a cyclical relationship, and a shallow-but-expensive query through large nested list fields - rather than assuming one depth limit covers both. For people who test GraphQL APIs regularly: what complexity weights have you found actually correlate with real server cost in practice, and how do you calibrate a depth or complexity ceiling without an extended trial-and-error cycle against production-like data volumes?">
+Picking complexity weights that reflect real resolver cost, rather than arbitrary numbers, and calibrating
+a ceiling that blocks attacks without breaking legitimate deep screens, are both things I'd like to compare
+notes on with people who've tuned this against a real GraphQL service.
+</AskCommunity>
+
+<Resources
+  links={[
+    { href: "https://graphql.org/learn/validation/", title: "GraphQL Foundation - Validation", kind: "read" },
+    { href: "https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html", title: "OWASP GraphQL Cheat Sheet", kind: "read" },
+  ]}
+/>
+
+<Video href="https://www.youtube.com/watch?v=b7OwR1gs-xA" title="GraphQL Query Depth Limiting with Express" minutes={2} />
+
+<Takeaways
+  points={[
+    "A single, syntactically valid GraphQL query can force a disproportionate amount of resolver work through deep nesting of a cyclical relationship - no authentication bypass or injection required.",
+    "Query depth (nesting levels) and query complexity (estimated cost including list sizes) are two independent dimensions - a depth limit alone does not catch a shallow-but-expensive query.",
+    "Request-count-based rate limiting has no visibility into what a single request costs to resolve, so it does not mitigate this class of denial-of-service.",
+    "Test both dimensions separately: a deep query through a self-referencing relationship, and a shallow query with large nested list fields.",
+    "A correctly calibrated limit blocks attack-shaped queries while still allowing the deepest query real product usage actually needs - verify both sides.",
+    "Only test systems you own or are explicitly, in writing, authorized to test, and be mindful that a real depth/complexity attack query can degrade a shared sandbox for other learners.",
+  ]}
+/>
+
+<Complete xp={10} />
