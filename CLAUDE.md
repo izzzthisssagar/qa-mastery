@@ -91,7 +91,21 @@ mind when deploying:
   tokens — `:root` = light palette, `.dark` = brand dark (`--accent` emerald,
   `--bug` amber); toggled by `next-themes` (class strategy, dark default; see
   ADR-9). **New UI must use semantic classes** (`bg-surface`, `border-border`,
-  `text-muted-foreground`) — never raw `zinc-*`. Fonts Bricolage Grotesque
-  (display), Geist (body/mono), Instrument Serif italic (`.font-serif-accent`).
-  Atmosphere via `.bg-grid` / `.bg-glow` / `.grain`. Respect
-  `prefers-reduced-motion`. BuggyShop stays dark-only on purpose.
+  `text-muted-foreground`) — never raw `zinc-*`, and never a raw Tailwind
+  pastel (`text-emerald-300`, `text-red-400`, …) as text color either: those
+  are tuned for the dark palette only and measure well under AA (as low as
+  1.2:1) against the light background — axe caught this repeatedly in Phase
+  7. Use the **text-tone tokens** instead, each independently AA-verified
+  against `--background`/`--surface`/`--surface-raised` on light, unchanged
+  (already-safe) pastels on dark: `text-accent-text` (general accent-colored
+  copy — labels, inline code, links; distinct from `text-accent`, which is
+  tuned for `bg-accent` buttons paired with `--accent-foreground`, not for
+  text-on-background), `text-success-text`, `text-warning-text`,
+  `text-info-text`, `text-danger-text` (state/feedback copy — success
+  messages, warnings, info, errors). A one-off brand color with no matching
+  tone token (BuggyAPI's cyan, the coding-simulator card's violet) gets an
+  explicit `dark:` variant instead of a new global token — see
+  `dashboard/buggyapi-card.tsx`. Fonts Bricolage Grotesque (display), Geist
+  (body/mono), Instrument Serif italic (`.font-serif-accent`). Atmosphere via
+  `.bg-grid` / `.bg-glow` / `.grain`. Respect `prefers-reduced-motion`.
+  BuggyShop stays dark-only on purpose.
