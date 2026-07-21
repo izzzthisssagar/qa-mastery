@@ -7,6 +7,9 @@ const repoRoot = path.join(appDir, "..", "..");
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
+  // Drop the `X-Powered-By: Next.js` banner (OWASP A05 tech disclosure).
+  // `Server: Vercel` is added by the edge and can't be suppressed from here.
+  poweredByHeader: false,
   // Internal workspace packages ship TS source; Next transpiles them in-place.
   transpilePackages: [
     "@qa-mastery/agent",
@@ -49,6 +52,9 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: [
           { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+          // Legacy twin of frame-ancestors. Modern browsers ignore it in favour
+          // of the CSP above, but scanners (and IE/old Edge) look for it.
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
