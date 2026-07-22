@@ -4,13 +4,20 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 /**
  * RLS regression tests — prove the database enforces the access invariants,
- * independent of any app code. Needs the local Supabase stack and the lesson
- * registry synced. Run with:
+ * independent of any app code. Needs the local Supabase stack. Run with:
  *
  *   NEXT_PUBLIC_SUPABASE_URL=… NEXT_PUBLIC_SUPABASE_ANON_KEY=… \
  *   SUPABASE_SERVICE_ROLE_KEY=… pnpm --filter @qa-mastery/db test:rls
  *
  * Kept out of the default `pnpm test` (it requires a running DB).
+ *
+ * The lesson content pipeline (`content/track-a`/`track-b`) was retired
+ * 2026-07-22 — the notes wiki is the graded spine now, and nothing ever
+ * syncs a `lessons` row again. `progress` is still lesson-keyed (no
+ * note_slug alternative exists for it, unlike code_runs/bug_reports/
+ * capstone_submissions), so this suite seeds its own throwaway
+ * track/module/lesson via the service role instead of depending on a
+ * synced one — this only tests `progress` RLS, not any real lesson content.
  */
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -58,15 +65,45 @@ describe.skipIf(!hasEnv)("RLS regression", () => {
     clientA = await signedInClient(emailA);
     clientB = await signedInClient(emailB);
 
+    const { data: track, error: trackError } = await service
+      .from("tracks")
+      .upsert(
+        { slug: "rls-test-track", title: "RLS test track", status: "published" },
+        { onConflict: "slug" },
+      )
+      .select("id")
+      .single();
+    if (trackError || !track) throw new Error(trackError?.message ?? "track upsert failed");
+
+    const { data: mod, error: modError } = await service
+      .from("modules")
+      .upsert(
+        {
+          track_id: track.id as string,
+          slug: "rls-test-module",
+          title: "RLS test module",
+          status: "published",
+        },
+        { onConflict: "slug" },
+      )
+      .select("id")
+      .single();
+    if (modError || !mod) throw new Error(modError?.message ?? "module upsert failed");
+
     const { data: lesson, error } = await service
       .from("lessons")
+      .upsert(
+        {
+          module_id: mod.id as string,
+          slug: "rls-test-lesson",
+          title: "RLS test lesson",
+          status: "published",
+        },
+        { onConflict: "slug" },
+      )
       .select("id")
-      .eq("status", "published")
-      .limit(1)
       .single();
-    if (error || !lesson) {
-      throw new Error("no published lesson — run the curriculum sync --apply first");
-    }
+    if (error || !lesson) throw new Error(error?.message ?? "lesson upsert failed");
     lessonId = lesson.id as string;
 
     // Seed a progress row for A via the service role.
