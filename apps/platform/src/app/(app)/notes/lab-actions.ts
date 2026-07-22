@@ -1,12 +1,6 @@
 "use server";
 
-import {
-  chapterForLab,
-  findNoteLeaf,
-  getNote,
-  labForChapter,
-  type NoteLab,
-} from "@qa-mastery/curriculum";
+import type { NoteLab } from "@qa-mastery/curriculum";
 import { createServiceClient } from "@qa-mastery/db";
 import {
   gradeLabRun,
@@ -17,6 +11,7 @@ import {
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAuthedUserId } from "@/lib/auth";
 import { assertCodeRunQuota, getCodeRunner } from "@/lib/code-runs";
+import { requireNoteLab, topicsRemaining } from "./lab-shared";
 
 /**
  * Note-spine lab submission. The lesson-bound equivalents live in
@@ -38,6 +33,10 @@ export interface NoteLabState {
   language?: string;
   starter?: string;
   xp: number;
+  /** bug_report only — which practice app the hunt targets. */
+  target?: NoteLab["target"];
+  /** bug_report only — distinct bugs required to pass. */
+  minValidBugs?: number;
   /** Chapter notes still unread — the lab stays locked until this is empty. */
   topicsRemaining: number;
   /** True once any submission for this chapter has passed. */
@@ -54,56 +53,26 @@ export interface NoteLabResult {
   xpAwarded: number;
 }
 
-/**
- * Resolve a lab and its chapter, or throw. This is the trust boundary: a
- * `chapterSlug` arriving from the client is only honoured when the taxonomy has
- * that chapter AND the registry declares a lab on it, so a forged slug can
- * never reach the code runner or write a `note_slug` row.
- */
-function requireNoteLab(chapterSlug: string): {
-  lab: NoteLab;
-  moduleSlug: string;
-  topicSlugs: string[];
-} {
-  const chapter = chapterForLab(chapterSlug);
-  const lab = labForChapter(chapterSlug);
-  if (!chapter || !lab) throw new Error("Lab not available");
-  return { lab, moduleSlug: chapter.moduleSlug, topicSlugs: chapter.topicSlugs };
-}
-
-/** How many of the chapter's notes the learner still has to read. The lab is a
- *  chapter's closing exercise, so it unlocks only once the chapter is read. */
-async function topicsRemaining(
-  service: SupabaseClient,
-  userId: string,
-  moduleSlug: string,
-  chapterSlug: string,
-  topicSlugs: string[],
-): Promise<number> {
-  // A planned stub or a topic with no MDX on disk can't be read, so it must not
-  // hold the lab hostage.
-  const readable = topicSlugs.filter((t) => {
-    const leaf = findNoteLeaf(moduleSlug, chapterSlug, t);
-    return leaf && !leaf.planned && getNote(moduleSlug, chapterSlug, t);
-  });
-  if (readable.length === 0) return 0;
-
-  const slugs = readable.map((t) => `${moduleSlug}/${chapterSlug}/${t}`);
-  const { data } = await service
-    .from("note_progress")
-    .select("note_slug")
-    .eq("user_id", userId)
-    .in("note_slug", slugs);
-
-  return readable.length - (data?.length ?? 0);
-}
-
 /** Whether this learner has ever passed this chapter's lab. */
 async function hasPassed(
   service: SupabaseClient,
   userId: string,
   chapterSlug: string,
+  kind: NoteLab["kind"],
+  minValidBugs: number,
 ): Promise<boolean> {
+  if (kind === "bug_report") {
+    // Distinct bugs, not report rows — a learner can match the same bug once;
+    // further attempts on it score 0 as a duplicate (see matchBugReport).
+    const { data } = await service
+      .from("bug_reports")
+      .select("matched_bug_id")
+      .eq("user_id", userId)
+      .eq("note_slug", chapterSlug)
+      .not("matched_bug_id", "is", null);
+    const distinct = new Set((data ?? []).map((r) => r.matched_bug_id as string));
+    return distinct.size >= minValidBugs;
+  }
   const { count } = await service
     .from("code_runs")
     .select("*", { count: "exact", head: true })
@@ -121,7 +90,7 @@ export async function getNoteLabState(chapterSlug: string): Promise<NoteLabState
 
   const [remaining, passed] = await Promise.all([
     topicsRemaining(service, userId, moduleSlug, lab.chapterSlug.split("/")[1]!, topicSlugs),
-    hasPassed(service, userId, chapterSlug),
+    hasPassed(service, userId, chapterSlug, lab.kind, lab.minValidBugs ?? 1),
   ]);
 
   return {
@@ -132,6 +101,8 @@ export async function getNoteLabState(chapterSlug: string): Promise<NoteLabState
     language: lab.language,
     starter: lab.starter,
     xp: lab.xp,
+    target: lab.target,
+    minValidBugs: lab.minValidBugs,
     topicsRemaining: remaining,
     passed,
   };
@@ -168,7 +139,7 @@ export async function submitNoteLab(chapterSlug: string, code: string): Promise<
   const validated = validateCodeSubmission(code);
   await assertCodeRunQuota(service, userId);
 
-  const alreadyPassed = await hasPassed(service, userId, chapterSlug);
+  const alreadyPassed = await hasPassed(service, userId, chapterSlug, "code_run", 1);
 
   const runner = getCodeRunner();
   const language = lab.language ?? "python";

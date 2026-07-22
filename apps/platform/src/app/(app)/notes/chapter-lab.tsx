@@ -12,6 +12,7 @@
 
 import { useState, useTransition } from "react";
 import { Spinner } from "@qa-mastery/ui";
+import { BugHuntPanel } from "./bug-hunt-panel";
 import { submitNoteLab, type NoteLabResult, type NoteLabState } from "./lab-actions";
 
 export function ChapterLab({ state }: { state: NoteLabState }) {
@@ -20,7 +21,10 @@ export function ChapterLab({ state }: { state: NoteLabState }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  // Passed on a previous visit, or passed just now in this session.
+  // Passed on a previous visit, or (code_run only) passed just now in this
+  // session — bug_report's own BugHuntPanel tracks live progress internally
+  // and shows its own "lab passed" state, so this header badge only reflects
+  // state.passed for that kind until the next page load.
   const solved = state.passed || result?.passed === true;
   const locked = state.topicsRemaining > 0;
 
@@ -46,6 +50,12 @@ export function ChapterLab({ state }: { state: NoteLabState }) {
           Finish the last {state.topicsRemaining} note
           {state.topicsRemaining === 1 ? "" : "s"} in this chapter to unlock the lab.
         </p>
+      ) : state.kind === "bug_report" ? (
+        <BugHuntPanel
+          chapterSlug={state.chapterSlug}
+          title={state.title}
+          minValidBugs={state.minValidBugs ?? 1}
+        />
       ) : (
         <>
           <textarea
