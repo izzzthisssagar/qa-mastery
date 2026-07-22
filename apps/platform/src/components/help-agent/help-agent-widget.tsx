@@ -1,21 +1,23 @@
 "use client";
 
-import { useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { HelpAgentPanel } from "./help-agent-panel";
+import { useHelpAgent } from "./help-agent-context";
 
 export function HelpAgentWidget() {
-  const [open, setOpen] = useState(false);
+  const { open, initialPrompt, openWithPrompt, close } = useHelpAgent();
   const reduce = useReducedMotion();
 
   return (
     <>
       <AnimatePresence>
-        {open && <HelpAgentPanel key="panel" onClose={() => setOpen(false)} />}
+        {open && (
+          <HelpAgentPanel key="panel" initialPrompt={initialPrompt} onClose={close} />
+        )}
       </AnimatePresence>
       <motion.button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => (open ? close() : openWithPrompt())}
         aria-label={open ? "Close QA tutor" : "Open QA tutor"}
         title="QA Tutor"
         initial={reduce ? false : { scale: 0, opacity: 0 }}

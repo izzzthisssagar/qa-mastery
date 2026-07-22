@@ -20,10 +20,20 @@ function newSessionId(): string {
   return crypto.randomUUID();
 }
 
-export function HelpAgentPanel({ onClose }: { onClose: () => void }) {
+export function HelpAgentPanel({
+  onClose,
+  initialPrompt,
+}: {
+  onClose: () => void;
+  /** Pre-fills the input (never auto-sent) — e.g. "Stuck on the bug-hunt lab
+   *  for X" from a contextual "Ask the mentor" button elsewhere in the app,
+   *  so the learner doesn't have to re-explain what they're doing from
+   *  scratch, but still reviews/edits before it actually sends. */
+  initialPrompt?: string;
+}) {
   const pathname = usePathname();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialPrompt ?? "");
   const [loading, setLoading] = useState(false);
   const [brain, setBrain] = useState<BrainInfo | null>(null);
   const [sessionId] = useState(newSessionId);
