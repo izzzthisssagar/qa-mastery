@@ -9,6 +9,7 @@ import {
 } from "@qa-mastery/curriculum";
 import { createServiceClient } from "@qa-mastery/db";
 import { getAuthedUserId } from "@/lib/auth";
+import { withLogging } from "@/lib/logging";
 import { touchStreak } from "@/lib/streaks";
 
 const XP_NOTE_COMPLETED = 10;
@@ -249,6 +250,13 @@ export async function completeNote(
   noteSlug: string,
 ): Promise<{ ok: true; xp: number; alreadyDone: boolean }> {
   const userId = await getAuthedUserId();
+  return withLogging("completeNote", userId, () => completeNoteSave(userId, noteSlug));
+}
+
+async function completeNoteSave(
+  userId: string,
+  noteSlug: string,
+): Promise<{ ok: true; xp: number; alreadyDone: boolean }> {
   if (!resolveNoteSlug(noteSlug)) throw new Error("Note not available");
 
   const service = createServiceClient();

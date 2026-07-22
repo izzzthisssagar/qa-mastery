@@ -20,6 +20,7 @@ import { DEFAULT_RELEASE, isRelease, mintHandoffToken } from "@qa-mastery/shared
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAuthedUserId } from "@/lib/auth";
 import { assertCodeRunQuota, getCodeRunner } from "@/lib/code-runs";
+import { withLogging } from "@/lib/logging";
 import { touchStreak } from "@/lib/streaks";
 
 type Step = "see" | "try" | "do" | "prove";
@@ -116,6 +117,14 @@ export async function submitQuiz(
   answers: QuizAnswers,
 ): Promise<SubmitQuizResult> {
   const userId = await getAuthedUserId();
+  return withLogging("submitQuiz", userId, () => submitQuizScoring(userId, slug, answers));
+}
+
+async function submitQuizScoring(
+  userId: string,
+  slug: string,
+  answers: QuizAnswers,
+): Promise<SubmitQuizResult> {
   const service = createServiceClient();
   const lesson = await requireAccessibleLesson(service, slug);
 
@@ -477,6 +486,10 @@ function getRunnerForLesson(slug: string): RunnerProvider {
 
 export async function submitCodeLab(slug: string, code: string): Promise<{ runId: string }> {
   const userId = await getAuthedUserId();
+  return withLogging("submitCodeLab", userId, () => submitCodeLabRun(userId, slug, code));
+}
+
+async function submitCodeLabRun(userId: string, slug: string, code: string): Promise<{ runId: string }> {
   const service = createServiceClient();
   const lesson = await requireAccessibleLesson(service, slug);
 
