@@ -11,6 +11,7 @@ import {
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAuthedUserId } from "@/lib/auth";
 import { assertCodeRunQuota, getCodeRunner } from "@/lib/code-runs";
+import { touchStreak } from "@/lib/streaks";
 import { requireNoteLab, topicsRemaining } from "./lab-shared";
 
 /**
@@ -182,6 +183,7 @@ export async function submitNoteLab(chapterSlug: string, code: string): Promise<
       reason: "note_lab_passed",
       ref_id: chapterSlug,
     });
+    await touchStreak(service, userId);
   }
 
   // Best-effort audit; a failure here must never fail the submission.

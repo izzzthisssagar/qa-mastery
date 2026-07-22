@@ -9,6 +9,7 @@ import {
 } from "@qa-mastery/curriculum";
 import { createServiceClient } from "@qa-mastery/db";
 import { getAuthedUserId } from "@/lib/auth";
+import { touchStreak } from "@/lib/streaks";
 
 const XP_NOTE_COMPLETED = 10;
 
@@ -80,6 +81,88 @@ export async function getNotesCurriculumProgress(): Promise<NoteTrackProgress[]>
       certEarned: topicCount > 0 && topicsDone === topicCount,
     };
   });
+}
+
+export interface LearningHomeItem {
+  moduleSlug: string;
+  chapterSlug: string;
+  topicSlug: string;
+  title: string;
+  moduleTitle: string;
+}
+
+export interface LearningHomeItemWithTrack extends LearningHomeItem {
+  trackTitle: string;
+}
+
+export interface LearningHome {
+  /** Most recently completed note — "continue" reopens it, doesn't advance
+   *  past it. null for a learner with zero progress. */
+  continueItem: LearningHomeItem | null;
+  /** First unstarted, non-planned topic in NOTE_TRACKS order — the curated
+   *  "zero to job-ready" spine order, not raw taxonomy order. null once
+   *  every backed topic across every track is done. */
+  recommendedItem: LearningHomeItemWithTrack | null;
+}
+
+/** The dashboard's personalized landing data. Reuses the same note_progress
+ *  read getNotesCurriculumProgress does — a second single-column indexed
+ *  query is cheap enough not to bother threading a shared result between the
+ *  two, and keeps each function independently callable. */
+export async function getLearningHome(): Promise<LearningHome> {
+  const userId = await getAuthedUserId();
+  const service = createServiceClient();
+  const { data } = await service
+    .from("note_progress")
+    .select("note_slug, completed_at")
+    .eq("user_id", userId)
+    .order("completed_at", { ascending: false });
+  const rows = data ?? [];
+  const completed = new Set(rows.map((r) => r.note_slug as string));
+
+  let continueItem: LearningHomeItem | null = null;
+  const mostRecent = rows[0]?.note_slug as string | undefined;
+  if (mostRecent) {
+    const [moduleSlug, chapterSlug, topicSlug] = mostRecent.split("/");
+    const leaf = moduleSlug && chapterSlug && topicSlug
+      ? findNoteLeaf(moduleSlug, chapterSlug, topicSlug)
+      : undefined;
+    if (leaf && moduleSlug) {
+      continueItem = {
+        moduleSlug,
+        chapterSlug: chapterSlug!,
+        topicSlug: topicSlug!,
+        title: leaf.title,
+        moduleTitle: findNoteModule(moduleSlug)?.title ?? moduleSlug,
+      };
+    }
+  }
+
+  let recommendedItem: LearningHomeItemWithTrack | null = null;
+  outer: for (const track of NOTE_TRACKS) {
+    for (const moduleSlug of track.moduleSlugs) {
+      const mod = findNoteModule(moduleSlug);
+      if (!mod) continue;
+      for (const chapter of mod.chapters) {
+        for (const topic of chapter.topics) {
+          if (topic.planned) continue;
+          const slug = `${moduleSlug}/${chapter.slug}/${topic.slug}`;
+          if (completed.has(slug)) continue;
+          recommendedItem = {
+            moduleSlug,
+            chapterSlug: chapter.slug,
+            topicSlug: topic.slug,
+            title: topic.title,
+            moduleTitle: mod.title,
+            trackTitle: track.title,
+          };
+          break outer;
+        }
+      }
+    }
+  }
+
+  return { continueItem, recommendedItem };
 }
 
 /**
@@ -193,6 +276,8 @@ export async function completeNote(
     reason: "note_completed",
     ref_id: noteSlug,
   });
+
+  await touchStreak(service, userId);
 
   // Best-effort audit; a failure here must never fail the completion.
   await service

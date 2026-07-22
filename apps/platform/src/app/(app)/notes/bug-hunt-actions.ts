@@ -5,6 +5,7 @@ import { matchBugReport, type BugReportInput, type ManifestBug } from "@qa-maste
 import { DEFAULT_RELEASE, mintHandoffToken } from "@qa-mastery/shared";
 import type { BugReportResult } from "@/components/bug-report-lab";
 import { getAuthedUserId } from "@/lib/auth";
+import { touchStreak } from "@/lib/streaks";
 import { requireChapterRead, requireNoteLab } from "./lab-shared";
 
 /**
@@ -200,6 +201,7 @@ export async function submitNoteBugReport(
       reason: "note_lab_passed",
       ref_id: chapterSlug,
     });
+    await touchStreak(service, userId);
   }
 
   await service

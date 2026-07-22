@@ -20,6 +20,7 @@ import { DEFAULT_RELEASE, isRelease, mintHandoffToken } from "@qa-mastery/shared
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAuthedUserId } from "@/lib/auth";
 import { assertCodeRunQuota, getCodeRunner } from "@/lib/code-runs";
+import { touchStreak } from "@/lib/streaks";
 
 type Step = "see" | "try" | "do" | "prove";
 
@@ -179,6 +180,7 @@ export async function submitQuiz(
         reason: "lesson_completed",
         ref_id: slug,
       });
+      await touchStreak(service, userId);
 
       await recordAuditEvent(service, {
         actorId: userId,

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createServiceClient } from "@qa-mastery/db";
 import { gradeTask, type TaskCriteria } from "@qa-mastery/grading";
 import { getAuthedUserId } from "@/lib/auth";
+import { touchStreak } from "@/lib/streaks";
 
 /**
  * Tasks server actions. Personal planner rows are owner-scoped (RLS + explicit
@@ -227,6 +228,7 @@ export async function submitTaskForGrading(
       await service
         .from("xp_events")
         .insert({ user_id: userId, amount: task.xp, reason: "task", ref_id: userTaskId });
+      await touchStreak(service, userId);
     }
   }
 
