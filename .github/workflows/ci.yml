@@ -21,7 +21,13 @@ env:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Was 30 — the pinned-container E2E stage alone ran 26+ min on its first
+    # real run and got cancelled at the wire (see docs/known-issues/
+    # visual-regression-baselines.md). Root cause fixed below (a redundant
+    # `pnpm install` inside the container was re-downloading everything the
+    # host already installed), but padding the ceiling too since a 2-core
+    # shared runner's e2e time has real variance run to run.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
 
@@ -88,13 +94,22 @@ jobs:
           env | grep -E '^(NEXT_PUBLIC_|SUPABASE_|SANDBOX_JWT_SECRET|BILLING_ENABLED)=' > /tmp/e2e.env
           echo "CI=true" >> /tmp/e2e.env
 
+      # node_modules is already installed on the runner (the "Install
+      # dependencies" step above) and the runner (ubuntu-latest) is the same
+      # OS/arch (linux-x64 Noble) as this pinned image by design — that's the
+      # whole point of the -noble tag. Re-running `pnpm install` inside the
+      # container was pure waste: it re-downloaded ~700 packages from the
+      # network with zero cache, and was the actual cause of the E2E stage
+      # running 26+ minutes and hitting the job timeout on its first real run.
+      # Only `corepack` is needed here, to make the `pnpm` binary available
+      # inside the container for the bind-mounted repo.
       - name: E2E (production builds + live DB, Chromium + WebKit, pinned image)
         run: |
           docker run --rm --network host \
             --env-file /tmp/e2e.env \
             -v "$GITHUB_WORKSPACE":/work -w /work \
             mcr.microsoft.com/playwright:v1.60.0-noble \
-            bash -c "corepack enable && corepack prepare pnpm@11.6.0 --activate && pnpm install --frozen-lockfile && pnpm --filter @qa-mastery/e2e exec playwright test"
+            bash -c "corepack enable && corepack prepare pnpm@11.6.0 --activate && pnpm --filter @qa-mastery/e2e exec playwright test"
 
       # Separate invocation with its own webServer — keeps a third Next server
       # out of the main run (2-core runners flake under that contention).

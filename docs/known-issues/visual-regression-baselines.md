@@ -79,6 +79,22 @@ absorbs harmless sub-pixel AA noise without hiding a real visual change.
 
 ## Lessons / follow-ups
 
+- **First real CI run timed out.** The pinned-container E2E step ran 26+
+  minutes and got cancelled at the 30-minute job ceiling. Cause: the docker
+  command included a `pnpm install --frozen-lockfile` inside the container
+  "to be safe" — but the runner (`ubuntu-latest`) and the pinned image are
+  the same OS/arch (linux-x64 Noble) by design, and the "Install dependencies"
+  step earlier in the same job had already populated `node_modules` there.
+  The container step was re-downloading ~700 packages from the network with
+  zero cache on every single run. Removed — the container only needs
+  `corepack enable && corepack prepare pnpm@11.6.0 --activate` to get a
+  working `pnpm` binary against the already-installed, bind-mounted
+  `node_modules`. Job timeout also padded 30 -> 45 min as margin, since a
+  2-core shared runner's E2E time still has real run-to-run variance even
+  without the redundant install. Local rehearsal of this exact pattern
+  (macOS host, Linux container) couldn't fully validate the fix — cross-OS
+  install IS genuinely required there, unlike real CI's same-OS case — so
+  this specific fix could only be confirmed by watching an actual CI run.
 - A residual, much smaller-scale WebKit flake surfaced under heavy parallel
   load (`--repeat-each=3` with 5 workers) after the theme race was fixed —
   no longer a wrong-render, just occasional slow settling. Same category as
