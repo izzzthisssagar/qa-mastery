@@ -58,7 +58,12 @@ test.describe("notes bug-hunt lab", () => {
     }
 
     await page.goto(LAST_TOPIC);
-    const panel = page.getByTestId("note-bug-hunt");
+    // .first(): the known transient double-render race right after a fresh
+    // goto (docs/known-issues/hydration-double-render.md) — React briefly
+    // double-mounts the just-hydrated subtree before reconciling back to
+    // one copy a moment later. Both copies are content-identical, so
+    // .first() is always a valid, correct element either way.
+    const panel = page.getByTestId("note-bug-hunt").first();
     await panel.scrollIntoViewIfNeeded();
     await expect(panel).toBeVisible();
     await expect(page.getByTestId("note-hunt-count")).toHaveText(/0 of 1 found/);
