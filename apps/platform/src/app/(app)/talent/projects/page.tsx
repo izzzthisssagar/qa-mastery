@@ -17,11 +17,11 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
     <div className="space-y-6 py-2">
       <header className="space-y-1">
         <h1 className="font-display text-2xl font-bold tracking-tight">Open projects</h1>
-        <p className="text-sm text-zinc-400">Testing work looking for QA. Apply to what fits.</p>
+        <p className="text-sm text-muted-foreground">Testing work looking for QA. Apply to what fits.</p>
       </header>
 
       {items.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-zinc-800 p-8 text-center text-sm text-zinc-500">
+        <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
           No open projects right now — check back soon.
         </div>
       ) : (
@@ -35,7 +35,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
             <div className="flex justify-center">
               <Link
                 href={`/talent/projects?cursor=${encodeURIComponent(nextCursor)}`}
-                className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-500"
+                className="rounded-lg border border-border px-4 py-2 text-sm text-foreground hover:border-border"
               >
                 Load more
               </Link>

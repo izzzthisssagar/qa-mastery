@@ -37,7 +37,7 @@ export function VerifiedSkills({ initial }: { initial: VerifiedSkill[] }) {
           ))}
         </div>
       ) : (
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-muted-foreground">
           No verified skills yet — pass graded labs on QA Mastery, then refresh to earn badges.
         </p>
       )}
@@ -45,7 +45,7 @@ export function VerifiedSkills({ initial }: { initial: VerifiedSkill[] }) {
         <Button variant="secondary" onClick={refresh} loading={pending}>
           {pending ? "Checking your labs…" : "Refresh from my labs"}
         </Button>
-        {error && <span className="text-sm text-red-300">{error}</span>}
+        {error && <span className="text-sm text-danger-text">{error}</span>}
       </div>
     </div>
   );

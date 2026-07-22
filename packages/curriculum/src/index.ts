@@ -43,3 +43,25 @@ export {
   type NoteFrontmatter,
   type NoteSource,
 } from "./notes/load";
+
+export {
+  NOTE_TRACKS,
+  trackForModule,
+  findNoteTrack,
+  type NoteTrack,
+} from "./notes/tracks";
+
+export {
+  NOTE_LABS,
+  labForChapter,
+  labsForModule,
+  chapterForLab,
+  type NoteLab,
+  type NoteLabKind,
+} from "./notes/labs";
+
+export {
+  NOTE_TRACK_CAPSTONES,
+  trackCapstoneForChapter,
+  type NoteTrackCapstone,
+} from "./notes/track-capstones";

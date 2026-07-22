@@ -58,7 +58,7 @@ function CommentRow({
       <div className="flex items-center gap-2 text-sm">
         <span className="font-medium text-foreground">{comment.authorName ?? "Member"}</span>
         {comment.isAccepted && (
-          <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-400">
+          <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-success-text">
             ✓ Accepted
           </span>
         )}
@@ -84,7 +84,7 @@ function CommentRow({
               await acceptAnswer(postId, comment.id);
               onAccepted(comment.id);
             })}
-            className="text-emerald-400 hover:underline"
+            className="text-success-text hover:underline"
           >
             Accept answer
           </button>
@@ -167,7 +167,7 @@ export function ThreadClient({ thread }: { thread: PostThread }) {
           data-testid="comment-body"
           className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-accent min-h-24"
         />
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <p className="text-sm text-danger-text">{error}</p>}
         <Button onClick={submit} loading={pending} disabled={!body.trim()} data-testid="comment-submit">
           {pending ? "Posting…" : isQuestion ? "Post answer" : "Comment"}
         </Button>

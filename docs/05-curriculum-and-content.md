@@ -1,5 +1,14 @@
 # 05 — Curriculum & content
 
+> **Historical.** The `track-a`/`track-b` lesson content this doc describes was
+> retired 2026-07-22 — the notes wiki (876 notes, `packages/curriculum/content/
+> notes/`) is now the graded spine, with labs in `notes/labs.ts` and the track
+> capstone in `notes/track-capstones.ts`. The `lessons` DB table and this
+> pipeline stay wired (invariant 5: slugs archive, never delete) in case
+> content ever needs to move back here, but nothing currently publishes
+> through it. Kept for reference on the frontmatter/sync mechanics, which the
+> notes pipeline still shares conceptually.
+
 Lessons are **content, not code**. They live as MDX under
 `packages/curriculum/content/` and are mirrored into the DB registry by a sync
 script. This doc covers the content model and the pipeline.

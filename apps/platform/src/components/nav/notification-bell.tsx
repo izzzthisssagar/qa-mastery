@@ -52,7 +52,7 @@ export function NotificationBell({ userId, initialUnread }: { userId: string; in
         {unread > 0 && (
           <span
             data-testid="notification-badge"
-            className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-zinc-950"
+            className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-accent-foreground"
           >
             {unread > 9 ? "9+" : unread}
           </span>

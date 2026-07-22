@@ -48,9 +48,9 @@ export function CodeRunnerLab({ slug }: { slug: string }) {
   }
 
   return (
-    <section className="my-6 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-      <p className="text-sm font-semibold text-zinc-100">Java Interactive Runner</p>
-      <p className="mt-1 text-xs text-zinc-500 mb-4">
+    <section className="my-6 rounded-2xl border border-border bg-surface/40 p-6">
+      <p className="text-sm font-semibold text-foreground">Java Interactive Runner</p>
+      <p className="mt-1 text-xs text-muted-foreground mb-4">
         Write your Java code below. It will be compiled and run against an OpenJDK sandbox.
       </p>
 
@@ -59,7 +59,7 @@ export function CodeRunnerLab({ slug }: { slug: string }) {
         value={code}
         onChange={(e) => setCode(e.target.value)}
         onKeyDown={handleKeyDown}
-        className="w-full min-h-64 bg-[#0d1117] border border-zinc-800 rounded-lg p-4 font-mono text-[13px] leading-relaxed text-zinc-300 focus:outline-none focus:border-accent"
+        className="w-full min-h-64 bg-[#0d1117] border border-border rounded-lg p-4 font-mono text-[13px] leading-relaxed text-foreground focus:outline-none focus:border-accent"
         spellCheck={false}
         disabled={running}
       />
@@ -68,15 +68,15 @@ export function CodeRunnerLab({ slug }: { slug: string }) {
         <Button onClick={runCode} loading={running} disabled={!code.trim()} data-testid="run-code">
           {running ? "Running..." : "Run Code"}
         </Button>
-        {result?.status === "passed" && <span className="text-xs font-semibold text-emerald-400">Execution completed</span>}
+        {result?.status === "passed" && <span className="text-xs font-semibold text-success-text">Execution completed</span>}
       </div>
 
-      {error && <p role="alert" className="mt-4 text-sm text-red-400">{error}</p>}
+      {error && <p role="alert" className="mt-4 text-sm text-danger-text">{error}</p>}
 
       {result && (
         <div className="mt-4" role="status" aria-live="polite">
-          <p className="text-xs font-semibold text-zinc-400 mb-1">Console Output:</p>
-          <pre className={`w-full bg-black border ${result.passed ? 'border-zinc-800' : 'border-red-900/50'} rounded-lg p-4 font-mono text-xs text-zinc-300 overflow-auto whitespace-pre-wrap`}>
+          <p className="text-xs font-semibold text-muted-foreground mb-1">Console Output:</p>
+          <pre className={`w-full bg-black border ${result.passed ? 'border-border' : 'border-red-900/50'} rounded-lg p-4 font-mono text-xs text-foreground overflow-auto whitespace-pre-wrap`}>
             {result.console || "No output."}
           </pre>
         </div>

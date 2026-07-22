@@ -1,8 +1,8 @@
 import Link from "next/link";
+import { Button, EmptyState } from "@qa-mastery/ui";
 import { searchTesters, type TesterFilters } from "../actions";
 import { TesterCard } from "../_components/tester-card";
 import { FilterRail } from "../_components/filter-rail";
-import { EmptyState } from "../_components/empty-state";
 
 type Search = { [key: string]: string | string[] | undefined };
 
@@ -37,7 +37,7 @@ export default async function TestersPage({ searchParams }: { searchParams: Prom
     <div className="space-y-6 py-2">
       <header className="space-y-1">
         <h1 className="font-display text-2xl font-bold tracking-tight">Find a QA tester</h1>
-        <p className="text-sm text-zinc-400">
+        <p className="text-sm text-muted-foreground">
           Filter on real testing signals — specialty, availability, lab-verified skills.
         </p>
       </header>
@@ -49,7 +49,26 @@ export default async function TestersPage({ searchParams }: { searchParams: Prom
 
         <div className="space-y-6">
           {items.length === 0 ? (
-            <EmptyState filtered={hasFilters} />
+            <EmptyState
+              title={hasFilters ? "No testers match those filters" : "The directory is just getting started"}
+              description={
+                hasFilters
+                  ? "Try widening your specialty or availability filters."
+                  : "QA Mastery graduates are publishing profiles now. Check back soon — or, if you test, claim your spot."
+              }
+              actions={
+                <>
+                  {!hasFilters && (
+                    <Link href="/talent/profile">
+                      <Button>Create your tester profile</Button>
+                    </Link>
+                  )}
+                  <Link href="/talent/post">
+                    <Button variant="secondary">Post a project</Button>
+                  </Link>
+                </>
+              }
+            />
           ) : (
             <>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -61,7 +80,7 @@ export default async function TestersPage({ searchParams }: { searchParams: Prom
                 <div className="flex justify-center">
                   <Link
                     href={`/talent/testers?${nextParams.toString()}`}
-                    className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-500"
+                    className="rounded-lg border border-border px-4 py-2 text-sm text-foreground hover:border-border"
                   >
                     Load more
                   </Link>

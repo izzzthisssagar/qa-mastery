@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { HelpAgentWidget } from "@/components/help-agent/help-agent-widget";
+import { HelpAgentProvider } from "@/components/help-agent/help-agent-context";
 import { FeedbackWidget } from "@/components/feedback/feedback-widget";
 import { NotificationBell } from "@/components/nav/notification-bell";
 import { AvatarMenu } from "@/components/nav/avatar-menu";
@@ -44,8 +45,10 @@ export default async function AppLayout({
           <AvatarMenu email={user.email ?? ""} />
         </div>
       </header>
-      <main className="flex-1 px-6 py-10 sm:px-10">{children}</main>
-      <HelpAgentWidget />
+      <HelpAgentProvider>
+        <main className="flex-1 px-6 py-10 sm:px-10">{children}</main>
+        <HelpAgentWidget />
+      </HelpAgentProvider>
       <FeedbackWidget />
     </div>
   );

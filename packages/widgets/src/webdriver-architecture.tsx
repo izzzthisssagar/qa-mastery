@@ -20,11 +20,11 @@ export function WebDriverArchitecture({ onMilestone }: { onMilestone?: (m: strin
   };
 
   return (
-    <div className="my-8 rounded-2xl border border-zinc-800 bg-zinc-900/30 p-6 md:p-8 backdrop-blur-xl">
+    <div className="my-8 rounded-2xl border border-border bg-surface/30 p-6 md:p-8 backdrop-blur-xl">
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-zinc-100">WebDriver Architecture</h3>
-          <p className="text-sm text-zinc-400">The Request/Response model of a single Selenium command.</p>
+          <h3 className="text-lg font-semibold text-foreground">WebDriver Architecture</h3>
+          <p className="text-sm text-muted-foreground">The Request/Response model of a single Selenium command.</p>
         </div>
         <button
           onClick={sendCommand}
@@ -42,7 +42,7 @@ export function WebDriverArchitecture({ onMilestone }: { onMilestone?: (m: strin
         <Node label="Browser" icon="🌐" isActive={step === 3} color="border-rose-500 text-rose-400" />
 
         {/* Lines between nodes */}
-        <div className="absolute left-1/4 right-1/4 top-1/2 -z-10 h-[2px] -translate-y-1/2 bg-zinc-800 w-1/2" />
+        <div className="absolute left-1/4 right-1/4 top-1/2 -z-10 h-[2px] -translate-y-1/2 bg-surface-raised w-1/2" />
         
         {/* Animated Packet */}
         <AnimatePresence>
@@ -64,7 +64,7 @@ export function WebDriverArchitecture({ onMilestone }: { onMilestone?: (m: strin
       </div>
 
       <div className="mt-8 flex justify-center">
-        <p className="text-sm text-zinc-400 min-h-6 font-mono text-center">
+        <p className="text-sm text-muted-foreground min-h-6 font-mono text-center">
           {getStepDescription(step)}
         </p>
       </div>
@@ -77,13 +77,13 @@ function Node({ label, icon, isActive, color }: { label: string; icon: string; i
     <div className="flex flex-col items-center gap-3">
       <motion.div
         animate={{ scale: isActive ? 1.1 : 1 }}
-        className={`flex h-16 w-16 items-center justify-center rounded-2xl border-2 bg-zinc-950 text-2xl shadow-xl transition-colors duration-300 ${
-          isActive ? color + " shadow-" + color.split('-')[1] + "-500/20" : "border-zinc-800 text-zinc-600"
+        className={`flex h-16 w-16 items-center justify-center rounded-2xl border-2 bg-background text-2xl shadow-xl transition-colors duration-300 ${
+          isActive ? color + " shadow-" + color.split('-')[1] + "-500/20" : "border-border text-muted-foreground"
         }`}
       >
         {icon}
       </motion.div>
-      <span className="text-xs font-semibold uppercase tracking-wider text-zinc-300">{label}</span>
+      <span className="text-xs font-semibold uppercase tracking-wider text-foreground">{label}</span>
     </div>
   );
 }

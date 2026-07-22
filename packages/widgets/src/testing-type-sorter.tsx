@@ -46,13 +46,13 @@ export function TestingTypeSorter({ onMilestone }: { onMilestone?: (m: string) =
   };
 
   return (
-    <div className="my-8 rounded-2xl border border-zinc-800 bg-zinc-900/30 p-6 backdrop-blur-xl">
+    <div className="my-8 rounded-2xl border border-border bg-surface/30 p-6 backdrop-blur-xl">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h3 className="text-lg font-semibold text-zinc-100">Sort the Tests</h3>
-          <p className="text-sm text-zinc-400">Sort the scenarios below. Does it test WHAT the system does, or HOW it does it?</p>
+          <h3 className="text-lg font-semibold text-foreground">Sort the Tests</h3>
+          <p className="text-sm text-muted-foreground">Sort the scenarios below. Does it test WHAT the system does, or HOW it does it?</p>
         </div>
-        <button onClick={reset} className="text-xs font-semibold text-zinc-400 hover:text-zinc-200">Reset</button>
+        <button onClick={reset} className="text-xs font-semibold text-muted-foreground hover:text-foreground">Reset</button>
       </div>
 
       <div className="mb-8 min-h-[100px] flex flex-wrap gap-3 justify-center">
@@ -64,9 +64,9 @@ export function TestingTypeSorter({ onMilestone }: { onMilestone?: (m: string) =
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
-              className="rounded-lg border border-zinc-700 bg-zinc-800 p-3 shadow-md w-full md:w-auto"
+              className="rounded-lg border border-border bg-surface-raised p-3 shadow-md w-full md:w-auto"
             >
-              <p className="text-sm font-medium text-zinc-200 mb-3">{s.text}</p>
+              <p className="text-sm font-medium text-foreground mb-3">{s.text}</p>
               <div className="flex gap-2 justify-center">
                 <button
                   onClick={() => handleSort(s, "func")}
@@ -97,13 +97,13 @@ export function TestingTypeSorter({ onMilestone }: { onMilestone?: (m: string) =
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Functional Column */}
-        <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4 min-h-[150px]">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-4 border-b border-zinc-800 pb-2">
+        <div className="rounded-xl border border-border bg-background/50 p-4 min-h-[150px]">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-4 border-b border-border pb-2">
             Functional (What)
           </h4>
           <div className="space-y-2">
             {func.map(s => (
-              <motion.div key={s.id} layoutId={s.id} className="rounded border border-emerald-500/20 bg-emerald-500/5 p-2 text-xs text-zinc-300">
+              <motion.div key={s.id} layoutId={s.id} className="rounded border border-emerald-500/20 bg-emerald-500/5 p-2 text-xs text-foreground">
                 {s.text}
               </motion.div>
             ))}
@@ -111,13 +111,13 @@ export function TestingTypeSorter({ onMilestone }: { onMilestone?: (m: string) =
         </div>
 
         {/* Non-Functional Column */}
-        <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4 min-h-[150px]">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-purple-400 mb-4 border-b border-zinc-800 pb-2">
+        <div className="rounded-xl border border-border bg-background/50 p-4 min-h-[150px]">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-purple-400 mb-4 border-b border-border pb-2">
             Non-Functional (How)
           </h4>
           <div className="space-y-2">
             {nonfunc.map(s => (
-              <motion.div key={s.id} layoutId={s.id} className="rounded border border-purple-500/20 bg-purple-500/5 p-2 text-xs text-zinc-300">
+              <motion.div key={s.id} layoutId={s.id} className="rounded border border-purple-500/20 bg-purple-500/5 p-2 text-xs text-foreground">
                 {s.text}
               </motion.div>
             ))}

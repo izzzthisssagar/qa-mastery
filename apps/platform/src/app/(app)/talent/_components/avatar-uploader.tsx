@@ -59,7 +59,7 @@ export function AvatarUploader({
           className="size-16 rounded-full object-cover"
         />
       ) : (
-        <div className="flex size-16 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-xs text-zinc-500">
+        <div className="flex size-16 items-center justify-center rounded-full border border-border bg-surface text-xs text-muted-foreground">
           No photo
         </div>
       )}
@@ -73,7 +73,7 @@ export function AvatarUploader({
           disabled={pending}
         />
       </label>
-      {error && <span className="text-sm text-red-300">{error}</span>}
+      {error && <span className="text-sm text-danger-text">{error}</span>}
     </div>
   );
 }

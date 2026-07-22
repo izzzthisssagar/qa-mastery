@@ -21,7 +21,13 @@ env:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Was 30 — the pinned-container E2E stage alone ran 26+ min on its first
+    # real run and got cancelled at the wire (see docs/known-issues/
+    # visual-regression-baselines.md). Root cause fixed below (a redundant
+    # `pnpm install` inside the container was re-downloading everything the
+    # host already installed), but padding the ceiling too since a 2-core
+    # shared runner's e2e time has real variance run to run.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
 
@@ -76,16 +82,54 @@ jobs:
           fi
           echo "No manifest fields in client bundles."
 
-      - name: Install Playwright browsers
-        run: pnpm --filter @qa-mastery/e2e exec playwright install --with-deps chromium webkit
+      # visual.spec.ts baselines are only meaningful compared inside the exact
+      # environment they were captured in (font rendering drifts across OS/
+      # package versions — see docs/known-issues/visual-regression-baselines.md).
+      # Running the whole E2E stage in the pinned image, not just installing
+      # browsers on whatever ubuntu-latest happens to have today, is what
+      # makes that hold run over run — and it ships browsers preinstalled, so
+      # there's no separate "Install Playwright browsers" step anymore.
+      - name: Write env for containerized E2E
+        run: |
+          # `^(NEXT_PUBLIC_|SUPABASE_|...)=` (no `.*` between the prefix group
+          # and `=`) only matches a var LITERALLY NAMED "NEXT_PUBLIC_" or
+          # "SUPABASE_" — never "NEXT_PUBLIC_SUPABASE_URL=...", since nothing
+          # sits between the prefix and the required "=". SANDBOX_JWT_SECRET/
+          # BILLING_ENABLED matched fine (they're exact full names already),
+          # masking the bug: every NEXT_PUBLIC_*/SUPABASE_* var silently
+          # never reached /tmp/e2e.env, so every authenticated e2e test threw
+          # "createServiceClient requires ..." from turn one and ate the full
+          # 45min job budget on retries. See docs/known-issues/
+          # e2e-service-client-env-missing.md for the diagnosis trail.
+          env | grep -E '^(NEXT_PUBLIC_|SUPABASE_).*=|^(SANDBOX_JWT_SECRET|BILLING_ENABLED)=' > /tmp/e2e.env
+          echo "CI=true" >> /tmp/e2e.env
 
-      - name: E2E (production builds + live DB, Chromium + WebKit)
-        run: pnpm e2e
+      # node_modules is already installed on the runner (the "Install
+      # dependencies" step above) and the runner (ubuntu-latest) is the same
+      # OS/arch (linux-x64 Noble) as this pinned image by design — that's the
+      # whole point of the -noble tag. Re-running `pnpm install` inside the
+      # container was pure waste: it re-downloaded ~700 packages from the
+      # network with zero cache, and was the actual cause of the E2E stage
+      # running 26+ minutes and hitting the job timeout on its first real run.
+      # Only `corepack` is needed here, to make the `pnpm` binary available
+      # inside the container for the bind-mounted repo.
+      - name: E2E (production builds + live DB, Chromium + WebKit, pinned image)
+        run: |
+          docker run --rm --network host \
+            --env-file /tmp/e2e.env \
+            -v "$GITHUB_WORKSPACE":/work -w /work \
+            mcr.microsoft.com/playwright:v1.60.0-noble \
+            bash -c "corepack enable && corepack prepare pnpm@11.6.0 --activate && pnpm --filter @qa-mastery/e2e exec playwright test"
 
       # Separate invocation with its own webServer — keeps a third Next server
       # out of the main run (2-core runners flake under that contention).
-      - name: E2E BuggyAPI (contract suite)
-        run: pnpm --filter @qa-mastery/e2e exec playwright test --config=playwright.buggyapi.config.ts
+      - name: E2E BuggyAPI (contract suite, pinned image)
+        run: |
+          docker run --rm --network host \
+            --env-file /tmp/e2e.env \
+            -v "$GITHUB_WORKSPACE":/work -w /work \
+            mcr.microsoft.com/playwright:v1.60.0-noble \
+            bash -c "corepack enable && corepack prepare pnpm@11.6.0 --activate && pnpm --filter @qa-mastery/e2e exec playwright test --config=playwright.buggyapi.config.ts"
 
       - name: Upload Playwright report on failure
         if: failure()

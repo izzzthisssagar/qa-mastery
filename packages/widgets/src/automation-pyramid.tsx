@@ -57,20 +57,20 @@ export function AutomationPyramid({ onMilestone }: { onMilestone?: (m: string) =
   const layers = isIceCream ? [...PYRAMID_LAYERS].reverse() : PYRAMID_LAYERS;
 
   return (
-    <div className="my-8 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/30 p-6 md:p-8 backdrop-blur-xl">
+    <div className="my-8 overflow-hidden rounded-2xl border border-border bg-surface/30 p-6 md:p-8 backdrop-blur-xl">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h3 className="text-lg font-semibold text-zinc-100">Automation Strategy</h3>
-          <p className="text-sm text-zinc-400">Click a layer to explore the trade-offs.</p>
+          <h3 className="text-lg font-semibold text-foreground">Automation Strategy</h3>
+          <p className="text-sm text-muted-foreground">Click a layer to explore the trade-offs.</p>
           <p className="text-xs text-amber-500/80 mt-1 block md:hidden">📱 Rotate your device for the best view.</p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs font-medium text-zinc-400">Ice Cream Cone Mode</span>
+          <span className="text-xs font-medium text-muted-foreground">Ice Cream Cone Mode</span>
           <button
             type="button"
             onClick={toggleIceCream}
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-              isIceCream ? "bg-rose-500" : "bg-zinc-700"
+              isIceCream ? "bg-rose-500" : "bg-surface-raised"
             }`}
           >
             <span
@@ -112,7 +112,7 @@ export function AutomationPyramid({ onMilestone }: { onMilestone?: (m: string) =
                   className={`
                     relative flex items-center justify-center h-20 w-full overflow-hidden
                     rounded-lg border-2 transition-all duration-300
-                    ${isActive ? layer.color : "border-zinc-800 bg-zinc-800/40 text-zinc-500 hover:border-zinc-700"}
+                    ${isActive ? layer.color : "border-border bg-surface-raised/40 text-muted-foreground hover:border-border"}
                   `}
                 >
                   <div className={`absolute inset-0 bg-gradient-to-br ${layer.gradient} opacity-50`} />
@@ -135,29 +135,29 @@ export function AutomationPyramid({ onMilestone }: { onMilestone?: (m: string) =
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
                 transition={{ duration: 0.2 }}
-                className="flex flex-col h-full justify-center space-y-6 rounded-xl border border-zinc-800 bg-zinc-950 p-6"
+                className="flex flex-col h-full justify-center space-y-6 rounded-xl border border-border bg-background p-6"
               >
                 <div>
                   <h4 className={`text-xl font-bold mb-2 ${activeData.color.split(' ')[1]}`}>
                     {activeData.title}
                   </h4>
-                  <p className="text-sm text-zinc-400 leading-relaxed">
+                  <p className="text-sm text-muted-foreground leading-relaxed">
                     {activeData.desc}
                   </p>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4">
                   <div className="flex flex-col space-y-1">
-                    <span className="text-[10px] uppercase tracking-wider text-zinc-600 font-semibold">Speed</span>
-                    <span className="text-sm font-medium text-zinc-200">{activeData.speed}</span>
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Speed</span>
+                    <span className="text-sm font-medium text-foreground">{activeData.speed}</span>
                   </div>
                   <div className="flex flex-col space-y-1">
-                    <span className="text-[10px] uppercase tracking-wider text-zinc-600 font-semibold">Cost</span>
-                    <span className="text-sm font-medium text-zinc-200">{activeData.cost}</span>
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Cost</span>
+                    <span className="text-sm font-medium text-foreground">{activeData.cost}</span>
                   </div>
                   <div className="flex flex-col space-y-1">
-                    <span className="text-[10px] uppercase tracking-wider text-zinc-600 font-semibold">Flakiness</span>
-                    <span className="text-sm font-medium text-zinc-200">{activeData.flakiness}</span>
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Flakiness</span>
+                    <span className="text-sm font-medium text-foreground">{activeData.flakiness}</span>
                   </div>
                 </div>
               </motion.div>

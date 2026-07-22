@@ -7,7 +7,7 @@ import { createTestCase, type TestCaseActionState } from "./actions";
 const INITIAL: TestCaseActionState = { error: null };
 
 const field =
-  "w-full rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none transition-colors focus:border-accent/70";
+  "w-full rounded-lg border border-border bg-background/60 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-accent/70";
 
 export function TestCaseForm() {
   const [state, action, pending] = useActionState(createTestCase, INITIAL);
@@ -27,7 +27,12 @@ export function TestCaseForm() {
       </div>
       <textarea name="steps" rows={3} placeholder="Steps — one per line" className={field} />
       <div className="flex items-center gap-3">
-        <select name="priority" defaultValue="medium" className={`${field} w-auto`}>
+        <select
+          name="priority"
+          aria-label="Priority"
+          defaultValue="medium"
+          className={`${field} w-auto`}
+        >
           <option value="low">Low</option>
           <option value="medium">Medium</option>
           <option value="high">High</option>
@@ -36,7 +41,7 @@ export function TestCaseForm() {
           {pending ? "Saving…" : "Add test case"}
         </Button>
         {state.error ? (
-          <span role="alert" className="text-sm text-red-300">
+          <span role="alert" className="text-sm text-danger-text">
             {state.error}
           </span>
         ) : null}

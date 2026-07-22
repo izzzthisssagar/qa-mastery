@@ -43,23 +43,23 @@ export default async function PortfolioPage() {
     <div className="mx-auto max-w-5xl">
       <header className="mb-8">
         <p className="font-mono text-xs uppercase tracking-[0.28em] text-accent/80">Portfolio</p>
-        <h1 className="font-display mt-2 text-3xl font-bold tracking-tight text-zinc-50">
+        <h1 className="font-display mt-2 text-3xl font-bold tracking-tight text-foreground">
           My submissions
         </h1>
-        <p className="mt-2 text-sm text-zinc-400">
+        <p className="mt-2 text-sm text-muted-foreground">
           Every bug report you&apos;ve filed, graded server-side. This is your proof of work.
         </p>
       </header>
 
       {rows.length === 0 ? (
         <Card className="text-center">
-          <p className="text-zinc-300">No graded submissions yet.</p>
-          <p className="mt-2 text-sm text-zinc-500">
+          <p className="text-foreground">No graded submissions yet.</p>
+          <p className="mt-2 text-sm text-muted-foreground">
             Go find a bug in BuggyShop and file your first report.
           </p>
           <Link
             href="/dashboard"
-            className="mt-4 inline-block font-medium text-accent underline-offset-4 transition-colors hover:text-emerald-300 hover:underline"
+            className="mt-4 inline-block font-medium text-accent underline-offset-4 transition-colors hover:opacity-80 hover:underline"
           >
             Back to dashboard →
           </Link>
@@ -68,23 +68,23 @@ export default async function PortfolioPage() {
         <>
           <div className="mb-6 grid grid-cols-3 gap-4">
             <Card>
-              <div className="text-3xl font-bold text-zinc-50">{rows.length}</div>
-              <div className="mt-1 text-xs uppercase tracking-wide text-zinc-500">Reports filed</div>
+              <div className="text-3xl font-bold text-foreground">{rows.length}</div>
+              <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">Reports filed</div>
             </Card>
             <Card>
               <div className="text-3xl font-bold text-accent">{matchedCount}</div>
-              <div className="mt-1 text-xs uppercase tracking-wide text-zinc-500">Bugs matched</div>
+              <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">Bugs matched</div>
             </Card>
             <Card>
-              <div className="text-3xl font-bold text-zinc-50">{totalScore}</div>
-              <div className="mt-1 text-xs uppercase tracking-wide text-zinc-500">Total score</div>
+              <div className="text-3xl font-bold text-foreground">{totalScore}</div>
+              <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">Total score</div>
             </Card>
           </div>
 
           <Card className="overflow-x-auto p-0">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-zinc-800 text-xs uppercase tracking-wide text-zinc-500">
+                <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
                   <th className="px-5 py-3 font-medium">Bug report</th>
                   <th className="px-5 py-3 font-medium">Location</th>
                   <th className="px-5 py-3 font-medium">Severity</th>
@@ -95,9 +95,9 @@ export default async function PortfolioPage() {
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.id} className="border-b border-zinc-800/60 last:border-0">
-                    <td className="px-5 py-4 font-medium text-zinc-100">{r.title}</td>
-                    <td className="px-5 py-4 text-zinc-400">
+                  <tr key={r.id} className="border-b border-border/60 last:border-0">
+                    <td className="px-5 py-4 font-medium text-foreground">{r.title}</td>
+                    <td className="px-5 py-4 text-muted-foreground">
                       {r.page} · {r.feature}
                     </td>
                     <td className="px-5 py-4">
@@ -106,8 +106,8 @@ export default async function PortfolioPage() {
                     <td className="px-5 py-4">
                       {r.matched ? <Badge tone="success">Matched</Badge> : <Badge>No match</Badge>}
                     </td>
-                    <td className="px-5 py-4 text-right font-mono text-zinc-200">{r.score}</td>
-                    <td className="px-5 py-4 text-right text-zinc-500">
+                    <td className="px-5 py-4 text-right font-mono text-foreground">{r.score}</td>
+                    <td className="px-5 py-4 text-right text-muted-foreground">
                       {new Date(r.created_at).toLocaleDateString()}
                     </td>
                   </tr>

@@ -16,10 +16,11 @@ import {
   type RunResult,
   type RunnerProvider,
 } from "@qa-mastery/grading";
-import { Judge0Runner, DockerPlaywrightRunner, WandboxRunner } from "@qa-mastery/grading/runners";
 import { DEFAULT_RELEASE, isRelease, mintHandoffToken } from "@qa-mastery/shared";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAuthedUserId } from "@/lib/auth";
+import { assertCodeRunQuota, getCodeRunner } from "@/lib/code-runs";
+import { touchStreak } from "@/lib/streaks";
 
 type Step = "see" | "try" | "do" | "prove";
 
@@ -31,22 +32,11 @@ interface LessonRegistryRow {
 
 const XP_LESSON_COMPLETED = 50;
 
-/** Does this learner hold the Pro entitlement? */
-async function hasProEntitlement(service: SupabaseClient, userId: string): Promise<boolean> {
-  const { count } = await service
-    .from("entitlements")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .eq("kind", "pro");
-  return (count ?? 0) > 0;
-}
-
-/** Look up a published, accessible lesson by slug. Free lessons are open to all;
- *  paid lessons require the learner's Pro entitlement. Throws otherwise. */
+/** Look up a published lesson by slug. Everything is free — the platform has no
+ *  paywall — so the only gate is that the lesson exists and is published. */
 async function requireAccessibleLesson(
   service: SupabaseClient,
   slug: string,
-  userId: string,
 ): Promise<LessonRegistryRow> {
   const { data, error } = await service
     .from("lessons")
@@ -55,17 +45,7 @@ async function requireAccessibleLesson(
     .maybeSingle<LessonRegistryRow>();
   if (error) throw new Error(error.message);
   if (!data || data.status !== "published") throw new Error("Lesson not available");
-  if (!data.free && !(await hasProEntitlement(service, userId))) {
-    throw new Error("Lesson requires Pro");
-  }
   return data;
-}
-
-/** Whether the current learner has Pro (for UI gating). */
-export async function getProStatus(): Promise<{ pro: boolean }> {
-  const userId = await getAuthedUserId();
-  const service = createServiceClient();
-  return { pro: await hasProEntitlement(service, userId) };
 }
 
 /** Append a sensitive-operation record to the audit trail. Best-effort: an
@@ -83,25 +63,12 @@ async function recordAuditEvent(
   if (error) console.error("audit_events insert failed:", error.message);
 }
 
-/** Mock "upgrade to Pro" — grants the entitlement via the service role. A real
- *  billing webhook would write the same row. */
-export async function grantPro(): Promise<{ ok: true }> {
-  const userId = await getAuthedUserId();
-  const service = createServiceClient();
-  const { error } = await service
-    .from("entitlements")
-    .upsert({ user_id: userId, kind: "pro" }, { onConflict: "user_id,kind" });
-  if (error) throw new Error(error.message);
-  await recordAuditEvent(service, { actorId: userId, action: "pro.granted" });
-  return { ok: true };
-}
-
 /** Record progress. `step` marks one of the see/try/do/prove milestones; no
  *  step just ensures a 'started' row exists. Completion is owned by submitQuiz. */
 export async function saveProgress(slug: string, step?: Step): Promise<{ ok: true }> {
   const userId = await getAuthedUserId();
   const service = createServiceClient();
-  const lesson = await requireAccessibleLesson(service, slug, userId);
+  const lesson = await requireAccessibleLesson(service, slug);
 
   const { data: existing } = await service
     .from("progress")
@@ -150,7 +117,7 @@ export async function submitQuiz(
 ): Promise<SubmitQuizResult> {
   const userId = await getAuthedUserId();
   const service = createServiceClient();
-  const lesson = await requireAccessibleLesson(service, slug, userId);
+  const lesson = await requireAccessibleLesson(service, slug);
 
   const quiz = loadQuiz(slug);
   const questions = quiz.questions as QuizQuestion[];
@@ -213,6 +180,7 @@ export async function submitQuiz(
         reason: "lesson_completed",
         ref_id: slug,
       });
+      await touchStreak(service, userId);
 
       await recordAuditEvent(service, {
         actorId: userId,
@@ -294,7 +262,7 @@ export async function submitBugReport(
 ): Promise<BugReportResult> {
   const userId = await getAuthedUserId();
   const service = createServiceClient();
-  const lesson = await requireAccessibleLesson(service, slug, userId);
+  const lesson = await requireAccessibleLesson(service, slug);
   const release = lessonRelease(slug);
 
   const { data: rows, error: manifestError } = await service
@@ -381,7 +349,7 @@ export interface HuntStatus {
 export async function getHuntStatus(slug: string): Promise<HuntStatus> {
   const userId = await getAuthedUserId();
   const service = createServiceClient();
-  const lesson = await requireAccessibleLesson(service, slug, userId);
+  const lesson = await requireAccessibleLesson(service, slug);
   const release = lessonRelease(slug);
 
   const { count } = await service
@@ -407,7 +375,7 @@ export async function launchSandbox(slug: string): Promise<string> {
   const userId = await getAuthedUserId();
   const service = createServiceClient();
   // Ensure the user has access to the lesson (throws if not)
-  await requireAccessibleLesson(service, slug, userId);
+  await requireAccessibleLesson(service, slug);
   const release = lessonRelease(slug);
 
   let sandboxId: string;
@@ -430,7 +398,9 @@ export async function launchSandbox(slug: string): Promise<string> {
     sandboxId = newSbx.id;
 
     // Seed data via the deny-all service-role RPC
-    const { error: resetError } = await service.rpc("reset_sandbox", { p_sandbox_id: sandboxId });
+    const { error: resetError } = await service
+      .schema("buggyshop")
+      .rpc("reset_sandbox", { p_sandbox_id: sandboxId });
     if (resetError) throw new Error(`Sandbox seeding failed: ${resetError.message}`);
   }
 
@@ -459,7 +429,7 @@ export async function submitCapstone(
 ): Promise<CapstoneResult> {
   const userId = await getAuthedUserId();
   const service = createServiceClient();
-  const lesson = await requireAccessibleLesson(service, slug, userId);
+  const lesson = await requireAccessibleLesson(service, slug);
 
   const result = gradeCapstone(input);
   const { normalized, checklist, score } = result;
@@ -494,43 +464,21 @@ export async function submitCapstone(
   return result;
 }
 
-const judge0 = new Judge0Runner();
-const playwright = new DockerPlaywrightRunner();
-const wandbox = new WandboxRunner();
-
 function getRunnerForLesson(slug: string): RunnerProvider {
   const lesson = findLessonBySlug(slug);
   if (!lesson) throw new Error("Lesson not found");
 
-  // Track B (automation) uses Playwright; plain-code lessons run on Wandbox
-  // (synchronous, free) with Judge0 as the fallback when the operator sets
-  // USE_JUDGE0 (e.g. a private Wandbox is down).
-  if (lesson.frontmatter.module !== "B0" && lesson.frontmatter.track === "track-b") {
-    return playwright;
-  }
-  return process.env.USE_JUDGE0 ? judge0 : wandbox;
-}
-
-/** Code execution is compute-heavy and paid; cap a learner's runs per UTC day. */
-const MAX_CODE_RUNS_PER_DAY = 100;
-
-async function assertCodeRunQuota(service: SupabaseClient, userId: string): Promise<void> {
-  const startOfDay = new Date();
-  startOfDay.setUTCHours(0, 0, 0, 0);
-  const { count } = await service
-    .from("code_runs")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .gte("created_at", startOfDay.toISOString());
-  if ((count ?? 0) >= MAX_CODE_RUNS_PER_DAY) {
-    throw new Error(`Daily code-run limit reached (${MAX_CODE_RUNS_PER_DAY}). Try again tomorrow.`);
-  }
+  // Track B (automation) drives a real browser; everything else is plain code.
+  // The ladder itself lives in @/lib/code-runs so note labs share it.
+  const browser =
+    lesson.frontmatter.module !== "B0" && lesson.frontmatter.track === "track-b";
+  return getCodeRunner({ browser });
 }
 
 export async function submitCodeLab(slug: string, code: string): Promise<{ runId: string }> {
   const userId = await getAuthedUserId();
   const service = createServiceClient();
-  const lesson = await requireAccessibleLesson(service, slug, userId);
+  const lesson = await requireAccessibleLesson(service, slug);
 
   // Validate, then rate-limit, before forwarding to the (compute-heavy) runner.
   const validated = validateCodeSubmission(code);
@@ -597,7 +545,7 @@ export async function submitCodeLab(slug: string, code: string): Promise<{ runId
 export async function pollCodeRun(slug: string, runId: string): Promise<RunResult> {
   const userId = await getAuthedUserId();
   const service = createServiceClient();
-  await requireAccessibleLesson(service, slug, userId);
+  await requireAccessibleLesson(service, slug);
 
   // Ownership: a run_id is only pollable by the learner who started it.
   const { data: run } = await service

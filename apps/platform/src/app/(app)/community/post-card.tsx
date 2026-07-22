@@ -45,7 +45,7 @@ export function PostCard({ post }: { post: FeedPost }) {
           </span>
         )}
         {post.acceptedAnswerId && (
-          <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-400">
+          <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-success-text">
             Answered
           </span>
         )}

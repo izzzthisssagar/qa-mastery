@@ -2,8 +2,21 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MDXRemote } from "next-mdx-remote/rsc";
-import { listNoteFiles, getNote, findNoteModule, findNoteLeaf } from "@qa-mastery/curriculum";
+import {
+  listNoteFiles,
+  getNote,
+  findNoteModule,
+  findNoteLeaf,
+  labForChapter,
+  trackCapstoneForChapter,
+} from "@qa-mastery/curriculum";
 import { mdxComponents } from "@/app/(app)/learn/[slug]/mdx-components";
+import { getNoteCompletion } from "../../../actions";
+import { getNoteLabState } from "../../../lab-actions";
+import { getNoteCapstoneState } from "../../../capstone-actions";
+import { ChapterLab } from "../../../chapter-lab";
+import { TrackCapstone } from "../../../track-capstone";
+import { NoteProgressProvider } from "../../../note-progress-context";
 import {
   AskCommunity,
   Callout,
@@ -84,6 +97,30 @@ export default async function NoteTopicPage({
   if (!note) notFound();
   const mod = findNoteModule(moduleSlug);
 
+  // Per-learner completion state for the <Complete> button inside the MDX body.
+  const noteSlug = `${moduleSlug}/${chapterSlug}/${topicSlug}`;
+  const { done: initialDone } = await getNoteCompletion(noteSlug);
+
+  // A lab closes out its whole chapter, and there is no chapter route — so it
+  // renders after the LAST file-backed topic, which is where a learner who has
+  // read the chapter actually ends up. Registry-driven: no .mdx authoring.
+  const chapterLabSlug = `${moduleSlug}/${chapterSlug}`;
+  const chapterTopics = (findNoteModule(moduleSlug)?.chapters ?? [])
+    .find((c) => c.slug === chapterSlug)
+    ?.topics.filter((t) => !t.planned && getNote(moduleSlug, chapterSlug, t.slug));
+  const isLastTopic = chapterTopics?.at(-1)?.slug === topicSlug;
+  const labState =
+    isLastTopic && labForChapter(chapterLabSlug)
+      ? await getNoteLabState(chapterLabSlug)
+      : null;
+  // A track capstone anchors at the same "last topic of the chapter" position
+  // as a chapter lab, on a chapter that has no chapter lab of its own — see
+  // notes/track-capstones.ts for why it can't be keyed like a normal lab.
+  const capstoneState =
+    isLastTopic && trackCapstoneForChapter(chapterLabSlug)
+      ? await getNoteCapstoneState(chapterLabSlug)
+      : null;
+
   // Related notes are authored as "module/chapter/topic" triples; resolve each
   // against the taxonomy + disk so a stale or planned-only reference never 404s.
   const related = note.frontmatter.related
@@ -117,17 +154,22 @@ export default async function NoteTopicPage({
         </div>
       )}
 
-      <article className="prose-notes mt-8 space-y-4 text-[15px] leading-relaxed text-foreground/90">
-        <MDXRemote
-          source={note.body}
-          components={{ ...mdxComponents, ...noteInteractiveComponents }}
-          // Notes MDX is repo-authored (trusted): allow JSX attribute
-          // expressions — next-mdx-remote v6 strips them by default, which
-          // silently emptied array props like WhenItBreaks items. The
-          // dangerous-calls guard (blockDangerousJS) stays on.
-          options={{ blockJS: false }}
-        />
-      </article>
+      <NoteProgressProvider slug={noteSlug} initialDone={initialDone}>
+        <article className="prose-notes mt-8 space-y-4 text-[15px] leading-relaxed text-foreground/90">
+          <MDXRemote
+            source={note.body}
+            components={{ ...mdxComponents, ...noteInteractiveComponents }}
+            // Notes MDX is repo-authored (trusted): allow JSX attribute
+            // expressions — next-mdx-remote v6 strips them by default, which
+            // silently emptied array props like WhenItBreaks items. The
+            // dangerous-calls guard (blockDangerousJS) stays on.
+            options={{ blockJS: false }}
+          />
+        </article>
+      </NoteProgressProvider>
+
+      {labState && <ChapterLab state={labState} />}
+      {capstoneState && <TrackCapstone state={capstoneState} />}
 
       {related.length > 0 && (
         <div className="mt-10 border-t border-border pt-6">

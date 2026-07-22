@@ -15,15 +15,12 @@ export function LessonRow({
   label,
   title,
   done,
-  locked,
   index,
 }: {
   slug: string;
   label: string;
   title: string;
   done: boolean;
-  /** Gated (Pro) lesson the current learner hasn't unlocked. */
-  locked?: boolean;
   index: number;
 }) {
   const reduce = useReducedMotion();
@@ -37,29 +34,22 @@ export function LessonRow({
       <Link
         href={`/learn/${slug}`}
         data-testid={`lesson-link-${slug}`}
-        className="group relative flex items-center justify-between gap-3 px-4 py-3 text-sm transition-colors hover:bg-zinc-900/70"
+        className="group relative flex items-center justify-between gap-3 px-4 py-3 text-sm transition-colors hover:bg-surface/70"
       >
         <span
           aria-hidden
           className="absolute inset-y-0 left-0 w-0.5 origin-top scale-y-0 bg-accent transition-transform duration-300 group-hover:scale-y-100"
         />
         <span className="min-w-0">
-          <span className="font-mono text-xs text-zinc-500">{label}</span>{" "}
-          <span className="text-zinc-100 transition-colors group-hover:text-white">{title}</span>
+          <span className="font-mono text-xs text-muted-foreground">{label}</span>{" "}
+          <span className="text-foreground transition-colors group-hover:text-white">{title}</span>
         </span>
         {done ? (
           <span
             data-testid={`lesson-done-${slug}`}
-            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400"
+            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-success-text"
           >
             <span aria-hidden>✓</span> done
-          </span>
-        ) : locked ? (
-          <span
-            data-testid={`lesson-locked-${slug}`}
-            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-300"
-          >
-            <span aria-hidden>🔒</span> Pro
           </span>
         ) : (
           <span className="shrink-0 text-accent transition-transform duration-300 group-hover:translate-x-1">

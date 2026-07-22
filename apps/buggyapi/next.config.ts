@@ -6,6 +6,8 @@ const PLATFORM_URL = process.env.NEXT_PUBLIC_PLATFORM_URL ?? "http://localhost:3
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
+  // Drop the `X-Powered-By: Next.js` banner (OWASP A05 tech disclosure).
+  poweredByHeader: false,
   transpilePackages: ["@qa-mastery/db", "@qa-mastery/shared", "@qa-mastery/ui"],
   async headers() {
     return [

@@ -66,6 +66,29 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
+/* ── direction 3: no raw neutral (zinc) — must use semantic tokens ────────────
+   The dual-theme system (globals.css) maps every neutral to a semantic token
+   (bg-surface, border-border, text-foreground, text-muted-foreground, …) so a
+   surface renders correctly in BOTH light and dark. A raw `zinc-*` class hard-
+   codes the dark palette and breaks in light mode — that was the Phase-7 debt
+   (580 raw zinc classes across 72 files). Decorative accents (emerald/amber/
+   sky/…) stay allowed; only the neutral `zinc` ramp is banned. */
+describe("no raw zinc — neutrals must be semantic tokens", () => {
+  const ZINC = /(?:text|bg|border|divide|ring|outline|from|via|to|placeholder|shadow|fill|stroke)-zinc-\d{2,3}(?:\/\d{1,3})?/g;
+  it("src/ contains no raw zinc-* utility", () => {
+    const offenders: string[] = [];
+    for (const file of walk(join(ROOT, "src"))) {
+      const srcText = readFileSync(file, "utf8");
+      const hits = [...new Set(srcText.match(ZINC) ?? [])];
+      if (hits.length) offenders.push(`${file.replace(ROOT + "/", "")}: ${hits.join(", ")}`);
+    }
+    expect(
+      offenders,
+      `raw zinc-* found — replace with semantic tokens:\n${offenders.join("\n")}`,
+    ).toEqual([]);
+  });
+});
+
 describe("color utilities used in src/ resolve to something real", () => {
   it("no (text|bg|border)-<token> references an unregistered custom token", () => {
     const offenders: string[] = [];

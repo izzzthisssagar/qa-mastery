@@ -3,7 +3,8 @@ import { expect, test } from "@playwright/test";
 /**
  * BuggyShop signup email validation (port 3001, public). In release v1.0 the
  * validator carries BS-001: a lax regex that accepts clearly invalid addresses.
- * This is the bug the A3.2 equivalence-partitioning lab hunts.
+ * One of several seeded bugs the notes-spine BuggyShop bug hunts (note-labs.ts,
+ * e.g. exploratory-testing/heuristics-and-tours) can turn up.
  */
 test.describe("buggyshop — signup email validation (BS-001)", () => {
   const SIGNUP_URL = "http://localhost:3001/signup";

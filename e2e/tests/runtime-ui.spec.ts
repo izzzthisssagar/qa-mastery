@@ -2,10 +2,13 @@ import { expect, test, type Page } from "@playwright/test";
 import { signUpFreshLearner as sharedSignUp } from "./signup-helper";
 
 /**
- * UI-wiring smoke for the help-agent tutor and the code-runner lab. These cover
- * that the surfaces mount and open correctly — NOT the runtime round-trip: the
- * tutor's reply needs an LLM and the code run needs Judge0/Docker, neither of
- * which exists in CI. The guard/validation logic behind them is unit-tested.
+ * UI-wiring smoke for the help-agent tutor. Covers that the surface mounts and
+ * opens correctly — NOT the runtime round-trip: the tutor's reply needs an LLM,
+ * which doesn't exist in CI. The guard/validation logic behind it is
+ * unit-tested. (The code-runner lab's equivalent smoke — editor + run control
+ * render once a chapter unlocks — now lives in chapter-lab.spec.ts on the
+ * notes spine; the legacy /learn lesson this test used to point at was
+ * retired 2026-07-22.)
  */
 
 async function signUpFreshLearner(page: Page): Promise<void> {
@@ -25,11 +28,3 @@ test.describe("help-agent — UI opens (no LLM)", () => {
   });
 });
 
-test.describe("code runner — lab renders (no Judge0)", () => {
-  test("a code-run lesson shows the editor and run control", async ({ page }) => {
-    await signUpFreshLearner(page);
-    await page.goto("http://localhost:3000/learn/java-setup-first-program");
-    await expect(page.getByLabel("Java code editor")).toBeVisible();
-    await expect(page.getByTestId("run-code")).toBeVisible();
-  });
-});

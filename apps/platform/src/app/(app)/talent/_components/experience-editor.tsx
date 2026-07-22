@@ -14,7 +14,7 @@ export type ExperienceRow = {
 };
 
 const field =
-  "rounded-lg border border-zinc-700 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-100 outline-none focus-visible:border-zinc-500";
+  "rounded-lg border border-border bg-surface/60 px-3 py-2 text-sm text-foreground outline-none focus-visible:border-border";
 
 export function ExperienceEditor({ initial }: { initial: ExperienceRow[] }) {
   const [rows, setRows] = useState<ExperienceRow[]>(initial);
@@ -72,13 +72,13 @@ export function ExperienceEditor({ initial }: { initial: ExperienceRow[] }) {
       {rows.length > 0 && (
         <ul className="space-y-3">
           {rows.map((e) => (
-            <li key={e.id} className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
+            <li key={e.id} className="rounded-lg border border-border bg-surface/40 p-3">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="font-medium text-zinc-100">
-                    {e.role} · <span className="text-zinc-300">{e.company}</span>
+                  <p className="font-medium text-foreground">
+                    {e.role} · <span className="text-foreground">{e.company}</span>
                   </p>
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-xs text-muted-foreground">
                     {e.start_year} – {e.end_year ?? "present"}
                   </p>
                 </div>
@@ -87,18 +87,18 @@ export function ExperienceEditor({ initial }: { initial: ExperienceRow[] }) {
                   aria-label={`Remove ${e.role} at ${e.company}`}
                   onClick={() => remove(e.id)}
                   disabled={pending}
-                  className="text-zinc-500 hover:text-red-300"
+                  className="text-muted-foreground hover:text-danger-text"
                 >
                   ×
                 </button>
               </div>
-              {e.summary && <p className="mt-1 text-sm text-zinc-400">{e.summary}</p>}
+              {e.summary && <p className="mt-1 text-sm text-muted-foreground">{e.summary}</p>}
             </li>
           ))}
         </ul>
       )}
 
-      <div className="space-y-2 rounded-xl border border-zinc-800 p-4">
+      <div className="space-y-2 rounded-xl border border-border p-4">
         <div className="grid gap-2 sm:grid-cols-2">
           <input
             className={field}
@@ -138,7 +138,7 @@ export function ExperienceEditor({ initial }: { initial: ExperienceRow[] }) {
           placeholder="What you did there (optional)."
           aria-label="Summary"
         />
-        {error && <p className="text-sm text-red-300">{error}</p>}
+        {error && <p className="text-sm text-danger-text">{error}</p>}
         <Button
           variant="secondary"
           onClick={add}

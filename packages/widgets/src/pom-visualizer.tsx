@@ -20,17 +20,17 @@ export function POMVisualizer({ onMilestone }: { onMilestone?: (m: string) => vo
   };
 
   return (
-    <div className="my-8 rounded-2xl border border-zinc-800 bg-zinc-900/30 p-6 md:p-8 backdrop-blur-xl">
+    <div className="my-8 rounded-2xl border border-border bg-surface/30 p-6 md:p-8 backdrop-blur-xl">
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-zinc-100">Page Object Model (POM)</h3>
-          <p className="text-sm text-zinc-400">Separation of Concerns: Test Intent vs DOM Interactions.</p>
+          <h3 className="text-lg font-semibold text-foreground">Page Object Model (POM)</h3>
+          <p className="text-sm text-muted-foreground">Separation of Concerns: Test Intent vs DOM Interactions.</p>
           <p className="text-xs text-amber-500/80 mt-1 block md:hidden">📱 Rotate your device for the best view.</p>
         </div>
         <button
           onClick={runTest}
           disabled={step !== 0}
-          className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-zinc-950 shadow-lg shadow-accent/20 transition-all hover:bg-accent/90 disabled:opacity-50 disabled:shadow-none"
+          className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground shadow-lg shadow-accent/20 transition-all hover:bg-accent/90 disabled:opacity-50 disabled:shadow-none"
         >
           {step === 0 ? "Run Test Login" : "Executing..."}
         </button>
@@ -38,27 +38,27 @@ export function POMVisualizer({ onMilestone }: { onMilestone?: (m: string) => vo
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative">
         {/* Test Script Layer */}
-        <div className={`relative rounded-xl border-2 p-6 transition-colors duration-500 ${step === 1 || step === 5 ? "border-emerald-500 bg-emerald-500/5 shadow-lg shadow-emerald-500/10" : "border-zinc-800 bg-zinc-950/50"}`}>
-          <div className="mb-4 flex items-center justify-between border-b border-zinc-800 pb-2">
+        <div className={`relative rounded-xl border-2 p-6 transition-colors duration-500 ${step === 1 || step === 5 ? "border-emerald-500 bg-emerald-500/5 shadow-lg shadow-emerald-500/10" : "border-border bg-background/50"}`}>
+          <div className="mb-4 flex items-center justify-between border-b border-border pb-2">
             <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Test Script</span>
-            <span className="text-xs text-zinc-500">LoginTest.java</span>
+            <span className="text-xs text-muted-foreground">LoginTest.java</span>
           </div>
           <div className="font-mono text-sm space-y-2">
-            <div className="text-zinc-400">@Test</div>
-            <div className="text-zinc-400">public void testValidLogin() {"{"}</div>
-            <div className={`pl-4 transition-colors duration-300 ${step === 1 ? "text-emerald-300" : "text-zinc-500"}`}>
+            <div className="text-muted-foreground">@Test</div>
+            <div className="text-muted-foreground">public void testValidLogin() {"{"}</div>
+            <div className={`pl-4 transition-colors duration-300 ${step === 1 ? "text-emerald-300" : "text-muted-foreground"}`}>
               LoginPage loginPage = new LoginPage(driver);
             </div>
-            <div className={`relative pl-4 transition-colors duration-300 ${step >= 1 && step <= 5 ? "text-emerald-300" : "text-zinc-500"}`}>
+            <div className={`relative pl-4 transition-colors duration-300 ${step >= 1 && step <= 5 ? "text-emerald-300" : "text-muted-foreground"}`}>
               {step > 1 && step < 5 && (
                 <motion.div layoutId="highlight" className="absolute -inset-1 rounded bg-emerald-500/20" />
               )}
               <span className="relative z-10">loginPage.login("user", "pass");</span>
             </div>
-            <div className={`pl-4 transition-colors duration-300 ${step === 5 ? "text-emerald-300" : "text-zinc-500"}`}>
+            <div className={`pl-4 transition-colors duration-300 ${step === 5 ? "text-emerald-300" : "text-muted-foreground"}`}>
               Assert.assertTrue(homePage.isDisplayed());
             </div>
-            <div className="text-zinc-400">{"}"}</div>
+            <div className="text-muted-foreground">{"}"}</div>
           </div>
         </div>
 
@@ -89,32 +89,32 @@ export function POMVisualizer({ onMilestone }: { onMilestone?: (m: string) => vo
         </div>
 
         {/* Page Object Layer */}
-        <div className={`relative rounded-xl border-2 p-6 transition-colors duration-500 ${step >= 2 && step <= 4 ? "border-accent bg-accent/5 shadow-lg shadow-accent/10" : "border-zinc-800 bg-zinc-950/50"}`}>
-          <div className="mb-4 flex items-center justify-between border-b border-zinc-800 pb-2">
+        <div className={`relative rounded-xl border-2 p-6 transition-colors duration-500 ${step >= 2 && step <= 4 ? "border-accent bg-accent/5 shadow-lg shadow-accent/10" : "border-border bg-background/50"}`}>
+          <div className="mb-4 flex items-center justify-between border-b border-border pb-2">
             <span className="text-xs font-bold uppercase tracking-wider text-accent">Page Object</span>
-            <span className="text-xs text-zinc-500">LoginPage.java</span>
+            <span className="text-xs text-muted-foreground">LoginPage.java</span>
           </div>
           <div className="font-mono text-sm space-y-2">
-            <div className={`transition-colors duration-300 ${step === 3 ? "text-accent" : "text-zinc-500"}`}>
+            <div className={`transition-colors duration-300 ${step === 3 ? "text-accent" : "text-muted-foreground"}`}>
               By userField = By.id("username");<br/>
               By passField = By.id("password");<br/>
               By loginBtn = By.id("login-btn");
             </div>
             <br/>
-            <div className="text-zinc-400">public void login(String u, String p) {"{"}</div>
-            <div className={`pl-4 transition-colors duration-300 ${step >= 3 ? "text-accent" : "text-zinc-500"}`}>
+            <div className="text-muted-foreground">public void login(String u, String p) {"{"}</div>
+            <div className={`pl-4 transition-colors duration-300 ${step >= 3 ? "text-accent" : "text-muted-foreground"}`}>
               <div className={step === 4 ? "bg-accent/20 rounded -mx-1 px-1" : ""}>
                 driver.findElement(userField).sendKeys(u);<br/>
                 driver.findElement(passField).sendKeys(p);<br/>
                 driver.findElement(loginBtn).click();
               </div>
             </div>
-            <div className="text-zinc-400">{"}"}</div>
+            <div className="text-muted-foreground">{"}"}</div>
           </div>
         </div>
       </div>
       
-      <div className="mt-8 text-center text-sm font-medium text-zinc-400 min-h-[24px]">
+      <div className="mt-8 text-center text-sm font-medium text-muted-foreground min-h-[24px]">
         <AnimatePresence mode="wait">
           <motion.span
             key={step}

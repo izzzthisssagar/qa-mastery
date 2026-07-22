@@ -11,14 +11,14 @@ export default function Loading() {
         </div>
         <Skeleton className="h-10 w-32 rounded-lg" />
       </div>
-      <div className="overflow-hidden rounded-xl border border-zinc-800">
-        <div className="border-b border-zinc-800 bg-zinc-900/50 p-3">
+      <div className="overflow-hidden rounded-xl border border-border">
+        <div className="border-b border-border bg-surface/50 p-3">
           <Skeleton className="h-4 w-32" />
         </div>
         {Array.from({ length: 8 }).map((_, i) => (
           <div
             key={i}
-            className="flex items-center gap-4 border-b border-zinc-800/60 p-4 last:border-0"
+            className="flex items-center gap-4 border-b border-border/60 p-4 last:border-0"
           >
             <Skeleton className="h-4 w-6" />
             <Skeleton className="h-4 w-full max-w-xs flex-1" />

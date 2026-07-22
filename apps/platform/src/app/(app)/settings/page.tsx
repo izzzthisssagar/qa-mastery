@@ -27,10 +27,10 @@ export default async function SettingsPage() {
     <div className="mx-auto max-w-xl">
       <header className="mb-8">
         <p className="font-mono text-xs uppercase tracking-[0.28em] text-accent/80">Settings</p>
-        <h1 className="font-display mt-2 text-3xl font-bold tracking-tight text-zinc-50">
+        <h1 className="font-display mt-2 text-3xl font-bold tracking-tight text-foreground">
           Your profile
         </h1>
-        <p className="mt-2 text-sm text-zinc-400">
+        <p className="mt-2 text-sm text-muted-foreground">
           How you show up across QA Mastery and on your public portfolio.
         </p>
       </header>
@@ -44,7 +44,7 @@ export default async function SettingsPage() {
             avatarUrl={data?.avatar_url ?? ""}
           />
         </div>
-        <p className="mt-6 border-t border-zinc-800/70 pt-4 text-xs text-zinc-600">
+        <p className="mt-6 border-t border-border/70 pt-4 text-xs text-muted-foreground">
           Signed in as {user?.email}
         </p>
       </Card>

@@ -58,7 +58,7 @@ export function AuthForm({
           </Reveal>
 
           <Reveal delay={0.12}>
-            <h1 className="font-display mt-3 text-3xl font-bold tracking-tight text-zinc-50 sm:text-4xl">
+            <h1 className="font-display mt-3 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
               {title}
             </h1>
           </Reveal>
@@ -94,7 +94,7 @@ export function AuthForm({
                 <div className="-mt-2 text-right">
                   <Link
                     href="/forgot-password"
-                    className="text-xs font-medium text-zinc-400 underline-offset-4 transition-colors hover:text-accent hover:underline"
+                    className="text-xs font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-accent hover:underline"
                   >
                     Forgot password?
                   </Link>
@@ -108,7 +108,7 @@ export function AuthForm({
                 data-testid="form-error"
                 initial={{ opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300"
+                className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-danger-text"
               >
                 {state.error}
               </motion.p>
@@ -118,7 +118,7 @@ export function AuthForm({
                 role="status"
                 initial={{ opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-emerald-200"
+                className="rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-success-text"
               >
                 {state.message}
               </motion.p>
@@ -149,11 +149,11 @@ export function AuthForm({
           </form>
 
           <Reveal delay={0.42}>
-            <p className="mt-8 border-t border-zinc-800/70 pt-6 text-sm text-zinc-500">
+            <p className="mt-8 border-t border-border/70 pt-6 text-sm text-muted-foreground">
               {altText}{" "}
               <Link
                 href={altHref}
-                className="font-medium text-accent underline-offset-4 transition-colors hover:text-emerald-300 hover:underline"
+                className="font-medium text-accent underline-offset-4 transition-colors hover:opacity-80 hover:underline"
               >
                 {altLinkLabel}
               </Link>

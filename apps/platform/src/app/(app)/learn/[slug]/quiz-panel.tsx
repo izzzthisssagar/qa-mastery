@@ -76,7 +76,7 @@ export function QuizPanel({
   }
 
   return (
-    <section data-testid="quiz-panel" className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+    <section data-testid="quiz-panel" className="mt-8 rounded-2xl border border-border bg-surface/40 p-6">
       {graded && (
         <div
           data-testid="quiz-result-banner"
@@ -86,11 +86,11 @@ export function QuizPanel({
               : "mb-6 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3"
           }
         >
-          <p className="text-sm font-semibold text-zinc-100">
+          <p className="text-sm font-semibold text-foreground">
             {result.passed ? "🎉 Passed" : "Not yet — keep going"} · {result.score}/{result.maxScore}{" "}
             ({result.maxScore > 0 ? Math.round((result.score / result.maxScore) * 100) : 0}%)
           </p>
-          <p className="mt-1 text-xs text-zinc-400">
+          <p className="mt-1 text-xs text-muted-foreground">
             {result.passed
               ? "Lesson complete. Your flashcards are now in the review queue."
               : `You need ${Math.round(result.passMark * 100)}% to pass. Review the explanations below, then try again.`}
@@ -104,10 +104,10 @@ export function QuizPanel({
           const r = resultFor(q.id);
           return (
             <li key={q.id} data-testid={`quiz-q-${q.id}`}>
-              <p className="text-sm font-medium text-zinc-100">
-                <span className="text-zinc-500">{qi + 1}.</span> {q.prompt}
+              <p className="text-sm font-medium text-foreground">
+                <span className="text-muted-foreground">{qi + 1}.</span> {q.prompt}
                 {q.type === "multi" && (
-                  <span className="ml-2 text-xs text-zinc-500">(select all that apply)</span>
+                  <span className="ml-2 text-xs text-muted-foreground">(select all that apply)</span>
                 )}
               </p>
               <div className="mt-3 space-y-2">
@@ -116,13 +116,13 @@ export function QuizPanel({
                   const isCorrect = r?.correctIndices.includes(oi) ?? false;
                   const stateClass = !graded
                     ? isSelected
-                      ? "border-accent bg-accent/10 text-zinc-50"
-                      : "border-zinc-700 text-zinc-300 hover:border-zinc-500"
+                      ? "border-accent bg-accent/10 text-foreground"
+                      : "border-border text-foreground hover:border-border"
                     : isCorrect
-                      ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-200"
+                      ? "border-emerald-500/60 bg-emerald-500/10 text-success-text"
                       : isSelected
-                        ? "border-red-500/60 bg-red-500/10 text-red-200"
-                        : "border-zinc-800 text-zinc-500";
+                        ? "border-red-500/60 bg-red-500/10 text-danger-text"
+                        : "border-border text-muted-foreground";
                   return (
                     <button
                       key={oi}
@@ -136,7 +136,7 @@ export function QuizPanel({
                       <span
                         className={`grid h-4 w-4 shrink-0 place-items-center border text-[10px] ${
                           q.type === "single" ? "rounded-full" : "rounded"
-                        } ${isSelected ? "border-current" : "border-zinc-600"}`}
+                        } ${isSelected ? "border-current" : "border-border"}`}
                         aria-hidden
                       >
                         {isSelected ? "✓" : ""}
@@ -149,7 +149,7 @@ export function QuizPanel({
               {graded && r?.explanation && (
                 <p
                   data-testid={`quiz-explanation-${q.id}`}
-                  className="mt-2 rounded-lg bg-zinc-800/50 px-3 py-2 text-xs text-zinc-400"
+                  className="mt-2 rounded-lg bg-surface-raised/50 px-3 py-2 text-xs text-muted-foreground"
                 >
                   {r.correct ? "✓ " : "✗ "}
                   {r.explanation}
@@ -161,7 +161,7 @@ export function QuizPanel({
       </ol>
 
       {error && (
-        <p data-testid="quiz-error" className="mt-4 text-sm text-red-400">
+        <p data-testid="quiz-error" className="mt-4 text-sm text-danger-text">
           {error}
         </p>
       )}
@@ -181,7 +181,7 @@ export function QuizPanel({
           </Button>
         )}
         {!graded && !allAnswered && (
-          <span className="text-xs text-zinc-500">Answer every question to submit.</span>
+          <span className="text-xs text-muted-foreground">Answer every question to submit.</span>
         )}
       </div>
     </section>

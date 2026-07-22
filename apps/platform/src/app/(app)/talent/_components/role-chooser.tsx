@@ -58,15 +58,15 @@ export function RoleChooser() {
               "rounded-xl border p-5 text-left transition-colors disabled:opacity-60 " +
               (picked === r.value
                 ? "border-emerald-500/50 bg-emerald-500/10"
-                : "border-zinc-800 bg-zinc-900/40 hover:border-zinc-600")
+                : "border-border bg-surface/40 hover:border-border")
             }
           >
-            <h2 className="font-medium text-zinc-100">{r.title}</h2>
-            <p className="mt-1 text-sm text-zinc-400">{r.blurb}</p>
+            <h2 className="font-medium text-foreground">{r.title}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{r.blurb}</p>
           </button>
         ))}
       </div>
-      {error && <p className="text-sm text-red-300">{error}</p>}
+      {error && <p className="text-sm text-danger-text">{error}</p>}
     </div>
   );
 }

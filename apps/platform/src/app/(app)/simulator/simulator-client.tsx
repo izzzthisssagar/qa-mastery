@@ -103,7 +103,7 @@ export function SimulatorClient() {
         <pre
           data-testid="simulator-output"
           className={`min-h-[420px] overflow-auto rounded-xl border border-border bg-surface p-4 text-sm ${
-            result && !result.passed ? "text-red-400" : "text-foreground"
+            result && !result.passed ? "text-danger-text" : "text-foreground"
           }`}
         >
           {error

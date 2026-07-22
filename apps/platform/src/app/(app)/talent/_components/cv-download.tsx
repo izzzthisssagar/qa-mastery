@@ -26,11 +26,11 @@ export function CvDownload({ handle }: { handle: string }) {
         type="button"
         onClick={open}
         disabled={pending}
-        className="rounded-lg border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:border-zinc-500 disabled:opacity-50"
+        className="rounded-lg border border-border px-3 py-1.5 text-sm text-foreground hover:border-border disabled:opacity-50"
       >
         {pending ? "Preparing…" : "Download CV"}
       </button>
-      {error && <span className="text-xs text-red-300">{error}</span>}
+      {error && <span className="text-xs text-danger-text">{error}</span>}
     </span>
   );
 }

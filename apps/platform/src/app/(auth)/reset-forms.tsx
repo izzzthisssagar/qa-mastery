@@ -39,13 +39,13 @@ function Shell({
             <p className="font-mono text-xs uppercase tracking-[0.28em] text-accent/80">{eyebrow}</p>
           </Reveal>
           <Reveal delay={0.12}>
-            <h1 className="font-display mt-3 text-3xl font-bold tracking-tight text-zinc-50 sm:text-4xl">
+            <h1 className="font-display mt-3 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
               {title}
             </h1>
           </Reveal>
           {children}
           <Reveal delay={0.42}>
-            <p className="mt-8 border-t border-zinc-800/70 pt-6 text-sm text-zinc-500">{footer}</p>
+            <p className="mt-8 border-t border-border/70 pt-6 text-sm text-muted-foreground">{footer}</p>
           </Reveal>
         </div>
       </section>
@@ -61,7 +61,7 @@ function Alerts({ state }: { state: AuthFormState }) {
           role="alert"
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300"
+          className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-danger-text"
         >
           {state.error}
         </motion.p>
@@ -71,7 +71,7 @@ function Alerts({ state }: { state: AuthFormState }) {
           role="status"
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-emerald-200"
+          className="rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-success-text"
         >
           {state.message}
         </motion.p>
@@ -93,7 +93,7 @@ const backToLogin = (
     Remembered it?{" "}
     <Link
       href="/login"
-      className="font-medium text-accent underline-offset-4 transition-colors hover:text-emerald-300 hover:underline"
+      className="font-medium text-accent underline-offset-4 transition-colors hover:opacity-80 hover:underline"
     >
       Back to log in
     </Link>

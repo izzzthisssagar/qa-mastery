@@ -10,30 +10,30 @@ export default async function InboxPage() {
     <div className="space-y-6 py-2">
       <header className="space-y-1">
         <h1 className="font-display text-2xl font-bold tracking-tight">Inbox</h1>
-        <p className="text-sm text-zinc-400">Your conversations with clients and testers.</p>
+        <p className="text-sm text-muted-foreground">Your conversations with clients and testers.</p>
       </header>
 
       {convos.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-zinc-800 p-8 text-center text-sm text-zinc-500">
+        <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
           No conversations yet. Contact a tester from their profile to start one.
         </div>
       ) : (
-        <ul className="divide-y divide-zinc-800 overflow-hidden rounded-xl border border-zinc-800">
+        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
           {convos.map((c) => (
             <li key={c.id}>
               <Link
                 href={`/talent/inbox/${c.id}`}
-                className="flex items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-zinc-900/60"
+                className="flex items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-surface/60"
               >
                 <div className="min-w-0">
-                  <p className="font-medium text-zinc-100">
+                  <p className="font-medium text-foreground">
                     {c.otherHandle ?? (c.role === "tester" ? "A client" : "A tester")}
                   </p>
                   {c.lastMessage && (
-                    <p className="truncate text-sm text-zinc-500">{c.lastMessage}</p>
+                    <p className="truncate text-sm text-muted-foreground">{c.lastMessage}</p>
                   )}
                 </div>
-                <span className="shrink-0 text-xs text-zinc-600">
+                <span className="shrink-0 text-xs text-muted-foreground">
                   {c.role === "client" ? "you contacted" : "contacted you"}
                 </span>
               </Link>

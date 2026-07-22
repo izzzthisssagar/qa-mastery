@@ -12,8 +12,8 @@ const ConversationThread = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-[60vh] items-center justify-center text-zinc-500">
-        <Spinner className="text-zinc-400" />
+      <div className="flex h-[60vh] items-center justify-center text-muted-foreground">
+        <Spinner className="text-muted-foreground" />
       </div>
     ),
   },

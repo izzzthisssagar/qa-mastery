@@ -93,7 +93,7 @@ export function Composer({ userId, videoEnabled }: { userId: string; videoEnable
             data-testid={`composer-kind-${k}`}
             onClick={() => setKind(k)}
             className={`rounded-lg px-3 py-1.5 text-sm font-medium capitalize transition-colors ${
-              kind === k ? "bg-accent text-zinc-950" : "text-muted-foreground hover:text-foreground"
+              kind === k ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             {k}
@@ -143,7 +143,7 @@ export function Composer({ userId, videoEnabled }: { userId: string; videoEnable
         {uploading && <span className="text-xs text-accent">Uploading…</span>}
       </div>
 
-      {error && <p className="text-sm text-red-400" data-testid="composer-error">{error}</p>}
+      {error && <p className="text-sm text-danger-text" data-testid="composer-error">{error}</p>}
 
       <Button onClick={submit} loading={pending} disabled={uploading || !body.trim()} data-testid="composer-submit">
         {pending ? "Posting…" : "Post"}

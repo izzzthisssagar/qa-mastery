@@ -47,11 +47,11 @@ export function TrackSwitch() {
   const track = TRACKS.find((t) => t.id === active)!;
 
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-2">
+    <div className="rounded-2xl border border-border bg-surface/30 p-2">
       <div
         role="tablist"
         aria-label="Learning tracks"
-        className="relative flex rounded-xl bg-zinc-950/60 p-1"
+        className="relative flex rounded-xl bg-background/60 p-1"
       >
         {TRACKS.map((t) => {
           const selected = t.id === active;
@@ -74,8 +74,8 @@ export function TrackSwitch() {
               <span
                 className={
                   selected
-                    ? "relative z-10 text-zinc-950"
-                    : "relative z-10 text-zinc-400 hover:text-zinc-200"
+                    ? "relative z-10 text-accent-foreground"
+                    : "relative z-10 text-muted-foreground hover:text-foreground"
                 }
               >
                 <span className="mr-2 font-mono text-xs uppercase tracking-widest opacity-70">
@@ -95,12 +95,12 @@ export function TrackSwitch() {
         transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         className="px-5 py-6"
       >
-        <p className="max-w-xl text-base leading-7 text-zinc-300">
+        <p className="max-w-xl text-base leading-7 text-foreground">
           {track.blurb}
         </p>
         <ul className="mt-5 space-y-3">
           {track.steps.map((s, i) => (
-            <li key={s} className="flex items-start gap-3 text-sm text-zinc-400">
+            <li key={s} className="flex items-start gap-3 text-sm text-muted-foreground">
               <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border border-accent/30 font-mono text-[11px] text-accent">
                 {i + 1}
               </span>

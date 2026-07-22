@@ -167,6 +167,58 @@ test surface.
 
 ---
 
+## ADR-17 — Phase 7 completion: text-tone tokens, axe + visual-regression gates (2026-07-21)
+
+**Context.** ADR-9 shipped the token *scaffold*; light mode itself, the
+`zinc-*` sweep, and per-theme contrast verification were deferred to Phase 7.
+Landing Phase 7 found the deferral had a sharper edge than expected: `--accent`
+itself (the flagship token ADR-9 introduced) measured 4.12:1 as small text on
+the light background — under AA — despite a comment claiming it passed,
+because the claim was never checked against a real renderer. Building an axe
+gate to verify it properly then found the same failure, systematically, in
+every raw Tailwind pastel (`text-emerald-300`, `text-red-400`, …) used as text
+anywhere in the app — ~50 call sites across Badge, form errors, dashboard
+cards, MDX content. Those colors aren't zinc, so ADR-9's sweep rule never
+touched them; they're just as unsafe on light for the same underlying reason.
+
+**Decision.** Two new token families, both added to `globals.css` alongside
+ADR-9's existing set:
+1. **`--accent-text`**, distinct from `--accent`. `--accent` is tuned for
+   `bg-accent` buttons paired with `--accent-foreground` (4.62:1 there);
+   darkening it to fix small-text contrast would have broken that pairing the
+   other direction. `--accent-text` is tuned for the text-on-background case
+   instead — verified 4.5:1+ against `--background`/`--surface`/
+   `--surface-raised`.
+2. **`--success/warning/info/danger-text`**, one per feedback state. Light
+   values are darker per-tone shades verified against each tone's own tinted
+   background (`bg-emerald-500/10` etc.); dark values are the original
+   pastels unchanged (already 7-12:1 there, never the problem).
+
+A one-off brand color with no matching tone (BuggyAPI's cyan, the simulator
+card's violet — single-file, low call-count) gets a `dark:` variant applied
+directly rather than a new global token; a recurring semantic category earns
+a token, a one-off doesn't.
+
+New test infrastructure, not just fixes: `e2e/tests/a11y.spec.ts` (axe,
+serious/critical only, both themes, expanded page-by-page as it kept finding
+real bugs) and `e2e/tests/visual.spec.ts` (screenshot regression, 2 pages x 2
+themes). The latter requires CI's whole E2E stage to run inside
+`mcr.microsoft.com/playwright:v1.60.0-noble` instead of installing browsers
+on bare `ubuntu-latest` — baselines drift otherwise (see
+`docs/known-issues/visual-regression-baselines.md`). Building those baselines
+caught a real WebKit-only theme-render race, fixed in `e2e/tests/theme-helper.ts`.
+
+**Consequences.** New tone-appropriate text gets a `text-*-text` token, not a
+raw Tailwind color, from here on — this is now load-bearing enough to belong
+in `CLAUDE.md`'s design-tokens section, not just this ADR. axe's
+`incomplete` results (contrast checks it can't confidently compute — a real
+blind spot, not just noise: it hid the BuggyAPI card's cyan bug through two
+clean scans) are logged, not gated, since most are legitimately
+unreviewable automatically; gating them would trade one blind spot for a
+flaky one.
+
+---
+
 ## ADR-13 — Communities: RLS-first feed with service-role-only notifications (2026-07-02)
 
 **Context.** The community feed (posts, questions, comments, likes, follows,

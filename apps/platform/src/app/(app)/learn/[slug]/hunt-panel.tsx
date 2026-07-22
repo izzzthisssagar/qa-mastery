@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@qa-mastery/ui";
-import { BugReportLab } from "./lab-panel";
-import { getHuntStatus, launchSandbox, type HuntStatus } from "../actions";
+import { BugReportLab } from "@/components/bug-report-lab";
+import { getHuntStatus, launchSandbox, submitBugReport, type HuntStatus } from "../actions";
 
 /**
  * The Bug Hunt milestone surface. Reuses the bug-report form, but tracks how
@@ -13,14 +13,16 @@ import { getHuntStatus, launchSandbox, type HuntStatus } from "../actions";
 export function HuntPanel({ slug }: { slug: string }) {
   const [status, setStatus] = useState<HuntStatus | null>(null);
   const [launching, setLaunching] = useState(false);
+  const [launchError, setLaunchError] = useState<string | null>(null);
 
   async function onLaunch() {
     setLaunching(true);
+    setLaunchError(null);
     try {
       const url = await launchSandbox(slug);
       window.open(url, "_blank");
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Could not launch sandbox");
+      setLaunchError(e instanceof Error ? e.message : "Could not launch sandbox");
     } finally {
       setLaunching(false);
     }
@@ -61,28 +63,34 @@ export function HuntPanel({ slug }: { slug: string }) {
     <section data-testid="bug-hunt" className="my-6">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-zinc-100">Practice Lab</h2>
-          <p className="text-sm text-zinc-400">Launch your sandbox and hunt for the seeded bugs.</p>
+          <h2 className="text-lg font-semibold text-foreground">Practice Lab</h2>
+          <p className="text-sm text-muted-foreground">Launch your sandbox and hunt for the seeded bugs.</p>
         </div>
         <Button onClick={onLaunch} disabled={launching} data-testid="launch-sandbox-btn">
           {launching ? "Provisioning..." : "Launch BuggyShop Sandbox"}
         </Button>
       </div>
 
+      {launchError && (
+        <p data-testid="launch-error" className="mb-4 text-sm text-danger-text">
+          {launchError}
+        </p>
+      )}
+
       <div
         className={
           complete
             ? "rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-5"
-            : "rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5"
+            : "rounded-2xl border border-border bg-surface/40 p-5"
         }
       >
         <div className="flex items-baseline justify-between">
-          <span className="text-sm font-semibold text-zinc-100">Bug Hunt progress</span>
-          <span data-testid="hunt-count" className="text-sm text-zinc-400">
+          <span className="text-sm font-semibold text-foreground">Bug Hunt progress</span>
+          <span data-testid="hunt-count" className="text-sm text-muted-foreground">
             {found} of {total} seeded bugs found
           </span>
         </div>
-        <div className="mt-3 h-2 w-full overflow-hidden rounded bg-zinc-800">
+        <div className="mt-3 h-2 w-full overflow-hidden rounded bg-surface-raised">
           <div
             className={complete ? "h-2 bg-emerald-400" : "h-2 bg-accent"}
             style={{ width: `${pct}%` }}
@@ -94,7 +102,7 @@ export function HuntPanel({ slug }: { slug: string }) {
             {status?.found.map((id) => (
               <li
                 key={id}
-                className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-200"
+                className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-xs text-success-text"
               >
                 {id}
               </li>
@@ -102,14 +110,14 @@ export function HuntPanel({ slug }: { slug: string }) {
           </ul>
         )}
         {complete && (
-          <p data-testid="hunt-complete" className="mt-3 text-sm font-semibold text-emerald-300">
+          <p data-testid="hunt-complete" className="mt-3 text-sm font-semibold text-success-text">
             🏅 Milestone complete — you found every seeded bug in this release.
           </p>
         )}
       </div>
 
       <div className="mt-4">
-        <BugReportLab slug={slug} onGraded={() => void refresh()} />
+        <BugReportLab onSubmit={(report) => submitBugReport(slug, report)} onGraded={() => void refresh()} />
       </div>
     </section>
   );

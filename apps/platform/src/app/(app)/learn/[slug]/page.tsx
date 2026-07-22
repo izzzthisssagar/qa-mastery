@@ -58,7 +58,7 @@ export default async function LessonPage({ params }: PageProps) {
   return (
     <LessonProgressProvider slug={slug}>
       <article className="mx-auto max-w-3xl pb-16">
-        <header className="mb-8 border-b border-zinc-800 pb-6">
+        <header className="mb-8 border-b border-border pb-6">
           <Reveal>
             <p className="text-xs font-semibold uppercase tracking-wide text-accent">
               {moduleMeta ? `${fm.module} · ${moduleMeta.title}` : fm.module}
@@ -68,13 +68,13 @@ export default async function LessonPage({ params }: PageProps) {
             <h1 className="mt-2 text-3xl font-semibold tracking-tight">{fm.title}</h1>
           </Reveal>
           <Reveal delay={0.16}>
-            <p className="mt-2 text-sm text-zinc-500">
+            <p className="mt-2 text-sm text-muted-foreground">
               ~{fm.duration_min} min · See it · Try it · Do it · Prove it
             </p>
           </Reveal>
         </header>
 
-        <div className="text-zinc-300">
+        <div className="text-foreground">
           <MDXRemote
             source={body}
             components={{

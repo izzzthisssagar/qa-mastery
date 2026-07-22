@@ -12,7 +12,7 @@ export function ApplyButton({ projectId, applied }: { projectId: string; applied
   const [pending, startTransition] = useTransition();
 
   if (done) {
-    return <p className="text-sm text-emerald-300">You&apos;ve applied to this project.</p>;
+    return <p className="text-sm text-success-text">You&apos;ve applied to this project.</p>;
   }
 
   function apply() {
@@ -36,14 +36,14 @@ export function ApplyButton({ projectId, applied }: { projectId: string; applied
           rows={3}
           placeholder="Optional: why you're a fit (your relevant proof)."
           aria-label="Application note"
-          className="w-full resize-y rounded-lg border border-zinc-700 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-100 outline-none focus-visible:border-zinc-500"
+          className="w-full resize-y rounded-lg border border-border bg-surface/60 px-3 py-2 text-sm text-foreground outline-none focus-visible:border-border"
         />
       )}
       <div className="flex items-center gap-3">
         <Button onClick={open ? apply : () => setOpen(true)} loading={pending}>
           {pending ? "Applying…" : open ? "Submit application" : "Apply"}
         </Button>
-        {error && <span className="text-sm text-red-300">{error}</span>}
+        {error && <span className="text-sm text-danger-text">{error}</span>}
       </div>
     </div>
   );

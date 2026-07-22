@@ -27,7 +27,7 @@ export function AuthBrandPanel() {
         };
 
   return (
-    <aside className="relative hidden flex-col justify-between overflow-hidden border-r border-zinc-800/80 bg-zinc-950 px-10 py-12 lg:flex lg:w-[44%] xl:px-14">
+    <aside className="relative hidden flex-col justify-between overflow-hidden border-r border-border/80 bg-background px-10 py-12 lg:flex lg:w-[44%] xl:px-14">
       {/* Atmosphere local to the panel. */}
       <div aria-hidden className="bg-grid absolute inset-0 -z-10 opacity-70" />
       <div aria-hidden className="bg-glow absolute inset-x-0 top-0 -z-10 h-[60%]" />
@@ -60,7 +60,7 @@ export function AuthBrandPanel() {
         </motion.p>
         <motion.h2
           {...rise(0.16)}
-          className="font-display mt-4 text-4xl font-bold leading-[1.05] tracking-tight text-zinc-50 xl:text-5xl"
+          className="font-display mt-4 text-4xl font-bold leading-[1.05] tracking-tight text-foreground xl:text-5xl"
         >
           Don&rsquo;t watch testing.
           <br />
@@ -75,21 +75,21 @@ export function AuthBrandPanel() {
               className="flex gap-4"
             >
               {/* zinc-400, not the muted token: the panel is dark-only
-                  (bg-zinc-950 in both themes) and zinc-500/600 fall below
+                  (bg-background in both themes) and zinc-500/600 fall below
                   WCAG AA 4.5:1 on it. */}
-              <span className="mt-0.5 font-mono text-xs text-zinc-400">
+              <span className="mt-0.5 font-mono text-xs text-muted-foreground">
                 {item.k}
               </span>
               <div>
-                <p className="text-sm font-semibold text-zinc-100">{item.t}</p>
-                <p className="text-sm text-zinc-400">{item.d}</p>
+                <p className="text-sm font-semibold text-foreground">{item.t}</p>
+                <p className="text-sm text-muted-foreground">{item.d}</p>
               </div>
             </motion.li>
           ))}
         </ul>
       </div>
 
-      <motion.p {...rise(0.5)} className="font-mono text-xs text-zinc-400">
+      <motion.p {...rise(0.5)} className="font-mono text-xs text-muted-foreground">
         Trusted by self-taught testers landing their first QA role.
       </motion.p>
     </aside>

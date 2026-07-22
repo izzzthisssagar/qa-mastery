@@ -55,15 +55,15 @@ export function FilterRail() {
   const chip = (on: boolean) =>
     "rounded-full border px-3 py-1 text-xs transition-colors " +
     (on
-      ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-200"
-      : "border-zinc-700 text-zinc-400 hover:border-zinc-500");
+      ? "border-emerald-500/50 bg-emerald-500/15 text-success-text"
+      : "border-border text-muted-foreground hover:border-border");
 
   const hasAny = specs.length > 0 || avail || verified;
 
   return (
     <nav aria-label="Tester filters" className="space-y-5">
       <div className="space-y-2">
-        <h2 className="text-xs font-medium uppercase tracking-wide text-zinc-500">Specialty</h2>
+        <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Specialty</h2>
         <div className="flex flex-wrap gap-2">
           {SPECIALTIES.map((s) => (
             <button
@@ -80,7 +80,7 @@ export function FilterRail() {
       </div>
 
       <div className="space-y-2">
-        <h2 className="text-xs font-medium uppercase tracking-wide text-zinc-500">Availability</h2>
+        <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Availability</h2>
         <div className="flex flex-wrap gap-2">
           {AVAILABILITY.map((a) => (
             <button
@@ -101,7 +101,7 @@ export function FilterRail() {
       </button>
 
       {hasAny && (
-        <button type="button" onClick={clearAll} className="block text-xs text-zinc-500 hover:text-zinc-300">
+        <button type="button" onClick={clearAll} className="block text-xs text-muted-foreground hover:text-foreground">
           Clear filters
         </button>
       )}

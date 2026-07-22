@@ -38,12 +38,12 @@ function Row({ a }: { a: Applicant }) {
   }
 
   return (
-    <li className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
+    <li className="space-y-2 rounded-lg border border-border bg-surface/40 p-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-xs text-zinc-400">{a.tester_id.slice(0, 8)}</span>
+        <span className="font-mono text-xs text-muted-foreground">{a.tester_id.slice(0, 8)}</span>
         <Badge tone={applicationTone[status] ?? "default"}>{labelFor(status)}</Badge>
       </div>
-      {a.note && <p className="text-sm text-zinc-300">{a.note}</p>}
+      {a.note && <p className="text-sm text-foreground">{a.note}</p>}
       <div className="flex flex-wrap gap-2">
         {ACTIONS.map((act) => (
           <button
@@ -51,20 +51,20 @@ function Row({ a }: { a: Applicant }) {
             type="button"
             disabled={pending || status === act.value}
             onClick={() => set(act.value)}
-            className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-zinc-500 disabled:opacity-40"
+            className="rounded-md border border-border px-2 py-1 text-xs text-foreground hover:border-border disabled:opacity-40"
           >
             {act.label}
           </button>
         ))}
       </div>
-      {error && <p className="text-xs text-red-300">{error}</p>}
+      {error && <p className="text-xs text-danger-text">{error}</p>}
     </li>
   );
 }
 
 export function ApplicantsList({ applicants }: { applicants: Applicant[] }) {
   if (applicants.length === 0) {
-    return <p className="text-sm text-zinc-500">No applications yet.</p>;
+    return <p className="text-sm text-muted-foreground">No applications yet.</p>;
   }
   return (
     <ul className="space-y-3">

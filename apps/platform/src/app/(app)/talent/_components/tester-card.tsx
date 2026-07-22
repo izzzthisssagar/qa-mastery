@@ -10,7 +10,7 @@ export function TesterCard({ tester }: { tester: TesterCardData }) {
   return (
     <Link
       href={`/talent/u/${tester.handle}`}
-      className="group flex flex-col gap-3 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 transition-colors hover:border-emerald-500/40"
+      className="group flex flex-col gap-3 rounded-xl border border-border bg-surface/40 p-4 transition-colors hover:border-emerald-500/40"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2.5">
@@ -27,8 +27,8 @@ export function TesterCard({ tester }: { tester: TesterCardData }) {
             />
           )}
           <div>
-            <h3 className="font-medium text-zinc-100">{tester.handle}</h3>
-            {tester.location && <p className="text-xs text-zinc-500">{tester.location}</p>}
+            <h3 className="font-medium text-foreground">{tester.handle}</h3>
+            {tester.location && <p className="text-xs text-muted-foreground">{tester.location}</p>}
           </div>
         </div>
         <Badge tone={availabilityTone[tester.availability] ?? "default"}>
@@ -36,7 +36,7 @@ export function TesterCard({ tester }: { tester: TesterCardData }) {
         </Badge>
       </div>
 
-      {tester.headline && <p className="line-clamp-2 text-sm text-zinc-400">{tester.headline}</p>}
+      {tester.headline && <p className="line-clamp-2 text-sm text-muted-foreground">{tester.headline}</p>}
 
       {tester.badges.length > 0 && (
         <div className="flex flex-wrap gap-1.5">

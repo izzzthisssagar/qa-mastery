@@ -12,6 +12,8 @@ import { useEffect, useRef, useState, useTransition, type ReactNode } from "reac
 import Link from "next/link";
 import { Spinner } from "@qa-mastery/ui";
 import { runSimulatorCode } from "@/app/(app)/simulator/actions";
+import { completeNote } from "./actions";
+import { useNoteProgress } from "./note-progress-context";
 
 /* ── Hook: the curiosity opener ─────────────────────────────────────────────*/
 export function Hook({ children }: { children: ReactNode }) {
@@ -61,23 +63,116 @@ export function Figure({ caption, children }: { caption?: string; children: Reac
   );
 }
 
-/* ── Video: links out (real embed lands when the note ships) ────────────────*/
+/* ── Video: inline embedded player, click-to-play facade ────────────────────*/
+
+/** Pull a provider + id out of a youtube.com/youtu.be/vimeo.com URL. Returns
+ *  null for anything else, which falls back to a plain link-out — better
+ *  than a broken embed for a URL shape nobody's seen yet. */
+function parseVideoHref(href: string): { provider: "youtube" | "vimeo"; id: string } | null {
+  try {
+    const url = new URL(href);
+    const host = url.hostname.replace(/^www\./, "");
+    if (host === "youtube.com" || host === "m.youtube.com") {
+      const v = url.searchParams.get("v");
+      if (v) return { provider: "youtube", id: v };
+      const shorts = url.pathname.match(/^\/shorts\/([^/]+)/);
+      if (shorts) return { provider: "youtube", id: shorts[1] };
+      return null;
+    }
+    if (host === "youtu.be") {
+      const id = url.pathname.slice(1);
+      return id ? { provider: "youtube", id } : null;
+    }
+    if (host === "vimeo.com") {
+      const id = url.pathname.slice(1);
+      return /^\d+$/.test(id) ? { provider: "vimeo", id } : null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function embedUrl(v: { provider: "youtube" | "vimeo"; id: string }): string {
+  return v.provider === "youtube"
+    ? `https://www.youtube-nocookie.com/embed/${v.id}?autoplay=1`
+    : `https://player.vimeo.com/video/${v.id}?autoplay=1`;
+}
+
 export function Video({ href, title, minutes }: { href: string; title: string; minutes?: number }) {
+  const [playing, setPlaying] = useState(false);
+  const video = parseVideoHref(href);
+
+  // Unrecognized URL shape: a working link-out beats a broken embed.
+  if (!video) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="my-6 flex items-center gap-4 rounded-2xl border border-border bg-surface p-4 transition-colors hover:border-accent/50"
+      >
+        <span className="grid size-12 shrink-0 place-items-center rounded-full border border-accent/40 bg-accent/15 text-lg text-accent">▶</span>
+        <span>
+          <span className="block text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+            Watch{minutes ? ` · ${minutes} min` : ""}
+          </span>
+          <span className="mt-0.5 block font-semibold text-foreground">{title}</span>
+        </span>
+      </a>
+    );
+  }
+
+  if (playing) {
+    return (
+      <div className="my-6 overflow-hidden rounded-2xl border border-border bg-black">
+        <div className="relative aspect-video w-full">
+          <iframe
+            src={embedUrl(video)}
+            title={title}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            className="absolute inset-0 size-full"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Click-to-play facade: a real <iframe> per video across 876 notes would
+  // load hundreds of embeds nobody's watching. YouTube's thumbnail CDN needs
+  // no API call; Vimeo has no equivalent no-auth endpoint, so it falls back
+  // to a plain play button on a dark card instead of a thumbnail.
+  const thumbnail =
+    video.provider === "youtube" ? `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg` : null;
+
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="my-6 flex items-center gap-4 rounded-2xl border border-border bg-surface p-4 transition-colors hover:border-accent/50"
+    <button
+      type="button"
+      onClick={() => setPlaying(true)}
+      aria-label={`Play video: ${title}`}
+      className="group relative my-6 block aspect-video w-full overflow-hidden rounded-2xl border border-border bg-surface"
     >
-      <span className="grid size-12 shrink-0 place-items-center rounded-full border border-accent/40 bg-accent/15 text-lg text-accent">▶</span>
-      <span>
-        <span className="block text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+      {thumbnail && (
+        // eslint-disable-next-line @next/next/no-img-element -- external thumbnail CDN, not an optimizable local asset
+        <img
+          src={thumbnail}
+          alt=""
+          className="absolute inset-0 size-full object-cover transition-opacity group-hover:opacity-80"
+        />
+      )}
+      <span className="absolute inset-0 flex items-center justify-center bg-black/30 transition-colors group-hover:bg-black/40">
+        <span className="grid size-16 shrink-0 place-items-center rounded-full border border-white/40 bg-black/50 text-2xl text-white backdrop-blur transition-transform group-hover:scale-110">
+          ▶
+        </span>
+      </span>
+      <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-4 text-left">
+        <span className="block text-[11px] font-medium uppercase tracking-widest text-white/70">
           Watch{minutes ? ` · ${minutes} min` : ""}
         </span>
-        <span className="mt-0.5 block font-semibold text-foreground">{title}</span>
+        <span className="mt-0.5 block font-semibold text-white">{title}</span>
       </span>
-    </a>
+    </button>
   );
 }
 
@@ -144,7 +239,7 @@ export function Quiz({
       </div>
       {done && (
         <div
-          className={`mt-3 rounded-xl border px-3.5 py-3 text-sm ${correct ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" : "border-bug/30 bg-bug/10 text-amber-200"}`}
+          className={`mt-3 rounded-xl border px-3.5 py-3 text-sm ${correct ? "border-emerald-400/30 bg-emerald-400/10 text-success-text" : "border-bug/30 bg-bug/10 text-warning-text"}`}
         >
           <b>{correct ? "Correct! " : "Not quite. "}</b>
           {explain}
@@ -205,9 +300,11 @@ export function Takeaways({ points }: { points: string[] }) {
   );
 }
 
-/* ── Complete: mark done + XP burst (client demo; wires to xp_events later) ──*/
+/* ── Complete: mark done + XP burst — persists via completeNote server action ─*/
 export function Complete({ xp = 10 }: { xp?: number }) {
-  const [done, setDone] = useState(false);
+  const { slug, initialDone } = useNoteProgress();
+  const [done, setDone] = useState(initialDone);
+  const [pending, startTransition] = useTransition();
   const btnRef = useRef<HTMLButtonElement>(null);
 
   function burst() {
@@ -239,14 +336,26 @@ export function Complete({ xp = 10 }: { xp?: number }) {
       <button
         ref={btnRef}
         type="button"
-        disabled={done}
+        disabled={done || pending}
         onClick={() => {
-          setDone(true);
-          burst();
+          if (done || pending) return;
+          startTransition(async () => {
+            try {
+              const res = await completeNote(slug);
+              setDone(true);
+              if (!res.alreadyDone) burst();
+            } catch {
+              // Leave the button enabled so the learner can retry.
+            }
+          });
         }}
-        className={`rounded-2xl px-8 py-3.5 text-base font-bold transition ${done ? "cursor-default border border-accent/40 bg-surface text-accent" : "bg-accent text-accent-foreground hover:brightness-105"}`}
+        className={`rounded-2xl px-8 py-3.5 text-base font-bold transition disabled:opacity-70 ${done ? "cursor-default border border-accent/40 bg-surface text-accent" : "bg-accent text-accent-foreground hover:brightness-105"}`}
       >
-        {done ? `✓ Completed · +${xp} XP earned` : `Mark complete · +${xp} XP`}
+        {done
+          ? `✓ Completed · +${xp} XP earned`
+          : pending
+            ? "Saving…"
+            : `Mark complete · +${xp} XP`}
       </button>
     </div>
   );
@@ -502,7 +611,7 @@ export function FlowAnimation({
       </div>
 
       <div className="mt-4 min-h-14 rounded-xl border border-accent/25 bg-background px-4 py-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-accent">
+        <p className="text-xs font-semibold uppercase tracking-wide text-accent-text">
           Stage {active + 1} of {nodes.length}
         </p>
         <p className="mt-1 text-sm text-foreground/90">{nodes[active].desc}</p>
@@ -654,7 +763,7 @@ export function HotspotImage({
           👆 Tap each numbered dot to explore the parts
         </p>
       )}
-      <p className={`mt-2 text-center text-xs font-medium ${done ? "text-accent" : "text-muted-foreground"}`}>
+      <p className={`mt-2 text-center text-xs font-medium ${done ? "text-accent-text" : "text-muted-foreground"}`}>
         {done ? "✓ All parts explored!" : `Explored ${seen.size} / ${pins.length}`}
       </p>
       <Credit credit={credit} creditHref={creditHref} />
@@ -716,7 +825,7 @@ export function PartsQuest({
           <p className="mt-1 text-sm text-muted-foreground">{parts[active].desc}</p>
         </div>
       )}
-      <p className={`mt-2 text-center text-xs font-medium ${done ? "text-accent" : "text-muted-foreground"}`}>
+      <p className={`mt-2 text-center text-xs font-medium ${done ? "text-accent-text" : "text-muted-foreground"}`}>
         {seen.size} / {parts.length} parts met
       </p>
       <Credit credit={credit} creditHref={creditHref} />
@@ -771,7 +880,7 @@ export function StepChecklist({ steps }: { steps: { text: string; detail?: strin
           </li>
         ))}
       </ol>
-      <p className={`mt-2 text-center text-xs font-medium ${pct === 100 ? "text-accent" : "text-muted-foreground"}`}>
+      <p className={`mt-2 text-center text-xs font-medium ${pct === 100 ? "text-accent-text" : "text-muted-foreground"}`}>
         {pct === 100 ? "✓ Mission complete — you know your machine!" : `${checked.size} / ${steps.length} done`}
       </p>
     </div>

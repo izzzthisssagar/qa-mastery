@@ -14,7 +14,7 @@ export default async function PostProjectPage() {
     <div className="space-y-6 py-2">
       <header className="space-y-1">
         <h1 className="font-display text-2xl font-bold tracking-tight">Post a testing project</h1>
-        <p className="text-sm text-zinc-400">
+        <p className="text-sm text-muted-foreground">
           Tell testers exactly what you need — the more specific, the better the match.
         </p>
       </header>

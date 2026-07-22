@@ -27,9 +27,9 @@ function SuccessBadge({ show }: { show: boolean }) {
         <motion.div
           initial={{ opacity: 0, y: -10, scale: 0.9 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          className="mt-4 flex items-center justify-center gap-2 rounded-lg bg-emerald-500/10 py-3 text-emerald-400 border border-emerald-500/20 shadow-lg shadow-emerald-500/5"
+          className="mt-4 flex items-center justify-center gap-2 rounded-lg bg-emerald-500/10 py-3 text-success-text border border-emerald-500/20 shadow-lg shadow-emerald-500/5"
         >
-          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-zinc-950">
+          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-accent-foreground">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>

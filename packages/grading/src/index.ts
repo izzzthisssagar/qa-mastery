@@ -83,3 +83,17 @@ export {
   type TaskRequirement,
   type TaskGradeResult,
 } from "./tasks";
+
+export {
+  gradeLabRun,
+  type LabCheck,
+  type LabCheckResult,
+  type LabGradeResult,
+  type LabRunEvidence,
+} from "./lab-checks";
+
+export {
+  computeStreakUpdate,
+  type StreakState,
+  type StreakUpdate,
+} from "./streak";

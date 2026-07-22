@@ -45,11 +45,11 @@ export default function BoundarySlider({ onMilestone }: WidgetProps) {
   return (
     <div
       data-testid="widget-boundary-slider"
-      className="rounded-xl border border-zinc-700 bg-zinc-900/70 p-5"
+      className="rounded-xl border border-border bg-surface/70 p-5"
     >
       <div className="mb-1 flex items-baseline justify-between">
-        <span className="text-sm font-semibold text-zinc-100">
-          Quantity <span className="font-normal text-zinc-500">(allowed: 1–99)</span>
+        <span className="text-sm font-semibold text-foreground">
+          Quantity <span className="font-normal text-muted-foreground">(allowed: 1–99)</span>
         </span>
         <span
           data-testid="boundary-verdict"
@@ -64,11 +64,11 @@ export default function BoundarySlider({ onMilestone }: WidgetProps) {
       </div>
 
       {/* number line: green where accepted, red where rejected */}
-      <div className="relative mt-4 h-6 w-full overflow-hidden rounded bg-zinc-800">
+      <div className="relative mt-4 h-6 w-full overflow-hidden rounded bg-surface-raised">
         <div className="absolute inset-y-0 left-0 bg-emerald-500/30" style={{ width: "99%" }} />
         <div className="absolute inset-y-0 right-0 bg-red-500/30" style={{ width: "1%" }} />
         <div
-          className="absolute top-0 h-6 w-0.5 bg-zinc-100"
+          className="absolute top-0 h-6 w-0.5 bg-foreground"
           style={{ left: `calc(${value}% - 1px)` }}
           aria-hidden
         />
@@ -84,7 +84,7 @@ export default function BoundarySlider({ onMilestone }: WidgetProps) {
         onChange={(e) => handleChange(Number(e.target.value))}
         className="mt-3 w-full accent-emerald-400"
       />
-      <div className="mt-1 flex justify-between text-xs text-zinc-500">
+      <div className="mt-1 flex justify-between text-xs text-muted-foreground">
         <span>0</span>
         <span>{MIN_LABEL} (min)</span>
         <span>{MAX_LABEL} (max)</span>
@@ -98,7 +98,7 @@ export default function BoundarySlider({ onMilestone }: WidgetProps) {
             type="button"
             onClick={() => handleChange(b)}
             data-testid={`boundary-jump-${b}`}
-            className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 hover:border-zinc-500 hover:text-zinc-50"
+            className="rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:border-border hover:text-foreground"
           >
             Jump to {b}
           </button>
@@ -116,7 +116,7 @@ export default function BoundarySlider({ onMilestone }: WidgetProps) {
           to production constantly.
         </p>
       ) : (
-        <p className="mt-4 text-xs text-zinc-500" data-testid="boundary-hint">
+        <p className="mt-4 text-xs text-muted-foreground" data-testid="boundary-hint">
           Boundaries explored: {boundariesSeen}/4. Try the edges — 0, 1, 99, 100 — not the middle.
         </p>
       )}
