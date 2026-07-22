@@ -1,4 +1,12 @@
-import { chapterForLab, labForChapter, findNoteLeaf, getNote, type NoteLab } from "@qa-mastery/curriculum";
+import {
+  chapterForLab,
+  labForChapter,
+  trackCapstoneForChapter,
+  findNoteLeaf,
+  getNote,
+  type NoteLab,
+  type NoteTrackCapstone,
+} from "@qa-mastery/curriculum";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
@@ -51,6 +59,23 @@ export async function topicsRemaining(
     .in("note_slug", slugs);
 
   return readable.length - (data?.length ?? 0);
+}
+
+/**
+ * Resolve a track capstone anchored at this chapter, or throw. Same trust
+ * boundary as requireNoteLab: a forged chapterSlug can never reach the grader
+ * or write a `note_slug` row unless the registry actually anchors a capstone
+ * there.
+ */
+export function requireTrackCapstone(chapterSlug: string): {
+  capstone: NoteTrackCapstone;
+  moduleSlug: string;
+  topicSlugs: string[];
+} {
+  const chapter = chapterForLab(chapterSlug);
+  const capstone = trackCapstoneForChapter(chapterSlug);
+  if (!chapter || !capstone) throw new Error("Capstone not available");
+  return { capstone, moduleSlug: chapter.moduleSlug, topicSlugs: chapter.topicSlugs };
 }
 
 /** Convenience wrapper: resolve the lab, then check how many of its chapter's

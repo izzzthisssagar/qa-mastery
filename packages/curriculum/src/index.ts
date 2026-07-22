@@ -59,3 +59,9 @@ export {
   type NoteLab,
   type NoteLabKind,
 } from "./notes/labs";
+
+export {
+  NOTE_TRACK_CAPSTONES,
+  trackCapstoneForChapter,
+  type NoteTrackCapstone,
+} from "./notes/track-capstones";

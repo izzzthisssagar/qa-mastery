@@ -2,11 +2,20 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MDXRemote } from "next-mdx-remote/rsc";
-import { listNoteFiles, getNote, findNoteModule, findNoteLeaf, labForChapter } from "@qa-mastery/curriculum";
+import {
+  listNoteFiles,
+  getNote,
+  findNoteModule,
+  findNoteLeaf,
+  labForChapter,
+  trackCapstoneForChapter,
+} from "@qa-mastery/curriculum";
 import { mdxComponents } from "@/app/(app)/learn/[slug]/mdx-components";
 import { getNoteCompletion } from "../../../actions";
 import { getNoteLabState } from "../../../lab-actions";
+import { getNoteCapstoneState } from "../../../capstone-actions";
 import { ChapterLab } from "../../../chapter-lab";
+import { TrackCapstone } from "../../../track-capstone";
 import { NoteProgressProvider } from "../../../note-progress-context";
 import {
   AskCommunity,
@@ -104,6 +113,13 @@ export default async function NoteTopicPage({
     isLastTopic && labForChapter(chapterLabSlug)
       ? await getNoteLabState(chapterLabSlug)
       : null;
+  // A track capstone anchors at the same "last topic of the chapter" position
+  // as a chapter lab, on a chapter that has no chapter lab of its own — see
+  // notes/track-capstones.ts for why it can't be keyed like a normal lab.
+  const capstoneState =
+    isLastTopic && trackCapstoneForChapter(chapterLabSlug)
+      ? await getNoteCapstoneState(chapterLabSlug)
+      : null;
 
   // Related notes are authored as "module/chapter/topic" triples; resolve each
   // against the taxonomy + disk so a stale or planned-only reference never 404s.
@@ -153,6 +169,7 @@ export default async function NoteTopicPage({
       </NoteProgressProvider>
 
       {labState && <ChapterLab state={labState} />}
+      {capstoneState && <TrackCapstone state={capstoneState} />}
 
       {related.length > 0 && (
         <div className="mt-10 border-t border-border pt-6">
