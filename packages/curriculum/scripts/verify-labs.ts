@@ -449,6 +449,166 @@ pct = round(covered / total * 100, 1)
 verdict = "PASS" if pct >= 80 else "FAIL"
 print(f"{pct}% {verdict}")
 `,
+  "api-testing-fundamentals/status-codes-and-rest": `
+codes = [200, 201, 301, 404, 401, 500, 503, 204]
+from collections import Counter
+fam = Counter(f"{c // 100}xx" for c in codes)
+for k in ["2xx", "3xx", "4xx", "5xx"]:
+    print(f"{k}: {fam.get(k, 0)}")
+`,
+  "api-test-automation/contract-and-schema-testing": `
+responses = [
+    {"id": 1, "name": "amy", "email": "amy@x.com"},
+    {"id": 2, "name": "ben"},
+    {"id": 3, "name": "cleo", "email": "cleo@x.com"},
+    {"id": 4, "email": "drew@x.com"},
+]
+required = {"id", "name", "email"}
+for r in responses:
+    if not required.issubset(r.keys()):
+        print(r["id"])
+`,
+  "docker-and-containers-for-testers/dockerfiles-and-compose": `
+dockerfile_lines = [
+    "FROM python:3.12",
+    "COPY requirements.txt .",
+    "RUN pip install -r requirements.txt",
+    "COPY . .",
+    'CMD ["python", "app.py"]',
+]
+changed_index = 3
+for line in dockerfile_lines[changed_index:]:
+    print(line)
+`,
+  "kubernetes-and-test-infrastructure/test-workloads-on-k8s": `
+attempts = ["fail", "fail", "pass", "fail"]
+backoff_limit = 1
+max_attempts = backoff_limit + 1
+window = attempts[:max_attempts]
+if "pass" in window:
+    print(f"Job SUCCEEDED after {window.index('pass') + 1} attempts")
+else:
+    print(f"Job FAILED after {max_attempts} attempts")
+`,
+  "system-design-for-testers/scaling-building-blocks": `
+servers = ["web-1", "web-2", "web-3"]
+num_requests = 7
+for n in range(1, num_requests + 1):
+    server = servers[(n - 1) % len(servers)]
+    print(f"request {n} -> {server}")
+`,
+  "agile-and-devops-for-testers/tester-in-a-sprint": `
+dod_criteria = ["code reviewed", "unit tests passing", "docs updated", "QA signed off"]
+story_criteria_met = {
+    "code reviewed": True,
+    "unit tests passing": True,
+    "docs updated": False,
+    "QA signed off": True,
+}
+missing = [c for c in dod_criteria if not story_criteria_met.get(c, False)]
+if missing:
+    print("NOT DONE")
+    for m in missing:
+        print(m)
+else:
+    print("DONE")
+`,
+  "non-functional-testing-intro/compatibility": `
+required_matrix = [
+    ("chrome", "windows"),
+    ("chrome", "mac"),
+    ("safari", "mac"),
+    ("firefox", "linux"),
+]
+tested_matrix = {("chrome", "windows"), ("safari", "mac")}
+for combo in required_matrix:
+    if combo not in tested_matrix:
+        print(f"{combo[0]}/{combo[1]}")
+`,
+  "performance-testing/metrics": `
+import math
+
+response_times = [220, 195, 310, 180, 240, 205, 260, 190, 275, 230,
+                   215, 250, 265, 200, 235, 210, 290, 1800, 225, 245]
+srt = sorted(response_times)
+rank = math.ceil(0.95 * len(srt))
+print(srt[rank - 1])
+`,
+  "accessibility-testing/automated-a11y-audits": `
+images = [
+    {"src": "logo.png", "alt": "Company logo"},
+    {"src": "banner.jpg", "alt": ""},
+    {"src": "icon1.png", "alt": "icon1.png"},
+    {"src": "hero.jpg", "alt": "Team celebrating product launch"},
+]
+for img in sorted(images, key=lambda i: i["src"]):
+    if not img["alt"] or img["alt"] == img["src"]:
+        print(img["src"])
+`,
+  "mobile-testing/device-and-os-matrix": `
+breakpoints = [
+    (0, 599, "mobile"),
+    (600, 1023, "tablet"),
+    (1024, 10000, "desktop"),
+]
+widths_to_check = [375, 768, 1440, 600, 1023]
+for w in widths_to_check:
+    for lo, hi, name in breakpoints:
+        if lo <= w <= hi:
+            print(f"{w}: {name}")
+            break
+`,
+  "test-management-and-reporting/metrics-and-reporting": `
+runs = [
+    {"run": 1, "passed": 80, "total": 100},
+    {"run": 2, "passed": 78, "total": 100},
+    {"run": 3, "passed": 92, "total": 100},
+]
+prev_rate = None
+for r in runs:
+    rate = r["passed"] / r["total"] * 100
+    if prev_rate is not None and rate < prev_rate:
+        print(f"run {r['run']}: {prev_rate}% -> {rate}% (regression)")
+    prev_rate = rate
+`,
+  "ai-and-the-modern-tester/ai-powered-test-automation": `
+existing_tests = {
+    "test_login_valid_password",
+    "test_login_empty_username",
+    "test_checkout_flow",
+}
+ai_suggestions = [
+    "test_login_valid_password",
+    "Test Login Valid Password",
+    "test_search_results",
+    "test_checkout_flow",
+]
+
+def normalize(s):
+    return s.lower().replace(" ", "_")
+
+redundant = [s for s in ai_suggestions if normalize(s) in existing_tests]
+new_ones = [s for s in ai_suggestions if normalize(s) not in existing_tests]
+for s in redundant:
+    print(s)
+print(f"{len(new_ones)} new suggestion: {', '.join(new_ones)}")
+`,
+  "interviews/technical-rounds": `
+log = ["run-1", "run-2", "run-3", "run-2", "run-4", "run-1"]
+seen = set()
+for entry in log:
+    if entry in seen:
+        print(entry)
+        break
+    seen.add(entry)
+`,
+  "a-portfolio-that-gets-interviews/the-3-repo-portfolio": `
+required_sections = ["Overview", "Setup", "Test Strategy", "Results", "Lessons Learned"]
+readme_headings = ["Overview", "Setup", "Results"]
+for section in required_sections:
+    if section not in readme_headings:
+        print(section)
+`,
 };
 
 async function grade(lab: (typeof NOTE_LABS)[number], code: string) {
