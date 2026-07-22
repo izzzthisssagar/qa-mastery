@@ -281,6 +281,174 @@ ratio = round(contrast_ratio(fg, bg), 2)
 verdict = "PASS" if ratio >= 4.5 else "FAIL"
 print(f"{ratio}:1 {verdict}")
 `,
+  "sql-and-databases-for-testers/reading-data": `
+import sqlite3
+
+conn = sqlite3.connect(":memory:")
+c = conn.cursor()
+c.execute("CREATE TABLE users (id INTEGER, name TEXT)")
+c.execute("CREATE TABLE orders (id INTEGER, user_id INTEGER, amount INTEGER)")
+c.executemany("INSERT INTO users VALUES (?,?)", [(1, "amy"), (2, "ben"), (3, "cleo")])
+c.executemany(
+    "INSERT INTO orders VALUES (?,?,?)",
+    [(1, 1, 50), (2, 1, 30), (3, 2, 20), (4, 3, 10), (5, 3, 15), (6, 3, 5)],
+)
+
+c.execute("""
+    SELECT u.name, SUM(o.amount) as total
+    FROM users u JOIN orders o ON u.id = o.user_id
+    GROUP BY u.name
+    HAVING COUNT(o.id) > 1
+    ORDER BY total DESC
+""")
+for name, total in c.fetchall():
+    print(f"{name}: {total}")
+`,
+  "sql-and-databases-for-testers/verifying-the-app-against-the-db": `
+ui_totals = {"order_1": 100, "order_2": 50, "order_3": 75}
+db_totals = {"order_1": 100, "order_2": 55, "order_3": 75}
+for k in sorted(ui_totals):
+    if ui_totals[k] != db_totals[k]:
+        print(f"{k}: ui={ui_totals[k]} db={db_totals[k]}")
+`,
+  "relational-databases-engineer-level/sql-mastery": `
+import sqlite3
+
+conn = sqlite3.connect(":memory:")
+c = conn.cursor()
+c.execute("CREATE TABLE sales (id INTEGER, name TEXT, category TEXT, amount INTEGER)")
+c.executemany(
+    "INSERT INTO sales VALUES (?,?,?,?)",
+    [
+        (1, "widget-a", "tools", 100),
+        (2, "widget-b", "tools", 150),
+        (3, "widget-c", "tools", 90),
+        (4, "gadget-x", "electronics", 200),
+        (5, "gadget-y", "electronics", 180),
+    ],
+)
+c.execute("""
+    WITH ranked AS (
+      SELECT category, name, amount,
+             ROW_NUMBER() OVER (PARTITION BY category ORDER BY amount DESC) as rn
+      FROM sales
+    )
+    SELECT category, name, amount FROM ranked WHERE rn = 1 ORDER BY category
+""")
+for category, name, amount in c.fetchall():
+    print(f"{category}: {name} ({amount})")
+`,
+  "relational-databases-engineer-level/schema-design": `
+rows = [
+    {"customer_id": 1, "email": "amy@x.com"},
+    {"customer_id": 1, "email": "amy@x.com"},
+    {"customer_id": 2, "email": "ben@x.com"},
+    {"customer_id": 2, "email": "ben.new@x.com"},
+    {"customer_id": 3, "email": "cleo@x.com"},
+]
+emails_by_id = {}
+for row in rows:
+    emails_by_id.setdefault(row["customer_id"], set()).add(row["email"])
+for cid in sorted(cid for cid, emails in emails_by_id.items() if len(emails) > 1):
+    print(cid)
+`,
+  "relational-databases-engineer-level/indexes-and-performance": `
+plan_lines = [
+    "SEARCH orders USING INDEX idx_user_id (user_id=?)",
+    "SCAN products",
+    "SEARCH users USING INTEGER PRIMARY KEY (rowid=?)",
+    "SCAN order_items",
+]
+for line in plan_lines:
+    if line.startswith("SCAN"):
+        print(line.split(" ", 1)[1])
+`,
+  "relational-databases-engineer-level/transactions-and-concurrency": `
+balance = 100
+a_read = balance
+b_read = balance
+a_write = a_read - 30
+b_write = b_read - 20
+naive_result = b_write
+correct_result = balance - 30 - 20
+print(f"naive result: {naive_result}")
+print(f"correct result: {correct_result}")
+`,
+  "nosql-and-modern-data/redis-and-caching-bugs": `
+cache = [
+    {"key": "user:1", "cached_at": 0, "ttl": 60},
+    {"key": "user:2", "cached_at": 0, "ttl": 30},
+    {"key": "user:3", "cached_at": 50, "ttl": 60},
+]
+now = 90
+for key in sorted(e["key"] for e in cache if now - e["cached_at"] >= e["ttl"]):
+    print(key)
+`,
+  "automation-foundations/the-automation-pyramid": `
+tests = [
+    ("t1", "unit"), ("t2", "unit"), ("t3", "unit"),
+    ("t4", "integration"),
+    ("t5", "e2e"), ("t6", "e2e"), ("t7", "e2e"), ("t8", "e2e"),
+]
+counts = {"unit": 0, "integration": 0, "e2e": 0}
+for _, level in tests:
+    counts[level] += 1
+print(f"unit: {counts['unit']}")
+print(f"integration: {counts['integration']}")
+print(f"e2e: {counts['e2e']}")
+print(f"ice-cream-cone: {counts['e2e'] > counts['unit']}")
+`,
+  "automation-foundations/pitfalls": `
+history = {
+    "test_login": ["pass", "pass", "pass"],
+    "test_checkout": ["pass", "fail", "pass"],
+    "test_search": ["fail", "fail", "fail"],
+    "test_cart": ["pass", "fail", "fail", "pass"],
+}
+for name in sorted(name for name, runs in history.items() if set(runs) == {"pass", "fail"}):
+    print(name)
+`,
+  "test-frameworks/data-driven-testing": `
+rows = [
+    ("amy", "longenough1"),
+    ("ben", "short"),
+    ("cleo", ""),
+    ("drew", "alsolongpw12"),
+]
+for name, pw in rows:
+    verdict = "PASS" if len(pw) >= 8 else "FAIL"
+    print(f"{name}: {verdict}")
+`,
+  "framework-design/config-and-data": `
+configs = {
+    "dev": {"base_url": "https://dev.example.com"},
+    "staging": {"base_url": "https://staging.example.com"},
+}
+default_url = "https://prod.example.com"
+envs_to_check = ["staging", "prod"]
+for env in envs_to_check:
+    url = configs.get(env, {}).get("base_url", default_url)
+    print(f"{env}: {url}")
+`,
+  "automation-in-cicd/github-actions": `
+matrix = {"os": ["ubuntu", "windows"], "browser": ["chrome", "firefox", "webkit"]}
+combos = [f"{o}/{b}" for o in matrix["os"] for b in matrix["browser"]]
+print(f"{len(combos)} jobs")
+for combo in combos:
+    print(combo)
+`,
+  "automation-in-cicd/gitlab-ci-and-quality-gates": `
+files = [
+    ("auth.py", 120, 100),
+    ("checkout.py", 80, 40),
+    ("utils.py", 50, 45),
+]
+total = sum(t for _, t, _ in files)
+covered = sum(cv for _, _, cv in files)
+pct = round(covered / total * 100, 1)
+verdict = "PASS" if pct >= 80 else "FAIL"
+print(f"{pct}% {verdict}")
+`,
 };
 
 async function grade(lab: (typeof NOTE_LABS)[number], code: string) {
