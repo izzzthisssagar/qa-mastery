@@ -1,21 +1,46 @@
-# Unresolved — `/dashboard` renders blank on first paint immediately after signup redirect
+# Resolved — `/dashboard` (and every `(app)` route) rendered blank on first paint under slow JS
 
-**Status:** found, not root-caused · **Severity:** unknown (self-heals on reload; blast radius unconfirmed) · **Filed:** 2026-07-22
+**Status:** root-caused & fixed 2026-07-22 · **Severity:** launch-blocker (real UX regression, not test-infra) · **Filed:** 2026-07-22
 
-## What was observed
+## Root cause
 
-While doing the visual verification this project had never had (no Chrome
-extension connected all session — see [[Claude Coordination.md]] 2026-07-22
-entries), a Playwright screenshot taken right after `signUpFreshLearner`
-redirects to `/dashboard` (3s settle time already given) came back **solid
-background, zero visible text or cards** — not an error page, not a loading
-skeleton, just blank.
+`(app)/template.tsx` wraps every authenticated route's children in
+`<Reveal y={8}>` (`components/motion.tsx`). `Reveal` defaults `fade={true}`,
+which sets `initial={{ opacity: 0, y }}` — the entire page content starts
+invisible until React hydrates and the mount animation plays. Because
+`template.tsx` is the shared wrapper for the whole `(app)` route group, this
+gated first paint on **every** authenticated page (dashboard, learn, notes,
+talent, community, …), not just dashboard — the doc's own JSDoc on `Reveal`
+already warned this yields "a blank hero for slow-JS visitors."
 
-A second screenshot of the exact same page, taken after nothing but
-`page.reload()`, rendered **perfectly** — full styling, XP stats, all 9
-tracks, every card.
+`dashboard/page.tsx` and `learn/[slug]/page.tsx` additionally wrap their own
+above-the-fold hero content (the LCP heading) in a second, nested `<Reveal>`
+with the same `fade=true` default — so even fixing the template alone would
+have left the H1 opacity-gated on those two routes.
 
-## What was ruled out before filing this
+This explains every observation in the original repro: content/CSS/layout
+were all correct (nothing was missing — see "What was ruled out" below,
+kept for record), the composited paint just had `opacity: 0` on the whole
+subtree until motion's mount animation resolved. Slower JS (throttled CPU/
+network, or a cold post-signup redirect where nothing is warm yet) simply
+widens the window where a screenshot lands mid-fade or pre-hydration.
+
+## The fix
+
+- `(app)/template.tsx`: `<Reveal y={8} fade={false}>` — the shared
+  authenticated-shell wrapper no longer opacity-gates any route.
+- `(app)/dashboard/page.tsx`: the hero `Reveal` (page title + subtitle) is
+  now `fade={false}`.
+- `(app)/learn/[slug]/page.tsx`: the three header `Reveal`s (module tag,
+  lesson title, duration line) are now `fade={false}`.
+- Below-the-fold content (staggered dashboard cards, `RevealOnView` sections
+  elsewhere) is untouched — those aren't visible at first paint regardless.
+- Repro test: `e2e/tests/dashboard-first-paint.spec.ts` (chromium, CDP 6x
+  CPU throttle + slow-4G network emulation) asserts the dashboard H1's
+  computed opacity is 1 immediately after `domcontentloaded`, across 20
+  consecutive cold-cache reloads.
+
+## What was ruled out before root-causing this (kept for record)
 
 - **Not missing content.** `document.body.innerText` on the blank paint
   dumped the entire dashboard text correctly — XP stats, "Nothing started
@@ -29,40 +54,5 @@ tracks, every card.
   `rgb(244, 244, 245)` — real near-black-on-near-white contrast, not a
   color collision.
 - **Not `<main>` being hidden.** Computed style on `<main>` during the blank
-  paint: `display=block opacity=1 visibility=visible height=4618px`.
-
-None of the usual suspects for a "looks blank" bug were true. Content,
-styles, and layout were all individually correct — the composited paint
-just didn't show it.
-
-## What this looks like
-
-Same shape as [[hydration-double-render]] and [[webkit-save-stall]]: a
-transient client-side race specific to the moment right after a
-client-side redirect into a freshly-hydrated page, not a real absence of
-anything. `/dashboard` is reached via `router.push` (or equivalent) from
-`/signup` on a successful auth call — a full top-level navigation, not a
-link click from within the app shell — which may be what's different about
-this path versus every other page transition in the same test run (the
-same Playwright session's subsequent navigations to `/notes/.../...`
-painted correctly on the very first try, no reload needed).
-
-## Why this wasn't chased further here
-
-Found incidentally during a verification pass (Phase C/D labs work,
-2026-07-22), not while working on the dashboard itself — nothing this
-session touched renders or routes `/dashboard`. Root-causing this properly
-needs the same kind of instrumented repro the hydration-double-render
-investigation used (raw SSR HTML vs. early/late DOM polls), which is real
-investigative work, not a side-effect of an unrelated verification pass.
-
-## Open questions for whoever picks this up
-
-- Does a **normal** dashboard visit (clicking a nav link from elsewhere in
-  the app, not landing via the signup redirect) reproduce it, or is it
-  specific to the post-auth client redirect?
-- Is this the same root cause as `hydration-double-render` (a transient
-  double-render that reconciles down), or a distinct issue where the first
-  paint commits with a stale/incomplete state?
-- Does it reproduce in `pnpm dev` as well as the production build this was
-  found against (`next start`, via Playwright's `webServer`)?
+  paint: `display=block opacity=1 visibility=visible height=4618px` — the
+  `opacity: 0` was on the inner `Reveal` `motion.div`, not `<main>` itself.

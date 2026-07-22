@@ -55,7 +55,7 @@ export default async function DashboardPage() {
       </div>
 
       <div className="mx-auto max-w-4xl">
-        <Reveal>
+        <Reveal fade={false}>
           <div className="flex items-start justify-between gap-4">
             <p className="text-xs font-medium uppercase tracking-widest text-accent">Dashboard</p>
           </div>
