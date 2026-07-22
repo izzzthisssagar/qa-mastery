@@ -431,6 +431,355 @@ export const NOTE_LABS: readonly NoteLab[] = [
     target: "buggyshop",
     minValidBugs: 1,
   },
+
+  // ── Manual QA · qa-foundations ───────────────────────────────────────────
+  {
+    chapterSlug: "qa-foundations/the-seven-principles",
+    title: "Find where 80% of the bugs live",
+    brief:
+      "Defect clustering says most bugs cluster in a few modules. Given this run's bug counts per module, print the fewest modules — ranked by bug count — whose combined total reaches at least 80% of all bugs.",
+    kind: "code_run",
+    xp: 45,
+    language: "python",
+    starter: [
+      "counts = {",
+      '    "checkout": 12,',
+      '    "search": 5,',
+      '    "login": 2,',
+      '    "profile": 1,',
+      "}",
+      "",
+      "# Rank modules by bug count (highest first), then print the fewest of",
+      "# them — one per line — whose running total reaches at least 80% of",
+      "# the sum of all counts.",
+    ].join("\n"),
+    checks: [
+      { label: "Prints the modules that cross 80% of all bugs", equals: "checkout\nsearch" },
+      { label: "Ranks modules by bug count rather than hardcoding the order", sourceContains: "sort" },
+      { label: "Computes the 80% threshold instead of guessing how many modules", sourceContains: "0.8" },
+      { label: "Does not just print the literal answer", sourceAbsent: "checkout\\nsearch" },
+    ],
+  },
+
+  // ── Manual QA · test-design-techniques ───────────────────────────────────
+  {
+    chapterSlug: "test-design-techniques/equivalence-partitioning",
+    title: "Split ages into valid and invalid classes",
+    brief:
+      "A signup form accepts ages 18 to 65 inclusive. Partition the ages below into the valid and invalid equivalence classes, printing each list comma-separated in original order.",
+    kind: "code_run",
+    xp: 40,
+    language: "python",
+    starter: [
+      "ages = [15, 18, 40, 65, 70, -5, 66]",
+      "",
+      "# Print two lines:",
+      "#   valid: 18, 40, 65",
+      "#   invalid: 15, 70, -5, 66",
+      "# Partition by the 18-65 rule, don't just copy the numbers across.",
+    ].join("\n"),
+    checks: [
+      { label: "Prints the valid class correctly", contains: "valid: 18, 40, 65" },
+      { label: "Prints the invalid class correctly", contains: "invalid: 15, 70, -5, 66" },
+      { label: "Filters by the boundary rule", sourceContains: "<=" },
+      { label: "Walks the list rather than hand-picking", sourceContains: "for" },
+    ],
+  },
+  {
+    chapterSlug: "test-design-techniques/boundary-value-analysis",
+    title: "Generate the boundary values",
+    brief:
+      "A field accepts 1 to 10. Print the six boundary values — min-1, min, min+1, max-1, max, max+1 — comma-separated, computed from the two limits below.",
+    kind: "code_run",
+    xp: 40,
+    language: "python",
+    starter: [
+      "min_val = 1",
+      "max_val = 10",
+      "",
+      "# Print: 0, 1, 2, 9, 10, 11",
+      "# Compute each value from min_val/max_val — don't type the numbers directly.",
+    ].join("\n"),
+    checks: [
+      { label: "Prints the six boundary values in order", equals: "0, 1, 2, 9, 10, 11" },
+      { label: "Derives them from the limits", sourceContains: "min_val" },
+      { label: "Does not just type the answer", sourceAbsent: '"0, 1, 2, 9, 10, 11"' },
+    ],
+  },
+  {
+    chapterSlug: "test-design-techniques/decision-tables",
+    title: "Collapse the duplicate rules",
+    brief:
+      "A discount decision table has a duplicate row from a copy-paste. Count how many distinct rules remain after collapsing exact duplicates.",
+    kind: "code_run",
+    xp: 45,
+    language: "python",
+    starter: [
+      "rules = [",
+      '    (True, True, "20%"),',
+      '    (True, False, "10%"),',
+      '    (False, True, "10%"),',
+      '    (False, False, "0%"),',
+      '    (True, True, "20%"),',
+      "]",
+      "",
+      "# Print exactly: 4 distinct rules",
+    ].join("\n"),
+    checks: [
+      { label: "Prints the collapsed rule count", equals: "4 distinct rules" },
+      { label: "Deduplicates instead of counting the raw list", sourceContains: "set(" },
+    ],
+  },
+  {
+    chapterSlug: "test-design-techniques/state-transition",
+    title: "Check the workflow transitions",
+    brief:
+      "A content workflow only allows certain moves between states. For each transition below, print whether it's VALID or INVALID according to the map.",
+    kind: "code_run",
+    xp: 45,
+    language: "python",
+    starter: [
+      "valid_transitions = {",
+      '    "draft": ["submitted"],',
+      '    "submitted": ["approved", "rejected"],',
+      '    "approved": ["published"],',
+      '    "rejected": ["draft"],',
+      '    "published": [],',
+      "}",
+      "transitions_to_check = [",
+      '    ("draft", "submitted"),',
+      '    ("submitted", "published"),',
+      '    ("approved", "published"),',
+      '    ("published", "draft"),',
+      "]",
+      "",
+      "# For each (from_state, to_state) pair, print one line:",
+      "#   from_state -> to_state: VALID",
+      "# or",
+      "#   from_state -> to_state: INVALID",
+    ].join("\n"),
+    checks: [
+      {
+        label: "Judges all four transitions correctly",
+        equals:
+          "draft -> submitted: VALID\nsubmitted -> published: INVALID\napproved -> published: VALID\npublished -> draft: INVALID",
+      },
+      { label: "Looks the transition up in the map", sourceContains: "valid_transitions" },
+      { label: "Walks the list of transitions", sourceContains: "for" },
+    ],
+  },
+
+  // ── Manual QA · test-artifacts ───────────────────────────────────────────
+  {
+    chapterSlug: "test-artifacts/traceability",
+    title: "Find the requirements coverage gap",
+    brief:
+      "Every requirement should have at least one test case linked to it. Print the requirement IDs that have zero linked cases, in the order they appear in the requirements list.",
+    kind: "code_run",
+    xp: 40,
+    language: "python",
+    starter: [
+      'requirements = ["REQ-1", "REQ-2", "REQ-3", "REQ-4"]',
+      'case_requirement_links = ["REQ-1", "REQ-1", "REQ-3"]',
+      "",
+      "# Print the requirement IDs with no linked case, one per line:",
+      "#   REQ-2",
+      "#   REQ-4",
+    ].join("\n"),
+    checks: [
+      { label: "Finds both uncovered requirements", equals: "REQ-2\nREQ-4" },
+      { label: "Checks coverage instead of hardcoding the gaps", sourceContains: "case_requirement_links" },
+      { label: "Walks the requirements list", sourceContains: "for" },
+    ],
+  },
+
+  // ── Manual QA · levels-and-types-of-testing ──────────────────────────────
+  {
+    chapterSlug: "levels-and-types-of-testing/functional-and-regression",
+    title: "Pick the regression subset from an impact analysis",
+    brief:
+      "Two files changed. Print the names of every test whose coverage overlaps those files — that's the regression subset, not the whole suite — sorted alphabetically.",
+    kind: "code_run",
+    xp: 45,
+    language: "python",
+    starter: [
+      'changed_files = {"checkout.py", "cart.py"}',
+      "test_coverage = {",
+      '    "test_login": {"login.py"},',
+      '    "test_checkout_flow": {"checkout.py", "payment.py"},',
+      '    "test_cart_totals": {"cart.py"},',
+      '    "test_search": {"search.py"},',
+      "}",
+      "",
+      "# Print the impacted test names, one per line, sorted alphabetically:",
+      "#   test_cart_totals",
+      "#   test_checkout_flow",
+    ].join("\n"),
+    checks: [
+      { label: "Finds exactly the impacted tests", equals: "test_cart_totals\ntest_checkout_flow" },
+      { label: "Compares coverage against the changed files", sourceContains: "changed_files" },
+      { label: "Sorts instead of trusting dict order", sourceContains: "sort" },
+    ],
+  },
+  {
+    chapterSlug: "levels-and-types-of-testing/smoke-and-sanity",
+    title: "Pull the smoke subset",
+    brief:
+      "Before a full regression run, only smoke-tagged tests run. Print how many there are, then their names in order.",
+    kind: "code_run",
+    xp: 40,
+    language: "python",
+    starter: [
+      "tests = [",
+      '    {"name": "login", "tags": ["smoke", "auth"]},',
+      '    {"name": "checkout", "tags": ["regression"]},',
+      '    {"name": "search", "tags": ["smoke"]},',
+      '    {"name": "admin_panel", "tags": ["regression", "admin"]},',
+      "]",
+      "",
+      "# Print:",
+      "#   2 smoke tests",
+      "#   login",
+      "#   search",
+    ].join("\n"),
+    checks: [
+      { label: "Prints the correct count and names", equals: "2 smoke tests\nlogin\nsearch" },
+      { label: "Filters by the smoke tag", sourceContains: '"smoke"' },
+      { label: "Walks the test list", sourceContains: "for" },
+    ],
+  },
+
+  // ── Manual QA · defect-management ────────────────────────────────────────
+  {
+    chapterSlug: "defect-management/severity-vs-priority",
+    title: "Combine severity and priority",
+    brief:
+      "Severity comes from whether a bug blocks the release; priority comes from how many users it affects. Print severity/priority for each bug below.",
+    kind: "code_run",
+    xp: 45,
+    language: "python",
+    starter: [
+      "bugs = [",
+      "    (True, True),    # blocks release, affects many users",
+      "    (True, False),   # blocks release, affects few users",
+      "    (False, True),   # doesn't block release, affects many users",
+      "]",
+      "",
+      '# Rule: severity is "critical" if it blocks the release, else "minor".',
+      '#       priority is "high" if it affects many users, else "low".',
+      '# Print one "severity/priority" line per bug:',
+      "#   critical/high",
+      "#   critical/low",
+      "#   minor/high",
+    ].join("\n"),
+    checks: [
+      { label: "Combines all three correctly", equals: "critical/high\ncritical/low\nminor/high" },
+      { label: "Derives severity from the release flag", sourceContains: "critical" },
+      { label: "Derives priority from the reach flag", sourceContains: "high" },
+      { label: "Builds the combo instead of typing it", sourceAbsent: '"critical/high"' },
+    ],
+  },
+  {
+    chapterSlug: "defect-management/the-bug-life-cycle",
+    title: "Order the triage queue",
+    brief:
+      "Triage works critical bugs before major before minor, and within the same severity, the oldest bug first. Print the bug IDs in triage order.",
+    kind: "code_run",
+    xp: 45,
+    language: "python",
+    starter: [
+      "bugs = [",
+      '    {"id": "BUG-1", "severity": "minor", "age_days": 10},',
+      '    {"id": "BUG-2", "severity": "critical", "age_days": 2},',
+      '    {"id": "BUG-3", "severity": "critical", "age_days": 8},',
+      '    {"id": "BUG-4", "severity": "major", "age_days": 5},',
+      "]",
+      "",
+      "# Print the bug IDs in triage order, one per line:",
+      "#   BUG-3",
+      "#   BUG-2",
+      "#   BUG-4",
+      "#   BUG-1",
+    ].join("\n"),
+    checks: [
+      { label: "Orders the queue correctly", equals: "BUG-3\nBUG-2\nBUG-4\nBUG-1" },
+      { label: "Sorts by the rule instead of eyeballing it", sourceContains: "sort" },
+      { label: "Uses severity in the ordering", sourceContains: "severity" },
+    ],
+  },
+
+  // ── Manual QA · ui-ux-design-qa ──────────────────────────────────────────
+  {
+    chapterSlug: "ui-ux-design-qa/color-theory-for-testers",
+    title: "Check a contrast ratio against WCAG AA",
+    brief:
+      "Run the real relative-luminance formula below on this gray-on-white pair, then print the contrast ratio and whether it clears the WCAG AA threshold for normal text (4.5:1).",
+    kind: "code_run",
+    xp: 50,
+    language: "python",
+    starter: [
+      "def srgb_to_linear(c):",
+      "    c = c / 255",
+      "    return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4",
+      "",
+      "def relative_luminance(hex_color):",
+      '    hex_color = hex_color.lstrip("#")',
+      "    r, g, b = (int(hex_color[i:i+2], 16) for i in (0, 2, 4))",
+      "    return 0.2126 * srgb_to_linear(r) + 0.7152 * srgb_to_linear(g) + 0.0722 * srgb_to_linear(b)",
+      "",
+      "def contrast_ratio(color_a, color_b):",
+      "    la, lb = relative_luminance(color_a), relative_luminance(color_b)",
+      "    lighter, darker = max(la, lb), min(la, lb)",
+      "    return (lighter + 0.05) / (darker + 0.05)",
+      "",
+      'fg = "#595959"',
+      'bg = "#FFFFFF"',
+      "",
+      "# Print the ratio rounded to 2 decimal places, then PASS or FAIL against",
+      "# WCAG AA for normal text (ratio >= 4.5), on one line like:",
+      "#   7.0:1 PASS",
+    ].join("\n"),
+    checks: [
+      { label: "Prints the ratio and verdict correctly", equals: "7.0:1 PASS" },
+      { label: "Rounds to two decimal places", sourceContains: "round(" },
+      { label: "Checks against the real AA threshold", sourceContains: "4.5" },
+      { label: "Does not just print the literal answer", sourceAbsent: '"7.0:1 PASS"' },
+    ],
+  },
+
+  // ── Manual QA · exploratory-testing (bug hunts) ──────────────────────────
+  {
+    chapterSlug: "exploratory-testing/heuristics-and-tours",
+    title: "Run an SFDPOT tour on BuggyShop",
+    brief:
+      "Pick one SFDPOT lens (Structure, Function, Data, Platform, Operations, or Time) and tour a section of BuggyShop with it. File one real bug your tour turns up — page, feature, category and severity all have to be right to match.",
+    kind: "bug_report",
+    xp: 60,
+    target: "buggyshop",
+    minValidBugs: 1,
+  },
+  {
+    chapterSlug: "exploratory-testing/reporting-exploratory-work",
+    title: "File a bug from a timeboxed session",
+    brief:
+      "Run a real timeboxed exploratory session against BuggyShop — pick a charter, work it, and file one bug your session actually found.",
+    kind: "bug_report",
+    xp: 60,
+    target: "buggyshop",
+    minValidBugs: 1,
+  },
+
+  // ── Manual QA · ui-ux-design-qa (bug hunt) ───────────────────────────────
+  {
+    chapterSlug: "ui-ux-design-qa/design-qa-in-practice",
+    title: "Flag a design bug devs will act on",
+    brief:
+      "Compare a BuggyShop page against expected spacing, states and breakpoints and file one design bug specific enough for a developer to fix without asking you to repeat yourself.",
+    kind: "bug_report",
+    xp: 55,
+    target: "buggyshop",
+    minValidBugs: 1,
+  },
 ];
 
 /** Look up the lab that closes out a chapter, if there is one. */

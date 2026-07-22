@@ -157,6 +157,130 @@ public class Main {
     }
 }
 `,
+  "qa-foundations/the-seven-principles": `
+counts = {"checkout": 12, "search": 5, "login": 2, "profile": 1}
+total = sum(counts.values())
+ranked = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
+running = 0
+for name, count in ranked:
+    running += count
+    print(name)
+    if running / total >= 0.8:
+        break
+`,
+  "test-design-techniques/equivalence-partitioning": `
+ages = [15, 18, 40, 65, 70, -5, 66]
+valid = [a for a in ages if 18 <= a <= 65]
+invalid = [a for a in ages if not (18 <= a <= 65)]
+print("valid: " + ", ".join(str(a) for a in valid))
+print("invalid: " + ", ".join(str(a) for a in invalid))
+`,
+  "test-design-techniques/boundary-value-analysis": `
+min_val = 1
+max_val = 10
+values = [min_val - 1, min_val, min_val + 1, max_val - 1, max_val, max_val + 1]
+print(", ".join(str(v) for v in values))
+`,
+  "test-design-techniques/decision-tables": `
+rules = [
+    (True, True, "20%"),
+    (True, False, "10%"),
+    (False, True, "10%"),
+    (False, False, "0%"),
+    (True, True, "20%"),
+]
+distinct = set(rules)
+print(f"{len(distinct)} distinct rules")
+`,
+  "test-design-techniques/state-transition": `
+valid_transitions = {
+    "draft": ["submitted"],
+    "submitted": ["approved", "rejected"],
+    "approved": ["published"],
+    "rejected": ["draft"],
+    "published": [],
+}
+transitions_to_check = [
+    ("draft", "submitted"),
+    ("submitted", "published"),
+    ("approved", "published"),
+    ("published", "draft"),
+]
+for from_state, to_state in transitions_to_check:
+    verdict = "VALID" if to_state in valid_transitions[from_state] else "INVALID"
+    print(f"{from_state} -> {to_state}: {verdict}")
+`,
+  "test-artifacts/traceability": `
+requirements = ["REQ-1", "REQ-2", "REQ-3", "REQ-4"]
+case_requirement_links = ["REQ-1", "REQ-1", "REQ-3"]
+for req in requirements:
+    if req not in case_requirement_links:
+        print(req)
+`,
+  "levels-and-types-of-testing/functional-and-regression": `
+changed_files = {"checkout.py", "cart.py"}
+test_coverage = {
+    "test_login": {"login.py"},
+    "test_checkout_flow": {"checkout.py", "payment.py"},
+    "test_cart_totals": {"cart.py"},
+    "test_search": {"search.py"},
+}
+impacted = sorted(name for name, files in test_coverage.items() if files & changed_files)
+for name in impacted:
+    print(name)
+`,
+  "levels-and-types-of-testing/smoke-and-sanity": `
+tests = [
+    {"name": "login", "tags": ["smoke", "auth"]},
+    {"name": "checkout", "tags": ["regression"]},
+    {"name": "search", "tags": ["smoke"]},
+    {"name": "admin_panel", "tags": ["regression", "admin"]},
+]
+smoke = [t["name"] for t in tests if "smoke" in t["tags"]]
+print(f"{len(smoke)} smoke tests")
+for name in smoke:
+    print(name)
+`,
+  "defect-management/severity-vs-priority": `
+bugs = [(True, True), (True, False), (False, True)]
+for blocks_release, affects_many in bugs:
+    severity = "critical" if blocks_release else "minor"
+    priority = "high" if affects_many else "low"
+    print(f"{severity}/{priority}")
+`,
+  "defect-management/the-bug-life-cycle": `
+bugs = [
+    {"id": "BUG-1", "severity": "minor", "age_days": 10},
+    {"id": "BUG-2", "severity": "critical", "age_days": 2},
+    {"id": "BUG-3", "severity": "critical", "age_days": 8},
+    {"id": "BUG-4", "severity": "major", "age_days": 5},
+]
+rank = {"critical": 0, "major": 1, "minor": 2}
+ordered = sorted(bugs, key=lambda b: (rank[b["severity"]], -b["age_days"]))
+for bug in ordered:
+    print(bug["id"])
+`,
+  "ui-ux-design-qa/color-theory-for-testers": `
+def srgb_to_linear(c):
+    c = c / 255
+    return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+def relative_luminance(hex_color):
+    hex_color = hex_color.lstrip("#")
+    r, g, b = (int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    return 0.2126 * srgb_to_linear(r) + 0.7152 * srgb_to_linear(g) + 0.0722 * srgb_to_linear(b)
+
+def contrast_ratio(color_a, color_b):
+    la, lb = relative_luminance(color_a), relative_luminance(color_b)
+    lighter, darker = max(la, lb), min(la, lb)
+    return (lighter + 0.05) / (darker + 0.05)
+
+fg = "#595959"
+bg = "#FFFFFF"
+ratio = round(contrast_ratio(fg, bg), 2)
+verdict = "PASS" if ratio >= 4.5 else "FAIL"
+print(f"{ratio}:1 {verdict}")
+`,
 };
 
 async function grade(lab: (typeof NOTE_LABS)[number], code: string) {
