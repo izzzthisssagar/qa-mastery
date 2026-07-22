@@ -3,12 +3,14 @@ import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Reveal } from "@/components/motion";
 import { StatCard } from "@/components/stat-card";
-import { TrackProgressBar } from "@/components/track-progress-bar";
 import { talentEnabled } from "@/lib/talent/flag";
-import { getNotesCurriculumProgress } from "@/app/(app)/notes/actions";
+import { getLearningHome, getNotesCurriculumProgress } from "@/app/(app)/notes/actions";
 import { BuggyApiCard } from "./buggyapi-card";
+import { ContinueLearningCard } from "./components/continue-learning-card";
 import { HubGrid } from "./components/hub-grid";
+import { RecommendedNextCard } from "./components/recommended-next-card";
 import { RolePanels } from "./components/role-panels";
+import { TrackBrowser } from "./components/track-browser";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -17,7 +19,10 @@ export default async function DashboardPage() {
 
   // The notes wiki is the learning spine: progress is per-topic, grouped into
   // tracks (see packages/curriculum/src/notes/tracks.ts).
-  const tracks = await getNotesCurriculumProgress();
+  const [tracks, learningHome] = await Promise.all([
+    getNotesCurriculumProgress(),
+    getLearningHome(),
+  ]);
   const topicsDone = tracks.reduce((n, t) => n + t.topicsDone, 0);
   const topicCount = tracks.reduce((n, t) => n + t.topicCount, 0);
   const overallPct = topicCount ? Math.round((topicsDone / topicCount) * 100) : 0;
@@ -25,6 +30,13 @@ export default async function DashboardPage() {
   // XP spans lessons, tasks, and notes (all write xp_events); read-own RLS.
   const { data: xpRows } = await supabase.from("xp_events").select("amount");
   const totalXp = (xpRows ?? []).reduce((sum, x) => sum + (x.amount as number), 0);
+
+  // read-own RLS; no row yet just means a learner with zero streak history.
+  const { data: streakRow } = await supabase
+    .from("streaks")
+    .select("current_streak")
+    .maybeSingle<{ current_streak: number }>();
+  const currentStreak = streakRow?.current_streak ?? 0;
 
   // Marketplace role drives the role-adaptive panels (read-own RLS on profiles).
   const { data: profile } = await supabase
@@ -83,7 +95,21 @@ export default async function DashboardPage() {
             suffix={<span className="font-sans text-lg font-normal text-muted-foreground">%</span>}
             delay={0.19}
           />
+          <StatCard
+            testId="stat-streak"
+            value={currentStreak}
+            label="day streak"
+            suffix={currentStreak > 0 ? <span aria-hidden> 🔥</span> : undefined}
+            delay={0.26}
+          />
         </div>
+
+        <Reveal delay={0.3}>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <ContinueLearningCard item={learningHome.continueItem} />
+            <RecommendedNextCard item={learningHome.recommendedItem} />
+          </div>
+        </Reveal>
 
         <Reveal delay={0.22}>
           <div className="mt-8">
@@ -146,70 +172,7 @@ export default async function DashboardPage() {
           </Link>
         </Reveal>
 
-        <div className="mt-12 space-y-12">
-          {tracks.map((track, trackIndex) => (
-            <Reveal key={track.slug} delay={0.05 + trackIndex * 0.04}>
-              <section data-testid={`track-${track.slug}`}>
-                <div className="flex items-baseline justify-between gap-4">
-                  <h2 className="font-display text-xl font-semibold tracking-tight">
-                    {track.title}
-                  </h2>
-                  <span
-                    data-testid={`track-progress-${track.slug}`}
-                    className="shrink-0 font-mono text-xs text-muted-foreground"
-                  >
-                    {track.topicsDone} / {track.topicCount}
-                  </span>
-                </div>
-                <p className="mt-1 text-sm text-muted-foreground">{track.blurb}</p>
-                <div className="mt-3">
-                  <TrackProgressBar pct={track.pct} />
-                </div>
-                {track.certEarned && (
-                  <Link
-                    href={`/certificate/${track.slug}`}
-                    data-testid={`certificate-link-${track.slug}`}
-                    className="mt-2 inline-block text-xs font-medium text-accent hover:opacity-80"
-                  >
-                    🏆 View your certificate →
-                  </Link>
-                )}
-
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  {track.modules.map((module) => {
-                    const complete = module.total > 0 && module.done === module.total;
-                    return (
-                      <Link
-                        key={module.slug}
-                        href={`/notes/${module.slug}`}
-                        data-testid={`module-card-${module.slug}`}
-                        className="group flex flex-col gap-2 rounded-2xl border border-border bg-surface/40 p-4 transition-colors hover:border-accent/50"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="text-sm font-semibold text-foreground">
-                            {module.title}
-                          </span>
-                          <span
-                            className={`shrink-0 text-xs ${complete ? "text-accent" : "text-muted-foreground"}`}
-                          >
-                            {complete ? "✓ " : ""}
-                            {module.done}/{module.total}
-                          </span>
-                        </div>
-                        <div className="h-1.5 overflow-hidden rounded-full bg-surface-raised">
-                          <div
-                            className="h-full rounded-full bg-accent transition-[width]"
-                            style={{ width: `${module.pct}%` }}
-                          />
-                        </div>
-                      </Link>
-                    );
-                  })}
-                </div>
-              </section>
-            </Reveal>
-          ))}
-        </div>
+        <TrackBrowser tracks={tracks} defaultOpen={learningHome.continueItem === null} />
       </div>
     </div>
   );
