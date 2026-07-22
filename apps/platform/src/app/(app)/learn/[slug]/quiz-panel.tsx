@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@qa-mastery/ui";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { submitQuiz, type SubmitQuizResult } from "../actions";
 
 /** Client-safe quiz question — the answer key (`correct`/`explanation`) is
@@ -20,6 +21,7 @@ export function QuizPanel({
   slug: string;
   questions: PublicQuizQuestion[];
 }) {
+  const hydrated = useHydrated();
   const [answers, setAnswers] = useState<Record<string, number[]>>({});
   const [result, setResult] = useState<SubmitQuizResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -76,7 +78,11 @@ export function QuizPanel({
   }
 
   return (
-    <section data-testid="quiz-panel" className="mt-8 rounded-2xl border border-border bg-surface/40 p-6">
+    <section
+      data-testid="quiz-panel"
+      data-hydrated={hydrated}
+      className="mt-8 rounded-2xl border border-border bg-surface/40 p-6"
+    >
       {graded && (
         <div
           data-testid="quiz-result-banner"
@@ -129,7 +135,7 @@ export function QuizPanel({
                       type="button"
                       data-testid={`quiz-opt-${q.id}-${oi}`}
                       aria-pressed={isSelected}
-                      disabled={graded}
+                      disabled={graded || !hydrated}
                       onClick={() => toggle(q, oi)}
                       className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors disabled:cursor-default ${stateClass}`}
                     >

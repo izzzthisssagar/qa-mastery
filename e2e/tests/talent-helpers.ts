@@ -26,17 +26,14 @@ export async function signUp(page: Page): Promise<string> {
 export async function publishTester(page: Page, handle: string): Promise<void> {
   await page.goto(`${BASE}/talent/profile`);
 
-  // Hydration gate. Interactions that land before React hydrates are silently
-  // lost: the input shows the text but component state stays empty, so the
-  // save fails handle validation and "Saved." never appears — the intermittent
-  // "WebKit save stall" (docs/known-issues/webkit-save-stall.md). The chip's
-  // aria-pressed is rendered from React state, so once a click sticks the page
-  // is interactive and the fill below reliably reaches state.
-  const chip = page.getByRole("button", { name: /^functional$/i }); // pick a specialty chip
-  await expect(async () => {
-    await chip.click();
-    await expect(chip).toHaveAttribute("aria-pressed", "true", { timeout: 1_000 });
-  }).toPass({ timeout: 20_000 });
+  // ProfileEditor now disables its fields until useHydrated() flips true
+  // (data-hydrated="true" on the root), so interactions can't land before
+  // React attaches — the pre-hydration lost-keystroke race this used to
+  // paper over with a click-and-retry loop is now impossible at the
+  // component level (docs/known-issues/webkit-save-stall.md). Wait for the
+  // gate directly instead of retrying a chip click.
+  await expect(page.locator('[data-hydrated="true"]')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole("button", { name: /^functional$/i }).click(); // pick a specialty chip
   // .first(): hydration can transiently double-render the freshly-navigated
   // page under CI concurrency (docs/known-issues/hydration-double-render.md)
   await page.getByLabel("Handle").first().fill(handle);

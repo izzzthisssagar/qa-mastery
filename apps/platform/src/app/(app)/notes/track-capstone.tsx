@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@qa-mastery/ui";
 import type { CapstoneResult, ShipRecommendation } from "@qa-mastery/grading";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { submitNoteCapstone, type NoteCapstoneState } from "./capstone-actions";
 
 const FIELD =
@@ -17,6 +18,7 @@ const FIELD =
  * which trust boundary owns which slug shape.
  */
 export function TrackCapstone({ state }: { state: NoteCapstoneState }) {
+  const hydrated = useHydrated();
   const [scope, setScope] = useState("");
   const [risks, setRisks] = useState("");
   const [approach, setApproach] = useState("");
@@ -50,6 +52,7 @@ export function TrackCapstone({ state }: { state: NoteCapstoneState }) {
 
   return (
     <section
+      data-hydrated={hydrated}
       className={`my-10 rounded-2xl border p-5 ${
         result?.score === 100 ? "border-accent/50 bg-accent/5" : "border-accent/30 bg-surface"
       }`}
@@ -85,6 +88,7 @@ export function TrackCapstone({ state }: { state: NoteCapstoneState }) {
                 className={`${FIELD} min-h-16`}
                 value={scope}
                 onChange={(e) => setScope(e.target.value)}
+                disabled={!hydrated}
               />
             </label>
             <label className="flex flex-col gap-1 text-xs text-muted-foreground">
@@ -93,6 +97,7 @@ export function TrackCapstone({ state }: { state: NoteCapstoneState }) {
                 className={`${FIELD} min-h-20`}
                 value={risks}
                 onChange={(e) => setRisks(e.target.value)}
+                disabled={!hydrated}
               />
             </label>
             <label className="flex flex-col gap-1 text-xs text-muted-foreground">
@@ -101,6 +106,7 @@ export function TrackCapstone({ state }: { state: NoteCapstoneState }) {
                 className={`${FIELD} min-h-16`}
                 value={approach}
                 onChange={(e) => setApproach(e.target.value)}
+                disabled={!hydrated}
               />
             </label>
             <label className="flex flex-col gap-1 text-xs text-muted-foreground">
@@ -109,6 +115,7 @@ export function TrackCapstone({ state }: { state: NoteCapstoneState }) {
                 className={FIELD}
                 value={recommendation}
                 onChange={(e) => setRecommendation(e.target.value as ShipRecommendation)}
+                disabled={!hydrated}
               >
                 <option value="">Select…</option>
                 <option value="go">Go</option>
@@ -119,7 +126,7 @@ export function TrackCapstone({ state }: { state: NoteCapstoneState }) {
           </div>
 
           <div className="mt-5">
-            <Button onClick={onSubmit} disabled={!complete || submitting}>
+            <Button onClick={onSubmit} disabled={!complete || submitting || !hydrated}>
               {submitting ? "Submitting…" : "Submit capstone"}
             </Button>
           </div>
