@@ -36,6 +36,7 @@ New to the codebase? Read in this order:
 | [07-development.md](./07-development.md) | Runbook: prerequisites, commands, env setup, adding a lesson/widget, the testing bar. |
 | [08-decisions.md](./08-decisions.md) | ADR-style records for the notable engineering decisions. |
 | [09-deployment.md](./09-deployment.md) | Live URLs, the Vercel CLI-token deploy, CI/CD auto-deploy, the two deploy gotchas, the design system, and ops. |
+| [10-caching.md](./10-caching.md) | Cache policy by data class — lesson content (tag-by-slug), per-user progress/score data, tutor retrieval vs. generation, static assets — and the never-cache-per-user-data-globally rule. |
 
 ## Conventions in these docs
 
