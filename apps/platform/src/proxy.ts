@@ -7,7 +7,27 @@ import { updateSession } from "@/lib/supabase/proxy-session";
  * auth pages. Real authorization happens server-side in layouts/actions —
  * the proxy is a convenience, not the security boundary.
  */
-const PROTECTED_PREFIXES = ["/dashboard", "/learn", "/review", "/portfolio/me", "/settings"];
+const PROTECTED_PREFIXES = [
+  "/dashboard",
+  "/learn",
+  "/review",
+  "/portfolio/me",
+  "/settings",
+  // P0-3: these (app) routes were missing here, so a deep link to any of
+  // them dropped an unauthenticated visitor on a bare /login with no
+  // ?next= — the layout-level fallback redirect (real auth boundary) has
+  // no way to recover the intended path, so this is the one place it can
+  // be captured. All four gated redirect()s in (app)/talent/** were also
+  // silently doing the same bare "/login" — fixed alongside this.
+  "/notes",
+  "/talent",
+  "/tasks",
+  "/simulator",
+  "/certificate",
+  "/community",
+  "/buggyapi",
+  "/test-cases",
+];
 const AUTH_PATHS = ["/login", "/signup"];
 
 export default async function proxy(request: NextRequest) {

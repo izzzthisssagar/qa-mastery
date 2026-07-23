@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
+import { signUpFreshLearner } from "./signup-helper";
 
 /**
  * Requires the local Supabase stack (`pnpm db:start`) — locally and in CI.
@@ -47,6 +48,40 @@ test.describe("auth", () => {
   }) => {
     await page.goto("http://localhost:3000/dashboard");
     await expect(page).toHaveURL(/\/login/);
+  });
+
+  test("deep link survives the login round trip", async ({ page }) => {
+    // P0-3: an unauthenticated visitor hitting an authenticated route deep
+    // link (not just /dashboard) should land back on that same route after
+    // logging in, not get dropped on /dashboard.
+    const email = await signUpFreshLearner(page, "deeplink");
+    await page.getByRole("button", { name: /account menu/i }).click();
+    await page.getByRole("menuitem", { name: /sign out/i }).click();
+    await expect(page).toHaveURL("http://localhost:3000/");
+
+    await page.goto("http://localhost:3000/notes");
+    await expect(page).toHaveURL(/\/login\?next=%2Fnotes/);
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill("a-strong-password-1");
+    await page.getByRole("button", { name: /^log in$/i }).click();
+    await expect(page).toHaveURL("http://localhost:3000/notes");
+  });
+
+  test("open-redirect: a next= pointing off-site falls back to /dashboard", async ({
+    page,
+  }) => {
+    const email = await signUpFreshLearner(page, "openredirect");
+    await page.getByRole("button", { name: /account menu/i }).click();
+    await page.getByRole("menuitem", { name: /sign out/i }).click();
+    await expect(page).toHaveURL("http://localhost:3000/");
+
+    await page.goto(
+      "http://localhost:3000/login?next=" + encodeURIComponent("https://evil.example"),
+    );
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill("a-strong-password-1");
+    await page.getByRole("button", { name: /^log in$/i }).click();
+    await expect(page).toHaveURL("http://localhost:3000/dashboard");
   });
 
   test("wrong password shows an error, not a dashboard", async ({ page }) => {

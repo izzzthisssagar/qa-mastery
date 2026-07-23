@@ -19,6 +19,8 @@ export interface AuthFormProps {
   altLinkLabel: string;
   /** Show a "Forgot password?" link under the password field (login only). */
   showForgot?: boolean;
+  /** Same-origin path to return to after auth succeeds; validated upstream. */
+  next?: string;
 }
 
 export function AuthForm({
@@ -29,6 +31,7 @@ export function AuthForm({
   altHref,
   altLinkLabel,
   showForgot = false,
+  next,
 }: AuthFormProps) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
 
@@ -53,7 +56,7 @@ export function AuthForm({
 
           <Reveal delay={0.05}>
             <p className="font-mono text-xs uppercase tracking-[0.28em] text-accent/80">
-              {altHref === "/login" ? "Create account" : "Welcome back"}
+              {altHref.startsWith("/login") ? "Create account" : "Welcome back"}
             </p>
           </Reveal>
 
@@ -64,6 +67,7 @@ export function AuthForm({
           </Reveal>
 
           <form action={formAction} className="mt-9 space-y-5">
+            {next ? <input type="hidden" name="next" value={next} /> : null}
             <Reveal delay={0.2}>
               <AuthField
                 id="email"
@@ -82,7 +86,7 @@ export function AuthForm({
                 name="password"
                 label="Password"
                 type="password"
-                autoComplete={altHref === "/login" ? "new-password" : "current-password"}
+                autoComplete={altHref.startsWith("/login") ? "new-password" : "current-password"}
                 required
                 minLength={8}
                 placeholder="••••••••"
