@@ -11,9 +11,13 @@
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { Spinner } from "@qa-mastery/ui";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { runSimulatorCode } from "@/app/(app)/simulator/actions";
 import { completeNote } from "./actions";
+import { createAutosave, type SaveStatus } from "./autosave";
+import { deletePendingSave, getPendingSave, putPendingSave } from "./note-draft-db";
 import { useNoteProgress } from "./note-progress-context";
+import { SaveIndicator } from "./save-indicator";
 
 /* ── Hook: the curiosity opener ─────────────────────────────────────────────*/
 export function Hook({ children }: { children: ReactNode }) {
@@ -300,12 +304,15 @@ export function Takeaways({ points }: { points: string[] }) {
   );
 }
 
-/* ── Complete: mark done + XP burst — persists via completeNote server action ─*/
+/* ── Complete: mark done + XP burst — optimistic local save, honest indicator ─*/
 export function Complete({ xp = 10 }: { xp?: number }) {
   const { slug, initialDone } = useNoteProgress();
+  const hydrated = useHydrated();
   const [done, setDone] = useState(initialDone);
-  const [pending, startTransition] = useTransition();
+  const [status, setStatus] = useState<SaveStatus>("idle");
   const btnRef = useRef<HTMLButtonElement>(null);
+  const draftKey = `note-complete:${slug}`;
+  const controllerRef = useRef<ReturnType<typeof createAutosave> | null>(null);
 
   function burst() {
     if (typeof window === "undefined") return;
@@ -331,32 +338,73 @@ export function Complete({ xp = 10 }: { xp?: number }) {
     }
   }
 
+  // Built once on mount, never during render — its closures read `btnRef`
+  // (via burst()) and refs may only be touched outside render.
+  useEffect(() => {
+    controllerRef.current = createAutosave({
+      persistLocal: () => putPendingSave(draftKey, { slug }),
+      sync: async () => {
+        const res = await completeNote(slug);
+        if (!res.alreadyDone) burst();
+        await deletePendingSave(draftKey);
+      },
+      onStatusChange: setStatus,
+    });
+    return () => controllerRef.current?.dispose();
+  }, [draftKey, slug]);
+
+  // A completion click whose sync() never landed (reload after a network
+  // drop mid-request) leaves a pending marker in IndexedDB — resume it once
+  // hydrated. completeNote is idempotent, so resuming an already-landed
+  // completion is harmless.
+  useEffect(() => {
+    if (!hydrated || done) return;
+    let cancelled = false;
+    void (async () => {
+      const pending = await getPendingSave<{ slug: string }>(draftKey);
+      if (cancelled || !pending) return;
+      setDone(true);
+      controllerRef.current?.run();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, done, draftKey]);
+
+  const statusRef = useRef(status);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+  useEffect(() => {
+    function onOnline() {
+      if (statusRef.current === "error") controllerRef.current?.retry();
+    }
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, []);
+
   return (
     <div className="my-10 text-center">
       <button
         ref={btnRef}
         type="button"
-        disabled={done || pending}
+        disabled={!hydrated || done}
         onClick={() => {
-          if (done || pending) return;
-          startTransition(async () => {
-            try {
-              const res = await completeNote(slug);
-              setDone(true);
-              if (!res.alreadyDone) burst();
-            } catch {
-              // Leave the button enabled so the learner can retry.
-            }
-          });
+          if (!hydrated || done) return;
+          // Optimistic: the click IS the edit — mark it done locally right
+          // away, then let the controller persist + sync in the background.
+          setDone(true);
+          controllerRef.current?.run();
         }}
         className={`rounded-2xl px-8 py-3.5 text-base font-bold transition disabled:opacity-70 ${done ? "cursor-default border border-accent/40 bg-surface text-accent" : "bg-accent text-accent-foreground hover:brightness-105"}`}
       >
-        {done
-          ? `✓ Completed · +${xp} XP earned`
-          : pending
-            ? "Saving…"
-            : `Mark complete · +${xp} XP`}
+        {done ? `✓ Completed · +${xp} XP earned` : `Mark complete · +${xp} XP`}
       </button>
+      {done && status !== "idle" && (
+        <div className="mt-2">
+          <SaveIndicator status={status} onRetry={() => controllerRef.current?.retry()} />
+        </div>
+      )}
     </div>
   );
 }
