@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Button } from "@qa-mastery/ui";
+import { useHydrated } from "@/hooks/use-hydrated";
 import {
   AVAILABILITY,
   SPECIALTIES,
@@ -66,6 +67,7 @@ const field =
   "w-full rounded-lg border border-border bg-surface/60 px-3 py-2 text-sm text-foreground outline-none focus-visible:border-border";
 
 export function ProfileEditor({ initial }: { initial: Initial }) {
+  const hydrated = useHydrated();
   const [handle, setHandle] = useState(initial.handle ?? "");
   const [headline, setHeadline] = useState(initial.headline ?? "");
   const [bio, setBio] = useState(initial.bio ?? "");
@@ -142,7 +144,7 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-hydrated={hydrated}>
       <div>
         <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
           <span>Profile strength</span>
@@ -168,6 +170,7 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
             onChange={(e) => setHandle(e.target.value)}
             placeholder="priya-qa"
             aria-label="Handle"
+            disabled={!hydrated}
           />
         </label>
         <label className="block text-sm">
