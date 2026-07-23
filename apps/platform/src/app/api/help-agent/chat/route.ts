@@ -12,6 +12,7 @@ import {
 import { buildSystemPrompt } from "@/lib/help-agent/prompt";
 import { assertWithinRateLimit } from "@/lib/help-agent/rate-limit";
 import { parseLessonSlug } from "@/lib/help-agent/types";
+import { hashUserId, logAction } from "@/lib/logging";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 interface ChatRequestBody {
@@ -30,6 +31,9 @@ export async function POST(request: Request) {
   if (!user) {
     return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
   }
+
+  const requestStart = Date.now();
+  const userIdHash = hashUserId(user.id);
 
   let body: ChatRequestBody;
   try {
@@ -79,6 +83,7 @@ export async function POST(request: Request) {
       lessonSlug: slug,
       sessionId: body.sessionId,
     });
+    logAction({ action: "tutorChat", userIdHash, ok: true, ms: Date.now() - requestStart });
     return new Response(SCOPE_REFUSAL, {
       headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache" },
     });
@@ -139,6 +144,13 @@ export async function POST(request: Request) {
         fullText = res.value;
       } catch (err) {
         console.error("help-agent chat error:", (err as Error).message);
+        logAction({
+          action: "tutorChat",
+          userIdHash,
+          ok: false,
+          error: (err as Error).message,
+          ms: Date.now() - requestStart,
+        });
         // Only surface the fallback if nothing was streamed yet — never append
         // an error after the learner has already received a full answer.
         if (!streamedAny) {
@@ -149,6 +161,8 @@ export async function POST(request: Request) {
         controller.close();
         return;
       }
+
+      logAction({ action: "tutorChat", userIdHash, ok: true, ms: Date.now() - requestStart });
 
       // Persist AFTER a successful generation. A persistence failure must not
       // corrupt the client stream — the learner already has the answer — so log

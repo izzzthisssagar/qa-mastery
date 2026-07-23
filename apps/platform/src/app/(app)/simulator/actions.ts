@@ -8,6 +8,7 @@ import {
 } from "@qa-mastery/grading";
 import { WandboxRunner } from "@qa-mastery/grading/runners";
 import { getAuthedUserId } from "@/lib/auth";
+import { withLogging } from "@/lib/logging";
 
 const wandbox = new WandboxRunner();
 
@@ -57,6 +58,14 @@ export async function runSimulatorCode(
   code: string,
 ): Promise<RunResult> {
   const userId = await getAuthedUserId();
+  return withLogging("runSimulatorCode", userId, () => runSimulatorCodeRun(userId, language, code));
+}
+
+async function runSimulatorCodeRun(
+  userId: string,
+  language: string,
+  code: string,
+): Promise<RunResult> {
   if (!isSimulatorLanguage(language)) throw new Error("Unsupported language.");
 
   const validated = validateCodeSubmission(code);
