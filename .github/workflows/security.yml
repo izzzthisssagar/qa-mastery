@@ -43,3 +43,30 @@ jobs:
       # aren't shipped to users, and some carry advisories with no published fix.
       - name: Audit production dependencies (high+)
         run: pnpm audit --prod --audit-level high
+
+  dependabot-config:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      # Catches a malformed dependabot.yml (bad indentation, unknown
+      # ecosystem key, typo'd interval) before it silently stops opening
+      # update PRs — python3/PyYAML ship on the ubuntu-latest image already,
+      # no new dependency needed for a one-off config check.
+      - name: Validate dependabot.yml
+        run: |
+          python3 -c "
+          import sys, yaml
+          with open('.github/dependabot.yml') as f:
+              config = yaml.safe_load(f)
+          assert config.get('version') == 2, 'dependabot.yml must be version 2'
+          updates = config.get('updates') or []
+          assert updates, 'dependabot.yml must declare at least one update block'
+          ecosystems = {u.get('package-ecosystem') for u in updates}
+          required = {'npm', 'github-actions'}
+          missing = required - ecosystems
+          assert not missing, f'dependabot.yml missing ecosystems: {missing}'
+          for u in updates:
+              assert u.get('schedule', {}).get('interval'), f'{u.get(\"package-ecosystem\")} update block missing schedule.interval'
+          print('dependabot.yml OK:', ecosystems)
+          "
