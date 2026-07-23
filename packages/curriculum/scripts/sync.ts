@@ -17,6 +17,7 @@ import { createServiceClient } from "@qa-mastery/db";
 import { isWidgetName } from "@qa-mastery/shared/widget-names";
 import { listLessonFiles, parseLessonFile, type LessonSource } from "../src/load";
 import { MODULES, TRACKS, moduleSlug } from "../src/taxonomy";
+import { notifyRevalidate } from "./notify-revalidate";
 
 interface Problem {
   file: string;
@@ -131,9 +132,21 @@ for (const code of usedModules) {
   moduleIdByCode.set(code, data.id);
 }
 
-// lessons
+// lessons — compare against the DB's stored content_hash first so only
+// slugs whose MDX/frontmatter actually changed get revalidated below (a
+// content edit + sync should invalidate just that slug, not every lesson).
+const { data: hashRows, error: hashError } = await supabase
+  .from("lessons")
+  .select("slug, content_hash");
+if (hashError) throw new Error(`reading content hashes: ${hashError.message}`);
+const hashBySlug = new Map((hashRows ?? []).map((r) => [r.slug, r.content_hash]));
+
+const changedSlugs: string[] = [];
+
 for (const lesson of lessons) {
   const fm = lesson.frontmatter;
+  if (hashBySlug.get(fm.slug) !== lesson.contentHash) changedSlugs.push(fm.slug);
+
   const { error } = await supabase.from("lessons").upsert(
     {
       module_id: moduleIdByCode.get(fm.module),
@@ -175,3 +188,16 @@ console.log(
   `\napplied: ${usedTracks.size} track(s), ${usedModules.size} module(s), ${lessons.length} lesson(s)` +
     (archived ? `, ${archived} archived` : ""),
 );
+
+// Bust the `lesson:${slug}` unstable_cache tag for changed slugs only.
+const revalidateResult = await notifyRevalidate(changedSlugs);
+if (revalidateResult.skipped) {
+  console.log(
+    `revalidate: skipped (CURRICULUM_REVALIDATE_URL/SECRET not set) — ${changedSlugs.length} slug(s) changed`,
+  );
+} else if (changedSlugs.length > 0) {
+  console.log(
+    `revalidate: ${revalidateResult.ok ? "ok" : `failed (status ${revalidateResult.status})`} — ${changedSlugs.length} slug(s): ${changedSlugs.join(", ")}`,
+  );
+  if (!revalidateResult.ok) process.exit(1);
+}

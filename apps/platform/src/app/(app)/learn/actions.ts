@@ -1,7 +1,7 @@
 "use server";
 
 import { createServiceClient } from "@qa-mastery/db";
-import { findLessonBySlug, loadQuiz } from "@qa-mastery/curriculum";
+import { findLessonBySlug, loadQuiz } from "@/lib/curriculum-cache";
 import {
   scoreQuiz,
   matchBugReport,
@@ -128,7 +128,7 @@ async function submitQuizScoring(
   const service = createServiceClient();
   const lesson = await requireAccessibleLesson(service, slug);
 
-  const quiz = loadQuiz(slug);
+  const quiz = await loadQuiz(slug);
   const questions = quiz.questions as QuizQuestion[];
   const result = scoreQuiz(questions, answers);
 
@@ -198,7 +198,7 @@ async function submitQuizScoring(
         metadata: { score: result.score, maxScore: result.maxScore },
       });
 
-      const flashcards = findLessonBySlug(slug)?.frontmatter.flashcards ?? [];
+      const flashcards = (await findLessonBySlug(slug))?.frontmatter.flashcards ?? [];
       if (flashcards.length > 0) {
         const dueAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
         await service.from("review_queue").upsert(
@@ -255,8 +255,8 @@ export interface BugReportResult {
 
 /** The release this lesson's lab grades against — from its frontmatter, server
  *  side, so the client can't aim grading at a release where the bug is fixed. */
-function lessonRelease(slug: string): string {
-  const source = findLessonBySlug(slug);
+async function lessonRelease(slug: string): Promise<string> {
+  const source = await findLessonBySlug(slug);
   const declared = source?.frontmatter.requires_release;
   return declared && isRelease(declared) ? declared : DEFAULT_RELEASE;
 }
@@ -272,7 +272,7 @@ export async function submitBugReport(
   const userId = await getAuthedUserId();
   const service = createServiceClient();
   const lesson = await requireAccessibleLesson(service, slug);
-  const release = lessonRelease(slug);
+  const release = await lessonRelease(slug);
 
   const { data: rows, error: manifestError } = await service
     .schema("buggyshop")
@@ -359,7 +359,7 @@ export async function getHuntStatus(slug: string): Promise<HuntStatus> {
   const userId = await getAuthedUserId();
   const service = createServiceClient();
   const lesson = await requireAccessibleLesson(service, slug);
-  const release = lessonRelease(slug);
+  const release = await lessonRelease(slug);
 
   const { count } = await service
     .schema("buggyshop")
@@ -385,7 +385,7 @@ export async function launchSandbox(slug: string): Promise<string> {
   const service = createServiceClient();
   // Ensure the user has access to the lesson (throws if not)
   await requireAccessibleLesson(service, slug);
-  const release = lessonRelease(slug);
+  const release = await lessonRelease(slug);
 
   let sandboxId: string;
   const { data: existing } = await service
@@ -473,8 +473,8 @@ export async function submitCapstone(
   return result;
 }
 
-function getRunnerForLesson(slug: string): RunnerProvider {
-  const lesson = findLessonBySlug(slug);
+async function getRunnerForLesson(slug: string): Promise<RunnerProvider> {
+  const lesson = await findLessonBySlug(slug);
   if (!lesson) throw new Error("Lesson not found");
 
   // Track B (automation) drives a real browser; everything else is plain code.
@@ -497,8 +497,8 @@ async function submitCodeLabRun(userId: string, slug: string, code: string): Pro
   const validated = validateCodeSubmission(code);
   await assertCodeRunQuota(service, userId);
 
-  const runner = getRunnerForLesson(slug);
-  const language = findLessonBySlug(slug)?.frontmatter.lab_language ?? "java";
+  const runner = await getRunnerForLesson(slug);
+  const language = (await findLessonBySlug(slug))?.frontmatter.lab_language ?? "java";
   const payload = { code: validated, language };
 
   // Synchronous runners (Piston) execute inline: persist the final RunResult so
@@ -572,7 +572,8 @@ export async function pollCodeRun(slug: string, runId: string): Promise<RunResul
   // A synchronous run already stored its final RunResult — replay it.
   if (run.result) return run.result;
 
-  const result = await getRunnerForLesson(slug).getResult(runId);
+  const runner = await getRunnerForLesson(slug);
+  const result = await runner.getResult(runId);
 
   // Persist the latest status; mark the lab done on a pass.
   await service

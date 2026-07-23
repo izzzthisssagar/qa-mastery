@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { MDXRemote } from "next-mdx-remote/rsc";
-import { findLessonBySlug, loadLessonBody, loadQuiz, MODULES } from "@qa-mastery/curriculum";
+import { MODULES } from "@qa-mastery/curriculum";
+import { findLessonBySlug, loadLessonBody, loadQuiz } from "@/lib/curriculum-cache";
 import { LessonProgressProvider } from "./progress-context";
 import {
   SeeWidget,
@@ -32,22 +33,22 @@ interface PageProps {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const lesson = findLessonBySlug(slug);
+  const lesson = await findLessonBySlug(slug);
   return { title: lesson?.frontmatter.title ?? "Lesson not found" };
 }
 
 export default async function LessonPage({ params }: PageProps) {
   const { slug } = await params;
-  const lesson = findLessonBySlug(slug);
+  const lesson = await findLessonBySlug(slug);
   if (!lesson || lesson.frontmatter.status !== "published") notFound();
 
   const fm = lesson.frontmatter;
   const moduleMeta = MODULES[fm.module];
-  const body = loadLessonBody(slug);
+  const body = await loadLessonBody(slug);
 
   // Strip the answer key — `correct`/`explanation` are server-only and reach
   // the client only after grading, via submitQuiz's return value.
-  const quiz = loadQuiz(slug);
+  const quiz = await loadQuiz(slug);
   const publicQuestions: PublicQuizQuestion[] = quiz.questions.map((q) => ({
     id: q.id,
     type: q.type,

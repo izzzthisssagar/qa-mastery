@@ -1,7 +1,7 @@
 import "server-only";
 
 import { embedQuery } from "@qa-mastery/agent";
-import { findLessonBySlug, loadLessonBody, loadQuiz } from "@qa-mastery/curriculum";
+import { findLessonBySlug, loadLessonBody, loadQuiz } from "@/lib/curriculum-cache";
 import { createServiceClient } from "@qa-mastery/db";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { HelpAgentMemory, HelpAgentMessage, HelpAgentProfile } from "./types";
@@ -169,11 +169,11 @@ async function loadLessonBlock(
   slug: string,
   assistantTurn: number,
 ): Promise<string | null> {
-  const lesson = findLessonBySlug(slug);
+  const lesson = await findLessonBySlug(slug);
   if (!lesson) return null;
 
-  const body = truncateText(loadLessonBody(slug), 12000);
-  const quiz = loadQuiz(slug);
+  const body = truncateText(await loadLessonBody(slug), 12000);
+  const quiz = await loadQuiz(slug);
   const publicQuiz = quiz.questions.map((q) => ({
     id: q.id,
     prompt: q.prompt,
@@ -241,7 +241,7 @@ async function loadQuizExplanations(
 
   if (!attempt) return null;
 
-  const quiz = loadQuiz(slug);
+  const quiz = await loadQuiz(slug);
   const explained = quiz.questions
     .filter((q) => q.explanation)
     .map((q) => `${q.prompt}: ${q.explanation}`)
