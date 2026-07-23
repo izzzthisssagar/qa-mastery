@@ -14,8 +14,15 @@ export default defineConfig({
   testDir: "./tests",
   // BuggyAPI has its own config (playwright.buggyapi.config.ts) booting only
   // its own server — a third Next server in THIS run starved the CI runner
-  // and made timing-sensitive talent/widget tests flake.
-  testIgnore: "**/buggyapi.spec.ts",
+  // and made timing-sensitive talent/widget tests flake. dashboard-first-paint
+  // has its own config too (playwright.first-paint.config.ts, workers: 1) —
+  // its 6x-CPU-throttle + slow-4G × 20 reloads is real CPU load on the runner
+  // (not just emulated), and running it fullyParallel alongside everything
+  // else starved the shared 2-core CI runner: tasks.spec.ts's server-action
+  // round trip blew its 30s timeout under the contention (checkbox stuck on
+  // an unsettled optimistic row — not a product bug, see
+  // docs/known-issues/dashboard-blank-first-paint.md).
+  testIgnore: ["**/buggyapi.spec.ts", "**/dashboard-first-paint.spec.ts"],
   fullyParallel: true,
   forbidOnly: CI,
   retries: CI ? 2 : 0,

@@ -39,6 +39,16 @@ widens the window where a screenshot lands mid-fade or pre-hydration.
   CPU throttle + slow-4G network emulation) asserts the dashboard H1's
   computed opacity is 1 immediately after `domcontentloaded`, across 20
   consecutive cold-cache reloads.
+- That repro test runs in its own CI invocation,
+  `playwright.first-paint.config.ts` (`workers: 1`, testMatch only this
+  spec) — the CDP throttle emulation is real CPU load on the runner, not
+  just a simulated condition on the page, and the first CI run had it
+  `fullyParallel` alongside the whole main suite. On the 2-core CI runner
+  that starved concurrent tests: `tasks.spec.ts`'s checkbox-toggle server
+  action blew its 30s timeout waiting on an optimistic row to settle — a
+  resource-contention flake, not a regression in the tasks UI (same class
+  of problem as the BuggyAPI server split, see `playwright.config.ts`).
+  Isolating this spec the same way fixed both failures.
 
 ## What was ruled out before root-causing this (kept for record)
 
