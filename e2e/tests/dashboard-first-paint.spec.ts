@@ -15,7 +15,13 @@ test.describe("dashboard first paint (throttled)", () => {
     browserName,
   }) => {
     test.skip(browserName !== "chromium", "CDP throttling is chromium-only");
-    test.slow();
+    // test.slow()'s 3x (90s) isn't enough budget for 20 cold-cache reloads
+    // under 6x CPU + slow 4G — it died at/near the last iteration on every
+    // attempt even isolated on its own runner (playwright.first-paint.config.ts,
+    // workers: 1), never a real hang. 4 min gives real margin without masking
+    // an actual regression (a genuine blank-paint failure fails immediately
+    // via the per-iteration assertion, not via this outer timeout).
+    test.setTimeout(240_000);
 
     await signUpFreshLearner(page, "firstpaint");
 

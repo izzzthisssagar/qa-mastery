@@ -49,6 +49,13 @@ widens the window where a screenshot lands mid-fade or pre-hydration.
   resource-contention flake, not a regression in the tasks UI (same class
   of problem as the BuggyAPI server split, see `playwright.config.ts`).
   Isolating this spec the same way fixed both failures.
+- Isolating it also exposed a separate, genuine budget problem: `test.slow()`
+  (90s) isn't enough for 20 cold-cache reloads under 6x CPU + slow 4G even
+  with the runner to itself — it died at/near the last iteration on all 3
+  attempts, never mid-run. Replaced with an explicit `test.setTimeout(240_000)`.
+  Not a masked regression: a real blank-paint failure still fails fast on the
+  per-iteration `toBeVisible`/`toHaveCSS` assertions, independent of this
+  outer timeout.
 
 ## What was ruled out before root-causing this (kept for record)
 
