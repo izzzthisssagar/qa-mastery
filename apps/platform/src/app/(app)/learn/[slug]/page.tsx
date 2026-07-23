@@ -59,15 +59,15 @@ export default async function LessonPage({ params }: PageProps) {
     <LessonProgressProvider slug={slug}>
       <article className="mx-auto max-w-3xl pb-16">
         <header className="mb-8 border-b border-border pb-6">
-          <Reveal>
+          <Reveal fade={false}>
             <p className="text-xs font-semibold uppercase tracking-wide text-accent">
               {moduleMeta ? `${fm.module} · ${moduleMeta.title}` : fm.module}
             </p>
           </Reveal>
-          <Reveal delay={0.08}>
+          <Reveal delay={0.08} fade={false}>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight">{fm.title}</h1>
           </Reveal>
-          <Reveal delay={0.16}>
+          <Reveal delay={0.16} fade={false}>
             <p className="mt-2 text-sm text-muted-foreground">
               ~{fm.duration_min} min · See it · Try it · Do it · Prove it
             </p>
