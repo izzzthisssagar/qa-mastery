@@ -22,7 +22,16 @@ export default defineConfig({
   // round trip blew its 30s timeout under the contention (checkbox stuck on
   // an unsettled optimistic row — not a product bug, see
   // docs/known-issues/dashboard-blank-first-paint.md).
-  testIgnore: ["**/buggyapi.spec.ts", "**/dashboard-first-paint.spec.ts"],
+  // visual.spec.ts + a11y.spec.ts also moved out, to their own config
+  // (playwright.full.config.ts) — CI gates that suite to `main` + the
+  // `full-e2e` label instead of running it (and its screenshot/axe cost) on
+  // every push (P4-3).
+  testIgnore: [
+    "**/buggyapi.spec.ts",
+    "**/dashboard-first-paint.spec.ts",
+    "**/visual.spec.ts",
+    "**/a11y.spec.ts",
+  ],
   fullyParallel: true,
   forbidOnly: CI,
   retries: CI ? 2 : 0,

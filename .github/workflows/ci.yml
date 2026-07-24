@@ -9,31 +9,18 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # Supabase URL/keys are exported via GITHUB_ENV by the "Export Supabase env"
-  # step (real local stack) — do NOT define them here, workflow env would
-  # shadow the runner env.
-  SANDBOX_JWT_SECRET: ci-only-secret-not-a-real-one
-  NEXT_PUBLIC_PLATFORM_URL: http://localhost:3000
-  NEXT_PUBLIC_BUGGYSHOP_URL: http://localhost:3001
-  BILLING_ENABLED: "false"
-
 jobs:
+  # Fast, no DB / no build — fails in under a couple minutes instead of
+  # burning a 20min e2e slot on a lint typo.
   checks:
     runs-on: ubuntu-latest
-    # Was 30 — the pinned-container E2E stage alone ran 26+ min on its first
-    # real run and got cancelled at the wire (see docs/known-issues/
-    # visual-regression-baselines.md). Root cause fixed below (a redundant
-    # `pnpm install` inside the container was re-downloading everything the
-    # host already installed), but padding the ceiling too since a 2-core
-    # shared runner's e2e time has real variance run to run.
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -53,8 +40,31 @@ jobs:
       - name: RLS test coverage (every table needs a test — P1-7)
         run: node scripts/check-rls-coverage.mjs
 
+      - name: E2E CI shape (shard + gate — P4-3)
+        run: node scripts/check-e2e-ci-shape.mjs
+
       - name: Validate curriculum content
         run: pnpm --filter @qa-mastery/curriculum sync
+
+  # Live-DB RLS regression only — split out of `checks` because it's the only
+  # static-vs-live-DB step, and out of the e2e shards because it doesn't need
+  # a build and shouldn't wait on one.
+  rls-regression:
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Start local Supabase (applies migrations)
         run: pnpm exec supabase start
@@ -71,89 +81,43 @@ jobs:
       - name: RLS regression tests (live DB)
         run: pnpm test:rls
 
-      # Lessons live in MDX and reach the DB registry only via `sync --apply`.
-      # Without this the lessons table is empty and every learn e2e fails with
-      # "Lesson not available". (migrations + supabase seed don't cover content.)
-      - name: Seed curriculum registry
-        run: pnpm --filter @qa-mastery/curriculum sync --apply
+  # Main cross-app suite (everything except buggyapi/first-paint/visual/a11y,
+  # see e2e/playwright.config.ts testIgnore), sharded 4 ways so wall-clock
+  # stays under the 20min p95 target (P4-3) instead of one runner eating the
+  # whole suite sequentially.
+  e2e-core:
+    needs: checks
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    uses: ./.github/workflows/e2e-shard.yml
+    with:
+      job-label: core-${{ matrix.shard }}
+      playwright-args: "--shard=${{ matrix.shard }}/4"
 
-      - name: Build both apps
-        run: pnpm build
+  e2e-buggyapi:
+    needs: checks
+    uses: ./.github/workflows/e2e-shard.yml
+    with:
+      job-label: buggyapi
+      playwright-args: "--config=playwright.buggyapi.config.ts"
 
-      - name: Manifest leak check (client bundles)
-        run: |
-          if grep -rl "title_internal\|repro_steps_internal" apps/platform/.next/static apps/buggyshop/.next/static apps/buggyapi/.next/static 2>/dev/null; then
-            echo "::error::Internal bug-manifest fields found in a client bundle — grading integrity broken."
-            exit 1
-          fi
-          echo "No manifest fields in client bundles."
+  e2e-first-paint:
+    needs: checks
+    uses: ./.github/workflows/e2e-shard.yml
+    with:
+      job-label: first-paint
+      playwright-args: "--config=playwright.first-paint.config.ts"
 
-      # visual.spec.ts baselines are only meaningful compared inside the exact
-      # environment they were captured in (font rendering drifts across OS/
-      # package versions — see docs/known-issues/visual-regression-baselines.md).
-      # Running the whole E2E stage in the pinned image, not just installing
-      # browsers on whatever ubuntu-latest happens to have today, is what
-      # makes that hold run over run — and it ships browsers preinstalled, so
-      # there's no separate "Install Playwright browsers" step anymore.
-      - name: Write env for containerized E2E
-        run: |
-          # `^(NEXT_PUBLIC_|SUPABASE_|...)=` (no `.*` between the prefix group
-          # and `=`) only matches a var LITERALLY NAMED "NEXT_PUBLIC_" or
-          # "SUPABASE_" — never "NEXT_PUBLIC_SUPABASE_URL=...", since nothing
-          # sits between the prefix and the required "=". SANDBOX_JWT_SECRET/
-          # BILLING_ENABLED matched fine (they're exact full names already),
-          # masking the bug: every NEXT_PUBLIC_*/SUPABASE_* var silently
-          # never reached /tmp/e2e.env, so every authenticated e2e test threw
-          # "createServiceClient requires ..." from turn one and ate the full
-          # 45min job budget on retries. See docs/known-issues/
-          # e2e-service-client-env-missing.md for the diagnosis trail.
-          env | grep -E '^(NEXT_PUBLIC_|SUPABASE_).*=|^(SANDBOX_JWT_SECRET|BILLING_ENABLED)=' > /tmp/e2e.env
-          echo "CI=true" >> /tmp/e2e.env
-
-      # node_modules is already installed on the runner (the "Install
-      # dependencies" step above) and the runner (ubuntu-latest) is the same
-      # OS/arch (linux-x64 Noble) as this pinned image by design — that's the
-      # whole point of the -noble tag. Re-running `pnpm install` inside the
-      # container was pure waste: it re-downloaded ~700 packages from the
-      # network with zero cache, and was the actual cause of the E2E stage
-      # running 26+ minutes and hitting the job timeout on its first real run.
-      # Only `corepack` is needed here, to make the `pnpm` binary available
-      # inside the container for the bind-mounted repo.
-      - name: E2E (production builds + live DB, Chromium + WebKit, pinned image)
-        run: |
-          docker run --rm --network host \
-            --env-file /tmp/e2e.env \
-            -v "$GITHUB_WORKSPACE":/work -w /work \
-            mcr.microsoft.com/playwright:v1.60.0-noble \
-            bash -c "corepack enable && corepack prepare pnpm@11.6.0 --activate && pnpm --filter @qa-mastery/e2e exec playwright test"
-
-      # Separate invocation with its own webServer — keeps a third Next server
-      # out of the main run (2-core runners flake under that contention).
-      - name: E2E BuggyAPI (contract suite, pinned image)
-        run: |
-          docker run --rm --network host \
-            --env-file /tmp/e2e.env \
-            -v "$GITHUB_WORKSPACE":/work -w /work \
-            mcr.microsoft.com/playwright:v1.60.0-noble \
-            bash -c "corepack enable && corepack prepare pnpm@11.6.0 --activate && pnpm --filter @qa-mastery/e2e exec playwright test --config=playwright.buggyapi.config.ts"
-
-      # Separate invocation, workers: 1 — the 6x-CPU-throttle + slow-4G ×
-      # 20-reload emulation is real CPU load on the runner, and running it
-      # fullyParallel alongside the main suite starved the 2-core runner and
-      # flaked unrelated tests (same class of issue as the BuggyAPI split
-      # above, see playwright.first-paint.config.ts).
-      - name: E2E dashboard first paint (throttled, pinned image)
-        run: |
-          docker run --rm --network host \
-            --env-file /tmp/e2e.env \
-            -v "$GITHUB_WORKSPACE":/work -w /work \
-            mcr.microsoft.com/playwright:v1.60.0-noble \
-            bash -c "corepack enable && corepack prepare pnpm@11.6.0 --activate && pnpm --filter @qa-mastery/e2e exec playwright test --config=playwright.first-paint.config.ts"
-
-      - name: Upload Playwright report on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: e2e/playwright-report/
-          retention-days: 7
+  # Visual regression + a11y: gated to `main` pushes and PRs carrying the
+  # `full-e2e` label (P4-3 acceptance — full suite still runs on main +
+  # label). These are the slow/flaky-under-load specs (screenshot diffing,
+  # axe scans across every page x2 themes) — not worth every PR's wall-clock.
+  e2e-full:
+    needs: checks
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'full-e2e'))
+    uses: ./.github/workflows/e2e-shard.yml
+    with:
+      job-label: visual-a11y
+      playwright-args: "--config=playwright.full.config.ts"
