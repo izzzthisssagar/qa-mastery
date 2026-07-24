@@ -32,7 +32,19 @@ test.describe("notification bell — realtime", () => {
 
     await signUpFreshLearner(liker, "bell-liker");
     await liker.goto(postUrl);
-    await liker.getByTestId("post-like").first().click();
+
+    // Guard against the pre-hydration lost-click race documented in
+    // docs/known-issues/webkit-save-stall.md: post-card.tsx has no hydration
+    // gate, so a click before React attaches is silently dropped (no
+    // toggleLike call, no notify(), badge never appears). Retry the click
+    // until the optimistic ♥ state sticks, mirroring signup-helper's guard.
+    const likeButton = liker.getByTestId("post-like").first();
+    await expect(async () => {
+      if (!(await likeButton.innerText()).includes("♥")) {
+        await likeButton.click();
+      }
+      await expect(likeButton).toContainText("♥", { timeout: 1_000 });
+    }).toPass({ timeout: 10_000 });
 
     // No reload on the author's page — the badge must appear via the Realtime
     // push within the ticket's <2s budget.
