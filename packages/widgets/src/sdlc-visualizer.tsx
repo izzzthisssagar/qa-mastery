@@ -32,7 +32,14 @@ export function SDLCVisualizer({ onMilestone }: { onMilestone?: (m: string) => v
           const isPast = selectedPhase !== null && idx < selectedPhase;
 
           return (
-            <div key={phase.id} className="flex-1 flex md:flex-col items-center group relative cursor-pointer" onClick={() => handleClick(idx)}>
+            <button
+              key={phase.id}
+              type="button"
+              aria-pressed={isActive}
+              aria-label={`${phase.name}: cost to fix a defect found here is ${phase.cost}`}
+              className="flex-1 flex md:flex-col items-center group relative cursor-pointer appearance-none border-0 bg-transparent p-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 rounded-lg"
+              onClick={() => handleClick(idx)}
+            >
               {/* Connector line (desktop) */}
               {idx !== 0 && (
                 <div className="hidden md:block absolute top-6 right-1/2 w-full h-[2px] bg-surface-raised -z-10" />
@@ -58,12 +65,16 @@ export function SDLCVisualizer({ onMilestone }: { onMilestone?: (m: string) => v
                   {phase.name}
                 </div>
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
 
-      <div className="min-h-[120px] rounded-xl border border-border bg-background p-6 flex flex-col justify-center items-center text-center">
+      <div
+        role="status"
+        aria-live="polite"
+        className="min-h-[120px] rounded-xl border border-border bg-background p-6 flex flex-col justify-center items-center text-center"
+      >
         {selectedPhase === null ? (
           <p className="text-muted-foreground italic">Select a phase above...</p>
         ) : (

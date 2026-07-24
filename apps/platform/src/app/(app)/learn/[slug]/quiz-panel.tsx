@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@qa-mastery/ui";
 import { useHydrated } from "@/hooks/use-hydrated";
+import { prefersReducedMotion } from "@/lib/reduced-motion";
 import { submitQuiz, type SubmitQuizResult } from "../actions";
 
 /** Client-safe quiz question — the answer key (`correct`/`explanation`) is
@@ -50,7 +51,7 @@ export function QuizPanel({
     try {
       const res = await submitQuiz(slug, answers);
       setResult(res);
-      if (res.passed) {
+      if (res.passed && !prefersReducedMotion()) {
         import("canvas-confetti").then((confetti) => {
           confetti.default({
             particleCount: 100,
