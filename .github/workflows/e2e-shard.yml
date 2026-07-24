@@ -1,0 +1,93 @@
+name: E2E shard (reusable)
+
+# Called by ci.yml once per shard/suite. Each call is a fresh runner: the live
+# DB the e2e specs hit lives in a local Supabase stack reached over
+# `--network host`, so it has to run on the SAME runner as the tests — that
+# rules out building once and fanning artifacts out to lighter shard runners.
+# Duplicating build+DB-start per call is the cost of sharding this suite; the
+# payoff is wall-clock, since the calls run concurrently (see ci.yml P4-3).
+
+on:
+  workflow_call:
+    inputs:
+      job-label:
+        required: true
+        type: string
+      playwright-args:
+        required: true
+        type: string
+
+env:
+  SANDBOX_JWT_SECRET: ci-only-secret-not-a-real-one
+  NEXT_PUBLIC_PLATFORM_URL: http://localhost:3000
+  NEXT_PUBLIC_BUGGYSHOP_URL: http://localhost:3001
+  BILLING_ENABLED: "false"
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Start local Supabase (applies migrations)
+        run: pnpm exec supabase start
+
+      - name: Export Supabase env
+        run: |
+          eval "$(pnpm exec supabase status -o env | grep -E '^(API_URL|ANON_KEY|SERVICE_ROLE_KEY)=')"
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+          } >> "$GITHUB_ENV"
+
+      # Lessons live in MDX and reach the DB registry only via `sync --apply`.
+      # Without this the lessons table is empty and every learn e2e fails with
+      # "Lesson not available".
+      - name: Seed curriculum registry
+        run: pnpm --filter @qa-mastery/curriculum sync --apply
+
+      - name: Build both apps
+        run: pnpm build
+
+      - name: Manifest leak check (client bundles)
+        run: |
+          if grep -rl "title_internal\|repro_steps_internal" apps/platform/.next/static apps/buggyshop/.next/static apps/buggyapi/.next/static 2>/dev/null; then
+            echo "::error::Internal bug-manifest fields found in a client bundle — grading integrity broken."
+            exit 1
+          fi
+          echo "No manifest fields in client bundles."
+
+      - name: Write env for containerized E2E
+        run: |
+          env | grep -E '^(NEXT_PUBLIC_|SUPABASE_).*=|^(SANDBOX_JWT_SECRET|BILLING_ENABLED)=' > /tmp/e2e.env
+          echo "CI=true" >> /tmp/e2e.env
+
+      # Same pinned-container reasoning as before sharding (P4-3): visual.spec.ts
+      # baselines and font rendering only hold stable inside this exact image.
+      - name: "E2E: ${{ inputs.job-label }} (pinned image)"
+        run: |
+          docker run --rm --network host \
+            --env-file /tmp/e2e.env \
+            -v "$GITHUB_WORKSPACE":/work -w /work \
+            mcr.microsoft.com/playwright:v1.60.0-noble \
+            bash -c "corepack enable && corepack prepare pnpm@11.6.0 --activate && pnpm --filter @qa-mastery/e2e exec playwright test ${{ inputs.playwright-args }}"
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ inputs.job-label }}
+          path: e2e/playwright-report/
+          retention-days: 7
