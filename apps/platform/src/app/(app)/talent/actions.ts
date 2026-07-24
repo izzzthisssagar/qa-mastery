@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { createServiceClient } from "@qa-mastery/db";
+import { type ActionResult } from "@qa-mastery/shared";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { emitTalentEvent } from "@/lib/talent/events";
 import { withinRate } from "@/lib/talent/rate-limit";
@@ -23,10 +24,6 @@ import {
  * policies in 20260621000017_talent.sql are the real security boundary. Taxonomy
  * fields are allow-list validated here to keep directory filters precise.
  */
-
-export type ActionResult<T = null> =
-  | { ok: true; data: T }
-  | { ok: false; error: string };
 
 const inSet = (set: readonly string[], msg: string) =>
   z.string().refine((v) => set.includes(v), msg);

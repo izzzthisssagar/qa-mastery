@@ -67,7 +67,12 @@ export async function setTestCaseStatus(formData: FormData): Promise<void> {
   if (!id || !STATUSES.includes(status as (typeof STATUSES)[number])) return;
 
   const supabase = await createSupabaseServerClient();
-  await supabase.from("test_cases").update({ status }).eq("id", id);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  await supabase.from("test_cases").update({ status }).eq("id", id).eq("user_id", user.id);
   revalidatePath("/test-cases");
 }
 
@@ -76,6 +81,11 @@ export async function deleteTestCase(formData: FormData): Promise<void> {
   if (!id) return;
 
   const supabase = await createSupabaseServerClient();
-  await supabase.from("test_cases").delete().eq("id", id);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  await supabase.from("test_cases").delete().eq("id", id).eq("user_id", user.id);
   revalidatePath("/test-cases");
 }
