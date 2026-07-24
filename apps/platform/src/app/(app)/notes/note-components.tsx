@@ -13,7 +13,6 @@ import Link from "next/link";
 import { Spinner } from "@qa-mastery/ui";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { runSimulatorCode } from "@/app/(app)/simulator/actions";
-import { completeNote } from "./actions";
 import { createAutosave, type SaveStatus } from "./autosave";
 import { deletePendingSave, getPendingSave, putPendingSave } from "./note-draft-db";
 import { useNoteProgress } from "./note-progress-context";
@@ -343,9 +342,19 @@ export function Complete({ xp = 10 }: { xp?: number }) {
   useEffect(() => {
     controllerRef.current = createAutosave({
       persistLocal: () => putPendingSave(draftKey, { slug }),
+      // `keepalive` lets this request survive a hard nav/reload that follows
+      // the optimistic click within milliseconds — a plain server-action
+      // fetch would be aborted along with the unloading document.
       sync: async () => {
-        const res = await completeNote(slug);
-        if (!res.alreadyDone) burst();
+        const res = await fetch("/api/notes/complete", {
+          method: "POST",
+          keepalive: true,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ noteSlug: slug }),
+        });
+        if (!res.ok) throw new Error("Failed to complete note");
+        const data = (await res.json()) as { alreadyDone: boolean };
+        if (!data.alreadyDone) burst();
         await deletePendingSave(draftKey);
       },
       onStatusChange: setStatus,
