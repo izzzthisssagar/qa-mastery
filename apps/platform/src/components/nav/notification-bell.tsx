@@ -46,7 +46,9 @@ export function NotificationBell({ userId, initialUnread }: { userId: string; in
         onClick={toggle}
         aria-label="Notifications"
         data-testid="notification-bell"
-        className="relative flex h-12 w-12 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface hover:text-foreground"
+        // before:inset-[-6px] pads the 36px icon out to a 48px hit box
+        // without growing the visible element — see avatar-menu.tsx.
+        className="relative flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground before:absolute before:inset-[-6px] before:content-[''] hover:bg-surface hover:text-foreground"
       >
         <span aria-hidden className="text-lg">🔔</span>
         {unread > 0 && (

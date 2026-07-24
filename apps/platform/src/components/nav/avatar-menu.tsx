@@ -25,7 +25,10 @@ export function AvatarMenu({ email }: { email: string }) {
     <DropdownMenu>
       <DropdownTrigger
         aria-label="Account menu"
-        className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+        // relative + before:inset-[-6px] pads the 36px circle out to a 48px
+        // hit box without growing the visible element (avoids reflowing the
+        // header — see notification-bell.tsx for the matching pattern).
+        className="relative flex h-9 w-9 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground transition before:absolute before:inset-[-6px] before:content-[''] hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
       >
         {initial}
       </DropdownTrigger>
