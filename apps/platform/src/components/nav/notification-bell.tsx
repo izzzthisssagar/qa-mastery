@@ -46,7 +46,7 @@ export function NotificationBell({ userId, initialUnread }: { userId: string; in
         onClick={toggle}
         aria-label="Notifications"
         data-testid="notification-bell"
-        className="relative flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface hover:text-foreground"
+        className="relative flex h-12 w-12 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface hover:text-foreground"
       >
         <span aria-hidden className="text-lg">🔔</span>
         {unread > 0 && (

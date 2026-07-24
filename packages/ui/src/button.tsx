@@ -41,7 +41,10 @@ export function Button({
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition duration-200",
+        // min-h-12 (48px): meets the 48dp touch-target floor on top of the
+        // visual px-4/py-2 sizing — text-only buttons stay small-looking but
+        // tappable (playbook 2.4).
+        "inline-flex min-h-12 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition duration-200",
         "hover:-translate-y-px active:translate-y-0",
         "focus-visible:outline-2 focus-visible:outline-offset-2 disabled:pointer-events-none disabled:opacity-50",
         VARIANT_CLASSES[variant],

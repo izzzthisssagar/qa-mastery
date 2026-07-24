@@ -25,7 +25,7 @@ export function AvatarMenu({ email }: { email: string }) {
     <DropdownMenu>
       <DropdownTrigger
         aria-label="Account menu"
-        className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+        className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
       >
         {initial}
       </DropdownTrigger>
