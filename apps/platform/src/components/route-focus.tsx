@@ -14,6 +14,11 @@ export function RouteFocusHeading() {
     const heading = document.querySelector<HTMLElement>("main h1");
     if (!heading) return;
     if (!heading.hasAttribute("tabindex")) heading.setAttribute("tabindex", "-1");
+    // Programmatic focus (not a keyboard tab stop) still triggers the
+    // browser's default :focus-visible ring in Chromium/WebKit — visibly
+    // different per-browser and enough to bust the pinned visual-regression
+    // baselines (maxDiffPixelRatio 0.01) on every dashboard screenshot.
+    heading.style.outline = "none";
     heading.focus({ preventScroll: true });
   }, []);
 
