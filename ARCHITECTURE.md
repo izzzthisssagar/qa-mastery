@@ -1,9 +1,11 @@
 # Architecture
 
-QA Mastery is a hands-on QA learning platform. Two Next.js apps share a Supabase
-(Postgres + Auth + Storage) backend through a set of internal packages, deployed
-on Vercel. This doc is the system overview; `CLAUDE.md` holds the engineering
-conventions + invariants, and `DEPLOYMENT.md` the go-live steps.
+QA Mastery is a hands-on QA learning platform. Three Next.js apps plus a
+standalone WebSocket service share a Supabase (Postgres + Auth + Storage)
+backend through a set of internal packages, deployed on Vercel (apps) and
+Fly.io (the WebSocket service). This doc is the system overview; `CLAUDE.md`
+holds the engineering conventions + invariants, and `DEPLOYMENT.md` the go-live
+steps.
 
 ## System context
 
@@ -12,6 +14,13 @@ conventions + invariants, and `DEPLOYMENT.md` the go-live steps.
 - **buggyshop** (`:3001`) — a deliberately-buggy practice e-commerce app the
   curriculum tests against. Fake (cookie-free) auth; every bug is seeded behind
   a release flag.
+- **buggyapi** (`:3002`) — "TaskFlight", a deliberately-buggy practice REST API
+  with generated OpenAPI docs, covering REST/GraphQL/SOAP/OAuth surfaces for
+  API-testing curriculum modules. Same fake-auth, seeded-bug-behind-a-flag
+  model as buggyshop (`apiBugFlag`, `ba_sandbox_state`).
+- **buggyapi-ws** (`services/buggyapi-ws`) — BuggyAPI's WebSocket practice
+  service, deployed separately on Fly.io since Vercel's serverless functions
+  can't hold long-lived socket connections.
 - **Supabase** — Postgres (RLS), Auth, Storage. One client per request;
   `auth.getUser()` for the real boundary; a service-role client bypasses RLS for
   server-side writes.
@@ -28,6 +37,10 @@ graph TD
     subgraph Apps
       platform
       buggyshop
+      buggyapi
+    end
+    subgraph Services
+      buggyapi_ws["buggyapi-ws"]
     end
     curriculum
     subgraph "Domain / leaf packages"
@@ -37,6 +50,8 @@ graph TD
 
     platform --> agent & curriculum & db & grading & shared & ui & widgets
     buggyshop --> db & shared & ui
+    buggyapi --> db & shared & ui
+    buggyapi_ws --> config
     curriculum --> db & shared & config
     widgets --> shared & config
     agent & db & grading & shared & ui --> config
@@ -44,7 +59,7 @@ graph TD
 
 | Layer | Packages | Role |
 |---|---|---|
-| 3 — apps | `platform`, `buggyshop` | Next.js App Router; consume packages only |
+| 3 — apps/services | `platform`, `buggyshop`, `buggyapi` (Next.js App Router), `buggyapi-ws` (standalone WS service) | consume packages only |
 | 2 — composite | `curriculum` (MDX→registry), `widgets` (teaching UI) | depend on `shared`/`db` |
 | 1 — domain | `agent` (tutor LLM), `grading`, `db`, `ui`, `shared` | depend on `config` |
 | 0 — leaf | `config` (tsconfig/eslint) | nothing |
@@ -55,7 +70,7 @@ rapid iteration. Internal packages ship TS source; apps list them in
 exports (`@qa-mastery/grading/runners` keeps `node:child_process` out of client
 bundles).
 
-## Data model (Postgres, 13 migrations)
+## Data model (Postgres, 36 migrations)
 
 **`public` schema — learner data.** RLS read-own; scores/XP/entitlements are
 written only by the service role (invariant 2 — learners never write scores).
@@ -91,12 +106,14 @@ never reach a client bundle (invariant 1, CI-checked).
 
 ## Deployment & CI/CD
 
-Two Vercel projects (one per app, rooted at `apps/platform` / `apps/buggyshop`)
-build from this monorepo on a shared Supabase cloud project.
-`.github/workflows/deploy.yml` ships both apps to production on every push to
-`main` via the Vercel CLI token; `ci.yml` runs the quality gates in parallel.
-Vercel's own build gates the deploy — a red build leaves the live alias on the
-last good one. The platform's `next.config.ts` traces
+Three Vercel projects (one per Next.js app, rooted at `apps/platform` /
+`apps/buggyshop` / `apps/buggyapi`) build from this monorepo on a shared
+Supabase cloud project; `buggyapi-ws` deploys separately to Fly.io.
+`.github/workflows/deploy.yml` ships to production via `workflow_run`, gated
+on `ci.yml` (lint/typecheck/unit/RLS/e2e) completing successfully on `main` —
+a red CI run blocks the deploy entirely, and Vercel's own build is a second
+gate on top of that (a red build leaves the live alias on the last good one).
+The platform's `next.config.ts` traces
 `packages/curriculum/content` into the serverless bundle so lesson/quiz/tutor
 routes can read it at request time. Full runbook, the two deploy gotchas, and
 the design system: [`docs/09-deployment.md`](./docs/09-deployment.md).

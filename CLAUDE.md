@@ -72,9 +72,10 @@ RLS regression tests (`pnpm test:rls`) that run in the DB-backed CI stage.
 
 ## Deployment & design (live)
 
-Both apps run on Vercel and **redeploy on every push to `main`** via
-`.github/workflows/deploy.yml`. Full detail: `docs/09-deployment.md`. Keep in
-mind when deploying:
+All three Next.js apps run on Vercel (buggyapi-ws on Fly.io) and **redeploy on
+every push to `main` that passes CI** via `.github/workflows/deploy.yml`
+(`workflow_run`, gated on `ci.yml` succeeding — a red CI run blocks the
+deploy). Full detail: `docs/09-deployment.md`. Keep in mind when deploying:
 
 - **Live:** platform `qa-mastery-platform.vercel.app`, buggyshop
   `qa-mastery-buggyshop.vercel.app`. One Supabase cloud project backs both.

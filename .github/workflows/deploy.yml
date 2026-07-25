@@ -1,14 +1,20 @@
 name: Deploy to Vercel
 
-# Every push to main ships both apps to production. Vercel runs the real build,
-# so a broken build fails the deploy and leaves the live alias on the last good
-# one. Quality gates (lint / typecheck / unit / e2e) run in parallel in ci.yml.
+# Gated on CI: fires only after the "CI" workflow (lint/typecheck/unit/RLS/e2e)
+# finishes on main, and only deploys if it passed. Previously this ran on
+# every push to main independently of ci.yml — a broken build (or worse, a red
+# e2e run) could still go live because nothing blocked it. workflow_run doesn't
+# auto-checkout the triggering commit, so the checkout step below pins to
+# github.event.workflow_run.head_sha explicitly.
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
 
 jobs:
   deploy:
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -26,6 +32,8 @@ jobs:
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - uses: actions/setup-node@v7
         with:
@@ -49,12 +57,13 @@ jobs:
           # project is selected via VERCEL_ORG_ID / VERCEL_PROJECT_ID, not git, so
           # drop git metadata before deploying.
           rm -rf .git
-          npx vercel@latest deploy --prod --yes --archive=tgz
+          npx vercel@57.0.0 deploy --prod --yes --archive=tgz
 
   # BuggyAPI's WebSocket practice service lives on Fly.io (Vercel serverless
   # can't hold sockets). Skips cleanly until FLY_API_TOKEN is configured and
   # the app has been `flyctl launch`ed once (see services/buggyapi-ws/fly.toml).
   deploy-ws:
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
@@ -64,10 +73,15 @@ jobs:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Set up flyctl
         if: env.FLY_API_TOKEN != ''
-        uses: superfly/flyctl-actions/setup-flyctl@master
+        # Pinned to the ed8efb3 commit (tags v1 / 1.6 both point here as of
+        # 2026-07 — @master floated and could change underneath CI with no
+        # review).
+        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
 
       - name: Deploy buggyapi-ws to Fly.io
         if: env.FLY_API_TOKEN != ''
