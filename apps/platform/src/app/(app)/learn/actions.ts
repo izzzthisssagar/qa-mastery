@@ -1,588 +1,78 @@
 "use server";
 
 import { createServiceClient } from "@qa-mastery/db";
-import { findLessonBySlug, loadQuiz } from "@qa-mastery/curriculum";
-import {
-  scoreQuiz,
-  matchBugReport,
-  gradeCapstone,
-  validateCodeSubmission,
-  type QuizAnswers,
-  type QuizQuestion,
-  type BugReportInput,
-  type ManifestBug,
-  type CapstoneInput,
-  type CapstoneResult,
-  type RunResult,
-  type RunnerProvider,
+import type {
+  BugReportInput,
+  CapstoneInput,
+  CapstoneResult,
+  QuizAnswers,
+  RunResult,
 } from "@qa-mastery/grading";
-import { DEFAULT_RELEASE, isRelease, mintHandoffToken } from "@qa-mastery/shared";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAuthedUserId } from "@/lib/auth";
-import { assertCodeRunQuota, getCodeRunner } from "@/lib/code-runs";
 import { withLogging } from "@/lib/logging";
-import { touchStreak } from "@/lib/streaks";
+import type { BugReportResult, HuntStatus, Step, SubmitQuizResult } from "./action-types";
+import { huntStatusForUser, recordBugReport } from "./server/bug-hunt";
+import { gradeAndRecordCapstone } from "./server/capstone";
+import { pollCodeRunResult, runCodeSubmission } from "./server/code-lab";
+import { saveProgressForUser } from "./server/progress";
+import { scoreAndRecordQuiz } from "./server/quiz";
+import { provisionSandboxAndMintUrl } from "./server/sandbox";
 
-type Step = "see" | "try" | "do" | "prove";
-
-interface LessonRegistryRow {
-  id: string;
-  free: boolean;
-  status: string;
-}
-
-const XP_LESSON_COMPLETED = 50;
-
-/** Look up a published lesson by slug. Everything is free — the platform has no
- *  paywall — so the only gate is that the lesson exists and is published. */
-async function requireAccessibleLesson(
-  service: SupabaseClient,
-  slug: string,
-): Promise<LessonRegistryRow> {
-  const { data, error } = await service
-    .from("lessons")
-    .select("id, free, status")
-    .eq("slug", slug)
-    .maybeSingle<LessonRegistryRow>();
-  if (error) throw new Error(error.message);
-  if (!data || data.status !== "published") throw new Error("Lesson not available");
-  return data;
-}
-
-/** Append a sensitive-operation record to the audit trail. Best-effort: an
- *  audit-write failure must never break the operation it records. */
-async function recordAuditEvent(
-  service: SupabaseClient,
-  event: { actorId: string; action: string; target?: string; metadata?: Record<string, unknown> },
-): Promise<void> {
-  const { error } = await service.from("audit_events").insert({
-    actor_id: event.actorId,
-    action: event.action,
-    target: event.target ?? null,
-    metadata: event.metadata ?? {},
-  });
-  if (error) console.error("audit_events insert failed:", error.message);
-}
+export type {
+  BugReportResult,
+  HuntStatus,
+  QuizQuestionResultForClient,
+  Step,
+  SubmitQuizResult,
+} from "./action-types";
 
 /** Record progress. `step` marks one of the see/try/do/prove milestones; no
  *  step just ensures a 'started' row exists. Completion is owned by submitQuiz. */
 export async function saveProgress(slug: string, step?: Step): Promise<{ ok: true }> {
   const userId = await getAuthedUserId();
-  const service = createServiceClient();
-  const lesson = await requireAccessibleLesson(service, slug);
-
-  const { data: existing } = await service
-    .from("progress")
-    .select("step_state, status")
-    .eq("user_id", userId)
-    .eq("lesson_id", lesson.id)
-    .maybeSingle<{ step_state: Record<string, boolean>; status: string }>();
-
-  const stepState = { ...(existing?.step_state ?? {}) };
-  if (step) stepState[step] = true;
-
-  const { error } = await service.from("progress").upsert(
-    {
-      user_id: userId,
-      lesson_id: lesson.id,
-      status: existing?.status ?? "started",
-      step_state: stepState,
-    },
-    { onConflict: "user_id,lesson_id" },
-  );
-  if (error) throw new Error(error.message);
-  return { ok: true };
+  return saveProgressForUser(createServiceClient(), userId, slug, step);
 }
 
-export interface QuizQuestionResultForClient {
-  id: string;
-  correct: boolean;
-  correctIndices: number[];
-  explanation: string | null;
-}
-
-export interface SubmitQuizResult {
-  score: number;
-  maxScore: number;
-  passed: boolean;
-  passMark: number;
-  perQuestion: QuizQuestionResultForClient[];
-}
-
-/** Grade a quiz server-side against the answer key (never shipped to the
- *  client), persist the attempt, and on a first pass mark the lesson complete,
- *  award XP, and seed flashcards into the review queue. */
 export async function submitQuiz(slug: string, answers: QuizAnswers): Promise<SubmitQuizResult> {
   const userId = await getAuthedUserId();
-  return withLogging("submitQuiz", userId, () => submitQuizScoring(userId, slug, answers));
+  return withLogging("submitQuiz", userId, () =>
+    scoreAndRecordQuiz(createServiceClient(), userId, slug, answers),
+  );
 }
 
-async function submitQuizScoring(
-  userId: string,
-  slug: string,
-  answers: QuizAnswers,
-): Promise<SubmitQuizResult> {
-  const service = createServiceClient();
-  const lesson = await requireAccessibleLesson(service, slug);
-
-  const quiz = loadQuiz(slug);
-  const questions = quiz.questions as QuizQuestion[];
-  const result = scoreQuiz(questions, answers);
-
-  // attempt_no is unique per (user, lesson). A naive count-then-insert races on
-  // rapid re-submit (double-click / retry) and the second insert hits 23505.
-  // Retry on conflict, recomputing the next number each pass, so concurrency
-  // never fails the learner. (A max+1 DB trigger would NOT fix this — both
-  // transactions read the same max and the second still collides.)
-  for (let attempt = 0; ; attempt++) {
-    const { count } = await service
-      .from("quiz_attempts")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .eq("lesson_id", lesson.id);
-    const attemptNo = (count ?? 0) + 1 + attempt;
-
-    const { error: insertError } = await service.from("quiz_attempts").insert({
-      user_id: userId,
-      lesson_id: lesson.id,
-      attempt_no: attemptNo,
-      score: result.score,
-      max_score: result.maxScore,
-      passed: result.passed,
-      answers,
-    });
-    if (!insertError) break;
-    if (insertError.code !== "23505") throw new Error(insertError.message);
-    if (attempt >= 4) {
-      throw new Error("Could not record quiz attempt (too many concurrent submissions)");
-    }
-  }
-
-  if (result.passed) {
-    const { data: prog } = await service
-      .from("progress")
-      .select("status, step_state")
-      .eq("user_id", userId)
-      .eq("lesson_id", lesson.id)
-      .maybeSingle<{ status: string; step_state: Record<string, boolean> }>();
-
-    const firstCompletion = prog?.status !== "completed";
-
-    await service.from("progress").upsert(
-      {
-        user_id: userId,
-        lesson_id: lesson.id,
-        status: "completed",
-        step_state: { ...(prog?.step_state ?? {}), prove: true },
-        completed_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id,lesson_id" },
-    );
-
-    if (firstCompletion) {
-      await service.from("xp_events").insert({
-        user_id: userId,
-        amount: XP_LESSON_COMPLETED,
-        reason: "lesson_completed",
-        ref_id: slug,
-      });
-      await touchStreak(service, userId);
-
-      await recordAuditEvent(service, {
-        actorId: userId,
-        action: "lesson.completed",
-        target: slug,
-        metadata: { score: result.score, maxScore: result.maxScore },
-      });
-
-      const flashcards = findLessonBySlug(slug)?.frontmatter.flashcards ?? [];
-      if (flashcards.length > 0) {
-        const dueAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-        await service.from("review_queue").upsert(
-          flashcards.map((card, i) => ({
-            user_id: userId,
-            card_key: `${slug}:${i}`,
-            lesson_id: lesson.id,
-            front: card.front,
-            back: card.back,
-            due_at: dueAt,
-          })),
-          { onConflict: "user_id,card_key", ignoreDuplicates: true },
-        );
-      }
-    }
-  }
-
-  return {
-    score: result.score,
-    maxScore: result.maxScore,
-    passed: result.passed,
-    passMark: result.passMark,
-    perQuestion: questions.map((q) => {
-      const r = result.perQuestion.find((p) => p.id === q.id);
-      return {
-        id: q.id,
-        correct: r?.correct ?? false,
-        correctIndices: q.correct,
-        explanation: quiz.questions.find((qq) => qq.id === q.id)?.explanation ?? null,
-      };
-    }),
-  };
-}
-
-interface BugManifestRow {
-  bug_id: string;
-  release: string;
-  page: string;
-  feature: string;
-  category: string;
-  severity: ManifestBug["severity"];
-  points: number;
-  title_internal: string;
-  expected: string | null;
-}
-
-export interface BugReportResult {
-  matched: boolean;
-  duplicate: boolean;
-  score: number;
-  feedback: string[];
-  matchedBugId: string | null;
-}
-
-/** The release this lesson's lab grades against — from its frontmatter, server
- *  side, so the client can't aim grading at a release where the bug is fixed. */
-function lessonRelease(slug: string): string {
-  const source = findLessonBySlug(slug);
-  const declared = source?.frontmatter.requires_release;
-  return declared && isRelease(declared) ? declared : DEFAULT_RELEASE;
-}
-
-/** Grade a bug-report lab submission against the seeded-bug manifest (read
- *  server-side from the deny-all buggyshop schema), persist it, and mark the
- *  "do" step. The answer key (title_internal, expected) never reaches the
- *  client except as post-match feedback. */
 export async function submitBugReport(
   slug: string,
   report: BugReportInput,
 ): Promise<BugReportResult> {
   const userId = await getAuthedUserId();
-  const service = createServiceClient();
-  const lesson = await requireAccessibleLesson(service, slug);
-  const release = lessonRelease(slug);
-
-  const { data: rows, error: manifestError } = await service
-    .schema("buggyshop")
-    .from("bs_bug_manifest")
-    .select("bug_id, release, page, feature, category, severity, points, title_internal, expected")
-    .eq("release", release)
-    .returns<BugManifestRow[]>();
-  if (manifestError) throw new Error(manifestError.message);
-
-  const manifest: ManifestBug[] = (rows ?? []).map((r) => ({
-    id: r.bug_id,
-    release: r.release,
-    page: r.page,
-    feature: r.feature,
-    category: r.category,
-    severity: r.severity,
-    points: r.points,
-    titleInternal: r.title_internal,
-    expected: r.expected ?? "",
-  }));
-
-  // Bugs this learner already matched on this lesson — duplicates score 0.
-  const { data: prior } = await service
-    .from("bug_reports")
-    .select("matched_bug_id")
-    .eq("user_id", userId)
-    .eq("lesson_id", lesson.id)
-    .not("matched_bug_id", "is", null);
-  const alreadyMatched = new Set((prior ?? []).map((p) => p.matched_bug_id as string));
-
-  const outcome = matchBugReport(report, manifest, alreadyMatched);
-
-  const { error: insertError } = await service.from("bug_reports").insert({
-    user_id: userId,
-    lesson_id: lesson.id,
-    matched_bug_id: outcome.matched?.id ?? null,
-    page: report.page,
-    feature: report.feature,
-    category: report.category,
-    severity: report.severity,
-    title: report.title,
-    steps: report.steps,
-    expected: report.expected,
-    actual: report.actual,
-    evidence_url: report.evidenceUrl ?? null,
-    score: outcome.score,
-    matched: outcome.matched !== null,
-    duplicate: outcome.duplicate,
-    feedback: outcome.feedback,
-  });
-  if (insertError) throw new Error(insertError.message);
-
-  if (outcome.matched && !outcome.duplicate) {
-    await recordAuditEvent(service, {
-      actorId: userId,
-      action: "bug_report.matched",
-      target: outcome.matched.id,
-      metadata: { slug, score: outcome.score },
-    });
-  }
-
-  // Filing a report counts as doing the lab.
-  await saveProgress(slug, "do");
-
-  return {
-    matched: outcome.matched !== null,
-    duplicate: outcome.duplicate,
-    score: outcome.score,
-    feedback: outcome.feedback,
-    matchedBugId: outcome.matched?.id ?? null,
-  };
+  return recordBugReport(createServiceClient(), userId, slug, report);
 }
 
-export interface HuntStatus {
-  /** Distinct seeded-bug ids this learner has matched on this lesson. */
-  found: string[];
-  /** Seeded bugs available to find in the lesson's release. */
-  total: number;
-}
-
-/** Bug-hunt progress for the current learner: how many distinct seeded bugs
- *  they've matched on this lesson, out of the total in the release manifest. */
 export async function getHuntStatus(slug: string): Promise<HuntStatus> {
   const userId = await getAuthedUserId();
-  const service = createServiceClient();
-  const lesson = await requireAccessibleLesson(service, slug);
-  const release = lessonRelease(slug);
-
-  const { count } = await service
-    .schema("buggyshop")
-    .from("bs_bug_manifest")
-    .select("*", { count: "exact", head: true })
-    .eq("release", release);
-
-  const { data } = await service
-    .from("bug_reports")
-    .select("matched_bug_id")
-    .eq("user_id", userId)
-    .eq("lesson_id", lesson.id)
-    .not("matched_bug_id", "is", null);
-
-  const found = [...new Set((data ?? []).map((r) => r.matched_bug_id as string))];
-  return { found, total: count ?? 0 };
+  return huntStatusForUser(createServiceClient(), userId, slug);
 }
 
 /** Provision a BuggyShop sandbox for this user if they don't have one, and return
  *  the handoff URL populated with a short-lived JWT. */
 export async function launchSandbox(slug: string): Promise<string> {
   const userId = await getAuthedUserId();
-  const service = createServiceClient();
-  // Ensure the user has access to the lesson (throws if not)
-  await requireAccessibleLesson(service, slug);
-  const release = lessonRelease(slug);
-
-  let sandboxId: string;
-  const { data: existing } = await service
-    .from("sandboxes")
-    .select("id")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (existing) {
-    sandboxId = existing.id;
-  } else {
-    // Provision sandbox row
-    const { data: newSbx, error: insertError } = await service
-      .from("sandboxes")
-      .insert({ user_id: userId, current_release: release })
-      .select("id")
-      .single();
-    if (insertError || !newSbx) throw new Error("Could not provision sandbox");
-    sandboxId = newSbx.id;
-
-    // Seed data via the deny-all service-role RPC
-    const { error: resetError } = await service
-      .schema("buggyshop")
-      .rpc("reset_sandbox", { p_sandbox_id: sandboxId });
-    if (resetError) throw new Error(`Sandbox seeding failed: ${resetError.message}`);
-  }
-
-  const secret = process.env.SANDBOX_JWT_SECRET;
-  if (!secret) throw new Error("SANDBOX_JWT_SECRET is missing");
-
-  // TECH_DEBT: lessonRelease() returns a plain string but mintHandoffToken
-  // expects the checked Release union; bypassing with `any` instead of
-  // narrowing at the source. Tracked by docs/superpowers/plans/
-  // 2026-07-26-release-repository-governance.md Task 5.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const token = await mintHandoffToken({ userId, sandboxId, release: release as any }, secret);
-
-  const baseUrl = process.env.NEXT_PUBLIC_BUGGYSHOP_URL || "http://localhost:3001";
-  return `${baseUrl}/enter#t=${token}`;
+  return provisionSandboxAndMintUrl(createServiceClient(), userId, slug);
 }
 
-// The capstone rubric grading lives in @qa-mastery/grading (pure + unit-tested).
-// Client components import its types straight from the grading package — a
-// "use server" module may only export async functions, never types.
-
-/** Grade a capstone deliverable with the structured auto-checks a reviewer would
- *  tick, then persist it. The capstone is a Pro lesson, so the access check
- *  gates it. Returns the checklist + a 0–100 score. */
 export async function submitCapstone(slug: string, input: CapstoneInput): Promise<CapstoneResult> {
   const userId = await getAuthedUserId();
-  const service = createServiceClient();
-  const lesson = await requireAccessibleLesson(service, slug);
-
-  const result = gradeCapstone(input);
-  const { normalized, checklist, score } = result;
-
-  // Upsert: the capstone is one deliverable per lesson, so a resubmission
-  // overwrites the prior plan rather than stacking a duplicate row.
-  const { error } = await service.from("capstone_submissions").upsert(
-    {
-      user_id: userId,
-      lesson_id: lesson.id,
-      scope: normalized.scope,
-      risks: normalized.risks,
-      approach: normalized.approach,
-      recommendation: input.recommendation,
-      checklist,
-      score,
-    },
-    { onConflict: "user_id,lesson_id" },
-  );
-  if (error) throw new Error(error.message);
-
-  await recordAuditEvent(service, {
-    actorId: userId,
-    action: "capstone.submitted",
-    target: slug,
-    metadata: { score },
-  });
-
-  // A submitted capstone counts as doing the lab.
-  await saveProgress(slug, "do");
-
-  return result;
-}
-
-function getRunnerForLesson(slug: string): RunnerProvider {
-  const lesson = findLessonBySlug(slug);
-  if (!lesson) throw new Error("Lesson not found");
-
-  // Track B (automation) drives a real browser; everything else is plain code.
-  // The ladder itself lives in @/lib/code-runs so note labs share it.
-  const browser = lesson.frontmatter.module !== "B0" && lesson.frontmatter.track === "track-b";
-  return getCodeRunner({ browser });
+  return gradeAndRecordCapstone(createServiceClient(), userId, slug, input);
 }
 
 export async function submitCodeLab(slug: string, code: string): Promise<{ runId: string }> {
   const userId = await getAuthedUserId();
-  return withLogging("submitCodeLab", userId, () => submitCodeLabRun(userId, slug, code));
-}
-
-async function submitCodeLabRun(
-  userId: string,
-  slug: string,
-  code: string,
-): Promise<{ runId: string }> {
-  const service = createServiceClient();
-  const lesson = await requireAccessibleLesson(service, slug);
-
-  // Validate, then rate-limit, before forwarding to the (compute-heavy) runner.
-  const validated = validateCodeSubmission(code);
-  await assertCodeRunQuota(service, userId);
-
-  const runner = getRunnerForLesson(slug);
-  const language = findLessonBySlug(slug)?.frontmatter.lab_language ?? "java";
-  const payload = { code: validated, language };
-
-  // Synchronous runners (Piston) execute inline: persist the final RunResult so
-  // pollCodeRun replays it instead of re-running. Async runners keep the
-  // submit→poll dance with a queued row.
-  if (runner.executeSync) {
-    const result = await runner.executeSync({ lessonSlug: slug, userId, payload });
-    const { data: row, error } = await service
-      .from("code_runs")
-      .insert({
-        user_id: userId,
-        lesson_id: lesson.id,
-        runner: runner.name,
-        run_id: crypto.randomUUID(),
-        language,
-        status: result.status,
-        passed: result.passed,
-        result,
-      })
-      .select("run_id")
-      .single<{ run_id: string }>();
-    if (error || !row) throw new Error(error?.message ?? "Could not record run");
-
-    if (result.passed) await saveProgress(slug, "do");
-    await recordAuditEvent(service, {
-      actorId: userId,
-      action: "code_run.submitted",
-      target: slug,
-      metadata: { runner: runner.name, runId: row.run_id, sync: true },
-    });
-    return { runId: row.run_id };
-  }
-
-  const { runId } = await runner.submit({ lessonSlug: slug, userId, payload });
-
-  // Record the run for quota accounting + ownership on poll.
-  const { error } = await service.from("code_runs").insert({
-    user_id: userId,
-    lesson_id: lesson.id,
-    runner: runner.name,
-    run_id: runId,
-    language,
-    status: "queued",
-  });
-  if (error) throw new Error(error.message);
-
-  await recordAuditEvent(service, {
-    actorId: userId,
-    action: "code_run.submitted",
-    target: slug,
-    metadata: { runner: runner.name, runId },
-  });
-
-  return { runId };
+  return withLogging("submitCodeLab", userId, () =>
+    runCodeSubmission(createServiceClient(), userId, slug, code),
+  );
 }
 
 export async function pollCodeRun(slug: string, runId: string): Promise<RunResult> {
   const userId = await getAuthedUserId();
-  const service = createServiceClient();
-  await requireAccessibleLesson(service, slug);
-
-  // Ownership: a run_id is only pollable by the learner who started it.
-  const { data: run } = await service
-    .from("code_runs")
-    .select("id, result")
-    .eq("run_id", runId)
-    .eq("user_id", userId)
-    .maybeSingle<{ id: string; result: RunResult | null }>();
-  if (!run) throw new Error("Run not found.");
-
-  // A synchronous run already stored its final RunResult — replay it.
-  if (run.result) return run.result;
-
-  const result = await getRunnerForLesson(slug).getResult(runId);
-
-  // Persist the latest status; mark the lab done on a pass.
-  await service
-    .from("code_runs")
-    .update({ status: result.status, passed: result.passed })
-    .eq("run_id", runId)
-    .eq("user_id", userId);
-
-  if (result.passed) {
-    await saveProgress(slug, "do");
-  }
-
-  return result;
+  return pollCodeRunResult(createServiceClient(), userId, slug, runId);
 }
