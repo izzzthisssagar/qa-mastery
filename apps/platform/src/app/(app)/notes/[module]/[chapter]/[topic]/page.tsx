@@ -4,13 +4,13 @@ import { notFound } from "next/navigation";
 import { MDXRemote } from "next-mdx-remote/rsc";
 import {
   listNoteFiles,
-  getNote,
   findNoteModule,
   findNoteLeaf,
   labForChapter,
   trackCapstoneForChapter,
 } from "@qa-mastery/curriculum";
 import { mdxComponents } from "@/app/(app)/learn/[slug]/mdx-components";
+import { getCachedTopic } from "@/lib/curriculum-cache";
 import { getNoteCompletion } from "../../../actions";
 import { getNoteLabState } from "../../../lab-actions";
 import { getNoteCapstoneState } from "../../../capstone-actions";
@@ -83,7 +83,7 @@ export async function generateMetadata({
   params: Promise<{ module: string; chapter: string; topic: string }>;
 }): Promise<Metadata> {
   const { module: m, chapter: c, topic: t } = await params;
-  const note = getNote(m, c, t);
+  const note = await getCachedTopic(`${m}/${c}/${t}`);
   return { title: note ? `${note.frontmatter.title} · Notes` : "Notes" };
 }
 
@@ -93,7 +93,7 @@ export default async function NoteTopicPage({
   params: Promise<{ module: string; chapter: string; topic: string }>;
 }) {
   const { module: moduleSlug, chapter: chapterSlug, topic: topicSlug } = await params;
-  const note = getNote(moduleSlug, chapterSlug, topicSlug);
+  const note = await getCachedTopic(`${moduleSlug}/${chapterSlug}/${topicSlug}`);
   if (!note) notFound();
   const mod = findNoteModule(moduleSlug);
 
@@ -105,9 +105,15 @@ export default async function NoteTopicPage({
   // renders after the LAST file-backed topic, which is where a learner who has
   // read the chapter actually ends up. Registry-driven: no .mdx authoring.
   const chapterLabSlug = `${moduleSlug}/${chapterSlug}`;
-  const chapterTopics = (findNoteModule(moduleSlug)?.chapters ?? [])
+  const chapterAllTopics = (findNoteModule(moduleSlug)?.chapters ?? [])
     .find((c) => c.slug === chapterSlug)
-    ?.topics.filter((t) => !t.planned && getNote(moduleSlug, chapterSlug, t.slug));
+    ?.topics.filter((t) => !t.planned);
+  const chapterTopicsBacked = chapterAllTopics
+    ? await Promise.all(
+        chapterAllTopics.map((t) => getCachedTopic(`${moduleSlug}/${chapterSlug}/${t.slug}`)),
+      )
+    : [];
+  const chapterTopics = chapterAllTopics?.filter((_, i) => chapterTopicsBacked[i]);
   const isLastTopic = chapterTopics?.at(-1)?.slug === topicSlug;
   const labState =
     isLastTopic && labForChapter(chapterLabSlug) ? await getNoteLabState(chapterLabSlug) : null;
@@ -121,14 +127,15 @@ export default async function NoteTopicPage({
 
   // Related notes are authored as "module/chapter/topic" triples; resolve each
   // against the taxonomy + disk so a stale or planned-only reference never 404s.
-  const related = note.frontmatter.related
-    .map((triple) => {
+  const relatedResolved = await Promise.all(
+    note.frontmatter.related.map(async (triple) => {
       const [m, c, t] = triple.split("/");
       const leaf = findNoteLeaf(m, c, t);
-      if (!leaf || leaf.planned || !getNote(m, c, t)) return null;
+      if (!leaf || leaf.planned || !(await getCachedTopic(`${m}/${c}/${t}`))) return null;
       return { moduleSlug: m, chapterSlug: c, topicSlug: t, title: leaf.title };
-    })
-    .filter((r): r is NonNullable<typeof r> => r !== null);
+    }),
+  );
+  const related = relatedResolved.filter((r): r is NonNullable<typeof r> => r !== null);
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-10">

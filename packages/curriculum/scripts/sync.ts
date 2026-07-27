@@ -176,3 +176,16 @@ console.log(
   `\napplied: ${usedTracks.size} track(s), ${usedModules.size} module(s), ${lessons.length} lesson(s)` +
     (archived ? `, ${archived} archived` : ""),
 );
+
+// Bust the running platform's curriculum cache (lib/curriculum-cache.ts) so a
+// live environment doesn't serve stale content until its next deploy. Only
+// attempted when both are configured -- a dev/CI run with neither set is not
+// an error, it just has nothing listening to notify.
+const revalidateUrl = process.env.CURRICULUM_REVALIDATE_URL;
+const revalidateSecret = process.env.CURRICULUM_REVALIDATE_SECRET;
+if (revalidateUrl && revalidateSecret) {
+  // @ts-expect-error - untyped script
+  const { notifyCurriculumUpdate } = await import("../../../scripts/notify-curriculum-update.mjs");
+  await notifyCurriculumUpdate({ url: revalidateUrl, secret: revalidateSecret });
+  console.log("curriculum cache revalidated.");
+}

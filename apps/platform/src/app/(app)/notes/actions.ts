@@ -1,14 +1,9 @@
 "use server";
 
-import {
-  allNoteLeaves,
-  getNote,
-  findNoteLeaf,
-  findNoteModule,
-  NOTE_TRACKS,
-} from "@qa-mastery/curriculum";
+import { findNoteLeaf, findNoteModule, NOTE_TRACKS } from "@qa-mastery/curriculum";
 import { createServiceClient } from "@qa-mastery/db";
 import { getAuthedUserId } from "@/lib/auth";
+import { getCachedCurriculumIndex, getCachedTopic } from "@/lib/curriculum-cache";
 import { withLogging } from "@/lib/logging";
 import { touchStreak } from "@/lib/streaks";
 
@@ -192,11 +187,7 @@ export async function searchNotes(query: string): Promise<NoteHit[]> {
   const terms = q.split(/\s+/).filter(Boolean);
 
   const hits: NoteHit[] = [];
-  for (const leaf of allNoteLeaves()) {
-    if (leaf.planned) continue;
-    const note = getNote(leaf.moduleSlug, leaf.chapterSlug, leaf.topicSlug);
-    if (!note) continue;
-
+  for (const note of await getCachedCurriculumIndex()) {
     const title = note.frontmatter.title.toLowerCase();
     const summary = note.frontmatter.summary.toLowerCase();
     const tags = note.frontmatter.tags.join(" ").toLowerCase();
@@ -211,9 +202,9 @@ export async function searchNotes(query: string): Promise<NoteHit[]> {
     }
     if (score > 0) {
       hits.push({
-        moduleSlug: leaf.moduleSlug,
-        chapterSlug: leaf.chapterSlug,
-        topicSlug: leaf.topicSlug,
+        moduleSlug: note.moduleSlug,
+        chapterSlug: note.chapterSlug,
+        topicSlug: note.topicSlug,
         title: note.frontmatter.title,
         summary: note.frontmatter.summary,
         score,
@@ -227,11 +218,13 @@ export async function searchNotes(query: string): Promise<NoteHit[]> {
 /** A note slug is "module/chapter/topic" and only valid if the taxonomy leaf
  *  exists, is not a planned stub, and has MDX on disk. Guards the completion
  *  path against arbitrary/forged slugs. */
-function resolveNoteSlug(noteSlug: string): { m: string; c: string; t: string } | null {
+async function resolveNoteSlug(
+  noteSlug: string,
+): Promise<{ m: string; c: string; t: string } | null> {
   const [m, c, t] = noteSlug.split("/");
   if (!m || !c || !t) return null;
   const leaf = findNoteLeaf(m, c, t);
-  if (!leaf || leaf.planned || !getNote(m, c, t)) return null;
+  if (!leaf || leaf.planned || !(await getCachedTopic(noteSlug))) return null;
   return { m, c, t };
 }
 
@@ -261,7 +254,7 @@ async function completeNoteSave(
   userId: string,
   noteSlug: string,
 ): Promise<{ ok: true; xp: number; alreadyDone: boolean }> {
-  if (!resolveNoteSlug(noteSlug)) throw new Error("Note not available");
+  if (!(await resolveNoteSlug(noteSlug))) throw new Error("Note not available");
 
   const service = createServiceClient();
 
