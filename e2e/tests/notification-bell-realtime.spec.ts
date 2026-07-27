@@ -11,7 +11,9 @@ import { signUpFreshLearner } from "./signup-helper";
  * ticket's 2s budget.
  */
 test.describe("notification bell — realtime", () => {
-  test("a like from another learner updates the author's bell without reload", async ({ browser }) => {
+  test("a like from another learner updates the author's bell without reload", async ({
+    browser,
+  }) => {
     const authorCtx = await browser.newContext();
     const likerCtx = await browser.newContext();
     const author = await authorCtx.newPage();
