@@ -27,9 +27,13 @@ export default async function DashboardPage() {
   const topicCount = tracks.reduce((n, t) => n + t.topicCount, 0);
   const overallPct = topicCount ? Math.round((topicsDone / topicCount) * 100) : 0;
 
-  // XP spans lessons, tasks, and notes (all write xp_events); read-own RLS.
-  const { data: xpRows } = await supabase.from("xp_events").select("amount");
-  const totalXp = (xpRows ?? []).reduce((sum, x) => sum + (x.amount as number), 0);
+  // XP spans lessons, tasks, and notes (all write xp_events). Aggregated
+  // server-side (my_xp_total(), security invoker — RLS still scopes it to
+  // the caller's own rows) instead of transferring every xp_events row to
+  // sum client-side.
+  const { data: xpTotal, error: xpError } = await supabase.rpc("my_xp_total");
+  if (xpError) console.error("my_xp_total RPC failed:", xpError.message);
+  const totalXp = xpTotal !== null && xpTotal !== undefined ? Number(xpTotal) : 0;
 
   // read-own RLS; no row yet just means a learner with zero streak history.
   const { data: streakRow } = await supabase
