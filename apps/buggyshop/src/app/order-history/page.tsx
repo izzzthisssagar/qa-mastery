@@ -5,7 +5,6 @@ import { useMemo } from "react";
 import { readRelease } from "@/lib/catalog";
 import { CURRENT_USER, visibleOrders } from "@/lib/order-history";
 
-
 export default function OrderHistoryPage() {
   // Release decides which seeded bugs are live. Read once from the session if
   // the learner arrived via the handoff; default release otherwise.

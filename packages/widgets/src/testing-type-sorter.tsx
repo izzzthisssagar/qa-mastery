@@ -19,7 +19,12 @@ const ALL_SCENARIOS: Scenario[] = [
 ];
 
 export function TestingTypeSorter({ onMilestone }: { onMilestone?: (m: string) => void }) {
-  const [unassigned, setUnassigned] = useState<Scenario[]>([...ALL_SCENARIOS].sort(() => Math.random() - 0.5));
+  // Lazy initializer: the shuffle only needs to run once, on mount, not on
+  // every render -- calling Math.random() directly in the render body is an
+  // impure operation React (and this lint rule) flags.
+  const [unassigned, setUnassigned] = useState<Scenario[]>(() =>
+    [...ALL_SCENARIOS].sort(() => Math.random() - 0.5),
+  );
   const [func, setFunc] = useState<Scenario[]>([]);
   const [nonfunc, setNonfunc] = useState<Scenario[]>([]);
 
@@ -29,9 +34,9 @@ export function TestingTypeSorter({ onMilestone }: { onMilestone?: (m: string) =
       return;
     }
 
-    setUnassigned(prev => prev.filter(s => s.id !== scenario.id));
-    if (target === "func") setFunc(prev => [...prev, scenario]);
-    if (target === "nonfunc") setNonfunc(prev => [...prev, scenario]);
+    setUnassigned((prev) => prev.filter((s) => s.id !== scenario.id));
+    if (target === "func") setFunc((prev) => [...prev, scenario]);
+    if (target === "nonfunc") setNonfunc((prev) => [...prev, scenario]);
 
     if (unassigned.length === 1) {
       // It was the last one
@@ -50,14 +55,21 @@ export function TestingTypeSorter({ onMilestone }: { onMilestone?: (m: string) =
       <div className="flex items-center justify-between mb-8">
         <div>
           <h3 className="text-lg font-semibold text-foreground">Sort the Tests</h3>
-          <p className="text-sm text-muted-foreground">Sort the scenarios below. Does it test WHAT the system does, or HOW it does it?</p>
+          <p className="text-sm text-muted-foreground">
+            Sort the scenarios below. Does it test WHAT the system does, or HOW it does it?
+          </p>
         </div>
-        <button onClick={reset} className="text-xs font-semibold text-muted-foreground hover:text-foreground">Reset</button>
+        <button
+          onClick={reset}
+          className="text-xs font-semibold text-muted-foreground hover:text-foreground"
+        >
+          Reset
+        </button>
       </div>
 
       <div className="mb-8 min-h-[100px] flex flex-wrap gap-3 justify-center">
         <AnimatePresence>
-          {unassigned.map(s => (
+          {unassigned.map((s) => (
             <motion.div
               key={s.id}
               layoutId={s.id}
@@ -102,8 +114,12 @@ export function TestingTypeSorter({ onMilestone }: { onMilestone?: (m: string) =
             Functional (What)
           </h4>
           <div className="space-y-2">
-            {func.map(s => (
-              <motion.div key={s.id} layoutId={s.id} className="rounded border border-emerald-500/20 bg-emerald-500/5 p-2 text-xs text-foreground">
+            {func.map((s) => (
+              <motion.div
+                key={s.id}
+                layoutId={s.id}
+                className="rounded border border-emerald-500/20 bg-emerald-500/5 p-2 text-xs text-foreground"
+              >
                 {s.text}
               </motion.div>
             ))}
@@ -116,8 +132,12 @@ export function TestingTypeSorter({ onMilestone }: { onMilestone?: (m: string) =
             Non-Functional (How)
           </h4>
           <div className="space-y-2">
-            {nonfunc.map(s => (
-              <motion.div key={s.id} layoutId={s.id} className="rounded border border-purple-500/20 bg-purple-500/5 p-2 text-xs text-foreground">
+            {nonfunc.map((s) => (
+              <motion.div
+                key={s.id}
+                layoutId={s.id}
+                className="rounded border border-purple-500/20 bg-purple-500/5 p-2 text-xs text-foreground"
+              >
                 {s.text}
               </motion.div>
             ))}

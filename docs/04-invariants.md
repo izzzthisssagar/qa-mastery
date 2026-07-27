@@ -2,23 +2,26 @@
 
 These seven rules come from `CLAUDE.md` and are **non-negotiable**. Each is a
 security or correctness guarantee the product depends on. Read this before
-changing data access, content, or BuggyShop. For each: *what it is*, *why it
-matters*, *how it's enforced*.
+changing data access, content, or BuggyShop. For each: _what it is_, _why it
+matters_, _how it's enforced_.
 
 ---
 
 ## 1. Manifest secrecy
 
-**What.** BuggyShop's seeded-bug manifest (`buggyshop.bs_bug_manifest`, with
-`title_internal` / `repro_steps_internal`) never reaches a client bundle.
+**What.** The seeded-bug manifests (`buggyshop.bs_bug_manifest` and
+`buggyapi.ba_bug_manifest`, with `title_internal` / `repro_steps_internal`)
+never reach a client bundle.
 
 **Why.** If the answer key shipped to the browser, learners could read the bugs
 instead of finding them — the entire product is finding them.
 
-**How enforced.** Grading reads the manifest server-side only. CI greps the
-built `.next/static` output for `title_internal` / `repro_steps_internal` and
-fails on any hit. The `buggyshop` schema is deny-all (invariant 4), so a client
-can't query it even if it tried.
+**How enforced.** Grading reads both manifests server-side only (BuggyAPI
+reports its grade in `dashboard/actions.ts` `submitApiBugReport`). CI greps
+the built `.next/static` output across platform + buggyshop + buggyapi for
+`title_internal` / `repro_steps_internal` and fails on any hit. The
+`buggyshop`/`buggyapi` schemas are deny-all (invariant 4), so a client can't
+query either even if it tried.
 
 ---
 
@@ -38,33 +41,38 @@ The learner's JWT physically cannot insert a row.
 
 ---
 
-## 3. BuggyShop auth is fake
+## 3. Practice-app auth is fake
 
-**What.** BuggyShop's signup/login are *curriculum subjects* (seeded bugs live
-there) writing `bs_users` / `bs_sessions` sandbox rows. Real identity arrives
+**What.** BuggyShop's signup/login and BuggyAPI's users/API keys/OAuth clients
+are _curriculum subjects_ (seeded bugs live there) writing sandbox rows
+(`bs_users`/`bs_sessions`, `ba_users`/`ba_api_keys`/…). Real identity arrives
 only via the handoff token (`packages/shared`) in the `/enter#t=…` URL fragment
 → `localStorage`. **No cookies in that path.**
 
-**Why.** BuggyShop must be safely, deliberately broken without endangering the
-real account. A URL fragment is never sent to a server and shares nothing with
-platform cookies, so a BuggyShop bug can't escalate into the learner's identity.
+**Why.** Both practice apps must be safely, deliberately broken without
+endangering the real account. A URL fragment is never sent to a server and
+shares nothing with platform cookies, so a practice-app bug can't escalate
+into the learner's identity.
 
 **How enforced.** The token is minted/verified in `packages/shared`
-(`sandbox-token`, unit-tested). BuggyShop reads it from the fragment into
-`localStorage`; it sets no auth cookie. The two apps run on different ports/origins.
+(`sandbox-token`, unit-tested). Each practice app reads it from the fragment
+into `localStorage`; neither sets an auth cookie. Platform, BuggyShop, and
+BuggyAPI each run on their own port/origin.
 
 ---
 
-## 4. Every `bs_*` row is scoped by `sandbox_id`
+## 4. Every `bs_*`/`ba_*` row is scoped by `sandbox_id`
 
-**What.** All BuggyShop data is per-sandbox. Access is service-role via route
-handlers; the `buggyshop` schema has deny-all RLS.
+**What.** All BuggyShop and BuggyAPI data is per-sandbox. Access is
+service-role via route handlers; the `buggyshop` and `buggyapi` schemas both
+have deny-all RLS. Both share one `public.sandboxes` table (one row per
+learner).
 
-**Why.** Learners share one BuggyShop deployment; their data must never bleed
-across sandboxes.
+**Why.** Learners share one deployment of each practice app; their data must
+never bleed across sandboxes.
 
-**How enforced.** Deny-all RLS + no role grants on the `buggyshop` schema
-(migration 0001/0002). Every query is service-role and filtered by `sandbox_id`.
+**How enforced.** Deny-all RLS + no role grants on the `buggyshop`/`buggyapi`
+schemas. Every query is service-role and filtered by `sandbox_id`.
 `provision_sandbox` / `reset_sandbox` have `execute` revoked from everyone but
 the service role.
 
@@ -98,19 +106,23 @@ and fails (CI gate) on an unknown name.
 
 ---
 
-## 7. Seeded bugs go behind `bugFlag(id, release)`
+## 7. Seeded bugs go behind a flag
 
-**What.** Seeded-bug logic in BuggyShop is wrapped in `bugFlag(id, release)` —
-never inlined.
+**What.** Seeded-bug logic is wrapped in `bugFlag(id, release)` (BuggyShop) or
+`apiBugFlag(id, mode)` (BuggyAPI) — never inlined.
 
-**Why.** Bugs must be toggleable per release (BuggyShop ships v1.0 → v2.0 with
-different active bugs) and auditable in one place.
+**Why.** Bugs must be toggleable per release/mode (BuggyShop ships v1.0 → v2.0
+with different active bugs; BuggyAPI's mode comes from the handoff token) and
+auditable in one place.
 
 **How enforced.** `bugFlag(id, release)` lives in `packages/shared`
 (`bug-flag.ts`): a registry of seeded bugs keyed by id with an introduced/fixed
 release window, plus a pure `isBugActive` predicate, unit-tested. BuggyShop's
-BS-008 price-filter bug is wired through it (active in v1.0, fixed in v1.1). The
-remaining seeded bugs adopt the same wrapper as they land.
+BS-008 price-filter bug is wired through it (active in v1.0, fixed in v1.1).
+`apiBugFlag(id, mode)` (`apps/buggyapi/src/api/bugs.ts`) reads BuggyAPI's mode
+from `ba_sandbox_state`, set from the handoff token's `mode` claim — clean
+mode is a perfect reference API. The remaining seeded bugs adopt the same
+wrapper pattern as they land.
 
 ---
 

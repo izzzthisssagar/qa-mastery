@@ -134,13 +134,22 @@ export function PortfolioEditor({
         {link && (
           <p className="text-xs text-success-text">
             Linked to your {link.source_table === "bug_reports" ? "bug report" : "test case"}.{" "}
-            <button type="button" className="text-muted-foreground underline" onClick={() => setLink(null)}>
+            <button
+              type="button"
+              className="text-muted-foreground underline"
+              onClick={() => setLink(null)}
+            >
               unlink
             </button>
           </p>
         )}
         <div className="flex flex-wrap gap-2">
-          <select className={field + " w-auto"} value={type} onChange={(e) => setType(e.target.value)} aria-label="Type">
+          <select
+            className={field + " w-auto"}
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            aria-label="Type"
+          >
             {PORTFOLIO_TYPES.map((t) => (
               <option key={t} value={t}>
                 {labelFor(t)}
@@ -171,8 +180,8 @@ export function PortfolioEditor({
         />
         <label className="block text-sm text-muted-foreground">
           <span className="mb-1 block">
-            Attach a file — bug-report sheet, test plan, coverage report (PDF, Excel, Word,
-            CSV or image — optional)
+            Attach a file — bug-report sheet, test plan, coverage report (PDF, Excel, Word, CSV or
+            image — optional)
           </span>
           <input
             type="file"

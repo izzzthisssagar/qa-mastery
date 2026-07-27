@@ -6,11 +6,7 @@ export function generateStaticParams() {
   return NOTES_TAXONOMY.map((m) => ({ module: m.slug }));
 }
 
-export default async function NotesModulePage({
-  params,
-}: {
-  params: Promise<{ module: string }>;
-}) {
+export default async function NotesModulePage({ params }: { params: Promise<{ module: string }> }) {
   const { module: moduleSlug } = await params;
   const mod = findNoteModule(moduleSlug);
   if (!mod) notFound();
@@ -46,7 +42,9 @@ export default async function NotesModulePage({
                       className="flex items-center justify-between bg-surface px-4 py-3 text-sm text-foreground transition-colors hover:bg-muted"
                     >
                       {t.title}
-                      <span aria-hidden className="text-muted-foreground">→</span>
+                      <span aria-hidden className="text-muted-foreground">
+                        →
+                      </span>
                     </Link>
                   </li>
                 ) : (

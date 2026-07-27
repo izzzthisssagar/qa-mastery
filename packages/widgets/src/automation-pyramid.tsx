@@ -62,7 +62,9 @@ export function AutomationPyramid({ onMilestone }: { onMilestone?: (m: string) =
         <div>
           <h3 className="text-lg font-semibold text-foreground">Automation Strategy</h3>
           <p className="text-sm text-muted-foreground">Click a layer to explore the trade-offs.</p>
-          <p className="text-xs text-amber-500/80 mt-1 block md:hidden">📱 Rotate your device for the best view.</p>
+          <p className="text-xs text-amber-500/80 mt-1 block md:hidden">
+            📱 Rotate your device for the best view.
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs font-medium text-muted-foreground">Ice Cream Cone Mode</span>
@@ -86,13 +88,13 @@ export function AutomationPyramid({ onMilestone }: { onMilestone?: (m: string) =
         {/* Visual Pyramid */}
         <div className="flex flex-col items-center justify-center space-y-2 py-4">
           <AnimatePresence mode="popLayout">
-            {layers.map((layer, idx) => {
+            {layers.map((layer) => {
               // Calculate width based on position
               // Pyramid (isIceCream=false): 100%, 75%, 45% (bottom to top)
               // Since layers array maps E2E, Integration, Unit (top to bottom):
               // E2E = 45%, Int = 75%, Unit = 100%
               // If IceCream, we reverse the visual size: E2E = 100%, Int = 75%, Unit = 45%
-              
+
               let width = "100%";
               if (layer.id === "e2e") width = isIceCream ? "100%" : "45%";
               if (layer.id === "integration") width = "75%";
@@ -115,7 +117,9 @@ export function AutomationPyramid({ onMilestone }: { onMilestone?: (m: string) =
                     ${isActive ? layer.color : "border-border bg-surface-raised/40 text-muted-foreground hover:border-border"}
                   `}
                 >
-                  <div className={`absolute inset-0 bg-gradient-to-br ${layer.gradient} opacity-50`} />
+                  <div
+                    className={`absolute inset-0 bg-gradient-to-br ${layer.gradient} opacity-50`}
+                  />
                   <span className="relative z-10 font-semibold tracking-wide uppercase text-sm">
                     {layer.title}
                   </span>
@@ -138,26 +142,32 @@ export function AutomationPyramid({ onMilestone }: { onMilestone?: (m: string) =
                 className="flex flex-col h-full justify-center space-y-6 rounded-xl border border-border bg-background p-6"
               >
                 <div>
-                  <h4 className={`text-xl font-bold mb-2 ${activeData.color.split(' ')[1]}`}>
+                  <h4 className={`text-xl font-bold mb-2 ${activeData.color.split(" ")[1]}`}>
                     {activeData.title}
                   </h4>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    {activeData.desc}
-                  </p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{activeData.desc}</p>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4">
                   <div className="flex flex-col space-y-1">
-                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Speed</span>
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                      Speed
+                    </span>
                     <span className="text-sm font-medium text-foreground">{activeData.speed}</span>
                   </div>
                   <div className="flex flex-col space-y-1">
-                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Cost</span>
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                      Cost
+                    </span>
                     <span className="text-sm font-medium text-foreground">{activeData.cost}</span>
                   </div>
                   <div className="flex flex-col space-y-1">
-                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Flakiness</span>
-                    <span className="text-sm font-medium text-foreground">{activeData.flakiness}</span>
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                      Flakiness
+                    </span>
+                    <span className="text-sm font-medium text-foreground">
+                      {activeData.flakiness}
+                    </span>
                   </div>
                 </div>
               </motion.div>

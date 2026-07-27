@@ -74,7 +74,10 @@ export function Composer({ userId, videoEnabled }: { userId: string; videoEnable
           title: title.trim() || undefined,
           body,
           media,
-          tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+          tags: tags
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean),
         });
         router.push(`/community/${id}`);
       } catch (err) {
@@ -93,7 +96,9 @@ export function Composer({ userId, videoEnabled }: { userId: string; videoEnable
             data-testid={`composer-kind-${k}`}
             onClick={() => setKind(k)}
             className={`rounded-lg px-3 py-1.5 text-sm font-medium capitalize transition-colors ${
-              kind === k ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground"
+              kind === k
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             {k}
@@ -132,20 +137,41 @@ export function Composer({ userId, videoEnabled }: { userId: string; videoEnable
       <div className="flex flex-wrap items-center gap-3">
         <label className="cursor-pointer rounded-lg border border-border px-3 py-1.5 text-sm text-foreground hover:bg-surface">
           + Image
-          <input type="file" accept="image/*" onChange={onImage} className="hidden" data-testid="composer-image" />
+          <input
+            type="file"
+            accept="image/*"
+            onChange={onImage}
+            className="hidden"
+            data-testid="composer-image"
+          />
         </label>
         {videoEnabled && (
           <label className="cursor-pointer rounded-lg border border-border px-3 py-1.5 text-sm text-foreground hover:bg-surface">
             + Video (≤60s)
-            <input type="file" accept="video/*" onChange={onVideo} className="hidden" data-testid="composer-video" />
+            <input
+              type="file"
+              accept="video/*"
+              onChange={onVideo}
+              className="hidden"
+              data-testid="composer-video"
+            />
           </label>
         )}
         {uploading && <span className="text-xs text-accent">Uploading…</span>}
       </div>
 
-      {error && <p className="text-sm text-danger-text" data-testid="composer-error">{error}</p>}
+      {error && (
+        <p className="text-sm text-danger-text" data-testid="composer-error">
+          {error}
+        </p>
+      )}
 
-      <Button onClick={submit} loading={pending} disabled={uploading || !body.trim()} data-testid="composer-submit">
+      <Button
+        onClick={submit}
+        loading={pending}
+        disabled={uploading || !body.trim()}
+        data-testid="composer-submit"
+      >
         {pending ? "Posting…" : "Post"}
       </Button>
     </div>

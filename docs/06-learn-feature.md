@@ -24,7 +24,7 @@ apps/platform/src/lib/auth.ts   # getAuthedUserId() — used by the actions
 
 The lesson MDX embeds `<BugReportLab/>` in its "Do it" section. The learner finds
 the seeded bug on BuggyShop's products page, then files a structured report
-(page / feature / category / severity from the *stripped* taxonomy, plus title /
+(page / feature / category / severity from the _stripped_ taxonomy, plus title /
 steps / expected / actual). `submitBugReport` reads the seeded-bug manifest
 server-side from the deny-all `buggyshop` schema for the lesson's release, grades
 it with `matchBugReport`, records the submission in `bug_reports`, and marks the
@@ -42,10 +42,7 @@ it with `matchBugReport`, records the submission in `bug_reports`, and marks the
    `mdxComponents`. Wrap everything in `LessonProgressProvider`.
 
 ```tsx
-<MDXRemote
-  source={body}
-  components={{ ...mdxComponents, BoundarySlider: SeeWidget }}
-/>
+<MDXRemote source={body} components={{ ...mdxComponents, BoundarySlider: SeeWidget }} />
 ```
 
 RSC rendering is what keeps the answer key off the client: the MDX compiles on
@@ -67,7 +64,7 @@ low-stakes**:
 Wraps `BoundarySlider` from `@qa-mastery/widgets`, binding the slug from context
 and translating the widget's `found-boundary-bug` milestone into
 `markStep("see")`. The widget itself (the Boundary Hunter) lets the learner walk
-a "1–99" field's edges and *discover* that `0` is wrongly accepted — the same
+a "1–99" field's edges and _discover_ that `0` is wrongly accepted — the same
 off-by-one class as BuggyShop's BS-007.
 
 ## Server actions (`actions.ts`)
@@ -76,6 +73,7 @@ Both re-check auth via `getAuthedUserId()` and gate on a published, free,
 DB-registered lesson (`requireAccessibleLesson`). Pro gating is a `TODO(M3)`.
 
 ### `saveProgress(slug, step?)`
+
 Service-role upsert into `progress`. With a `step`, sets that key in `step_state`.
 Without, just ensures a `started` row. Completion is **not** owned here.
 
@@ -104,7 +102,7 @@ sequenceDiagram
 The response includes, **per question**, `correctIndices` + `explanation` — the
 answer key, revealed only now that grading is done. The client renders right/
 wrong styling and explanations from it. XP (`XP_LESSON_COMPLETED = 50`),
-completion, and flashcard seeding happen only on the *first* pass.
+completion, and flashcard seeding happen only on the _first_ pass.
 
 ## The quiz UI (`quiz-panel.tsx`, client)
 
@@ -115,9 +113,9 @@ reset. Errors (e.g. lesson not yet synced to the DB) surface inline.
 
 ## Answer-key secrecy — the guarantee
 
-| Stage | What the client has |
-|---|---|
-| Page render | Prompts + options only. No `correct`, no `explanation`. |
+| Stage              | What the client has                                                   |
+| ------------------ | --------------------------------------------------------------------- |
+| Page render        | Prompts + options only. No `correct`, no `explanation`.               |
 | After `submitQuiz` | `correctIndices` + `explanation` for review — returned by the grader. |
 
 Verified: a production build's `.next/static` contains none of the quiz answer

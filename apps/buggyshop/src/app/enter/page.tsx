@@ -76,20 +76,16 @@ export default function EnterPage() {
         {status === "reading" && <p>Reading your lab pass…</p>}
         {status === "exchanging" && <p>Setting up your sandbox session…</p>}
         {status === "ready" && (
-          <p className="font-medium text-emerald-600">
-            Sandbox ready — your lab will load here.
-          </p>
+          <p className="font-medium text-emerald-600">Sandbox ready — your lab will load here.</p>
         )}
         {status === "missing" && (
           <p>
-            No lab pass found. Open BuggyShop from a lesson on the QA Mastery
-            platform — it mints your sandbox access automatically.
+            No lab pass found. Open BuggyShop from a lesson on the QA Mastery platform — it mints
+            your sandbox access automatically.
           </p>
         )}
         {status === "error" && (
-          <p className="text-red-600">
-            Could not start your sandbox session: {detail}
-          </p>
+          <p className="text-red-600">Could not start your sandbox session: {detail}</p>
         )}
       </div>
     </main>

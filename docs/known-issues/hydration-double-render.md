@@ -13,6 +13,7 @@ exactly once in its source file — so this wasn't a duplicated render call
 site anywhere in the app.
 
 ## How it was proven (local repro, `feat/notes-v2`, full e2e suite against
+
 production builds + local Supabase, 10-core dev machine)
 
 A throwaway diagnostic test (`page.goto()`, capture `response.text()` for
@@ -32,20 +33,21 @@ raw=1   domEarly(~200ms)=1   →  2   domLate(~1.7s)=1
   time — never a persistent duplicate.
 
 Hypotheses ruled out:
+
 - **`reactCompiler: true`** (the leading suspect noted in earlier sessions)
   — disabled it in `next.config.ts`, rebuilt, reran the same load: identical
   duplication (3 flaky failures, same signature). Reverted; not the cause.
 - **Server-side shared/cached state** (a module-level cache or non-request-
   scoped memoization bleeding between concurrent requests) — ruled out by
   `raw=1` holding in every sample; if state were bleeding between requests,
-  the *server* HTML itself would show the duplicate. It never did.
+  the _server_ HTML itself would show the duplicate. It never did.
 - **Duplicate JSX render call sites** — grepped every affected testid; each
   appears exactly once in its component's source.
 
 This is the same category as `webkit-save-stall.md` — "hydration is
 CPU-bound, the race only loses on a starved runner (2-core CI, parallel
-Chromium + WebKit workers)" — but a different symptom: a transient *extra*
-DOM node during React's hydration reconciliation, instead of a *lost*
+Chromium + WebKit workers)" — but a different symptom: a transient _extra_
+DOM node during React's hydration reconciliation, instead of a _lost_
 pre-hydration interaction. Both are most exposed at the same moment: the
 first interaction immediately after a fresh navigation, before hydration has
 settled. Here it's plausibly sharpened by `signUpFreshLearner`'s own
@@ -66,7 +68,7 @@ A sixth instance turned up during verification: `talent-helpers.ts`'s
 `publishTester()` fills the profile "Handle" field via plain
 `getByLabel("Handle").fill(...)`, outside the hydration-gate `toPass` loop
 that guards the specialty chip a few lines above it (that loop exists for
-the *different* webkit-save-stall race — lost pre-hydration input — not this
+the _different_ webkit-save-stall race — lost pre-hydration input — not this
 one). Same fix: `.first()`.
 
 ## Lessons / follow-ups
@@ -76,11 +78,11 @@ one). Same fix: `.first()`.
   that "local sequential runs never reproduce it" (true for the WebKit save
   stall) does not hold for this one. Full-suite concurrent load, not raw CPU
   scarcity alone, is what widens the window.
-- Any *new* e2e assertion that interacts with a testid as the very first
+- Any _new_ e2e assertion that interacts with a testid as the very first
   thing after `page.goto()` is exposed to the same race. `.first()` is the
   cheap, safe default there unless the test specifically needs to assert
   there is exactly one such element (in which case, wait a beat or assert
-  count *after* an unrelated stable element is confirmed visible first).
+  count _after_ an unrelated stable element is confirmed visible first).
 - Root cause sits inside React/Next.js's hydration reconciliation timing
   itself, not in this app's code — no further product-side fix is expected
   or needed.

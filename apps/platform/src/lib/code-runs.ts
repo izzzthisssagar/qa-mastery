@@ -45,10 +45,7 @@ export const MAX_CODE_RUNS_PER_DAY = 100;
  * `code_runs` table, so lesson labs, note labs and the standalone simulator all
  * draw down one shared allowance.
  */
-export async function assertCodeRunQuota(
-  service: SupabaseClient,
-  userId: string,
-): Promise<void> {
+export async function assertCodeRunQuota(service: SupabaseClient, userId: string): Promise<void> {
   const startOfDay = new Date();
   startOfDay.setUTCHours(0, 0, 0, 0);
   const { count } = await service

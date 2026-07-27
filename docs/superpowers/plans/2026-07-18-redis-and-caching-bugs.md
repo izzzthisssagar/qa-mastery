@@ -22,19 +22,21 @@
 ### Task 1: Preflight and source verification
 
 **Files:**
+
 - Read: ../Claude Coordination.md
 - Read: packages/curriculum/content/notes/nosql-and-modern-data/mongodb-hands-on/documents-and-collections.mdx
 - Read: packages/curriculum/src/notes/taxonomy.ts near line 1674
-- Verify: apps/platform/public/notes/nosql-and-modern-data/redis-and-caching-bugs/*.jpg
+- Verify: apps/platform/public/notes/nosql-and-modern-data/redis-and-caching-bugs/\*.jpg
 
 **Interfaces:**
+
 - Consumes: coordination claims, locked note anatomy, four topic slugs, four images.
 - Produces: ownership check plus image credits, licenses, dimensions, and visible pin landmarks.
 
 - [ ] **Step 1: Recheck ownership and dirt**
 
-    tail -n 120 ../Claude\ Coordination.md
-    git status --short
+  tail -n 120 ../Claude\ Coordination.md
+  git status --short
 
 Expected: no competing Redis claim; all unrelated modifications remain unstaged.
 
@@ -54,10 +56,12 @@ Use Redis TTL, EXPIRE, eviction, client-side caching, and INFO documentation. Re
 ### Task 2: What caching solves
 
 **Files:**
+
 - Create: packages/curriculum/content/notes/nosql-and-modern-data/redis-and-caching-bugs/what-caching-solves.mdx
 - Read: apps/platform/public/notes/nosql-and-modern-data/redis-and-caching-bugs/what-caching-solves.jpg
 
 **Interfaces:**
+
 - Consumes: cache-aside behavior and pantry provenance.
 - Produces: introduction linked to three Redis siblings and MongoDB documents-and-collections.
 
@@ -80,10 +84,12 @@ Execute extracted programs. Run full MDX compile and scan this file for PLACEHOL
 ### Task 3: TTLs and eviction
 
 **Files:**
+
 - Create: packages/curriculum/content/notes/nosql-and-modern-data/redis-and-caching-bugs/ttls-and-eviction.mdx
 - Read: apps/platform/public/notes/nosql-and-modern-data/redis-and-caching-bugs/ttls-and-eviction.jpg
 
 **Interfaces:**
+
 - Consumes: TTL, EXPIRE, maxmemory, and policy contracts.
 - Produces: time-versus-capacity lesson linked to Redis siblings and cap-theorem-in-plain-words.
 
@@ -106,10 +112,12 @@ Execute both programs, run MDX compile, scan landmines. Expected: exit 0 and com
 ### Task 4: Stale data and invalidation
 
 **Files:**
+
 - Create: packages/curriculum/content/notes/nosql-and-modern-data/redis-and-caching-bugs/stale-data-bugs-and-cache-invalidation.mdx
 - Read: apps/platform/public/notes/nosql-and-modern-data/redis-and-caching-bugs/stale-data-bugs-and-cache-invalidation.jpg
 
 **Interfaces:**
+
 - Consumes: source-of-truth model and Redis invalidation caveats.
 - Produces: stale-read lesson linked to Redis siblings and MongoDB CRUD/query operators.
 
@@ -132,10 +140,12 @@ Execute both programs, run MDX compile, scan landmines. Expected: programs repro
 ### Task 5: Testing around a cache
 
 **Files:**
+
 - Create: packages/curriculum/content/notes/nosql-and-modern-data/redis-and-caching-bugs/testing-around-a-cache.mdx
 - Read: apps/platform/public/notes/nosql-and-modern-data/redis-and-caching-bugs/testing-around-a-cache.jpg
 
 **Interfaces:**
+
 - Consumes: hit/miss, expiry/eviction, and invalidation lessons.
 - Produces: synthesis linked to Redis siblings and where-each-shines.
 
@@ -158,27 +168,29 @@ Execute both programs, run MDX compile, scan landmines. Expected: all five cases
 ### Task 6: Chapter gate and taxonomy activation
 
 **Files:**
+
 - Modify: packages/curriculum/src/notes/taxonomy.ts near line 1678
-- Verify: packages/curriculum/content/notes/nosql-and-modern-data/redis-and-caching-bugs/*.mdx
+- Verify: packages/curriculum/content/notes/nosql-and-modern-data/redis-and-caching-bugs/\*.mdx
 - Append: ../Claude Coordination.md
 
 **Interfaces:**
+
 - Consumes: four passing notes and unchanged planned leaves.
 - Produces: live four-topic chapter plus collision-safe handoff.
 
 - [ ] **Step 1: Run content gates**
 
-    node packages/curriculum/scripts/check-note-mdx-compile.mjs
-    python3 packages/curriculum/scripts/check-note-components.py
-    python3 packages/curriculum/scripts/check-note-images.py
-    rg -n 'PLACEHOLDER|TODO|<<<<<<<|=======|>>>>>>>' packages/curriculum/content/notes/nosql-and-modern-data/redis-and-caching-bugs
+  node packages/curriculum/scripts/check-note-mdx-compile.mjs
+  python3 packages/curriculum/scripts/check-note-components.py
+  python3 packages/curriculum/scripts/check-note-images.py
+  rg -n 'PLACEHOLDER|TODO|<<<<<<<|=======|>>>>>>>' packages/curriculum/content/notes/nosql-and-modern-data/redis-and-caching-bugs
 
 Expected: all checkers pass and scan returns no matches.
 
 - [ ] **Step 2: Recheck coordination and taxonomy drift**
 
-    tail -n 120 ../Claude\ Coordination.md
-    git diff -- packages/curriculum/src/notes/taxonomy.ts
+  tail -n 120 ../Claude\ Coordination.md
+  git diff -- packages/curriculum/src/notes/taxonomy.ts
 
 Expected: no competing Redis claim; every unrelated taxonomy hunk preserved.
 
@@ -188,10 +200,10 @@ Remove planned status only from what-caching-solves, ttls-and-eviction, stale-da
 
 - [ ] **Step 4: Run repository gates**
 
-    pnpm --filter @qa-mastery/curriculum test
-    pnpm --filter @qa-mastery/curriculum sync
-    pnpm typecheck
-    git diff --check
+  pnpm --filter @qa-mastery/curriculum test
+  pnpm --filter @qa-mastery/curriculum sync
+  pnpm typecheck
+  git diff --check
 
 Expected: curriculum 9/9, sync valid, typecheck clean, no whitespace errors. If another live lane temporarily breaks a global gate, record its exact path and verify Redis independently.
 

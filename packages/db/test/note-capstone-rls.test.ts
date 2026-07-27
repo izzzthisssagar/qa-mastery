@@ -26,9 +26,7 @@ async function signedInClient(email: string): Promise<SupabaseClient> {
 }
 
 describe.skipIf(!hasEnv)("Track-capstone RLS invariants", () => {
-  const service = createClient(URL!, SERVICE!, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  let service: SupabaseClient;
 
   const emailAlice = `cap-alice-${randomUUID()}@e2e.local`;
   const emailBob = `cap-bob-${randomUUID()}@e2e.local`;
@@ -38,6 +36,10 @@ describe.skipIf(!hasEnv)("Track-capstone RLS invariants", () => {
   let asBob: SupabaseClient;
 
   beforeAll(async () => {
+    service = createClient(URL!, SERVICE!, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
     const mk = async (email: string) => {
       const r = await service.auth.admin.createUser({
         email,

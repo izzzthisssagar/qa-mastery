@@ -14,13 +14,7 @@ export { guardResponse, wouldGuard, guardFallback } from "./guard";
 
 export { guardedStream } from "./streaming-guard";
 
-export {
-  chat,
-  streamChat,
-  resolveProvider,
-  availableProviders,
-  readLlmEnv,
-} from "./llm/adapter";
+export { chat, streamChat, resolveProvider, availableProviders, readLlmEnv } from "./llm/adapter";
 
 export { EMBED_DIM, embedTexts, embedQuery } from "./embed";
 

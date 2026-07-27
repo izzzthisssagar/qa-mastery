@@ -19,16 +19,18 @@ export async function GET() {
       "brain_stage, brain_day_count, summary, weak_topics, strong_topics, hint_preference, total_messages",
     )
     .eq("user_id", user.id)
-    .maybeSingle<Pick<
-      HelpAgentProfile,
-      | "brain_stage"
-      | "brain_day_count"
-      | "summary"
-      | "weak_topics"
-      | "strong_topics"
-      | "hint_preference"
-      | "total_messages"
-    >>();
+    .maybeSingle<
+      Pick<
+        HelpAgentProfile,
+        | "brain_stage"
+        | "brain_day_count"
+        | "summary"
+        | "weak_topics"
+        | "strong_topics"
+        | "hint_preference"
+        | "total_messages"
+      >
+    >();
 
   if (!profile) {
     return NextResponse.json({

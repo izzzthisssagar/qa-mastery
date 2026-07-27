@@ -148,11 +148,19 @@ export function HelpAgentPanel({
       className="fixed bottom-20 right-4 z-50 flex h-[480px] w-[360px] flex-col overflow-hidden rounded-2xl border border-border/70 bg-surface/95 shadow-2xl shadow-black/40 backdrop-blur sm:right-6"
     >
       <header className="relative flex items-center justify-between border-b border-border px-4 py-3">
-        <span aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/60 to-transparent" />
+        <span
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/60 to-transparent"
+        />
         <div className="flex items-center gap-2">
-          <span aria-hidden className="h-2 w-2 rounded-full bg-accent shadow-[0_0_8px_var(--color-accent)]" />
+          <span
+            aria-hidden
+            className="h-2 w-2 rounded-full bg-accent shadow-[0_0_8px_var(--color-accent)]"
+          />
           <div>
-            <p className="font-display text-sm font-semibold tracking-tight text-foreground">QA Tutor</p>
+            <p className="font-display text-sm font-semibold tracking-tight text-foreground">
+              QA Tutor
+            </p>
             <p className="text-xs text-muted-foreground">
               {brain
                 ? `${brain.brain_label} · Day ${brain.brain_day_count}`
@@ -193,9 +201,7 @@ export function HelpAgentPanel({
             {m.content}
           </div>
         ))}
-        {loading && (
-          <p className="text-xs text-muted-foreground animate-pulse">Thinking…</p>
-        )}
+        {loading && <p className="text-xs text-muted-foreground animate-pulse">Thinking…</p>}
         <div ref={bottomRef} />
       </div>
 

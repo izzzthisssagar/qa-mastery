@@ -29,9 +29,7 @@ async function signedInClient(email: string): Promise<SupabaseClient> {
 }
 
 describe.skipIf(!hasEnv)("Talent RLS invariants", () => {
-  const service = createClient(URL!, SERVICE!, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  let service: SupabaseClient;
 
   const emailClient = `t-client-${randomUUID()}@e2e.local`;
   const emailTester = `t-tester-${randomUUID()}@e2e.local`;
@@ -45,6 +43,10 @@ describe.skipIf(!hasEnv)("Talent RLS invariants", () => {
   let asOutsider: SupabaseClient;
 
   beforeAll(async () => {
+    service = createClient(URL!, SERVICE!, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
     const mk = async (email: string) => {
       const r = await service.auth.admin.createUser({
         email,
@@ -117,10 +119,7 @@ describe.skipIf(!hasEnv)("Talent RLS invariants", () => {
   });
 
   it("3. a non-owner cannot read another tester's NDA portfolio item", async () => {
-    const { data } = await asOutsider
-      .from("talent_portfolio_items")
-      .select("*")
-      .eq("is_nda", true);
+    const { data } = await asOutsider.from("talent_portfolio_items").select("*").eq("is_nda", true);
     expect(data ?? []).toHaveLength(0);
   });
 
@@ -139,10 +138,7 @@ describe.skipIf(!hasEnv)("Talent RLS invariants", () => {
   });
 
   it("5. a non-owner cannot mutate another tester's profile", async () => {
-    await asOutsider
-      .from("talent_profiles")
-      .update({ headline: "hijacked" })
-      .eq("id", testerId);
+    await asOutsider.from("talent_profiles").update({ headline: "hijacked" }).eq("id", testerId);
     const { data } = await service
       .from("talent_profiles")
       .select("headline")

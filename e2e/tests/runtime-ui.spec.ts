@@ -27,4 +27,3 @@ test.describe("help-agent — UI opens (no LLM)", () => {
     await expect(dialog).toHaveCount(0);
   });
 });
-

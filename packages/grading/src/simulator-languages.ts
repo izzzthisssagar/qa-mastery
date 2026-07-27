@@ -60,7 +60,8 @@ export const SIMULATOR_LANGUAGES: readonly SimulatorLanguage[] = [
     monaco: "typescript",
     compiler: "typescript-5.6.2",
     normalize: null,
-    starter: 'const greet = (name: string): string => `Hello, ${name}!`;\nconsole.log(greet("QA"));\n',
+    starter:
+      'const greet = (name: string): string => `Hello, ${name}!`;\nconsole.log(greet("QA"));\n',
   },
   {
     id: "csharp",

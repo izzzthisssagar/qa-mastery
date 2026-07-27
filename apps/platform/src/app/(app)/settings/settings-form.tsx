@@ -8,7 +8,8 @@ const INITIAL: ProfileState = { error: null };
 
 const field =
   "w-full rounded-lg border border-border bg-background/60 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-accent/70";
-const label = "mb-1.5 block text-[0.7rem] font-medium uppercase tracking-[0.18em] text-muted-foreground";
+const label =
+  "mb-1.5 block text-[0.7rem] font-medium uppercase tracking-[0.18em] text-muted-foreground";
 
 export function SettingsForm({
   displayName,

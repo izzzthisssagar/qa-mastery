@@ -72,16 +72,20 @@ RLS regression tests (`pnpm test:rls`) that run in the DB-backed CI stage.
 
 ## Deployment & design (live)
 
-Both apps run on Vercel and **redeploy on every push to `main`** via
-`.github/workflows/deploy.yml`. Full detail: `docs/09-deployment.md`. Keep in
-mind when deploying:
+All three apps run on Vercel (BuggyAPI's infra isn't provisioned yet — its
+matrix entry in `deploy.yml` skips cleanly) and **redeploy once CI finishes
+verifying a commit on `main`** — `deploy.yml` triggers on CI's own completion
+(`workflow_run`), not the push itself, and deploys the exact `head_sha` CI
+checked. Full detail: `docs/09-deployment.md`. Keep in mind when deploying:
 
 - **Live:** platform `qa-mastery-platform.vercel.app`, buggyshop
   `qa-mastery-buggyshop.vercel.app`. One Supabase cloud project backs both.
 - **Vercel blocks deploys (`TEAM_ACCESS_REQUIRED`)** when the git commit author
-  isn't a team member. Deploy with no git metadata: CI does `rm -rf .git`; a
-  local deploy moves `.git` aside (`mv .git /tmp/x …; mv /tmp/x .git`). Always
-  use `--archive=tgz` and rely on `.vercelignore` (excludes the multi-GB
+  isn't a team member. Deploy with no git metadata: CI archives the exact
+  verified commit (`git archive <head_sha> | tar -x`) into a scratch dir and
+  deploys from there instead of the full checkout; a local deploy moves
+  `.git` aside (`mv .git /tmp/x …; mv /tmp/x .git`). Always use
+  `--archive=tgz` and rely on `.vercelignore` (excludes the multi-GB
   `.turbo` + symlinked `node_modules`) or the upload aborts.
 - **Runtime content reads need file tracing.** Lesson/quiz/tutor routes read
   `packages/curriculum/content` at request time, so `apps/platform/next.config.ts`
@@ -94,8 +98,7 @@ mind when deploying:
   `text-muted-foreground`) — never raw `zinc-*`, and never a raw Tailwind
   pastel (`text-emerald-300`, `text-red-400`, …) as text color either: those
   are tuned for the dark palette only and measure well under AA (as low as
-  1.2:1) against the light background — axe caught this repeatedly in Phase
-  7. Use the **text-tone tokens** instead, each independently AA-verified
+  1.2:1) against the light background — axe caught this repeatedly in Phase 7. Use the **text-tone tokens** instead, each independently AA-verified
   against `--background`/`--surface`/`--surface-raised` on light, unchanged
   (already-safe) pastels on dark: `text-accent-text` (general accent-colored
   copy — labels, inline code, links; distinct from `text-accent`, which is

@@ -54,7 +54,10 @@ export function ExploratoryTimer({ onMilestone }: { onMilestone?: (m: string) =>
       <div className="flex-1 space-y-4 w-full">
         <div className="flex justify-between items-center">
           <h3 className="text-lg font-semibold text-foreground">Session Charter</h3>
-          <button onClick={newCharter} className="text-xs font-semibold text-accent hover:text-accent/80 transition-colors">
+          <button
+            onClick={newCharter}
+            className="text-xs font-semibold text-accent hover:text-accent/80 transition-colors"
+          >
             Generate New
           </button>
         </div>
@@ -66,21 +69,28 @@ export function ExploratoryTimer({ onMilestone }: { onMilestone?: (m: string) =>
             exit={{ opacity: 0, y: -5 }}
             className="rounded-xl border border-border bg-background p-4 text-foreground font-medium leading-relaxed italic"
           >
-            "{charter}"
+            &ldquo;{charter}&rdquo;
           </motion.div>
         </AnimatePresence>
-        <p className="text-sm text-muted-foreground">A charter keeps you focused. You have 30 minutes to explore this specific area before stopping to debrief.</p>
+        <p className="text-sm text-muted-foreground">
+          A charter keeps you focused. You have 30 minutes to explore this specific area before
+          stopping to debrief.
+        </p>
       </div>
 
       <div className="flex flex-col items-center justify-center rounded-2xl border-4 border-border bg-background p-6 shadow-2xl min-w-[200px]">
-        <div className={`font-mono text-5xl font-black mb-4 tracking-tight transition-colors ${isRunning ? "text-accent" : "text-muted-foreground"}`}>
+        <div
+          className={`font-mono text-5xl font-black mb-4 tracking-tight transition-colors ${isRunning ? "text-accent" : "text-muted-foreground"}`}
+        >
           {formatTime(timeLeft)}
         </div>
         <div className="flex gap-2">
           <button
             onClick={toggleTimer}
             className={`rounded-lg px-6 py-2 font-bold uppercase tracking-wider text-sm transition-colors ${
-              isRunning ? "bg-rose-500/20 text-rose-400 hover:bg-rose-500/30" : "bg-accent text-accent-foreground hover:bg-accent/90"
+              isRunning
+                ? "bg-rose-500/20 text-rose-400 hover:bg-rose-500/30"
+                : "bg-accent text-accent-foreground hover:bg-accent/90"
             }`}
           >
             {isRunning ? "Pause" : timeLeft === 0 ? "Done" : "Start"}

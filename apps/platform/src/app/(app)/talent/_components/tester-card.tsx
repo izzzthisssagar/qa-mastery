@@ -15,7 +15,7 @@ export function TesterCard({ tester }: { tester: TesterCardData }) {
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2.5">
           {avatarUrl(tester.avatarPath) && (
-            // eslint-disable-next-line @next/next/no-img-element
+            // eslint-disable-next-line @next/next/no-img-element -- signed Supabase Storage URL, not a local/optimizable asset
             <img
               src={avatarUrl(tester.avatarPath)!}
               alt=""
@@ -36,7 +36,9 @@ export function TesterCard({ tester }: { tester: TesterCardData }) {
         </Badge>
       </div>
 
-      {tester.headline && <p className="line-clamp-2 text-sm text-muted-foreground">{tester.headline}</p>}
+      {tester.headline && (
+        <p className="line-clamp-2 text-sm text-muted-foreground">{tester.headline}</p>
+      )}
 
       {tester.badges.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
