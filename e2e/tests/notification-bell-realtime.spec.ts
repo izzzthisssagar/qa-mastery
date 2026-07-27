@@ -26,21 +26,27 @@ test.describe("notification bell — realtime", () => {
     await author.getByTestId("composer-body").fill(body);
     await author.getByTestId("composer-submit").click();
     await expect(author.getByText(body)).toBeVisible({ timeout: 10_000 });
-    const postUrl = author.url();
 
     // Author stays put on the thread page (bell lives in the shared app
     // layout, so any authenticated route works) with zero unread.
     await expect(author.getByTestId("notification-badge")).not.toBeVisible();
 
+    // The like button only exists on the feed's PostCard
+    // (community/post-card.tsx) — the single-post detail page
+    // (community/[postId]/page.tsx) has no like affordance at all. Go to
+    // the feed and scope to this post by its unique body text.
     await signUpFreshLearner(liker, "bell-liker");
-    await liker.goto(postUrl);
+    await liker.goto("http://localhost:3000/community");
+    const likeButton = liker
+      .getByTestId("community-post")
+      .filter({ hasText: body })
+      .getByTestId("post-like");
 
     // Guard against the pre-hydration lost-click race documented in
     // docs/known-issues/webkit-save-stall.md: post-card.tsx has no hydration
     // gate, so a click before React attaches is silently dropped (no
     // toggleLike call, no notify(), badge never appears). Retry the click
     // until the optimistic ♥ state sticks, mirroring signup-helper's guard.
-    const likeButton = liker.getByTestId("post-like").first();
     await expect(async () => {
       if (!(await likeButton.innerText()).includes("♥")) {
         await likeButton.click();
