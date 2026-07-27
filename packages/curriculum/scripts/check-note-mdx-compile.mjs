@@ -107,4 +107,6 @@ if (fail) {
   console.error(`\n${fail}/${files.length} note(s) FAILED (compile or frontmatter).`);
   process.exit(1);
 }
-console.log(`ok — all ${files.length} notes compile through @mdx-js/mdx and pass frontmatter checks`);
+console.log(
+  `ok — all ${files.length} notes compile through @mdx-js/mdx and pass frontmatter checks`,
+);

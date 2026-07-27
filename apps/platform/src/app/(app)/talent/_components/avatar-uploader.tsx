@@ -50,7 +50,7 @@ export function AvatarUploader({
   return (
     <div className="flex items-center gap-4">
       {url ? (
-        // eslint-disable-next-line @next/next/no-img-element
+        // eslint-disable-next-line @next/next/no-img-element -- signed Supabase Storage URL, not a local/optimizable asset
         <img
           src={`${url}?v=${bust}`}
           alt="Your avatar"

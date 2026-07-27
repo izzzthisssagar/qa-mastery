@@ -24,19 +24,19 @@ Production build on :3100 against local Supabase; standalone Playwright
 harness repeating signup → profile → save → publish in fresh WebKit contexts,
 6 concurrent, tracing forced on:
 
-| Build | Stalls |
-|---|---|
-| react 19.2.4 (shipped) + original flow | 3 / 30 |
-| react 19.2.7 + original flow | 3 / 60 |
-| react 19.3.0-canary-20260708 + original flow | 2 / 60 |
+| Build                                         | Stalls |
+| --------------------------------------------- | ------ |
+| react 19.2.4 (shipped) + original flow        | 3 / 30 |
+| react 19.2.7 + original flow                  | 3 / 60 |
+| react 19.3.0-canary-20260708 + original flow  | 2 / 60 |
 | react 19.2.4 + hydration-gated flow (the fix) | 0 / 60 |
 
 The decisive traces: the save POST completed in <300 ms (server fine), a
 probe after `await upsertTesterProfile(...)` logged `resolved false`
-(promise fine, action *failed*), and the captured response body read
+(promise fine, action _failed_), and the captured response body read
 `{"ok":false,"error":"Handle: 3–32 chars, lowercase letters/numbers/dashes"}`
 — an empty handle. Hypotheses ruled out along the way: Supabase/connection
-warmup (CI uses a *local* Supabase; DB round-trip <300 ms), WebKit itself
+warmup (CI uses a _local_ Supabase; DB round-trip <300 ms), WebKit itself
 (browser-agnostic race, WebKit just hydrates slowest under load), and the
 React 19.2.x fast-server-action reconciler race
 ([vercel/next.js#88767](https://github.com/vercel/next.js/discussions/88767))
@@ -49,7 +49,7 @@ React 19.2.x fast-server-action reconciler race
    then fill the handle. A lost pre-hydration interaction now retries instead
    of poisoning the save.
 2. **Fail fast with the real reason** — after clicking save, wait for
-   "Saved." *or* the error paragraph, and throw the actual error message
+   "Saved." _or_ the error paragraph, and throw the actual error message
    instead of blind-timing-out.
 
 ## Lessons / follow-ups

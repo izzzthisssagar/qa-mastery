@@ -41,9 +41,7 @@ export function AvatarMenu({ email }: { email: string }) {
         <Link href="/settings" role="menuitem" className="block">
           <DropdownItem>Settings</DropdownItem>
         </Link>
-        <DropdownItem
-          onSelect={() => setTheme(isDark ? "light" : "dark")}
-        >
+        <DropdownItem onSelect={() => setTheme(isDark ? "light" : "dark")}>
           {isDark ? "☀️ Light mode" : "🌙 Dark mode"}
         </DropdownItem>
         <DropdownSeparator />

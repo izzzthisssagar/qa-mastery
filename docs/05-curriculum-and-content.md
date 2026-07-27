@@ -2,7 +2,7 @@
 
 > **Historical.** The `track-a`/`track-b` lesson content this doc describes was
 > retired 2026-07-22 — the notes wiki (876 notes, `packages/curriculum/content/
-> notes/`) is now the graded spine, with labs in `notes/labs.ts` and the track
+notes/`) is now the graded spine, with labs in `notes/labs.ts` and the track
 > capstone in `notes/track-capstones.ts`. The `lessons` DB table and this
 > pipeline stay wired (invariant 5: slugs archive, never delete) in case
 > content ever needs to move back here, but nothing currently publishes
@@ -24,18 +24,18 @@ packages/curriculum/content/track-a/a3/
 ### Frontmatter (`packages/curriculum/src/frontmatter.ts`, zod-validated)
 
 ```yaml
-slug: boundary-value-analysis      # kebab-case, IMMUTABLE once published
+slug: boundary-value-analysis # kebab-case, IMMUTABLE once published
 title: Boundary Value Analysis
 track: track-a
-module: A3                         # must exist in taxonomy.ts; track must match
+module: A3 # must exist in taxonomy.ts; track must match
 order: 3
-free: true                         # false ⇒ Pro (gated by entitlements)
+free: true # false ⇒ Pro (gated by entitlements)
 duration_min: 25
-widgets: [boundary-slider]         # must exist in widgets/src/names.ts
+widgets: [boundary-slider] # must exist in widgets/src/names.ts
 lab_type: bug_report
 requires_release: "1.0"
-status: published                  # draft | published | archived
-flashcards:                        # seeded into the review queue on first pass
+status: published # draft | published | archived
+flashcards: # seeded into the review queue on first pass
   - { front: "...", back: "..." }
 ```
 
@@ -48,33 +48,41 @@ to the live widget at render time (see [06](./06-learn-feature.md)).
 ### Quiz (`*.quiz.json`) — the answer key is server-only
 
 ```json
-{ "questions": [
-  { "id": "bva-q1", "type": "single", "prompt": "…",
-    "options": ["…","…"], "correct": [1], "explanation": "…" }
-]}
+{
+  "questions": [
+    {
+      "id": "bva-q1",
+      "type": "single",
+      "prompt": "…",
+      "options": ["…", "…"],
+      "correct": [1],
+      "explanation": "…"
+    }
+  ]
+}
 ```
 
 `correct` and `explanation` are the **answer key**. They are read only on the
 server (`loadQuiz`, which is in `packages/curriculum/src/load.ts` and reads the
 file system). The learn page strips them before sending questions to the client;
-they come back only *after* grading. See [06](./06-learn-feature.md) and
+they come back only _after_ grading. See [06](./06-learn-feature.md) and
 invariant 2.
 
 ## The content → DB sync
 
 `packages/curriculum/scripts/sync.ts` has two modes:
 
-| Mode | Command | What it does |
-|---|---|---|
-| **validate** (default) | `pnpm --filter @qa-mastery/curriculum sync` | Schema-checks every lesson: frontmatter (zod), duplicate slugs, widget names exist, module codes exist + track matches. **CI gate** — fails the PR on any problem. Writes nothing. |
-| **apply** | `… sync --apply` | Everything validate does, then upserts `tracks`/`modules`/`lessons` via the service role and archives lessons whose slug left the repo. Needs `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`. |
+| Mode                   | Command                                     | What it does                                                                                                                                                                                            |
+| ---------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **validate** (default) | `pnpm --filter @qa-mastery/curriculum sync` | Schema-checks every lesson: frontmatter (zod), duplicate slugs, widget names exist, module codes exist + track matches. **CI gate** — fails the PR on any problem. Writes nothing.                      |
+| **apply**              | `… sync --apply`                            | Everything validate does, then upserts `tracks`/`modules`/`lessons` via the service role and archives lessons whose slug left the repo. Needs `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`. |
 
 `--apply` upserts on `slug` (invariant 5: immutable, archive-never-delete), so a
 learner's progress FKs always resolve.
 
 > **Gotcha:** `sync --apply` writes to `public` tables, so it depends on the
 > migration 0004 grants. Before those existed it failed with `permission denied
-> for table tracks`. If you see that error, the public-schema grants are missing
+for table tracks`. If you see that error, the public-schema grants are missing
 > — reset the DB so all migrations apply.
 
 ## Taxonomy (`packages/curriculum/src/taxonomy.ts`)

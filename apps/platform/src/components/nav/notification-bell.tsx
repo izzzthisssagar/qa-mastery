@@ -11,7 +11,13 @@ import { markNotificationsRead } from "@/app/(app)/community/actions";
  * to this user (the row is in the supabase_realtime publication — see migration
  * 0027). Opening the panel marks everything read.
  */
-export function NotificationBell({ userId, initialUnread }: { userId: string; initialUnread: number }) {
+export function NotificationBell({
+  userId,
+  initialUnread,
+}: {
+  userId: string;
+  initialUnread: number;
+}) {
   const [unread, setUnread] = useState(initialUnread);
   const [open, setOpen] = useState(false);
 
@@ -21,7 +27,12 @@ export function NotificationBell({ userId, initialUnread }: { userId: string; in
       .channel(`notifications:${userId}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${userId}`,
+        },
         () => setUnread((n) => n + 1),
       )
       .subscribe();
@@ -50,7 +61,9 @@ export function NotificationBell({ userId, initialUnread }: { userId: string; in
         // without growing the visible element — see avatar-menu.tsx.
         className="relative flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground before:absolute before:inset-[-6px] before:content-[''] hover:bg-surface hover:text-foreground"
       >
-        <span aria-hidden className="text-lg">🔔</span>
+        <span aria-hidden className="text-lg">
+          🔔
+        </span>
         {unread > 0 && (
           <span
             data-testid="notification-badge"

@@ -69,15 +69,21 @@ export default async function PortfolioPage() {
           <div className="mb-6 grid grid-cols-3 gap-4">
             <Card>
               <div className="text-3xl font-bold text-foreground">{rows.length}</div>
-              <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">Reports filed</div>
+              <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">
+                Reports filed
+              </div>
             </Card>
             <Card>
               <div className="text-3xl font-bold text-accent">{matchedCount}</div>
-              <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">Bugs matched</div>
+              <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">
+                Bugs matched
+              </div>
             </Card>
             <Card>
               <div className="text-3xl font-bold text-foreground">{totalScore}</div>
-              <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">Total score</div>
+              <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">
+                Total score
+              </div>
             </Card>
           </div>
 

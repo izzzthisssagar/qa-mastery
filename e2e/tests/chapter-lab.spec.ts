@@ -46,9 +46,7 @@ async function completeNote(page: Page, url: string): Promise<void> {
 }
 
 test.describe("chapter lab", () => {
-  test("renders on the chapter's last topic, locked until the notes are read", async ({
-    page,
-  }) => {
+  test("renders on the chapter's last topic, locked until the notes are read", async ({ page }) => {
     await signUpFreshLearner(page, "lab");
     await page.goto(LAST_TOPIC);
 
@@ -72,9 +70,7 @@ test.describe("chapter lab", () => {
     await expect(page.getByRole("heading", { name: /chapter lab/i })).toHaveCount(0);
   });
 
-  test("unlocks with a starter and a submit control once the chapter is read", async ({
-    page,
-  }) => {
+  test("unlocks with a starter and a submit control once the chapter is read", async ({ page }) => {
     test.slow(); // completes four notes before the assertion
     await signUpFreshLearner(page, "lab");
 

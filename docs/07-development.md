@@ -3,7 +3,8 @@
 ## Prerequisites
 
 - **Docker** — runs the local Supabase stack.
-- **pnpm** (workspace package manager) and **Node** (≥ 20).
+- **pnpm** (workspace package manager) and **Node** (`>=24 <25` — see root
+  `package.json`'s `engines`).
 - Supabase CLI is invoked through pnpm scripts (no global install needed).
 
 ## First-time setup
@@ -14,7 +15,7 @@ cp .env.example apps/platform/.env.local   # then fill from `pnpm db:status`
 pnpm db:start                              # boots local Supabase (needs Docker)
 pnpm db:reset                              # applies all migrations + seed
 pnpm --filter @qa-mastery/curriculum sync --apply   # publish lessons to the DB registry
-pnpm dev                                   # platform :3000, buggyshop :3001
+pnpm dev                                   # platform :3000, buggyshop :3001, buggyapi :3002
 ```
 
 `.env.local` values (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
@@ -27,19 +28,25 @@ The placeholders in `.env.example` fail fast on purpose.
 
 ## Commands
 
-| Command | What |
-|---|---|
-| `pnpm dev` | Both apps in dev (platform :3000, buggyshop :3001). |
-| `pnpm lint` / `pnpm typecheck` | Turbo-cached across all packages. |
-| `pnpm test` | Unit tests (Vitest) — grading, curriculum, shared. No DB needed. |
-| `pnpm test:rls` | RLS regression suite (`@qa-mastery/db`). Needs the live local stack + a synced lesson; pass the Supabase env vars. |
-| `pnpm build` | Production build of everything. |
-| `pnpm e2e` | `turbo build` then Playwright on **Chromium + WebKit** against `next start` of both apps. |
-| `pnpm db:start` / `db:stop` / `db:status` | Local Supabase stack. |
-| `pnpm db:reset` | Re-apply all migrations + seed (destroys local data). |
-| `pnpm --filter @qa-mastery/curriculum sync [--apply]` | Validate (CI gate) / publish the lesson registry. |
+| Command                                               | What                                                                                                                                                                                                                          |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`                                            | All three apps in dev (platform :3000, buggyshop :3001, buggyapi :3002).                                                                                                                                                      |
+| `pnpm lint` / `pnpm typecheck`                        | Turbo-cached across all packages.                                                                                                                                                                                             |
+| `pnpm test`                                           | Unit tests (Vitest) — grading, curriculum, shared. No DB needed.                                                                                                                                                              |
+| `pnpm test:rls`                                       | RLS regression suite (`@qa-mastery/db`). Needs the live local stack + a synced lesson; pass the Supabase env vars.                                                                                                            |
+| `pnpm build`                                          | Production build of everything.                                                                                                                                                                                               |
+| `pnpm e2e`                                            | `turbo build` then Playwright on **Chromium + WebKit** against `next start` of platform + buggyshop (the default config; BuggyAPI/first-paint/visual/a11y each have their own `--config=`, see `e2e/playwright.*.config.ts`). |
+| `pnpm db:start` / `db:stop` / `db:status`             | Local Supabase stack.                                                                                                                                                                                                         |
+| `pnpm db:reset`                                       | Re-apply all migrations + seed (destroys local data).                                                                                                                                                                         |
+| `pnpm --filter @qa-mastery/curriculum sync [--apply]` | Validate (CI gate) / publish the lesson registry.                                                                                                                                                                             |
 
 ## How to add a lesson
+
+The steps below are for the DB-registry-backed **lessons** system
+(`packages/curriculum/src/load.ts`) — this checkout has no live lesson
+content today; the live curriculum surface is the notes wiki (see
+[05 — Curriculum and content](./05-curriculum-and-content.md)). Kept here for
+when that system is populated again.
 
 1. Create `packages/curriculum/content/<track>/<module>/<slug>.mdx` with valid
    frontmatter (see [05](./05-curriculum-and-content.md)) and a co-located
@@ -71,21 +78,34 @@ This platform teaches QA — its own suite is marketing. The bar (`CLAUDE.md`):
   proves read-own/can't-read-others on progress, no self-written scores
   (quiz/XP/bug-report), and the sealed buggyshop schema. Run in the DB-backed stage.
 
-Locators use `data-testid`s; see `e2e/tests/learn.spec.ts` for the pattern
-(inline `signUpFreshLearner()` helper, `getByTestId`, both browser projects).
+Locators use `data-testid`s; see `e2e/tests/notes.spec.ts` for the pattern
+(shared `signUpFreshLearner()` helper from `./signup-helper`, `getByTestId`,
+both browser projects).
 
 ## CI
 
-`ci.yml` runs lint, typecheck, unit tests, the curriculum sync validation, the
-production build, the manifest-leak grep (`.next/static`, invariant 1), and the
-Playwright e2e against a fresh local Supabase stack on Chromium + WebKit.
+`ci.yml` is split into jobs, not one long-tail job: `checks` (lint, typecheck,
+unit tests, curriculum sync validation, RLS coverage + E2E-shape + workflow-
+pin checks), `rls` (live-DB RLS regression), `security` (a reusable workflow —
+secret scan, production dependency audit, `dependabot.yml` validation),
+`e2e-core` (the main Playwright suite, sharded 4 ways), `e2e-buggyapi`,
+`e2e-first-paint`, `e2e-full` (visual regression + a11y, gated to `main` pushes
+and PRs labeled `full-e2e`), `merge-playwright-reports` (one HTML + JUnit
+report from every shard/suite's blob report), and an aggregate `release-gate`
+that fails unless every one of those succeeded (or, for `e2e-full`, was
+cleanly skipped). Each e2e job builds + starts a fresh local Supabase stack
+and includes the manifest-leak grep (`.next/static`, invariant 1) before
+running its slice of the suite.
 
 ## Deploy
 
-`deploy.yml` deploys **both apps to Vercel production on every push to `main`**
-(Vercel CLI token; Vercel's own build gates it). For a local one-off deploy,
-move `.git` aside first so Vercel doesn't block on the commit author, and pass
-`--archive=tgz`. Full runbook + the two deploy gotchas:
+`deploy.yml` triggers on CI's own completion (`workflow_run`), not the push
+itself, and deploys exactly the commit CI verified (`head_sha`) to Vercel
+production for every provisioned app — Vercel's own build gates it further,
+and a post-deploy health check (`curl /api/health`) fails the release if the
+new deployment isn't actually serving. For a local one-off deploy, move
+`.git` aside first so Vercel doesn't block on the commit author, and pass
+`--archive=tgz`. Full runbook + the deploy gotchas:
 [09 — Deployment](./09-deployment.md).
 
 Next: [08 — Decisions](./08-decisions.md).

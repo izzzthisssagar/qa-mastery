@@ -1,9 +1,4 @@
-export {
-  RELEASES,
-  DEFAULT_RELEASE,
-  isRelease,
-  type Release,
-} from "./releases";
+export { RELEASES, DEFAULT_RELEASE, isRelease, type Release } from "./releases";
 
 export {
   SEEDED_BUGS,

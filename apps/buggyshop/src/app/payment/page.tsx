@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import { readRelease } from "@/lib/catalog";
 import { cardOffered, submitPayment, type PayMethod } from "@/lib/payment";
 
-
 // Fixed demo order total — deliberately under $100 so the BS-011 rule conflict
 // surfaces: Card is offered yet rejected on submit.
 const ORDER_TOTAL = 50;

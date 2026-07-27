@@ -60,9 +60,7 @@ describe("notes taxonomy", () => {
     // schema only checks a related entry's SHAPE, so a renamed/typo'd target
     // ships green and renders as a dead link. Guard both link kinds here; the
     // standalone scripts/check-note-links.mjs runs the same check outside vitest.
-    const valid = new Set(
-      files.map((f) => `${f.moduleSlug}/${f.chapterSlug}/${f.topicSlug}`),
-    );
+    const valid = new Set(files.map((f) => `${f.moduleSlug}/${f.chapterSlug}/${f.topicSlug}`));
     const broken: string[] = [];
     for (const f of files) {
       const note = getNote(f.moduleSlug, f.chapterSlug, f.topicSlug);
@@ -73,9 +71,7 @@ describe("notes taxonomy", () => {
       }
       // Only the triple-slug form is a note wikilink — bash `[[ ]]` tests and
       // code literals like `[[start]]` are not "a/b/c" shaped and are ignored.
-      for (const m of note.body.matchAll(
-        /\[\[([a-z0-9-]+\/[a-z0-9-]+\/[a-z0-9-]+)\]\]/g,
-      )) {
+      for (const m of note.body.matchAll(/\[\[([a-z0-9-]+\/[a-z0-9-]+\/[a-z0-9-]+)\]\]/g)) {
         if (!valid.has(m[1])) broken.push(`${key}: [[${m[1]}]]`);
       }
     }
@@ -85,9 +81,7 @@ describe("notes taxonomy", () => {
   it("notes are invisible to the lesson registry sync", () => {
     // notes frontmatter would fail the lesson schema — the sync must not see it
     for (const file of listLessonFiles()) {
-      expect(file, `lesson walker picked up a note: ${file}`).not.toContain(
-        "/notes/",
-      );
+      expect(file, `lesson walker picked up a note: ${file}`).not.toContain("/notes/");
     }
   });
 });

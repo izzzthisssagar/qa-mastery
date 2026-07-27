@@ -107,7 +107,10 @@ export async function getFeed(
 
   if (tab === "top") {
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    query = query.gte("created_at", weekAgo).order("like_count", { ascending: false }).order("id", { ascending: false });
+    query = query
+      .gte("created_at", weekAgo)
+      .order("like_count", { ascending: false })
+      .order("id", { ascending: false });
   } else {
     query = query.order("created_at", { ascending: false }).order("id", { ascending: false });
     if (cursor) {
@@ -156,7 +159,9 @@ export async function getFeed(
     likeCount: r.like_count,
     commentCount: r.comment_count,
     acceptedAnswerId: r.accepted_answer_id,
-    tags: (r.community_post_tags ?? []).map((t) => t.community_tags?.slug).filter(Boolean) as string[],
+    tags: (r.community_post_tags ?? [])
+      .map((t) => t.community_tags?.slug)
+      .filter(Boolean) as string[],
     likedByMe: likedSet.has(r.id),
     createdAt: r.created_at,
   }));
@@ -192,7 +197,9 @@ export async function createPost(input: CreatePostInput): Promise<string> {
     .single<{ id: string }>();
   if (error || !post) throw new Error(error?.message ?? "Could not create post");
 
-  const tagSlugs = [...new Set((input.tags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean))].slice(0, 5);
+  const tagSlugs = [
+    ...new Set((input.tags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean)),
+  ].slice(0, 5);
   for (const slug of tagSlugs) {
     const { data: tag } = await service
       .from("community_tags")
@@ -207,11 +214,7 @@ export async function createPost(input: CreatePostInput): Promise<string> {
 }
 
 /** Add a comment (optionally a reply via parentId). Notifies the post author. */
-export async function addComment(
-  postId: string,
-  body: string,
-  parentId?: string,
-): Promise<string> {
+export async function addComment(postId: string, body: string, parentId?: string): Promise<string> {
   const userId = await getAuthedUserId();
   const service = createServiceClient();
   const trimmed = body.trim();
@@ -264,7 +267,9 @@ export async function toggleLike(
     return { liked: false };
   }
 
-  await service.from("community_likes").insert({ user_id: userId, subject_type: subjectType, subject_id: subjectId });
+  await service
+    .from("community_likes")
+    .insert({ user_id: userId, subject_type: subjectType, subject_id: subjectId });
 
   const table = subjectType === "post" ? "community_posts" : "community_comments";
   const { data: subject } = await service
@@ -298,11 +303,17 @@ export async function toggleFollow(followingId: string): Promise<{ following: bo
     .maybeSingle();
 
   if (existing) {
-    await service.from("community_follows").delete().eq("follower_id", userId).eq("following_id", followingId);
+    await service
+      .from("community_follows")
+      .delete()
+      .eq("follower_id", userId)
+      .eq("following_id", followingId);
     return { following: false };
   }
 
-  await service.from("community_follows").insert({ follower_id: userId, following_id: followingId });
+  await service
+    .from("community_follows")
+    .insert({ follower_id: userId, following_id: followingId });
   await notify(service, {
     userId: followingId,
     actorId: userId,
@@ -330,9 +341,16 @@ export async function acceptAnswer(postId: string, commentId: string): Promise<v
 
   // Clear a previous acceptance, set the new one.
   if (post.accepted_answer_id) {
-    await service.from("community_comments").update({ is_accepted: false }).eq("id", post.accepted_answer_id);
+    await service
+      .from("community_comments")
+      .update({ is_accepted: false })
+      .eq("id", post.accepted_answer_id);
   }
-  await service.from("community_comments").update({ is_accepted: true }).eq("id", commentId).eq("post_id", postId);
+  await service
+    .from("community_comments")
+    .update({ is_accepted: true })
+    .eq("id", commentId)
+    .eq("post_id", postId);
   await service.from("community_posts").update({ accepted_answer_id: commentId }).eq("id", postId);
 
   const { data: answer } = await service
@@ -362,9 +380,12 @@ export async function reportSubject(
   const service = createServiceClient();
   const trimmed = reason.trim();
   if (!trimmed) throw new Error("Tell us what's wrong.");
-  const { error } = await service
-    .from("community_reports")
-    .insert({ reporter_id: userId, subject_type: subjectType, subject_id: subjectId, reason: trimmed });
+  const { error } = await service.from("community_reports").insert({
+    reporter_id: userId,
+    subject_type: subjectType,
+    subject_id: subjectId,
+    reason: trimmed,
+  });
   // A duplicate report (unique violation) is a no-op success — already flagged.
   if (error && error.code !== "23505") throw new Error(error.message);
 }
@@ -377,11 +398,18 @@ export async function hideSubject(
   const userId = await getAuthedUserId();
   const service = createServiceClient();
 
-  const { data: me } = await service.from("profiles").select("is_admin").eq("id", userId).single<{ is_admin: boolean }>();
+  const { data: me } = await service
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", userId)
+    .single<{ is_admin: boolean }>();
   if (!me?.is_admin) throw new Error("Admins only.");
 
   const table = subjectType === "post" ? "community_posts" : "community_comments";
-  await service.from(table).update({ hidden_at: new Date().toISOString(), hidden_by: userId }).eq("id", subjectId);
+  await service
+    .from(table)
+    .update({ hidden_at: new Date().toISOString(), hidden_by: userId })
+    .eq("id", subjectId);
   revalidatePath("/community");
 }
 
@@ -415,7 +443,9 @@ export async function searchPosts(q: string): Promise<FeedPost[]> {
     likeCount: r.like_count,
     commentCount: r.comment_count,
     acceptedAnswerId: r.accepted_answer_id,
-    tags: (r.community_post_tags ?? []).map((t) => t.community_tags?.slug).filter(Boolean) as string[],
+    tags: (r.community_post_tags ?? [])
+      .map((t) => t.community_tags?.slug)
+      .filter(Boolean) as string[],
     likedByMe: false,
     createdAt: r.created_at,
   }));
@@ -475,7 +505,9 @@ export async function getPostThread(postId: string): Promise<PostThread | null> 
 
   const { data: commentRows } = await service
     .from("community_comments")
-    .select("id, author_id, parent_id, body, is_accepted, like_count, created_at, profiles:author_id(display_name)")
+    .select(
+      "id, author_id, parent_id, body, is_accepted, like_count, created_at, profiles:author_id(display_name)",
+    )
     .eq("post_id", postId)
     .is("hidden_at", null)
     .order("is_accepted", { ascending: false })
@@ -507,7 +539,9 @@ export async function getPostThread(postId: string): Promise<PostThread | null> 
       likeCount: p.like_count,
       commentCount: p.comment_count,
       acceptedAnswerId: p.accepted_answer_id,
-      tags: (p.community_post_tags ?? []).map((t) => t.community_tags?.slug).filter(Boolean) as string[],
+      tags: (p.community_post_tags ?? [])
+        .map((t) => t.community_tags?.slug)
+        .filter(Boolean) as string[],
       likedByMe: !!myPostLike,
       createdAt: p.created_at,
     },
@@ -576,7 +610,9 @@ export async function getPostsByTag(slug: string): Promise<FeedPost[]> {
     likeCount: r.like_count,
     commentCount: r.comment_count,
     acceptedAnswerId: r.accepted_answer_id,
-    tags: (r.community_post_tags ?? []).map((t) => t.community_tags?.slug).filter(Boolean) as string[],
+    tags: (r.community_post_tags ?? [])
+      .map((t) => t.community_tags?.slug)
+      .filter(Boolean) as string[],
     likedByMe: likedSet.has(r.id),
     createdAt: r.created_at,
   }));

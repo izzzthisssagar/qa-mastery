@@ -92,8 +92,4 @@ export {
   type LabRunEvidence,
 } from "./lab-checks";
 
-export {
-  computeStreakUpdate,
-  type StreakState,
-  type StreakUpdate,
-} from "./streak";
+export { computeStreakUpdate, type StreakState, type StreakUpdate } from "./streak";

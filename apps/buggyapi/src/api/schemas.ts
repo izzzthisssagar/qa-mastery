@@ -68,7 +68,9 @@ export const MeSchema = z
 export const ProjectSchema = z
   .object({
     id: z.uuid(),
-    key: z.string().openapi({ example: "TF", description: "Short project key used in ticket refs (TF-12)." }),
+    key: z
+      .string()
+      .openapi({ example: "TF", description: "Short project key used in ticket refs (TF-12)." }),
     name: z.string().openapi({ example: "TaskFlight" }),
     description: z.string().nullable(),
     status: z.enum(["active", "archived"]),
@@ -125,7 +127,10 @@ export const TicketCreateSchema = z
     title: z.string().min(1).max(200).openapi({ example: "Boarding scanner rejects valid passes" }),
     description: z.string().max(5000).optional(),
     status: z.enum(TICKET_STATUSES).optional().openapi({ description: "Defaults to `open`." }),
-    priority: z.enum(TICKET_PRIORITIES).optional().openapi({ description: "Defaults to `medium`." }),
+    priority: z
+      .enum(TICKET_PRIORITIES)
+      .optional()
+      .openapi({ description: "Defaults to `medium`." }),
     assignee_id: z.uuid().optional(),
     labels: z.array(z.string().min(1).max(30)).max(10).optional(),
     due_date: z.iso.date().optional().openapi({ example: "2026-08-01" }),
@@ -145,39 +150,71 @@ export const TicketUpdateSchema = z
   .openapi("TicketUpdate");
 
 export const TicketListQuerySchema = z.object({
-  page: z.coerce.number().int().min(1).default(1).openapi({
-    param: { name: "page", in: "query" },
-    example: 1,
-  }),
-  per_page: z.coerce.number().int().min(1).max(100).default(20).openapi({
-    param: { name: "per_page", in: "query" },
-    example: 20,
-    description: "Max 100 — asking for more is a classic boundary test (you get a 422).",
-  }),
-  status: z.enum(TICKET_STATUSES).optional().openapi({
-    param: { name: "status", in: "query" },
-  }),
-  priority: z.enum(TICKET_PRIORITIES).optional().openapi({
-    param: { name: "priority", in: "query" },
-  }),
-  label: z.string().optional().openapi({
-    param: { name: "label", in: "query" },
-    example: "bug",
-  }),
-  project_id: z.uuid().optional().openapi({
-    param: { name: "project_id", in: "query" },
-  }),
-  q: z.string().optional().openapi({
-    param: { name: "q", in: "query" },
-    description: "Case-insensitive substring match on the title.",
-    example: "refund",
-  }),
-  sort: z.enum(["created_at", "updated_at", "priority", "number"]).default("number").openapi({
-    param: { name: "sort", in: "query" },
-  }),
-  order: z.enum(["asc", "desc"]).default("asc").openapi({
-    param: { name: "order", in: "query" },
-  }),
+  page: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(1)
+    .openapi({
+      param: { name: "page", in: "query" },
+      example: 1,
+    }),
+  per_page: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(20)
+    .openapi({
+      param: { name: "per_page", in: "query" },
+      example: 20,
+      description: "Max 100 — asking for more is a classic boundary test (you get a 422).",
+    }),
+  status: z
+    .enum(TICKET_STATUSES)
+    .optional()
+    .openapi({
+      param: { name: "status", in: "query" },
+    }),
+  priority: z
+    .enum(TICKET_PRIORITIES)
+    .optional()
+    .openapi({
+      param: { name: "priority", in: "query" },
+    }),
+  label: z
+    .string()
+    .optional()
+    .openapi({
+      param: { name: "label", in: "query" },
+      example: "bug",
+    }),
+  project_id: z
+    .uuid()
+    .optional()
+    .openapi({
+      param: { name: "project_id", in: "query" },
+    }),
+  q: z
+    .string()
+    .optional()
+    .openapi({
+      param: { name: "q", in: "query" },
+      description: "Case-insensitive substring match on the title.",
+      example: "refund",
+    }),
+  sort: z
+    .enum(["created_at", "updated_at", "priority", "number"])
+    .default("number")
+    .openapi({
+      param: { name: "sort", in: "query" },
+    }),
+  order: z
+    .enum(["asc", "desc"])
+    .default("asc")
+    .openapi({
+      param: { name: "order", in: "query" },
+    }),
 });
 
 export const TicketListSchema = z
@@ -185,7 +222,10 @@ export const TicketListSchema = z
     data: z.array(TicketSchema),
     page: z.number().int().openapi({ example: 1 }),
     per_page: z.number().int().openapi({ example: 20 }),
-    total: z.number().int().openapi({ example: 12, description: "Also sent as the X-Total-Count header." }),
+    total: z
+      .number()
+      .int()
+      .openapi({ example: 12, description: "Also sent as the X-Total-Count header." }),
     total_pages: z.number().int().openapi({ example: 1 }),
   })
   .openapi("TicketList");

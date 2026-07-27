@@ -26,9 +26,7 @@ test.describe("auth", () => {
       }
       await expect(page).toHaveURL(/\/dashboard/, { timeout: 4000 });
     }).toPass({ timeout: 20_000 });
-    await expect(
-      page.getByRole("heading", { name: /your learning/i }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: /your learning/i })).toBeVisible();
 
     // sign out (now inside the avatar menu) lands back on the marketing homepage
     await page.getByRole("button", { name: /account menu/i }).click();
@@ -43,17 +41,14 @@ test.describe("auth", () => {
     await expect(page).toHaveURL(/\/dashboard/);
   });
 
-  test("anonymous visitor is redirected from dashboard to login", async ({
-    page,
-  }) => {
+  test("anonymous visitor is redirected from dashboard to login", async ({ page }) => {
     await page.goto("http://localhost:3000/dashboard");
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test("deep link survives the login round trip", async ({ page }) => {
-    // P0-3: an unauthenticated visitor hitting an authenticated route deep
-    // link (not just /dashboard) should land back on that same route after
-    // logging in, not get dropped on /dashboard.
+  test("preserves protected destination through the login round trip", async ({ page }) => {
+    // Task 6: a deep link to any protected (app) route should land back on
+    // that same route after logging in, not get dropped on /dashboard.
     const email = await signUpFreshLearner(page, "deeplink");
     await page.getByRole("button", { name: /account menu/i }).click();
     await page.getByRole("menuitem", { name: /sign out/i }).click();
@@ -67,9 +62,7 @@ test.describe("auth", () => {
     await expect(page).toHaveURL("http://localhost:3000/notes");
   });
 
-  test("open-redirect: a next= pointing off-site falls back to /dashboard", async ({
-    page,
-  }) => {
+  test("rejects external next and falls back to /dashboard", async ({ page }) => {
     const email = await signUpFreshLearner(page, "openredirect");
     await page.getByRole("button", { name: /account menu/i }).click();
     await page.getByRole("menuitem", { name: /sign out/i }).click();

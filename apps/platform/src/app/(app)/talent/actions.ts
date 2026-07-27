@@ -24,9 +24,7 @@ import {
  * fields are allow-list validated here to keep directory filters precise.
  */
 
-export type ActionResult<T = null> =
-  | { ok: true; data: T }
-  | { ok: false; error: string };
+export type ActionResult<T = null> = { ok: true; data: T } | { ok: false; error: string };
 
 const inSet = (set: readonly string[], msg: string) =>
   z.string().refine((v) => set.includes(v), msg);
@@ -127,7 +125,8 @@ export type DeviceInput = z.input<typeof DeviceSchema>;
 
 export async function addDevice(input: DeviceInput): Promise<ActionResult<{ id: string }>> {
   const parsed = DeviceSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid device" };
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid device" };
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: "Please sign in" };
   const d = parsed.data;
@@ -179,7 +178,8 @@ export async function addPortfolioItem(
   input: PortfolioInput,
 ): Promise<ActionResult<{ id: string }>> {
   const parsed = PortfolioSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid item" };
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid item" };
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: "Please sign in" };
   const i = parsed.data;
@@ -229,7 +229,10 @@ export async function publishProfile(isPublic: boolean): Promise<ActionResult> {
 
   if (isPublic) {
     const [{ count: devices }, { count: portfolio }, { data: prof }] = await Promise.all([
-      supabase.from("talent_devices").select("id", { count: "exact", head: true }).eq("tester_id", user.id),
+      supabase
+        .from("talent_devices")
+        .select("id", { count: "exact", head: true })
+        .eq("tester_id", user.id),
       supabase
         .from("talent_portfolio_items")
         .select("id", { count: "exact", head: true })
@@ -418,7 +421,9 @@ export async function searchTesters(
   // Apply filters while `q` is still a filter builder; order/limit at the await.
   let q = supabase
     .from("talent_profiles")
-    .select("id, handle, headline, location, availability, specialties, stack, avatar_path, updated_at")
+    .select(
+      "id, handle, headline, location, availability, specialties, stack, avatar_path, updated_at",
+    )
     .eq("is_public", true);
 
   const specialties = (filters.specialties ?? []).filter((s) => SPECIALTIES.includes(s as never));
@@ -486,7 +491,8 @@ export type ProjectInput = z.input<typeof ProjectSchema>;
  *  funnel event. */
 export async function postProject(input: ProjectInput): Promise<ActionResult<{ id: string }>> {
   const parsed = ProjectSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid project" };
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid project" };
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: "Please sign in" };
 
@@ -513,7 +519,11 @@ export async function postProject(input: ProjectInput): Promise<ActionResult<{ i
   if (error || !data) return { ok: false, error: "Couldn't post your project — try again" };
 
   // Reflect client intent in the role (tester → both, none → client).
-  const { data: prof } = await supabase.from("profiles").select("talent_role").eq("id", user.id).single();
+  const { data: prof } = await supabase
+    .from("profiles")
+    .select("talent_role")
+    .eq("id", user.id)
+    .single();
   const role = prof?.talent_role as string | undefined;
   const nextRole = role === "tester" || role === "both" ? "both" : "client";
   await supabase.from("profiles").update({ talent_role: nextRole }).eq("id", user.id);
@@ -556,7 +566,9 @@ export async function contactTester(input: {
     .select("id")
     .eq("client_id", user.id)
     .eq("tester_id", testerId);
-  existingQ = input.projectId ? existingQ.eq("project_id", input.projectId) : existingQ.is("project_id", null);
+  existingQ = input.projectId
+    ? existingQ.eq("project_id", input.projectId)
+    : existingQ.is("project_id", null);
   const { data: existing } = await existingQ.maybeSingle();
   if (existing?.id) return { ok: true, data: { conversationId: existing.id as string } };
 
@@ -623,7 +635,8 @@ export async function getConversations(): Promise<ActionResult<ConversationSumma
   const lastByConvo = new Map<string, { body: string; at: string }>();
   for (const m of msgs ?? []) {
     const cid = m.conversation_id as string;
-    if (!lastByConvo.has(cid)) lastByConvo.set(cid, { body: m.body as string, at: m.created_at as string });
+    if (!lastByConvo.has(cid))
+      lastByConvo.set(cid, { body: m.body as string, at: m.created_at as string });
   }
 
   const items: ConversationSummary[] = rows.map((c) => {
@@ -773,7 +786,11 @@ export type ProjectDetail = {
 export async function getProject(id: string): Promise<ActionResult<ProjectDetail>> {
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: "Please sign in" };
-  const { data: project } = await supabase.from("talent_projects").select("*").eq("id", id).maybeSingle();
+  const { data: project } = await supabase
+    .from("talent_projects")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
   if (!project) return { ok: false, error: "Project not found" };
 
   const isOwner = project.owner_id === user.id;
@@ -805,7 +822,8 @@ export async function applyToProject(
     .select("id")
     .single();
   if (error || !data) {
-    if (error?.code === "23505") return { ok: false, error: "You've already applied to this project" };
+    if (error?.code === "23505")
+      return { ok: false, error: "You've already applied to this project" };
     return { ok: false, error: "Couldn't submit your application" };
   }
   await emitTalentEvent(user.id, "talent.application_submitted", {
@@ -855,7 +873,8 @@ export async function reportContent(
   const tt = z.enum(["profile", "project", "message"]).safeParse(targetType);
   if (!tt.success) return { ok: false, error: "Invalid report target" };
   const trimmed = reason.trim();
-  if (trimmed.length < 1 || trimmed.length > 2000) return { ok: false, error: "Add a short reason" };
+  if (trimmed.length < 1 || trimmed.length > 2000)
+    return { ok: false, error: "Add a short reason" };
 
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: "Please sign in" };
@@ -920,11 +939,10 @@ const ExperienceSchema = z.object({
 });
 export type ExperienceInput = z.input<typeof ExperienceSchema>;
 
-export async function addExperience(
-  input: ExperienceInput,
-): Promise<ActionResult<{ id: string }>> {
+export async function addExperience(input: ExperienceInput): Promise<ActionResult<{ id: string }>> {
   const parsed = ExperienceSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid entry" };
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid entry" };
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: "Please sign in" };
   const e = parsed.data;

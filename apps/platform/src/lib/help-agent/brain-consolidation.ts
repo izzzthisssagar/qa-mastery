@@ -80,10 +80,7 @@ export async function persistMessage(input: {
   if (error) throw new Error(error.message);
 }
 
-export async function consolidateBrain(
-  userId: string,
-  sessionId?: string,
-): Promise<void> {
+export async function consolidateBrain(userId: string, sessionId?: string): Promise<void> {
   const service = createServiceClient();
   const now = new Date();
 

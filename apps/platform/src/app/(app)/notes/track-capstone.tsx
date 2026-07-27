@@ -134,13 +134,20 @@ export function TrackCapstone({ state }: { state: NoteCapstoneState }) {
       )}
 
       {error && (
-        <p role="alert" className="mt-3 rounded-xl border border-bug/40 bg-bug/10 px-3 py-2 text-sm text-foreground">
+        <p
+          role="alert"
+          className="mt-3 rounded-xl border border-bug/40 bg-bug/10 px-3 py-2 text-sm text-foreground"
+        >
           {error}
         </p>
       )}
 
       {result && (
-        <div role="status" aria-live="polite" className="mt-4 rounded-xl border border-accent/40 bg-accent/10 px-4 py-3">
+        <div
+          role="status"
+          aria-live="polite"
+          className="mt-4 rounded-xl border border-accent/40 bg-accent/10 px-4 py-3"
+        >
           <p className="text-sm font-semibold text-foreground">Rubric — {result.score}%</p>
           <ul className="mt-2 space-y-1 text-xs">
             {result.checklist.map((c) => (

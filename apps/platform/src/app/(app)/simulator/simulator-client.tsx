@@ -4,11 +4,7 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 import { useTheme } from "next-themes";
 import { Button, Skeleton } from "@qa-mastery/ui";
-import {
-  SIMULATOR_LANGUAGES,
-  findSimulatorLanguage,
-  type RunResult,
-} from "@qa-mastery/grading";
+import { SIMULATOR_LANGUAGES, findSimulatorLanguage, type RunResult } from "@qa-mastery/grading";
 import { runSimulatorCode } from "./actions";
 import { usePointerFine } from "@/hooks/use-pointer-fine";
 
@@ -75,12 +71,7 @@ export function SimulatorClient() {
               </option>
             ))}
           </select>
-          <Button
-            onClick={run}
-            loading={running}
-            data-testid="simulator-run"
-            className="ml-auto"
-          >
+          <Button onClick={run} loading={running} data-testid="simulator-run" className="ml-auto">
             {running ? "Running…" : "Run ▸"}
           </Button>
         </div>
@@ -124,11 +115,7 @@ export function SimulatorClient() {
             result && !result.passed ? "text-danger-text" : "text-foreground"
           }`}
         >
-          {error
-            ? error
-            : result
-              ? result.console
-              : "Run your code to see output here."}
+          {error ? error : result ? result.console : "Run your code to see output here."}
         </pre>
       </div>
     </div>

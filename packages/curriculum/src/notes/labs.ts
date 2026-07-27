@@ -374,7 +374,7 @@ export const NOTE_LABS: readonly NoteLab[] = [
     starter: [
       "public class Main {",
       "    // Write a TestCase class with a name, a status, and a",
-      "    // summary() method that returns \"name: status\".",
+      '    // summary() method that returns "name: status".',
       "",
       "    public static void main(String[] args) {",
       "        // Create login/pass and checkout/fail, then print each summary:",
@@ -409,7 +409,7 @@ export const NOTE_LABS: readonly NoteLab[] = [
       '        results.put("search", "pass");',
       '        results.put("payment", "fail");',
       "",
-      "        // Print the name of every test whose status is \"fail\",",
+      '        // Print the name of every test whose status is "fail",',
       "        // one per line, in insertion order.",
       "    }",
       "}",
@@ -455,8 +455,14 @@ export const NOTE_LABS: readonly NoteLab[] = [
     ].join("\n"),
     checks: [
       { label: "Prints the modules that cross 80% of all bugs", equals: "checkout\nsearch" },
-      { label: "Ranks modules by bug count rather than hardcoding the order", sourceContains: "sort" },
-      { label: "Computes the 80% threshold instead of guessing how many modules", sourceContains: "0.8" },
+      {
+        label: "Ranks modules by bug count rather than hardcoding the order",
+        sourceContains: "sort",
+      },
+      {
+        label: "Computes the 80% threshold instead of guessing how many modules",
+        sourceContains: "0.8",
+      },
       { label: "Does not just print the literal answer", sourceAbsent: "checkout\\nsearch" },
     ],
   },
@@ -588,7 +594,10 @@ export const NOTE_LABS: readonly NoteLab[] = [
     ].join("\n"),
     checks: [
       { label: "Finds both uncovered requirements", equals: "REQ-2\nREQ-4" },
-      { label: "Checks coverage instead of hardcoding the gaps", sourceContains: "case_requirement_links" },
+      {
+        label: "Checks coverage instead of hardcoding the gaps",
+        sourceContains: "case_requirement_links",
+      },
       { label: "Walks the requirements list", sourceContains: "for" },
     ],
   },
@@ -798,7 +807,7 @@ export const NOTE_LABS: readonly NoteLab[] = [
       'c.execute("CREATE TABLE users (id INTEGER, name TEXT)")',
       'c.execute("CREATE TABLE orders (id INTEGER, user_id INTEGER, amount INTEGER)")',
       'c.executemany("INSERT INTO users VALUES (?,?)", [(1, "amy"), (2, "ben"), (3, "cleo")])',
-      'c.executemany(',
+      "c.executemany(",
       '    "INSERT INTO orders VALUES (?,?,?)",',
       "    [(1, 1, 50), (2, 1, 30), (3, 2, 20), (4, 3, 10), (5, 3, 15), (6, 3, 5)],",
       ")",
@@ -875,7 +884,10 @@ export const NOTE_LABS: readonly NoteLab[] = [
         equals: "electronics: gadget-x (200)\ntools: widget-b (150)",
       },
       { label: "Uses a window function to rank within each category", sourceContains: "OVER" },
-      { label: "Partitions by category rather than one global rank", sourceContains: "PARTITION BY" },
+      {
+        label: "Partitions by category rather than one global rank",
+        sourceContains: "PARTITION BY",
+      },
     ],
   },
   {
@@ -955,7 +967,10 @@ export const NOTE_LABS: readonly NoteLab[] = [
     ].join("\n"),
     checks: [
       { label: "Prints both results correctly", equals: "naive result: 80\ncorrect result: 50" },
-      { label: "Computes the correct result from the original balance", sourceContains: "balance -" },
+      {
+        label: "Computes the correct result from the original balance",
+        sourceContains: "balance -",
+      },
       { label: "Does not just type the correct answer", sourceAbsent: '"correct result: 50"' },
     ],
   },
@@ -1042,7 +1057,10 @@ export const NOTE_LABS: readonly NoteLab[] = [
       "#   test_checkout",
     ].join("\n"),
     checks: [
-      { label: "Finds both flaky tests, not the consistent ones", equals: "test_cart\ntest_checkout" },
+      {
+        label: "Finds both flaky tests, not the consistent ones",
+        equals: "test_cart\ntest_checkout",
+      },
       { label: "Checks for a mix of both outcomes", sourceContains: "set(" },
       { label: "Walks every test's history", sourceContains: "for" },
     ],
@@ -1109,8 +1127,14 @@ export const NOTE_LABS: readonly NoteLab[] = [
         label: "Resolves both environments correctly",
         equals: "staging: https://staging.example.com\nprod: https://prod.example.com",
       },
-      { label: "Falls back with a default instead of crashing on a missing key", sourceContains: "default_url" },
-      { label: "Looks each environment up rather than hardcoding both lines", sourceContains: "get(" },
+      {
+        label: "Falls back with a default instead of crashing on a missing key",
+        sourceContains: "default_url",
+      },
+      {
+        label: "Looks each environment up rather than hardcoding both lines",
+        sourceContains: "get(",
+      },
     ],
   },
 
@@ -1142,7 +1166,10 @@ export const NOTE_LABS: readonly NoteLab[] = [
         equals:
           "6 jobs\nubuntu/chrome\nubuntu/firefox\nubuntu/webkit\nwindows/chrome\nwindows/firefox\nwindows/webkit",
       },
-      { label: "Builds combinations from the matrix instead of listing them", sourceContains: "for" },
+      {
+        label: "Builds combinations from the matrix instead of listing them",
+        sourceContains: "for",
+      },
     ],
   },
   {
@@ -1193,7 +1220,10 @@ export const NOTE_LABS: readonly NoteLab[] = [
     ].join("\n"),
     checks: [
       { label: "Counts all four families correctly", equals: "2xx: 3\n3xx: 1\n4xx: 2\n5xx: 2" },
-      { label: "Derives the family from the code instead of listing codes by hand", sourceContains: "//" },
+      {
+        label: "Derives the family from the code instead of listing codes by hand",
+        sourceContains: "//",
+      },
       { label: "Walks the code list", sourceContains: "for" },
     ],
   },
@@ -1259,7 +1289,10 @@ export const NOTE_LABS: readonly NoteLab[] = [
       '#   CMD ["python", "app.py"]',
     ].join("\n"),
     checks: [
-      { label: "Prints exactly the invalidated layers", equals: 'COPY . .\nCMD ["python", "app.py"]' },
+      {
+        label: "Prints exactly the invalidated layers",
+        equals: 'COPY . .\nCMD ["python", "app.py"]',
+      },
       { label: "Slices from the changed line onward", sourceContains: "changed_index" },
     ],
   },
@@ -1391,7 +1424,10 @@ export const NOTE_LABS: readonly NoteLab[] = [
     checks: [
       { label: "Computes the correct p95", equals: "310" },
       { label: "Sorts before ranking", sourceContains: "sorted(" },
-      { label: "Uses the nearest-rank formula rather than eyeballing a number", sourceContains: "0.95" },
+      {
+        label: "Uses the nearest-rank formula rather than eyeballing a number",
+        sourceContains: "0.95",
+      },
     ],
   },
   {
@@ -1427,7 +1463,10 @@ export const NOTE_LABS: readonly NoteLab[] = [
     ].join("\n"),
     checks: [
       { label: "Flags both real failures", equals: "banner.jpg\nicon1.png" },
-      { label: "Catches the filename-as-alt-text case, not just empty alt", sourceContains: 'img["alt"] ==' },
+      {
+        label: "Catches the filename-as-alt-text case, not just empty alt",
+        sourceContains: 'img["alt"] ==',
+      },
       { label: "Checks every image", sourceContains: "for" },
     ],
   },
@@ -1572,7 +1611,10 @@ export const NOTE_LABS: readonly NoteLab[] = [
     ].join("\n"),
     checks: [
       { label: "Finds both missing sections in order", equals: "Test Strategy\nLessons Learned" },
-      { label: "Checks membership against what's actually present", sourceContains: "readme_headings" },
+      {
+        label: "Checks membership against what's actually present",
+        sourceContains: "readme_headings",
+      },
       { label: "Walks the required list", sourceContains: "for" },
     ],
   },
@@ -1597,9 +1639,9 @@ export function labsForModule(moduleSlug: string): NoteLab[] {
  * chapter does not exist — the guard the server action uses before letting a
  * submission through, so an unknown note_slug can never reach a runner.
  */
-export function chapterForLab(chapterSlug: string):
-  | { moduleSlug: string; chapterSlug: string; topicSlugs: string[] }
-  | undefined {
+export function chapterForLab(
+  chapterSlug: string,
+): { moduleSlug: string; chapterSlug: string; topicSlugs: string[] } | undefined {
   const [moduleSlug, chapter] = chapterSlug.split("/");
   if (!moduleSlug || !chapter) return undefined;
 

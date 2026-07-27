@@ -21,9 +21,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ sessionToken });
   } catch {
-    return NextResponse.json(
-      { error: "Invalid or expired handoff token" },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: "Invalid or expired handoff token" }, { status: 401 });
   }
 }

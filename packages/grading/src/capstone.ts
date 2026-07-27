@@ -66,9 +66,7 @@ export function gradeCapstone(input: CapstoneInput): CapstoneResult {
       passed: isShipRecommendation(input.recommendation),
     },
   ];
-  const score = Math.round(
-    (checklist.filter((c) => c.passed).length / checklist.length) * 100,
-  );
+  const score = Math.round((checklist.filter((c) => c.passed).length / checklist.length) * 100);
 
   return { normalized: { scope, risks, approach }, checklist, score };
 }

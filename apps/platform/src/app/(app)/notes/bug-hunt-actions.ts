@@ -102,10 +102,7 @@ export async function launchNoteSandbox(chapterSlug: string): Promise<string> {
   const secret = process.env.SANDBOX_JWT_SECRET;
   if (!secret) throw new Error("SANDBOX_JWT_SECRET is missing");
 
-  const token = await mintHandoffToken(
-    { userId, sandboxId, release: DEFAULT_RELEASE },
-    secret,
-  );
+  const token = await mintHandoffToken({ userId, sandboxId, release: DEFAULT_RELEASE }, secret);
 
   const baseUrl = process.env.NEXT_PUBLIC_BUGGYSHOP_URL || "http://localhost:3001";
   return `${baseUrl}/enter#t=${token}`;

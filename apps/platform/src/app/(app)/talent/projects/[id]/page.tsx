@@ -20,13 +20,17 @@ export default async function ProjectDetailPage({ params }: Params) {
     <div className="space-y-8 py-2">
       <header className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="font-display text-2xl font-bold tracking-tight">{project.title as string}</h1>
+          <h1 className="font-display text-2xl font-bold tracking-tight">
+            {project.title as string}
+          </h1>
           <Badge tone="default">{labelFor(project.project_type as string)}</Badge>
           <Badge tone="default">{labelFor(project.engagement as string)}</Badge>
           {Boolean(project.nda_required) && <Badge tone="info">NDA</Badge>}
         </div>
         {(project.description as string) && (
-          <p className="max-w-2xl whitespace-pre-wrap text-foreground">{project.description as string}</p>
+          <p className="max-w-2xl whitespace-pre-wrap text-foreground">
+            {project.description as string}
+          </p>
         )}
       </header>
 

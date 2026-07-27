@@ -53,9 +53,8 @@ export function matchApiBugReport(
   alreadyMatchedIds: ReadonlySet<string> = new Set(),
 ): ApiMatchOutcome {
   const candidate =
-    manifest.find(
-      (bug) => bug.surface === report.surface && bug.endpoint === report.endpoint,
-    ) ?? null;
+    manifest.find((bug) => bug.surface === report.surface && bug.endpoint === report.endpoint) ??
+    null;
 
   if (!candidate) {
     return {

@@ -98,7 +98,10 @@ describe("gradeLabRun", () => {
         { label: "uses a loop", sourceContains: "for" },
       ];
 
-      const hardcoded = gradeLabRun(checks, ran("login_empty_password", 'print("login_empty_password")'));
+      const hardcoded = gradeLabRun(
+        checks,
+        ran("login_empty_password", 'print("login_empty_password")'),
+      );
       expect(hardcoded.passed).toBe(false);
 
       const looped = gradeLabRun(

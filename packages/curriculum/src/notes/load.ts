@@ -24,7 +24,14 @@ export const noteFrontmatterSchema = z.object({
     .optional(),
   /** Other notes this one is meant to be read alongside, as "module/chapter/topic" triples. */
   related: z
-    .array(z.string().regex(/^[a-z0-9-]+\/[a-z0-9-]+\/[a-z0-9-]+$/, 'related entries must look like "module/chapter/topic"'))
+    .array(
+      z
+        .string()
+        .regex(
+          /^[a-z0-9-]+\/[a-z0-9-]+\/[a-z0-9-]+$/,
+          'related entries must look like "module/chapter/topic"',
+        ),
+    )
     .default([]),
 });
 
@@ -61,7 +68,8 @@ export function listNoteFiles(contentRoot: string = findContentRoot()): {
 }[] {
   const root = notesRoot(contentRoot);
   if (!fs.existsSync(root)) return [];
-  const out: { moduleSlug: string; chapterSlug: string; topicSlug: string; filePath: string }[] = [];
+  const out: { moduleSlug: string; chapterSlug: string; topicSlug: string; filePath: string }[] =
+    [];
   for (const m of fs.readdirSync(root, { withFileTypes: true })) {
     if (!m.isDirectory()) continue;
     const mDir = path.join(root, m.name);

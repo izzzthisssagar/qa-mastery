@@ -27,9 +27,13 @@ export default async function DashboardPage() {
   const topicCount = tracks.reduce((n, t) => n + t.topicCount, 0);
   const overallPct = topicCount ? Math.round((topicsDone / topicCount) * 100) : 0;
 
-  // XP spans lessons, tasks, and notes (all write xp_events); read-own RLS.
-  const { data: xpRows } = await supabase.from("xp_events").select("amount");
-  const totalXp = (xpRows ?? []).reduce((sum, x) => sum + (x.amount as number), 0);
+  // XP spans lessons, tasks, and notes (all write xp_events). Aggregated
+  // server-side (my_xp_total(), security invoker — RLS still scopes it to
+  // the caller's own rows) instead of transferring every xp_events row to
+  // sum client-side.
+  const { data: xpTotal, error: xpError } = await supabase.rpc("my_xp_total");
+  if (xpError) console.error("my_xp_total RPC failed:", xpError.message);
+  const totalXp = xpTotal !== null && xpTotal !== undefined ? Number(xpTotal) : 0;
 
   // read-own RLS; no row yet just means a learner with zero streak history.
   const { data: streakRow } = await supabase
@@ -60,31 +64,25 @@ export default async function DashboardPage() {
             <p className="text-xs font-medium uppercase tracking-widest text-accent">Dashboard</p>
           </div>
           <h1 className="font-display mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
-            Your{" "}
-            <span className="font-serif-accent font-normal text-accent">
-              learning
-            </span>
+            Your <span className="font-serif-accent font-normal text-accent">learning</span>
           </h1>
           <p className="mt-2 max-w-prose text-sm leading-6 text-muted-foreground">
-            {topicCount} notes across {tracks.length} tracks — the whole QA arc,
-            zero to job-ready. Every note is free.
+            {topicCount} notes across {tracks.length} tracks — the whole QA arc, zero to job-ready.
+            Every note is free.
           </p>
         </Reveal>
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-          <StatCard
-            testId="stat-xp"
-            value={totalXp}
-            label="XP earned"
-            accent
-            delay={0.05}
-          />
+          <StatCard testId="stat-xp" value={totalXp} label="XP earned" accent delay={0.05} />
           <StatCard
             testId="stat-completed"
             value={topicsDone}
             label="notes complete"
             suffix={
-              <span className="font-sans text-lg font-normal text-muted-foreground"> / {topicCount}</span>
+              <span className="font-sans text-lg font-normal text-muted-foreground">
+                {" "}
+                / {topicCount}
+              </span>
             }
             delay={0.12}
           />

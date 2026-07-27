@@ -21,13 +21,18 @@ const COLUMNS: { id: Status; title: string; color: string }[] = [
 
 export function JiraBoard({ onMilestone }: { onMilestone?: (m: string) => void }) {
   const [tickets, setTickets] = useState<Ticket[]>([
-    { id: "BS-102", title: "Checkout total ignores item quantity", status: "todo", severity: "Major" },
-    { id: "BS-105", title: "Typo in password reset email", status: "todo", severity: "Minor" }
+    {
+      id: "BS-102",
+      title: "Checkout total ignores item quantity",
+      status: "todo",
+      severity: "Major",
+    },
+    { id: "BS-105", title: "Typo in password reset email", status: "todo", severity: "Minor" },
   ]);
 
   const advanceTicket = (id: string) => {
-    setTickets(prev => {
-      const updated = prev.map(t => {
+    setTickets((prev) => {
+      const updated = prev.map((t) => {
         if (t.id === id) {
           if (t.status === "todo") return { ...t, status: "dev" as Status };
           if (t.status === "dev") return { ...t, status: "qa" as Status };
@@ -44,8 +49,13 @@ export function JiraBoard({ onMilestone }: { onMilestone?: (m: string) => void }
 
   const reset = () => {
     setTickets([
-      { id: "BS-102", title: "Checkout total ignores item quantity", status: "todo", severity: "Major" },
-      { id: "BS-105", title: "Typo in password reset email", status: "todo", severity: "Minor" }
+      {
+        id: "BS-102",
+        title: "Checkout total ignores item quantity",
+        status: "todo",
+        severity: "Major",
+      },
+      { id: "BS-105", title: "Typo in password reset email", status: "todo", severity: "Minor" },
     ]);
   };
 
@@ -54,34 +64,52 @@ export function JiraBoard({ onMilestone }: { onMilestone?: (m: string) => void }
       <div className="flex items-center justify-between mb-6">
         <div>
           <h3 className="text-lg font-semibold text-foreground">Ticket Lifecycle</h3>
-          <p className="text-sm text-muted-foreground">Click a ticket to advance it through the Agile board.</p>
+          <p className="text-sm text-muted-foreground">
+            Click a ticket to advance it through the Agile board.
+          </p>
         </div>
-        <button onClick={reset} className="text-xs font-semibold text-muted-foreground hover:text-foreground">Reset Board</button>
+        <button
+          onClick={reset}
+          className="text-xs font-semibold text-muted-foreground hover:text-foreground"
+        >
+          Reset Board
+        </button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {COLUMNS.map(col => (
-          <div key={col.id} className={`rounded-xl border border-border bg-background/50 flex flex-col h-64 overflow-hidden`}>
-            <div className={`px-3 py-2 border-b text-xs font-bold uppercase tracking-wider bg-surface/50 ${col.color}`}>
+        {COLUMNS.map((col) => (
+          <div
+            key={col.id}
+            className={`rounded-xl border border-border bg-background/50 flex flex-col h-64 overflow-hidden`}
+          >
+            <div
+              className={`px-3 py-2 border-b text-xs font-bold uppercase tracking-wider bg-surface/50 ${col.color}`}
+            >
               {col.title}
             </div>
             <div className="p-2 flex-1 flex flex-col gap-2">
-              {tickets.filter(t => t.status === col.id).map(ticket => (
-                <motion.div
-                  key={ticket.id}
-                  layout
-                  onClick={() => advanceTicket(ticket.id)}
-                  className={`cursor-pointer rounded-lg border border-border bg-surface-raised p-3 shadow-md hover:border-border transition-colors ${ticket.status === "done" ? "opacity-50" : ""}`}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="text-xs font-mono text-muted-foreground">{ticket.id}</span>
-                    <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${ticket.severity === "Major" ? "bg-rose-500/20 text-rose-400" : "bg-amber-500/20 text-amber-400"}`}>
-                      {ticket.severity}
-                    </span>
-                  </div>
-                  <p className="text-sm font-medium text-foreground leading-snug">{ticket.title}</p>
-                </motion.div>
-              ))}
+              {tickets
+                .filter((t) => t.status === col.id)
+                .map((ticket) => (
+                  <motion.div
+                    key={ticket.id}
+                    layout
+                    onClick={() => advanceTicket(ticket.id)}
+                    className={`cursor-pointer rounded-lg border border-border bg-surface-raised p-3 shadow-md hover:border-border transition-colors ${ticket.status === "done" ? "opacity-50" : ""}`}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="text-xs font-mono text-muted-foreground">{ticket.id}</span>
+                      <span
+                        className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${ticket.severity === "Major" ? "bg-rose-500/20 text-rose-400" : "bg-amber-500/20 text-amber-400"}`}
+                      >
+                        {ticket.severity}
+                      </span>
+                    </div>
+                    <p className="text-sm font-medium text-foreground leading-snug">
+                      {ticket.title}
+                    </p>
+                  </motion.div>
+                ))}
             </div>
           </div>
         ))}

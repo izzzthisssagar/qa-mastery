@@ -3,13 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Button } from "@qa-mastery/ui";
-import {
-  ENGAGEMENTS,
-  PROJECT_TYPES,
-  SPECIALTIES,
-  STACK,
-  labelFor,
-} from "@/lib/talent/taxonomy";
+import { ENGAGEMENTS, PROJECT_TYPES, SPECIALTIES, STACK, labelFor } from "@/lib/talent/taxonomy";
 import { postProject, type ProjectInput } from "@/app/(app)/talent/actions";
 
 const field =
@@ -125,7 +119,11 @@ export function PostProjectForm() {
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block text-sm">
           <span className="mb-1 block text-muted-foreground">Project type</span>
-          <select className={field} value={projectType} onChange={(e) => setProjectType(e.target.value)}>
+          <select
+            className={field}
+            value={projectType}
+            onChange={(e) => setProjectType(e.target.value)}
+          >
             {PROJECT_TYPES.map((t) => (
               <option key={t} value={t}>
                 {labelFor(t)}
@@ -135,7 +133,11 @@ export function PostProjectForm() {
         </label>
         <label className="block text-sm">
           <span className="mb-1 block text-muted-foreground">Engagement</span>
-          <select className={field} value={engagement} onChange={(e) => setEngagement(e.target.value)}>
+          <select
+            className={field}
+            value={engagement}
+            onChange={(e) => setEngagement(e.target.value)}
+          >
             {ENGAGEMENTS.map((en) => (
               <option key={en} value={en}>
                 {labelFor(en)}
@@ -147,7 +149,11 @@ export function PostProjectForm() {
 
       <div className="space-y-2 text-sm">
         <span className="block text-muted-foreground">Required testing types</span>
-        <Chips options={SPECIALTIES} selected={requiredTypes} onToggle={toggle(requiredTypes, setRequiredTypes)} />
+        <Chips
+          options={SPECIALTIES}
+          selected={requiredTypes}
+          onToggle={toggle(requiredTypes, setRequiredTypes)}
+        />
       </div>
 
       <div className="space-y-2 text-sm">
@@ -156,7 +162,11 @@ export function PostProjectForm() {
       </div>
 
       <label className="flex items-center gap-2 text-sm text-muted-foreground">
-        <input type="checkbox" checked={ndaRequired} onChange={(e) => setNdaRequired(e.target.checked)} />
+        <input
+          type="checkbox"
+          checked={ndaRequired}
+          onChange={(e) => setNdaRequired(e.target.checked)}
+        />
         NDA required
       </label>
 

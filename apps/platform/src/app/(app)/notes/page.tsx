@@ -21,8 +21,8 @@ export default function NotesPage() {
       <p className="text-xs font-medium uppercase tracking-widest text-accent">Reference</p>
       <h1 className="mt-1 text-2xl font-semibold text-foreground">Notes wiki</h1>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-        A growing encyclopedia of QA knowledge — foundations, manual, automation, API,
-        performance, security, and more. Browse by module or search across every topic.
+        A growing encyclopedia of QA knowledge — foundations, manual, automation, API, performance,
+        security, and more. Browse by module or search across every topic.
       </p>
 
       <div className="mt-6">
@@ -33,7 +33,8 @@ export default function NotesPage() {
         {NOTES_TAXONOMY.map((m) => {
           const total = m.chapters.reduce((n, c) => n + c.topics.length, 0);
           const done = m.chapters.reduce(
-            (n, c) => n + c.topics.filter((t) => written.has(`${m.slug}/${c.slug}/${t.slug}`)).length,
+            (n, c) =>
+              n + c.topics.filter((t) => written.has(`${m.slug}/${c.slug}/${t.slug}`)).length,
             0,
           );
           return (

@@ -79,7 +79,9 @@ export default async function TestCasesPage() {
                   <td className="px-5 py-4">
                     <div className="font-medium text-foreground">{r.title}</div>
                     {r.expected ? (
-                      <div className="mt-1 text-xs text-muted-foreground">Expected: {r.expected}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Expected: {r.expected}
+                      </div>
                     ) : null}
                   </td>
                   <td className="px-5 py-4 text-muted-foreground">{r.steps?.length ?? 0}</td>

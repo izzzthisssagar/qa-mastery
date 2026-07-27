@@ -31,8 +31,8 @@ export default function ShopHomePage() {
           everything for testers who shop
         </p>
         <p data-testid="release-notice" className="mt-6 max-w-md text-sm text-zinc-500">
-          Release v1.0 is open for testing. Every area below hides at least one
-          intentional bug — go find them.
+          Release v1.0 is open for testing. Every area below hides at least one intentional bug — go
+          find them.
         </p>
 
         <nav
@@ -64,8 +64,8 @@ export default function ShopHomePage() {
       </main>
 
       <footer className="border-t border-zinc-200 px-6 py-4 text-center text-xs text-zinc-400">
-        BuggyShop is the QA Mastery practice app. Every bug is intentional.
-        Data here is sandboxed per learner and resettable.
+        BuggyShop is the QA Mastery practice app. Every bug is intentional. Data here is sandboxed
+        per learner and resettable.
       </footer>
     </div>
   );

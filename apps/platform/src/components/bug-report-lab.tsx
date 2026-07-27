@@ -12,7 +12,8 @@ import {
 } from "@qa-mastery/grading";
 import { createBrowserSupabase } from "@qa-mastery/db";
 
-const FIELD = "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none";
+const FIELD =
+  "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none";
 
 export interface BugReportResult {
   matched: boolean;
@@ -96,7 +97,10 @@ export function BugReportLab({
         category,
         severity: severity as Severity,
         title: title.trim(),
-        steps: steps.split("\n").map((s) => s.trim()).filter(Boolean),
+        steps: steps
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean),
         expected: expected.trim(),
         actual: actual.trim(),
         evidenceUrl: evidenceUrl || undefined,
@@ -131,37 +135,77 @@ export function BugReportLab({
     >
       <p className="text-sm font-semibold text-foreground">File a bug report</p>
       <p className="mt-1 text-xs text-muted-foreground">
-        Find the bug on BuggyShop&apos;s Products page, then report it the way a real tester
-        would. Page + feature must be right to match; category and severity affect your score.
+        Find the bug on BuggyShop&apos;s Products page, then report it the way a real tester would.
+        Page + feature must be right to match; category and severity affect your score.
       </p>
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Page
-          <select data-testid="bug-page" className={FIELD} value={page} onChange={(e) => setPage(e.target.value)} disabled={!!result}>
+          <select
+            data-testid="bug-page"
+            className={FIELD}
+            value={page}
+            onChange={(e) => setPage(e.target.value)}
+            disabled={!!result}
+          >
             <option value="">Select…</option>
-            {BUG_PAGES.map((p) => <option key={p} value={p}>{p}</option>)}
+            {BUG_PAGES.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Feature
-          <select data-testid="bug-feature" className={FIELD} value={feature} onChange={(e) => setFeature(e.target.value)} disabled={!!result}>
+          <select
+            data-testid="bug-feature"
+            className={FIELD}
+            value={feature}
+            onChange={(e) => setFeature(e.target.value)}
+            disabled={!!result}
+          >
             <option value="">Select…</option>
-            {BUG_FEATURES.map((f) => <option key={f} value={f}>{f}</option>)}
+            {BUG_FEATURES.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Category
-          <select data-testid="bug-category" className={FIELD} value={category} onChange={(e) => setCategory(e.target.value)} disabled={!!result}>
+          <select
+            data-testid="bug-category"
+            className={FIELD}
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            disabled={!!result}
+          >
             <option value="">Select…</option>
-            {BUG_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            {BUG_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Severity
-          <select data-testid="bug-severity" className={FIELD} value={severity} onChange={(e) => setSeverity(e.target.value as Severity)} disabled={!!result}>
+          <select
+            data-testid="bug-severity"
+            className={FIELD}
+            value={severity}
+            onChange={(e) => setSeverity(e.target.value as Severity)}
+            disabled={!!result}
+          >
             <option value="">Select…</option>
-            {SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
+            {SEVERITIES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
           </select>
         </label>
       </div>
@@ -169,20 +213,45 @@ export function BugReportLab({
       <div className="mt-3 space-y-3">
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Title
-          <input data-testid="bug-title" className={FIELD} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="One-line summary" disabled={!!result} />
+          <input
+            data-testid="bug-title"
+            className={FIELD}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="One-line summary"
+            disabled={!!result}
+          />
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Steps to reproduce (one per line)
-          <textarea data-testid="bug-steps" className={`${FIELD} min-h-16`} value={steps} onChange={(e) => setSteps(e.target.value)} disabled={!!result} />
+          <textarea
+            data-testid="bug-steps"
+            className={`${FIELD} min-h-16`}
+            value={steps}
+            onChange={(e) => setSteps(e.target.value)}
+            disabled={!!result}
+          />
         </label>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-xs text-muted-foreground">
             Expected
-            <textarea data-testid="bug-expected" className={`${FIELD} min-h-16`} value={expected} onChange={(e) => setExpected(e.target.value)} disabled={!!result} />
+            <textarea
+              data-testid="bug-expected"
+              className={`${FIELD} min-h-16`}
+              value={expected}
+              onChange={(e) => setExpected(e.target.value)}
+              disabled={!!result}
+            />
           </label>
           <label className="flex flex-col gap-1 text-xs text-muted-foreground">
             Actual
-            <textarea data-testid="bug-actual" className={`${FIELD} min-h-16`} value={actual} onChange={(e) => setActual(e.target.value)} disabled={!!result} />
+            <textarea
+              data-testid="bug-actual"
+              className={`${FIELD} min-h-16`}
+              value={actual}
+              onChange={(e) => setActual(e.target.value)}
+              disabled={!!result}
+            />
           </label>
         </div>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
@@ -190,7 +259,14 @@ export function BugReportLab({
           {evidenceUrl ? (
             <div className="mt-1 flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground">
               <span className="truncate">Uploaded successfully</span>
-              <Button variant="secondary" onClick={() => setEvidenceUrl("")} disabled={!!result} className="ml-auto text-xs py-1 px-2 h-auto">Remove</Button>
+              <Button
+                variant="secondary"
+                onClick={() => setEvidenceUrl("")}
+                disabled={!!result}
+                className="ml-auto text-xs py-1 px-2 h-auto"
+              >
+                Remove
+              </Button>
             </div>
           ) : (
             <div className="relative">
@@ -202,7 +278,9 @@ export function BugReportLab({
                 className={`${FIELD} file:mr-4 file:rounded-md file:border-0 file:bg-surface-raised file:px-4 file:py-1 file:text-xs file:font-semibold file:text-foreground hover:file:bg-surface-raised`}
                 data-testid="bug-evidence"
               />
-              {uploadingEvidence && <span className="absolute right-3 top-2.5 text-xs text-accent">Uploading...</span>}
+              {uploadingEvidence && (
+                <span className="absolute right-3 top-2.5 text-xs text-accent">Uploading...</span>
+              )}
             </div>
           )}
         </label>
@@ -225,12 +303,18 @@ export function BugReportLab({
               : "No match"}
           </p>
           <ul data-testid="bug-feedback" className="mt-2 space-y-1 text-xs text-muted-foreground">
-            {result.feedback.map((line, i) => <li key={i}>• {line}</li>)}
+            {result.feedback.map((line, i) => (
+              <li key={i}>• {line}</li>
+            ))}
           </ul>
         </div>
       )}
 
-      {error && <p data-testid="bug-error" className="mt-4 text-sm text-danger-text">{error}</p>}
+      {error && (
+        <p data-testid="bug-error" className="mt-4 text-sm text-danger-text">
+          {error}
+        </p>
+      )}
 
       <div className="mt-5">
         {result ? (
@@ -238,7 +322,11 @@ export function BugReportLab({
             File another report
           </Button>
         ) : (
-          <Button onClick={handleSubmit} disabled={!complete || submitting || uploadingEvidence} data-testid="bug-submit">
+          <Button
+            onClick={handleSubmit}
+            disabled={!complete || submitting || uploadingEvidence}
+            data-testid="bug-submit"
+          >
             {submitting ? "Submitting…" : "Submit report"}
           </Button>
         )}

@@ -21,7 +21,12 @@ export const PRODUCTS: Product[] = [
   { id: "bug-net-tote", name: "Bug Net Tote", price: 25, category: "Bags" },
   { id: "boundary-hoodie", name: "Boundary Hoodie", price: 49, category: "Apparel" },
   { id: "regression-runners", name: "Regression Runner Sneakers", price: 89, category: "Apparel" },
-  { id: "premium-test-plan", name: "Premium Test Plan Template", price: 100, category: "Templates" },
+  {
+    id: "premium-test-plan",
+    name: "Premium Test Plan Template",
+    price: 100,
+    category: "Templates",
+  },
 ];
 
 /**
