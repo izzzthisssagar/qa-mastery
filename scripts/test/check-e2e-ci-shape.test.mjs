@@ -149,6 +149,7 @@ test("the real ci.yml and e2e-shard.yml satisfy every shape requirement today", 
   for (const required of [
     "checks",
     "rls",
+    "security",
     "e2e-core",
     "e2e-buggyapi",
     "e2e-first-paint",

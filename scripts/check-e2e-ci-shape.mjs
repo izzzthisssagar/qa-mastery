@@ -55,6 +55,7 @@ export function hasMergeJob(ciYml) {
 const REQUIRED_GATE_NEEDS = [
   "checks",
   "rls",
+  "security", // Task 11: reusable security workflow joins the release gate
   "e2e-core",
   "e2e-buggyapi",
   "e2e-first-paint",
