@@ -43,9 +43,11 @@ export const DOC_FILES = [
   "docs/README.md",
   "docs/01-overview.md",
   "docs/02-architecture.md",
+  "docs/04-invariants.md",
   "docs/07-development.md",
   "docs/08-decisions.md",
   "docs/09-deployment.md",
+  "docs/10-caching.md",
 ];
 
 export function getAppNames(root = ".") {
