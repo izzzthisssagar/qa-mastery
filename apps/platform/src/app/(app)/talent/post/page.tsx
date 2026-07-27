@@ -8,7 +8,7 @@ export default async function PostProjectPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  if (!user) redirect("/login?next=" + encodeURIComponent("/talent/post"));
 
   return (
     <div className="space-y-6 py-2">
