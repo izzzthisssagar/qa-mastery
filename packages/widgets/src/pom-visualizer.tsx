@@ -53,7 +53,7 @@ export function POMVisualizer({ onMilestone }: { onMilestone?: (m: string) => vo
               {step > 1 && step < 5 && (
                 <motion.div layoutId="highlight" className="absolute -inset-1 rounded bg-emerald-500/20" />
               )}
-              <span className="relative z-10">loginPage.login("user", "pass");</span>
+              <span className="relative z-10">loginPage.login(&quot;user&quot;, &quot;pass&quot;);</span>
             </div>
             <div className={`pl-4 transition-colors duration-300 ${step === 5 ? "text-emerald-300" : "text-muted-foreground"}`}>
               Assert.assertTrue(homePage.isDisplayed());
@@ -96,9 +96,9 @@ export function POMVisualizer({ onMilestone }: { onMilestone?: (m: string) => vo
           </div>
           <div className="font-mono text-sm space-y-2">
             <div className={`transition-colors duration-300 ${step === 3 ? "text-accent" : "text-muted-foreground"}`}>
-              By userField = By.id("username");<br/>
-              By passField = By.id("password");<br/>
-              By loginBtn = By.id("login-btn");
+              By userField = By.id(&quot;username&quot;);<br/>
+              By passField = By.id(&quot;password&quot;);<br/>
+              By loginBtn = By.id(&quot;login-btn&quot;);
             </div>
             <br/>
             <div className="text-muted-foreground">public void login(String u, String p) {"{"}</div>

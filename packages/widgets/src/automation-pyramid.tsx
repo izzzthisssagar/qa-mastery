@@ -86,7 +86,7 @@ export function AutomationPyramid({ onMilestone }: { onMilestone?: (m: string) =
         {/* Visual Pyramid */}
         <div className="flex flex-col items-center justify-center space-y-2 py-4">
           <AnimatePresence mode="popLayout">
-            {layers.map((layer, idx) => {
+            {layers.map((layer) => {
               // Calculate width based on position
               // Pyramid (isIceCream=false): 100%, 75%, 45% (bottom to top)
               // Since layers array maps E2E, Integration, Unit (top to bottom):

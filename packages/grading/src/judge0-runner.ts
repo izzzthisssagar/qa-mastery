@@ -1,5 +1,16 @@
 import type { RunnerProvider, RunRequest, RunResult, RunStatus } from "./runner";
 
+interface Judge0SubmitResponse {
+  token: string;
+}
+
+interface Judge0ResultResponse {
+  stdout?: string | null;
+  stderr?: string | null;
+  compile_output?: string | null;
+  status?: { id: number; description?: string };
+}
+
 export class Judge0Runner implements RunnerProvider {
   readonly name = "judge0";
 
@@ -37,7 +48,7 @@ export class Judge0Runner implements RunnerProvider {
       throw new Error(`Judge0 API error: ${response.statusText}`);
     }
 
-    const data = (await response.json()) as any;
+    const data = (await response.json()) as Judge0SubmitResponse;
     return { runId: data.token };
   }
 
@@ -61,7 +72,7 @@ export class Judge0Runner implements RunnerProvider {
       throw new Error(`Judge0 API error: ${response.statusText}`);
     }
 
-    const data = (await response.json()) as any;
+    const data = (await response.json()) as Judge0ResultResponse;
 
     // Map Judge0 status IDs to our internal status
     // 1 = In Queue, 2 = Processing, 3 = Accepted, 4 = Wrong Answer, 5 = Time Limit Exceeded, 6 = Compilation Error, etc.
@@ -77,7 +88,7 @@ export class Judge0Runner implements RunnerProvider {
     } else if (data.status?.id === 6) {
       status = "failed";
       consoleOutput = data.compile_output || "Compilation failed with no output.";
-    } else if (data.status?.id > 3) {
+    } else if ((data.status?.id ?? 0) > 3) {
       status = "failed";
       consoleOutput = (data.stderr || "") + "\n" + (data.compile_output || "");
     }

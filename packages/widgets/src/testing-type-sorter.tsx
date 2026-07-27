@@ -19,7 +19,12 @@ const ALL_SCENARIOS: Scenario[] = [
 ];
 
 export function TestingTypeSorter({ onMilestone }: { onMilestone?: (m: string) => void }) {
-  const [unassigned, setUnassigned] = useState<Scenario[]>([...ALL_SCENARIOS].sort(() => Math.random() - 0.5));
+  // Lazy initializer: the shuffle only needs to run once, on mount, not on
+  // every render -- calling Math.random() directly in the render body is an
+  // impure operation React (and this lint rule) flags.
+  const [unassigned, setUnassigned] = useState<Scenario[]>(() =>
+    [...ALL_SCENARIOS].sort(() => Math.random() - 0.5),
+  );
   const [func, setFunc] = useState<Scenario[]>([]);
   const [nonfunc, setNonfunc] = useState<Scenario[]>([]);
 

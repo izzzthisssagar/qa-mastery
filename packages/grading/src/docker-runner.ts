@@ -1,12 +1,18 @@
-import { exec } from "node:child_process";
+import { exec, type ExecException } from "node:child_process";
 import { promisify } from "node:util";
 import { writeFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import os from "node:os";
-import type { RunnerProvider, RunRequest, RunResult, RunStatus } from "./runner";
+import type { RunnerProvider, RunRequest, RunResult } from "./runner";
 
 const execAsync = promisify(exec);
+
+// util.promisify(exec) rejects with the same ExecException node's callback
+// form passes, plus stdout/stderr tacked on ad-hoc (undocumented in the
+// type, but real at runtime -- this is the standard pattern for reading a
+// failed command's output).
+type ExecFailure = ExecException & { stdout?: string; stderr?: string };
 
 export class DockerPlaywrightRunner implements RunnerProvider {
   readonly name = "docker-playwright";
@@ -46,7 +52,7 @@ export default defineConfig({
     return { runId };
   }
 
-  private async executeInContainer(runId: string, tmpDir: string, lessonSlug: string) {
+  private async executeInContainer(runId: string, tmpDir: string, _lessonSlug: string) {
     DockerPlaywrightRunner.results.set(runId, {
       status: "running",
       passed: false,
@@ -73,8 +79,9 @@ export default defineConfig({
         artifacts: [],
         staticChecks: [],
       });
-    } catch (err: any) {
-      const consoleOutput = err.stdout ? err.stdout : (err.stderr ? err.stderr : err.message);
+    } catch (err) {
+      const execErr = err as ExecFailure;
+      const consoleOutput = execErr.stdout || execErr.stderr || execErr.message;
       DockerPlaywrightRunner.results.set(runId, {
         status: "failed",
         passed: false,

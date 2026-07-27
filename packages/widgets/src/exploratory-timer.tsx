@@ -66,7 +66,7 @@ export function ExploratoryTimer({ onMilestone }: { onMilestone?: (m: string) =>
             exit={{ opacity: 0, y: -5 }}
             className="rounded-xl border border-border bg-background p-4 text-foreground font-medium leading-relaxed italic"
           >
-            "{charter}"
+            &ldquo;{charter}&rdquo;
           </motion.div>
         </AnimatePresence>
         <p className="text-sm text-muted-foreground">A charter keeps you focused. You have 30 minutes to explore this specific area before stopping to debrief.</p>

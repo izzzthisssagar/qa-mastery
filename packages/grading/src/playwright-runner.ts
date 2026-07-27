@@ -1,12 +1,18 @@
-import { exec } from "node:child_process";
+import { exec, type ExecException } from "node:child_process";
 import { promisify } from "node:util";
 import { writeFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import os from "node:os";
-import type { RunnerProvider, RunRequest, RunResult, RunStatus } from "./runner";
+import type { RunnerProvider, RunRequest, RunResult } from "./runner";
 
 const execAsync = promisify(exec);
+
+// util.promisify(exec) rejects with the same ExecException node's callback
+// form passes, plus stdout/stderr tacked on ad-hoc (undocumented in the
+// type, but real at runtime -- this is the standard pattern for reading a
+// failed command's output).
+type ExecFailure = ExecException & { stdout?: string; stderr?: string };
 
 export class PlaywrightRunner implements RunnerProvider {
   readonly name = "playwright";
@@ -57,7 +63,7 @@ export default defineConfig({
 
       // Run playwright test on the temporary file, but execute from the current working directory
       // so it can resolve the locally installed @playwright/test dependency.
-      const { stdout, stderr } = await execAsync(`npx playwright test "${testFile}" -c "${configFile}"`, {
+      const { stdout } = await execAsync(`npx playwright test "${testFile}" -c "${configFile}"`, {
         cwd: process.cwd(),
         timeout: 15000,
         env: { ...process.env, CI: "true" } // Force CI mode to avoid interactive prompts
@@ -70,11 +76,12 @@ export default defineConfig({
         artifacts: [],
         staticChecks: [],
       });
-    } catch (e: any) {
+    } catch (e) {
       // Playwright returns exit code 1 if tests fail, which throws an error in execAsync.
       // e.stdout contains the actual test output.
-      const consoleOutput = e.stdout ? e.stdout : (e.stderr ? e.stderr : e.message);
-      
+      const execErr = e as ExecFailure;
+      const consoleOutput = execErr.stdout || execErr.stderr || execErr.message;
+
       PlaywrightRunner.results.set(runId, {
         status: "failed",
         passed: false,

@@ -24,9 +24,7 @@ async function signedInClient(email: string): Promise<SupabaseClient> {
 }
 
 describe.skipIf(!hasEnv)("Streaks RLS invariants", () => {
-  const service = createClient(URL!, SERVICE!, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  let service: SupabaseClient;
 
   const emailAlice = `streak-alice-${randomUUID()}@e2e.local`;
   const emailBob = `streak-bob-${randomUUID()}@e2e.local`;
@@ -36,6 +34,10 @@ describe.skipIf(!hasEnv)("Streaks RLS invariants", () => {
   let asBob: SupabaseClient;
 
   beforeAll(async () => {
+    service = createClient(URL!, SERVICE!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    });
+
     const mk = async (email: string) => {
       const r = await service.auth.admin.createUser({
         email,

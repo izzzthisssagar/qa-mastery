@@ -65,7 +65,7 @@ export default function PairwiseVisualizer() {
           The Combinatorial Explosion
         </h3>
         <p className="mt-1 text-sm text-zinc-600">
-          Select parameters below. Notice how "All Combinations" grows exponentially, while "Pairwise" stays manageable.
+          Select parameters below. Notice how &ldquo;All Combinations&rdquo; grows exponentially, while &ldquo;Pairwise&rdquo; stays manageable.
         </p>
       </div>
 
