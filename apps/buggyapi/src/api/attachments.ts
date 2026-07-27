@@ -44,6 +44,9 @@ const AttachmentSchema = z
 
 const uploadRow = "id, ticket_id, file_name, content_type, size_bytes, storage_path, created_at";
 
+// TECH_DEBT: `row` is an untyped Supabase select() result; no generated row
+// type for this shape yet. Tracked by docs/superpowers/plans/
+// 2026-07-26-release-repository-governance.md Task 5.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function withSignedUrl(row: any) {
   const storage = createServiceClient().storage.from("buggyapi-uploads");

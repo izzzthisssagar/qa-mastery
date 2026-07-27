@@ -776,7 +776,7 @@ export function HotspotImage({
   return (
     <div className="my-7 rounded-2xl border border-border bg-surface p-4">
       <div className="relative overflow-hidden rounded-xl">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {/* eslint-disable-next-line @next/next/no-img-element -- external thumbnail CDN, not an optimizable local asset */}
         <img src={src} alt={alt} loading="lazy" className="w-full" />
         {pins.map((p, i) => (
           <button
@@ -835,7 +835,7 @@ export function PartsQuest({
 
   return (
     <div className="my-7 rounded-2xl border border-border bg-surface p-4">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {/* eslint-disable-next-line @next/next/no-img-element -- external thumbnail CDN, not an optimizable local asset */}
       <img src={src} alt={alt} loading="lazy" className="w-full rounded-xl bg-white p-2" />
       <p className="mt-3 text-center text-sm text-muted-foreground">
         {done

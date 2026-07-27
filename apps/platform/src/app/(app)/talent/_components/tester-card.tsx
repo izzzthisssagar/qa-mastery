@@ -15,7 +15,7 @@ export function TesterCard({ tester }: { tester: TesterCardData }) {
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2.5">
           {avatarUrl(tester.avatarPath) && (
-            // eslint-disable-next-line @next/next/no-img-element
+            // eslint-disable-next-line @next/next/no-img-element -- signed Supabase Storage URL, not a local/optimizable asset
             <img
               src={avatarUrl(tester.avatarPath)!}
               alt=""

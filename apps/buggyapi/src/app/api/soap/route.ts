@@ -120,6 +120,9 @@ export async function POST(request: Request) {
     return fault("Client", "Malformed XML envelope.", 400);
   }
 
+  // TECH_DEBT: fast-xml-parser has no generated type for this ad-hoc SOAP
+  // envelope shape. Tracked by docs/superpowers/plans/
+  // 2026-07-26-release-repository-governance.md Task 5.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const body = (parsed as any)?.Envelope?.Body;
   if (!body || typeof body !== "object") {
@@ -147,6 +150,9 @@ export async function POST(request: Request) {
   }
 
   if ("GetTicket" in body) {
+    // TECH_DEBT: same untyped SOAP body as above. Tracked by
+    // docs/superpowers/plans/2026-07-26-release-repository-governance.md
+    // Task 5.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ref = String((body as any).GetTicket?.Ref ?? "");
     const parsedRef = parseTicketRef(ref);

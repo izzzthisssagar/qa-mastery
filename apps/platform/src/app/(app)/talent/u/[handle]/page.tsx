@@ -44,7 +44,7 @@ export default async function PublicProfilePage({ params }: Params) {
       <header className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">
           {avatarUrl(profile.avatar_path as string | null) && (
-            // eslint-disable-next-line @next/next/no-img-element
+            // eslint-disable-next-line @next/next/no-img-element -- signed Supabase Storage URL, not a local/optimizable asset
             <img
               src={avatarUrl(profile.avatar_path as string | null)!}
               alt={`${profile.handle as string} avatar`}

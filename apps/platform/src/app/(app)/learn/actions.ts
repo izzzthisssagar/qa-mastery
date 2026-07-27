@@ -413,8 +413,10 @@ export async function launchSandbox(slug: string): Promise<string> {
   const secret = process.env.SANDBOX_JWT_SECRET;
   if (!secret) throw new Error("SANDBOX_JWT_SECRET is missing");
 
-  // Typecast to any is a simple bypass since lessonRelease returns a string
-  // and the Token minting expects a strict Release union (which is checked).
+  // TECH_DEBT: lessonRelease() returns a plain string but mintHandoffToken
+  // expects the checked Release union; bypassing with `any` instead of
+  // narrowing at the source. Tracked by docs/superpowers/plans/
+  // 2026-07-26-release-repository-governance.md Task 5.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const token = await mintHandoffToken({ userId, sandboxId, release: release as any }, secret);
 
