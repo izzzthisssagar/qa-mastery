@@ -1,14 +1,6 @@
-import {
-  classifyInScope,
-  guardedStream,
-  SCOPE_REFUSAL,
-  streamChat,
-} from "@qa-mastery/agent";
+import { classifyInScope, guardedStream, SCOPE_REFUSAL, streamChat } from "@qa-mastery/agent";
 import { buildAgentContext } from "@/lib/help-agent/context";
-import {
-  persistMessage,
-  touchProfileOnMessage,
-} from "@/lib/help-agent/brain-consolidation";
+import { persistMessage, touchProfileOnMessage } from "@/lib/help-agent/brain-consolidation";
 import { buildSystemPrompt } from "@/lib/help-agent/prompt";
 import { assertWithinRateLimit } from "@/lib/help-agent/rate-limit";
 import { parseLessonSlug } from "@/lib/help-agent/types";
@@ -155,7 +147,9 @@ export async function POST(request: Request) {
         // an error after the learner has already received a full answer.
         if (!streamedAny) {
           controller.enqueue(
-            encoder.encode("Sorry, the tutor is unavailable right now. Please try again in a moment."),
+            encoder.encode(
+              "Sorry, the tutor is unavailable right now. Please try again in a moment.",
+            ),
           );
         }
         controller.close();

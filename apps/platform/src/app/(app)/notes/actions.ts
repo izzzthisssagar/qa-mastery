@@ -1,14 +1,9 @@
 "use server";
 
-import {
-  allNoteLeaves,
-  getNote,
-  findNoteLeaf,
-  findNoteModule,
-  NOTE_TRACKS,
-} from "@qa-mastery/curriculum";
+import { findNoteLeaf, findNoteModule, NOTE_TRACKS } from "@qa-mastery/curriculum";
 import { createServiceClient } from "@qa-mastery/db";
 import { getAuthedUserId } from "@/lib/auth";
+import { getCachedCurriculumIndex, getCachedTopic } from "@/lib/curriculum-cache";
 import { withLogging } from "@/lib/logging";
 import { touchStreak } from "@/lib/streaks";
 
@@ -48,7 +43,13 @@ function moduleProgress(moduleSlug: string, completed: Set<string>): NoteModuleP
       if (completed.has(`${moduleSlug}/${chapter.slug}/${topic.slug}`)) done += 1;
     }
   }
-  return { slug: moduleSlug, title: mod?.title ?? moduleSlug, done, total, pct: total ? Math.round((done / total) * 100) : 0 };
+  return {
+    slug: moduleSlug,
+    title: mod?.title ?? moduleSlug,
+    done,
+    total,
+    pct: total ? Math.round((done / total) * 100) : 0,
+  };
 }
 
 /** The current learner's progress across the whole notes curriculum, grouped by
@@ -57,10 +58,7 @@ function moduleProgress(moduleSlug: string, completed: Set<string>): NoteModuleP
 export async function getNotesCurriculumProgress(): Promise<NoteTrackProgress[]> {
   const userId = await getAuthedUserId();
   const service = createServiceClient();
-  const { data } = await service
-    .from("note_progress")
-    .select("note_slug")
-    .eq("user_id", userId);
+  const { data } = await service.from("note_progress").select("note_slug").eq("user_id", userId);
   const completed = new Set((data ?? []).map((r) => r.note_slug as string));
 
   return NOTE_TRACKS.map((track) => {
@@ -125,9 +123,10 @@ export async function getLearningHome(): Promise<LearningHome> {
   const mostRecent = rows[0]?.note_slug as string | undefined;
   if (mostRecent) {
     const [moduleSlug, chapterSlug, topicSlug] = mostRecent.split("/");
-    const leaf = moduleSlug && chapterSlug && topicSlug
-      ? findNoteLeaf(moduleSlug, chapterSlug, topicSlug)
-      : undefined;
+    const leaf =
+      moduleSlug && chapterSlug && topicSlug
+        ? findNoteLeaf(moduleSlug, chapterSlug, topicSlug)
+        : undefined;
     if (leaf && moduleSlug) {
       continueItem = {
         moduleSlug,
@@ -188,11 +187,7 @@ export async function searchNotes(query: string): Promise<NoteHit[]> {
   const terms = q.split(/\s+/).filter(Boolean);
 
   const hits: NoteHit[] = [];
-  for (const leaf of allNoteLeaves()) {
-    if (leaf.planned) continue;
-    const note = getNote(leaf.moduleSlug, leaf.chapterSlug, leaf.topicSlug);
-    if (!note) continue;
-
+  for (const note of await getCachedCurriculumIndex()) {
     const title = note.frontmatter.title.toLowerCase();
     const summary = note.frontmatter.summary.toLowerCase();
     const tags = note.frontmatter.tags.join(" ").toLowerCase();
@@ -207,9 +202,9 @@ export async function searchNotes(query: string): Promise<NoteHit[]> {
     }
     if (score > 0) {
       hits.push({
-        moduleSlug: leaf.moduleSlug,
-        chapterSlug: leaf.chapterSlug,
-        topicSlug: leaf.topicSlug,
+        moduleSlug: note.moduleSlug,
+        chapterSlug: note.chapterSlug,
+        topicSlug: note.topicSlug,
         title: note.frontmatter.title,
         summary: note.frontmatter.summary,
         score,
@@ -223,11 +218,13 @@ export async function searchNotes(query: string): Promise<NoteHit[]> {
 /** A note slug is "module/chapter/topic" and only valid if the taxonomy leaf
  *  exists, is not a planned stub, and has MDX on disk. Guards the completion
  *  path against arbitrary/forged slugs. */
-function resolveNoteSlug(noteSlug: string): { m: string; c: string; t: string } | null {
+async function resolveNoteSlug(
+  noteSlug: string,
+): Promise<{ m: string; c: string; t: string } | null> {
   const [m, c, t] = noteSlug.split("/");
   if (!m || !c || !t) return null;
   const leaf = findNoteLeaf(m, c, t);
-  if (!leaf || leaf.planned || !getNote(m, c, t)) return null;
+  if (!leaf || leaf.planned || !(await getCachedTopic(noteSlug))) return null;
   return { m, c, t };
 }
 
@@ -257,7 +254,7 @@ async function completeNoteSave(
   userId: string,
   noteSlug: string,
 ): Promise<{ ok: true; xp: number; alreadyDone: boolean }> {
-  if (!resolveNoteSlug(noteSlug)) throw new Error("Note not available");
+  if (!(await resolveNoteSlug(noteSlug))) throw new Error("Note not available");
 
   const service = createServiceClient();
 
@@ -270,12 +267,15 @@ async function completeNoteSave(
 
   if (alreadyDone) return { ok: true, xp: XP_NOTE_COMPLETED, alreadyDone: true };
 
-  const { error: progressError } = await service
-    .from("note_progress")
-    .upsert(
-      { user_id: userId, note_slug: noteSlug, status: "completed", completed_at: new Date().toISOString() },
-      { onConflict: "user_id,note_slug" },
-    );
+  const { error: progressError } = await service.from("note_progress").upsert(
+    {
+      user_id: userId,
+      note_slug: noteSlug,
+      status: "completed",
+      completed_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id,note_slug" },
+  );
   if (progressError) throw new Error(progressError.message);
 
   await service.from("xp_events").insert({

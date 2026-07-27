@@ -79,7 +79,10 @@ export async function resolveAuth(getHeader: HeaderGetter): Promise<AuthResult> 
         .maybeSingle();
       if (!data) return { ok: false, message: "Invalid OAuth access token." };
       if (new Date(data.expires_at).getTime() < Date.now()) {
-        return { ok: false, message: "OAuth access token expired — request a new one at POST /v1/oauth/token." };
+        return {
+          ok: false,
+          message: "OAuth access token expired — request a new one at POST /v1/oauth/token.",
+        };
       }
       return {
         ok: true,

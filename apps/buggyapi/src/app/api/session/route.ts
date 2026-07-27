@@ -85,9 +85,6 @@ export async function POST(request: Request) {
       oauthClient: oauthClients?.[0] ?? null,
     });
   } catch {
-    return NextResponse.json(
-      { error: "Invalid or expired handoff token" },
-      { status: 401 },
-    );
+    return NextResponse.json({ error: "Invalid or expired handoff token" }, { status: 401 });
   }
 }

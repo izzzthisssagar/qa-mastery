@@ -1,19 +1,29 @@
 name: E2E shard (reusable)
 
-# Called by ci.yml once per shard/suite. Each call is a fresh runner: the live
-# DB the e2e specs hit lives in a local Supabase stack reached over
-# `--network host`, so it has to run on the SAME runner as the tests — that
-# rules out building once and fanning artifacts out to lighter shard runners.
-# Duplicating build+DB-start per call is the cost of sharding this suite; the
-# payoff is wall-clock, since the calls run concurrently (see ci.yml P4-3).
+# Called by ci.yml once per shard/suite (Task 10). Each call is a fresh
+# runner: the live DB the e2e specs hit lives in a local Supabase stack
+# reached over `--network host`, so it has to run on the SAME runner as the
+# tests — that rules out building once and fanning artifacts out to lighter
+# shard runners. Duplicating build+DB-start per call is the cost of sharding
+# this suite; the payoff is wall-clock, since the calls run concurrently.
 
 on:
   workflow_call:
     inputs:
-      job-label:
+      suite:
+        description: "Which Playwright suite to run: core, buggyapi, first-paint, or full."
         required: true
         type: string
-      playwright-args:
+      shard:
+        description: "This shard's 1-based index (core suite only)."
+        required: false
+        type: number
+      shard_total:
+        description: "Total shard count (core suite only)."
+        required: false
+        type: number
+      artifact_suffix:
+        description: "Unique suffix so concurrent calls never collide on artifact/blob names."
         required: true
         type: string
 
@@ -28,11 +38,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: pnpm
@@ -73,21 +83,46 @@ jobs:
         run: |
           env | grep -E '^(NEXT_PUBLIC_|SUPABASE_).*=|^(SANDBOX_JWT_SECRET|BILLING_ENABLED)=' > /tmp/e2e.env
           echo "CI=true" >> /tmp/e2e.env
+          echo "PLAYWRIGHT_BLOB_OUTPUT_FILE=blob-report/report-${{ inputs.suite }}-${{ inputs.artifact_suffix }}.zip" >> /tmp/e2e.env
 
-      # Same pinned-container reasoning as before sharding (P4-3): visual.spec.ts
+      - name: Resolve Playwright args for this suite
+        id: args
+        run: |
+          case "${{ inputs.suite }}" in
+            core) CONFIG_ARGS="" ;;
+            buggyapi) CONFIG_ARGS="--config=playwright.buggyapi.config.ts" ;;
+            first-paint) CONFIG_ARGS="--config=playwright.first-paint.config.ts" ;;
+            full) CONFIG_ARGS="--config=playwright.full.config.ts" ;;
+            *) echo "::error::Unknown suite '${{ inputs.suite }}'"; exit 1 ;;
+          esac
+          # Unset `number`-typed workflow_call inputs come through as 0, not
+          # empty — a plain `-n` check treats that as "present" and emits a
+          # nonsensical `--shard=0/0`, which Playwright rejects outright.
+          if [ "${{ inputs.shard || 0 }}" -gt 0 ] && [ "${{ inputs.shard_total || 0 }}" -gt 0 ]; then
+            CONFIG_ARGS="$CONFIG_ARGS --shard=${{ inputs.shard }}/${{ inputs.shard_total }}"
+          fi
+          echo "playwright_args=$CONFIG_ARGS --reporter=blob" >> "$GITHUB_OUTPUT"
+
+      # Same pinned-container reasoning as before sharding: visual.spec.ts
       # baselines and font rendering only hold stable inside this exact image.
-      - name: "E2E: ${{ inputs.job-label }} (pinned image)"
+      # node_modules is already installed on the runner and the runner
+      # (ubuntu-latest) is the same OS/arch (linux-x64 Noble) as this pinned
+      # image by design, so only `corepack` is needed inside the container —
+      # re-running `pnpm install` there would re-download everything with
+      # zero cache.
+      - name: "E2E: ${{ inputs.suite }} (${{ inputs.artifact_suffix }}, pinned image)"
         run: |
           docker run --rm --network host \
             --env-file /tmp/e2e.env \
             -v "$GITHUB_WORKSPACE":/work -w /work \
-            mcr.microsoft.com/playwright:v1.60.0-noble \
-            bash -c "corepack enable && corepack prepare pnpm@11.6.0 --activate && pnpm --filter @qa-mastery/e2e exec playwright test ${{ inputs.playwright-args }}"
+            mcr.microsoft.com/playwright:v1.60.0-noble@sha256:83192064c7510f7ee73dd63dc5f22a5e01a92c81a2e6a9c715d9e3fe55471fd9 \
+            bash -c "corepack enable && corepack prepare pnpm@11.6.0 --activate && pnpm --filter @qa-mastery/e2e exec playwright test ${{ steps.args.outputs.playwright_args }}"
 
-      - name: Upload Playwright report on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
+      - name: Upload blob report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: playwright-report-${{ inputs.job-label }}
-          path: e2e/playwright-report/
+          name: blob-report-${{ inputs.suite }}-${{ inputs.artifact_suffix }}
+          path: e2e/blob-report/
           retention-days: 7
+          if-no-files-found: ignore

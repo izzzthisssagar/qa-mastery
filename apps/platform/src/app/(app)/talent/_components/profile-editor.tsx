@@ -3,17 +3,8 @@
 import { useState, useTransition } from "react";
 import { Button } from "@qa-mastery/ui";
 import { useHydrated } from "@/hooks/use-hydrated";
-import {
-  AVAILABILITY,
-  SPECIALTIES,
-  STACK,
-  labelFor,
-} from "@/lib/talent/taxonomy";
-import {
-  publishProfile,
-  upsertTesterProfile,
-  type ProfileInput,
-} from "@/app/(app)/talent/actions";
+import { AVAILABILITY, SPECIALTIES, STACK, labelFor } from "@/lib/talent/taxonomy";
+import { publishProfile, upsertTesterProfile, type ProfileInput } from "@/app/(app)/talent/actions";
 
 type Initial = {
   handle?: string;
@@ -245,7 +236,11 @@ export function ProfileEditor({ initial }: { initial: Initial }) {
 
       <div className="space-y-2 text-sm">
         <span className="block text-muted-foreground">Specialties</span>
-        <Chips options={SPECIALTIES} selected={specialties} onToggle={toggle(specialties, setSpecialties)} />
+        <Chips
+          options={SPECIALTIES}
+          selected={specialties}
+          onToggle={toggle(specialties, setSpecialties)}
+        />
       </div>
 
       <div className="space-y-2 text-sm">

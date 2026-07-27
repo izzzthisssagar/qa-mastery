@@ -55,7 +55,9 @@ export async function signVideoUpload(): Promise<CloudinarySignature> {
     .sort()
     .map((k) => `${k}=${params[k]}`)
     .join("&");
-  const signature = createHash("sha1").update(toSign + env.apiSecret).digest("hex");
+  const signature = createHash("sha1")
+    .update(toSign + env.apiSecret)
+    .digest("hex");
 
   return { cloudName: env.cloudName, apiKey: env.apiKey, timestamp, signature, folder };
 }

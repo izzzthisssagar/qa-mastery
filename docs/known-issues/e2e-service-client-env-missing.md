@@ -33,7 +33,7 @@ env | grep -E '^(NEXT_PUBLIC_|SUPABASE_|SANDBOX_JWT_SECRET|BILLING_ENABLED)=' > 
 The alternation group `(NEXT_PUBLIC_|SUPABASE_|...)` sits directly against
 the required trailing `=` with **no wildcard in between**. For the two exact
 literal alternatives (`SANDBOX_JWT_SECRET`, `BILLING_ENABLED`) that's fine —
-the full key name is already spelled out. But for the two *prefix*
+the full key name is already spelled out. But for the two _prefix_
 alternatives, the pattern only matches a variable **literally named**
 `NEXT_PUBLIC_` or `SUPABASE_` — it never matches `NEXT_PUBLIC_SUPABASE_URL=...`,
 because nothing in the pattern accounts for the `SUPABASE_URL` between the
@@ -96,17 +96,17 @@ the permanent record.
 ## Lessons
 
 - **A local repro that doesn't reproduce the failure is informative, not
-  conclusive** — it proves the *mechanisms you tested* aren't at fault, not
+  conclusive** — it proves the _mechanisms you tested_ aren't at fault, not
   that the bug is elsewhere. Every layer checked here (docker, pnpm, the
   actual runtime process, Playwright's source) really was fine; the bug was
   one layer earlier, in the shell one-liner that built the input file none
   of those layers had any reason to distrust.
 - **Prefer testing regex changes against a real sample line, not just
   reading the pattern.** `grep -E '^(PREFIX_)='` reads as "starts with
-  PREFIX_" at a glance; it says "is exactly PREFIX_". The one-character fix
+  PREFIX*" at a glance; it says "is exactly PREFIX*". The one-character fix
   (`.*` before `=`) would have been obvious from a single `echo | grep`
   sanity check before ever committing the original line.
 - CI's `env: <var>: ***` preamble (GitHub's own display of a step's resolved
   environment) is trustworthy and was correct throughout — the bug was
-  entirely in what the step's *script* did with that environment, not in
+  entirely in what the step's _script_ did with that environment, not in
   what the runner provided.

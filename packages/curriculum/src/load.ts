@@ -87,10 +87,7 @@ export function loadAllLessons(contentRoot?: string): LessonSource[] {
   return listLessonFiles(contentRoot).map(parseLessonFile);
 }
 
-export function findLessonBySlug(
-  slug: string,
-  contentRoot?: string,
-): LessonSource | null {
+export function findLessonBySlug(slug: string, contentRoot?: string): LessonSource | null {
   for (const file of listLessonFiles(contentRoot)) {
     const lesson = parseLessonFile(file);
     if (lesson.frontmatter.slug === slug) return lesson;

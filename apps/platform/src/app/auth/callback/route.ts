@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { safeNextPath } from "@/lib/safe-next-path";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { sanitizeNext } from "@/app/(auth)/next-param";
 
 /**
  * Auth callback for Supabase email links — email confirmation (signup) and
@@ -11,7 +11,7 @@ import { sanitizeNext } from "@/app/(auth)/next-param";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = sanitizeNext(searchParams.get("next")) ?? "/dashboard";
+  const next = safeNextPath(searchParams.get("next"));
 
   if (code) {
     const supabase = await createSupabaseServerClient();

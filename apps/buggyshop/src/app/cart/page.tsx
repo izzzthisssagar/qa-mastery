@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import { readRelease } from "@/lib/catalog";
 import { shippingLabel } from "@/lib/cart";
 
-
 const UNIT_PRICE = 999;
 
 export default function CartPage() {
@@ -60,10 +59,7 @@ export default function CartPage() {
             >
               −
             </button>
-            <span
-              data-testid="cart-qty"
-              className="w-8 text-center font-medium text-zinc-900"
-            >
+            <span data-testid="cart-qty" className="w-8 text-center font-medium text-zinc-900">
               {qty}
             </span>
             <button
@@ -92,9 +88,7 @@ export default function CartPage() {
           </div>
         </dl>
 
-        <p className="mt-4 text-xs text-zinc-500">
-          Free shipping on orders over $999.
-        </p>
+        <p className="mt-4 text-xs text-zinc-500">Free shipping on orders over $999.</p>
       </main>
 
       <footer className="border-t border-zinc-200 px-6 py-4 text-center text-xs text-zinc-400">

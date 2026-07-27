@@ -63,8 +63,12 @@ test.describe("track capstone", () => {
     await page
       .getByLabel(/scope \(what's in \/ out of test\)/i)
       .fill("In scope: the new coupon flow on checkout. Out of scope: payment gateway internals.");
-    await page.getByLabel(/risks \(one per line, ranked\)/i).fill("Coupon stacking\nExpired coupon still applies");
-    await page.getByLabel(/approach \(name the techniques per requirement\)/i).fill("Manual click-through of the happy path.");
+    await page
+      .getByLabel(/risks \(one per line, ranked\)/i)
+      .fill("Coupon stacking\nExpired coupon still applies");
+    await page
+      .getByLabel(/approach \(name the techniques per requirement\)/i)
+      .fill("Manual click-through of the happy path.");
     await page.getByLabel(/ship recommendation/i).selectOption("go-with-conditions");
 
     await page.getByRole("button", { name: /submit capstone/i }).click();

@@ -66,7 +66,8 @@ export const LEGACY_UNTESTED_TABLES = [
   "public.test_cases",
 ];
 
-const CREATE_TABLE_RE = /create\s+table(?:\s+if\s+not\s+exists)?\s+([a-zA-Z0-9_]+\.[a-zA-Z0-9_]+)/gi;
+const CREATE_TABLE_RE =
+  /create\s+table(?:\s+if\s+not\s+exists)?\s+([a-zA-Z0-9_]+\.[a-zA-Z0-9_]+)/gi;
 const FROM_CALL_RE = /(?:\.schema\(["'](\w+)["']\)\s*)?\.from\(["'](\w+)["']\)/g;
 
 export function extractDeclaredTables(sqlFiles) {
@@ -113,14 +114,18 @@ function main() {
   const missing = findUncoveredTables(declared, covered, exempt);
 
   if (stale.length > 0) {
-    console.error("These LEGACY_UNTESTED_TABLES entries no longer exist in supabase/migrations — remove them from scripts/check-rls-coverage.mjs:");
+    console.error(
+      "These LEGACY_UNTESTED_TABLES entries no longer exist in supabase/migrations — remove them from scripts/check-rls-coverage.mjs:",
+    );
     for (const table of stale) console.error(`  ${table}`);
   }
 
   if (missing.length > 0) {
     console.error(`\n${missing.length} table(s) declared in supabase/migrations have no RLS test:`);
     for (const table of missing) console.error(`  ${table}`);
-    console.error('\nAdd a `.from("table")` (or `.schema("schema").from("table")`) assertion in packages/db/test/*.test.ts — see CLAUDE.md testing bar.');
+    console.error(
+      '\nAdd a `.from("table")` (or `.schema("schema").from("table")`) assertion in packages/db/test/*.test.ts — see CLAUDE.md testing bar.',
+    );
   }
 
   if (stale.length > 0 || missing.length > 0) {

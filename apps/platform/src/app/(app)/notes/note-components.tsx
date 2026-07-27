@@ -11,9 +11,12 @@
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { Spinner } from "@qa-mastery/ui";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { runSimulatorCode } from "@/app/(app)/simulator/actions";
-import { completeNote } from "./actions";
+import { createAutosave, type SaveStatus } from "./autosave";
+import { deletePendingSave, getPendingSave, putPendingSave } from "./note-draft-db";
 import { useNoteProgress } from "./note-progress-context";
+import { SaveIndicator } from "./save-indicator";
 
 /* ── Hook: the curiosity opener ─────────────────────────────────────────────*/
 export function Hook({ children }: { children: ReactNode }) {
@@ -41,8 +44,12 @@ export function Callout({
 }) {
   const m = CALLOUT_META[type];
   return (
-    <div className={`my-5 flex gap-3 rounded-xl border ${m.ring} bg-surface px-4 py-3.5 text-[15px]`}>
-      <span className="shrink-0 text-lg leading-6" aria-hidden>{m.icon}</span>
+    <div
+      className={`my-5 flex gap-3 rounded-xl border ${m.ring} bg-surface px-4 py-3.5 text-[15px]`}
+    >
+      <span className="shrink-0 text-lg leading-6" aria-hidden>
+        {m.icon}
+      </span>
       <div>
         <span className="mr-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {m.label}
@@ -58,7 +65,11 @@ export function Figure({ caption, children }: { caption?: string; children: Reac
   return (
     <figure className="my-6 rounded-2xl border border-border bg-surface p-5">
       {children}
-      {caption && <figcaption className="mt-3 text-center text-sm text-muted-foreground">{caption}</figcaption>}
+      {caption && (
+        <figcaption className="mt-3 text-center text-sm text-muted-foreground">
+          {caption}
+        </figcaption>
+      )}
     </figure>
   );
 }
@@ -112,7 +123,9 @@ export function Video({ href, title, minutes }: { href: string; title: string; m
         rel="noopener noreferrer"
         className="my-6 flex items-center gap-4 rounded-2xl border border-border bg-surface p-4 transition-colors hover:border-accent/50"
       >
-        <span className="grid size-12 shrink-0 place-items-center rounded-full border border-accent/40 bg-accent/15 text-lg text-accent">▶</span>
+        <span className="grid size-12 shrink-0 place-items-center rounded-full border border-accent/40 bg-accent/15 text-lg text-accent">
+          ▶
+        </span>
         <span>
           <span className="block text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
             Watch{minutes ? ` · ${minutes} min` : ""}
@@ -207,14 +220,15 @@ export function Quiz({
   return (
     <div className="my-7 rounded-2xl border border-border bg-gradient-to-b from-surface-raised to-surface p-5">
       <div className="flex items-center gap-2 text-[17px] font-semibold text-foreground">
-        <span className="text-bug" aria-hidden>🧠</span>
+        <span className="text-bug" aria-hidden>
+          🧠
+        </span>
         <span>Quick check</span>
       </div>
       <p className="mb-3 mt-3 text-[15px] font-medium text-foreground">{question}</p>
       <div className="flex flex-col gap-2">
         {options.map((opt, i) => {
-          const state =
-            !done ? "" : i === answer ? "correct" : i === picked ? "wrong" : "";
+          const state = !done ? "" : i === answer ? "correct" : i === picked ? "wrong" : "";
           const cls =
             state === "correct"
               ? "border-emerald-400 bg-emerald-400/10"
@@ -265,19 +279,39 @@ export function Flashcards({ cards }: { cards: { front: string; back: string }[]
           <span aria-hidden>🃏</span>
           <span>Flashcards</span>
         </span>
-        <span className="text-xs text-muted-foreground">{i + 1} / {cards.length}</span>
+        <span className="text-xs text-muted-foreground">
+          {i + 1} / {cards.length}
+        </span>
       </div>
       <button
         type="button"
         onClick={() => setFlipped((f) => !f)}
         className="flex min-h-28 w-full items-center justify-center rounded-xl border border-border bg-background px-5 py-6 text-center text-[15px] text-foreground transition-colors hover:border-accent/40"
       >
-        {flipped ? <span className="text-muted-foreground">{card.back}</span> : <span className="font-semibold">{card.front}</span>}
+        {flipped ? (
+          <span className="text-muted-foreground">{card.back}</span>
+        ) : (
+          <span className="font-semibold">{card.front}</span>
+        )}
       </button>
       <div className="mt-3 flex items-center justify-between text-sm">
-        <button type="button" onClick={() => go(-1)} className="text-muted-foreground hover:text-foreground">← Prev</button>
-        <span className="text-xs text-muted-foreground">{flipped ? "Showing answer" : "Tap card to flip"}</span>
-        <button type="button" onClick={() => go(1)} className="text-muted-foreground hover:text-foreground">Next →</button>
+        <button
+          type="button"
+          onClick={() => go(-1)}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          ← Prev
+        </button>
+        <span className="text-xs text-muted-foreground">
+          {flipped ? "Showing answer" : "Tap card to flip"}
+        </span>
+        <button
+          type="button"
+          onClick={() => go(1)}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          Next →
+        </button>
       </div>
     </div>
   );
@@ -300,12 +334,15 @@ export function Takeaways({ points }: { points: string[] }) {
   );
 }
 
-/* ── Complete: mark done + XP burst — persists via completeNote server action ─*/
+/* ── Complete: mark done + XP burst — optimistic local save, honest indicator ─*/
 export function Complete({ xp = 10 }: { xp?: number }) {
   const { slug, initialDone } = useNoteProgress();
+  const hydrated = useHydrated();
   const [done, setDone] = useState(initialDone);
-  const [pending, startTransition] = useTransition();
+  const [status, setStatus] = useState<SaveStatus>("idle");
   const btnRef = useRef<HTMLButtonElement>(null);
+  const draftKey = `note-complete:${slug}`;
+  const controllerRef = useRef<ReturnType<typeof createAutosave> | null>(null);
 
   function burst() {
     if (typeof window === "undefined") return;
@@ -331,32 +368,83 @@ export function Complete({ xp = 10 }: { xp?: number }) {
     }
   }
 
+  // Built once on mount, never during render — its closures read `btnRef`
+  // (via burst()) and refs may only be touched outside render.
+  useEffect(() => {
+    controllerRef.current = createAutosave({
+      persistLocal: () => putPendingSave(draftKey, { slug }),
+      // `keepalive` lets this request survive a hard nav/reload that follows
+      // the optimistic click within milliseconds — a plain server-action
+      // fetch would be aborted along with the unloading document.
+      sync: async () => {
+        const res = await fetch("/api/notes/complete", {
+          method: "POST",
+          keepalive: true,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ noteSlug: slug }),
+        });
+        if (!res.ok) throw new Error("Failed to complete note");
+        const data = (await res.json()) as { alreadyDone: boolean };
+        if (!data.alreadyDone) burst();
+        await deletePendingSave(draftKey);
+      },
+      onStatusChange: setStatus,
+    });
+    return () => controllerRef.current?.dispose();
+  }, [draftKey, slug]);
+
+  // A completion click whose sync() never landed (reload after a network
+  // drop mid-request) leaves a pending marker in IndexedDB — resume it once
+  // hydrated. completeNote is idempotent, so resuming an already-landed
+  // completion is harmless.
+  useEffect(() => {
+    if (!hydrated || done) return;
+    let cancelled = false;
+    void (async () => {
+      const pending = await getPendingSave<{ slug: string }>(draftKey);
+      if (cancelled || !pending) return;
+      setDone(true);
+      controllerRef.current?.run();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, done, draftKey]);
+
+  const statusRef = useRef(status);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+  useEffect(() => {
+    function onOnline() {
+      if (statusRef.current === "error") controllerRef.current?.retry();
+    }
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, []);
+
   return (
     <div className="my-10 text-center">
       <button
         ref={btnRef}
         type="button"
-        disabled={done || pending}
+        disabled={!hydrated || done}
         onClick={() => {
-          if (done || pending) return;
-          startTransition(async () => {
-            try {
-              const res = await completeNote(slug);
-              setDone(true);
-              if (!res.alreadyDone) burst();
-            } catch {
-              // Leave the button enabled so the learner can retry.
-            }
-          });
+          if (!hydrated || done) return;
+          // Optimistic: the click IS the edit — mark it done locally right
+          // away, then let the controller persist + sync in the background.
+          setDone(true);
+          controllerRef.current?.run();
         }}
         className={`rounded-2xl px-8 py-3.5 text-base font-bold transition disabled:opacity-70 ${done ? "cursor-default border border-accent/40 bg-surface text-accent" : "bg-accent text-accent-foreground hover:brightness-105"}`}
       >
-        {done
-          ? `✓ Completed · +${xp} XP earned`
-          : pending
-            ? "Saving…"
-            : `Mark complete · +${xp} XP`}
+        {done ? `✓ Completed · +${xp} XP earned` : `Mark complete · +${xp} XP`}
       </button>
+      {done && status !== "idle" && (
+        <div className="mt-2">
+          <SaveIndicator status={status} onRetry={() => controllerRef.current?.retry()} />
+        </div>
+      )}
     </div>
   );
 }
@@ -364,7 +452,13 @@ export function Complete({ xp = 10 }: { xp?: number }) {
 /* ── Mentor sections: the "senior QA in your pocket" anatomy ────────────────*/
 
 /** 🔧 First time? Do this — exact steps, nothing assumed. */
-export function FirstTime({ title = "First time? Do this", children }: { title?: string; children: ReactNode }) {
+export function FirstTime({
+  title = "First time? Do this",
+  children,
+}: {
+  title?: string;
+  children: ReactNode;
+}) {
   return (
     <section className="my-7 rounded-2xl border border-accent/30 bg-surface p-5">
       <h3 className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-foreground">
@@ -699,7 +793,12 @@ function Credit({ credit, creditHref }: { credit?: string; creditHref?: string }
   return (
     <p className="mt-2 text-right text-xs text-muted-foreground">
       {creditHref ? (
-        <a href={creditHref} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-foreground">
+        <a
+          href={creditHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline underline-offset-2 hover:text-foreground"
+        >
           {credit}
         </a>
       ) : (
@@ -734,7 +833,7 @@ export function HotspotImage({
   return (
     <div className="my-7 rounded-2xl border border-border bg-surface p-4">
       <div className="relative overflow-hidden rounded-xl">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {/* eslint-disable-next-line @next/next/no-img-element -- external thumbnail CDN, not an optimizable local asset */}
         <img src={src} alt={alt} loading="lazy" className="w-full" />
         {pins.map((p, i) => (
           <button
@@ -763,7 +862,9 @@ export function HotspotImage({
           👆 Tap each numbered dot to explore the parts
         </p>
       )}
-      <p className={`mt-2 text-center text-xs font-medium ${done ? "text-accent-text" : "text-muted-foreground"}`}>
+      <p
+        className={`mt-2 text-center text-xs font-medium ${done ? "text-accent-text" : "text-muted-foreground"}`}
+      >
         {done ? "✓ All parts explored!" : `Explored ${seen.size} / ${pins.length}`}
       </p>
       <Credit credit={credit} creditHref={creditHref} />
@@ -791,10 +892,12 @@ export function PartsQuest({
 
   return (
     <div className="my-7 rounded-2xl border border-border bg-surface p-4">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {/* eslint-disable-next-line @next/next/no-img-element -- external thumbnail CDN, not an optimizable local asset */}
       <img src={src} alt={alt} loading="lazy" className="w-full rounded-xl bg-white p-2" />
       <p className="mt-3 text-center text-sm text-muted-foreground">
-        {done ? "🏅 You met every part — nicely done!" : "👇 Tap a number to meet that part — can you collect all of them?"}
+        {done
+          ? "🏅 You met every part — nicely done!"
+          : "👇 Tap a number to meet that part — can you collect all of them?"}
       </p>
       <div className="mt-3 flex flex-wrap justify-center gap-1.5">
         {parts.map((p, i) => (
@@ -825,7 +928,9 @@ export function PartsQuest({
           <p className="mt-1 text-sm text-muted-foreground">{parts[active].desc}</p>
         </div>
       )}
-      <p className={`mt-2 text-center text-xs font-medium ${done ? "text-accent-text" : "text-muted-foreground"}`}>
+      <p
+        className={`mt-2 text-center text-xs font-medium ${done ? "text-accent-text" : "text-muted-foreground"}`}
+      >
         {seen.size} / {parts.length} parts met
       </p>
       <Credit credit={credit} creditHref={creditHref} />
@@ -860,28 +965,40 @@ export function StepChecklist({ steps }: { steps: { text: string; detail?: strin
               type="button"
               onClick={() => toggle(i)}
               className={`flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
-                checked.has(i) ? "border-accent/40 bg-accent/10" : "border-border bg-background hover:border-accent/40"
+                checked.has(i)
+                  ? "border-accent/40 bg-accent/10"
+                  : "border-border bg-background hover:border-accent/40"
               }`}
             >
               <span
                 className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border text-xs font-bold ${
-                  checked.has(i) ? "border-accent bg-accent text-accent-foreground" : "border-border text-muted-foreground"
+                  checked.has(i)
+                    ? "border-accent bg-accent text-accent-foreground"
+                    : "border-border text-muted-foreground"
                 }`}
               >
                 {checked.has(i) ? "✓" : i + 1}
               </span>
               <span>
-                <span className={`block text-[15px] ${checked.has(i) ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                <span
+                  className={`block text-[15px] ${checked.has(i) ? "text-muted-foreground line-through" : "text-foreground"}`}
+                >
                   {s.text}
                 </span>
-                {s.detail && <span className="mt-0.5 block text-sm text-muted-foreground">{s.detail}</span>}
+                {s.detail && (
+                  <span className="mt-0.5 block text-sm text-muted-foreground">{s.detail}</span>
+                )}
               </span>
             </button>
           </li>
         ))}
       </ol>
-      <p className={`mt-2 text-center text-xs font-medium ${pct === 100 ? "text-accent-text" : "text-muted-foreground"}`}>
-        {pct === 100 ? "✓ Mission complete — you know your machine!" : `${checked.size} / ${steps.length} done`}
+      <p
+        className={`mt-2 text-center text-xs font-medium ${pct === 100 ? "text-accent-text" : "text-muted-foreground"}`}
+      >
+        {pct === 100
+          ? "✓ Mission complete — you know your machine!"
+          : `${checked.size} / ${steps.length} done`}
       </p>
     </div>
   );

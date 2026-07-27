@@ -56,7 +56,10 @@ export default async function CertificatePage({ params }: PageProps) {
             Not earned yet — {done} / {total} notes complete. Finish the track to unlock your
             certificate.
           </p>
-          <Link href="/dashboard" className="mt-6 inline-block text-sm text-accent hover:opacity-80">
+          <Link
+            href="/dashboard"
+            className="mt-6 inline-block text-sm text-accent hover:opacity-80"
+          >
             ← Back to your learning
           </Link>
         </Reveal>

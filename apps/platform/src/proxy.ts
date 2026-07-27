@@ -13,12 +13,9 @@ const PROTECTED_PREFIXES = [
   "/review",
   "/portfolio/me",
   "/settings",
-  // P0-3: these (app) routes were missing here, so a deep link to any of
+  // Task 6: these (app) routes were missing here, so a deep link to any of
   // them dropped an unauthenticated visitor on a bare /login with no
-  // ?next= — the layout-level fallback redirect (real auth boundary) has
-  // no way to recover the intended path, so this is the one place it can
-  // be captured. All four gated redirect()s in (app)/talent/** were also
-  // silently doing the same bare "/login" — fixed alongside this.
+  // ?next= to recover the intended destination after signing in.
   "/notes",
   "/talent",
   "/tasks",

@@ -75,11 +75,7 @@ async function mint(
     .sign(secretKey(secret));
 }
 
-async function verify(
-  token: string,
-  secret: string,
-  audience: string,
-): Promise<SandboxClaims> {
+async function verify(token: string, secret: string, audience: string): Promise<SandboxClaims> {
   const { payload } = await jwtVerify(token, secretKey(secret), {
     issuer: ISSUER,
     audience,

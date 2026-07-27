@@ -16,8 +16,6 @@ test.describe("platform", () => {
 test.describe("buggyshop", () => {
   test("homepage renders the shop brand", async ({ page }) => {
     await page.goto("http://localhost:3001/");
-    await expect(
-      page.getByRole("heading", { name: /buggyshop/i }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: /buggyshop/i })).toBeVisible();
   });
 });

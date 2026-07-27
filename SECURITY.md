@@ -6,9 +6,14 @@ Email **izzzthisssagar@gmail.com** with `[security]` in the subject. Please incl
 reproduction steps and impact. We aim to acknowledge within 72 hours. Do not open
 a public issue for a security report.
 
-> Note: **BuggyShop** (`apps/buggyshop`) is a *deliberately* flawed practice app —
-> its bugs are intentional teaching material (`BS-###`, see the seeded-bug
-> manifest). Reports about BuggyShop behaviour are not security issues.
+This policy covers the platform (`apps/platform`), the two practice apps
+(**BuggyShop** `apps/buggyshop`, **BuggyAPI** `apps/buggyapi`), and BuggyAPI's
+WebSocket practice surface (`services/buggyapi-ws`, deployed to Fly.io).
+
+> Note: **BuggyShop** and **BuggyAPI** (including its WebSocket service) are
+> _deliberately_ flawed practice apps — their bugs are intentional teaching
+> material (`BS-###` / `BA-###`, see each app's seeded-bug manifest). Reports
+> about either app's seeded behaviour are not security issues.
 
 ## Security model
 
@@ -23,9 +28,10 @@ Security), not just the app — see `docs/04-invariants.md`. The load-bearing on
   BuggyShop bug manifest are read server-side only; the client gets a stripped
   projection (the manifest schema is deny-all). CI greps the built bundle for
   manifest answer-key strings.
-- **BuggyShop auth is fake and cookie-free.** Its login/signup are curriculum
-  subjects; real identity crosses only via a signed handoff token in a URL
-  fragment, never a shared cookie. The `buggyshop` schema is deny-all.
+- **BuggyShop/BuggyAPI auth is fake and cookie-free.** Their signup/login and
+  API keys/OAuth clients are curriculum subjects; real identity crosses only
+  via a signed handoff token in a URL fragment, never a shared cookie. Both
+  the `buggyshop` and `buggyapi` schemas are deny-all.
 - **Auth & sessions** are managed by Supabase (`@supabase/ssr`): cookie-based,
   `auth.getUser()` re-checked server-side on every protected page and in every
   mutating server action.
@@ -40,9 +46,16 @@ Security), not just the app — see `docs/04-invariants.md`. The load-bearing on
 ## Automated checks (CI)
 
 Every PR runs lint, typecheck, unit tests, the curriculum validation, a
-DB-backed e2e suite (Chromium + WebKit), plus the security workflow
-(`.github/workflows/security.yml`): secret scanning (gitleaks) and a dependency
-audit. The manifest-secrecy grep runs in the build stage.
+DB-backed live-RLS regression suite, and a sharded Playwright e2e suite
+(Chromium + WebKit) across every practice app, plus the reusable security
+workflow (`.github/workflows/security.yml`, called from `ci.yml`): secret
+scanning (gitleaks), a production dependency audit, and `dependabot.yml`
+validation, aggregated into one `security-gate` result that the release gate
+depends on. The manifest-secrecy grep runs in each e2e job's build stage.
+Every third-party GitHub Action, Docker image, and CLI invocation across
+`.github/workflows/**` is pinned to an immutable commit SHA / digest / exact
+version (`scripts/check-workflow-pins.mjs`) — nothing resolves a floating
+`@main`/`@latest` tag that could change what CI runs without a code review.
 
 ## Supported versions
 

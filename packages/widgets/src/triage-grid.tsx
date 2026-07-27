@@ -62,8 +62,7 @@ export default function TriageGrid({ onMilestone }: WidgetProps) {
   const [firedDivergent, setFiredDivergent] = useState(false);
 
   const bug = BUGS[index];
-  const correct =
-    pick !== null && pick.severity === bug.severity && pick.priority === bug.priority;
+  const correct = pick !== null && pick.severity === bug.severity && pick.priority === bug.priority;
 
   function choose(severity: Level, priority: Level) {
     if (pick) return;

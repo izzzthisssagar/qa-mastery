@@ -25,9 +25,7 @@ async function signedInClient(email: string): Promise<SupabaseClient> {
 }
 
 describe.skipIf(!hasEnv)("Community RLS invariants", () => {
-  const service = createClient(URL!, SERVICE!, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  let service: SupabaseClient;
 
   const emailAlice = `c-alice-${randomUUID()}@e2e.local`;
   const emailBob = `c-bob-${randomUUID()}@e2e.local`;
@@ -39,8 +37,16 @@ describe.skipIf(!hasEnv)("Community RLS invariants", () => {
   let hiddenPostId = "";
 
   beforeAll(async () => {
+    service = createClient(URL!, SERVICE!, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
     const mk = async (email: string) => {
-      const r = await service.auth.admin.createUser({ email, password: PASSWORD, email_confirm: true });
+      const r = await service.auth.admin.createUser({
+        email,
+        password: PASSWORD,
+        email_confirm: true,
+      });
       if (r.error) throw new Error(r.error.message);
       return r.data.user!.id;
     };
@@ -59,7 +65,11 @@ describe.skipIf(!hasEnv)("Community RLS invariants", () => {
 
     const { data: h } = await service
       .from("community_posts")
-      .insert({ author_id: aliceId, body: "alice hidden post", hidden_at: new Date().toISOString() })
+      .insert({
+        author_id: aliceId,
+        body: "alice hidden post",
+        hidden_at: new Date().toISOString(),
+      })
       .select("id")
       .single();
     hiddenPostId = h!.id as string;

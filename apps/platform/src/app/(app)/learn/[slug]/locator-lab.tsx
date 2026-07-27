@@ -160,7 +160,9 @@ export function LocatorLab() {
                 aria-pressed={mode === m}
                 onClick={() => setMode(m)}
                 className={`rounded-md px-2.5 py-1 font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                  mode === m ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground"
+                  mode === m
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {m === "css" ? "CSS" : "XPath"}

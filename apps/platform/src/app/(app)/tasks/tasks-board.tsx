@@ -70,7 +70,10 @@ function AssignedCard({
   const showAccepted = accepted || acceptedNow;
 
   return (
-    <div className="rounded-2xl border border-border bg-surface p-4" data-testid={`task-${task.slug}`}>
+    <div
+      className="rounded-2xl border border-border bg-surface p-4"
+      data-testid={`task-${task.slug}`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-foreground">{task.title}</h3>
@@ -115,7 +118,11 @@ function AssignedCard({
               }
               className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground disabled:opacity-50"
             >
-              {userTask?.grade?.passed ? "Completed ✓" : gradePending ? "Grading…" : "Grade my work"}
+              {userTask?.grade?.passed
+                ? "Completed ✓"
+                : gradePending
+                  ? "Grading…"
+                  : "Grade my work"}
             </button>
             {result && <span className="text-xs text-muted-foreground">{result}</span>}
             {!result && userTask?.grade && (
@@ -214,7 +221,9 @@ function PlannerRow({ task }: { task: UserTask }) {
         className="size-4 accent-[var(--accent)]"
         aria-label="Toggle done"
       />
-      <span className={`flex-1 text-sm ${done ? "text-muted-foreground line-through" : "text-foreground"}`}>
+      <span
+        className={`flex-1 text-sm ${done ? "text-muted-foreground line-through" : "text-foreground"}`}
+      >
         {task.title}
       </span>
       <button

@@ -2,8 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
+import { safeNextPath } from "@/lib/safe-next-path";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { sanitizeNext } from "./next-param";
 
 export interface AuthFormState {
   error: string | null;
@@ -18,9 +18,11 @@ function credentials(formData: FormData) {
 }
 
 /** Resolve the post-auth redirect destination from the hidden `next` form
- *  field (round-tripped from the login/signup page's ?next= query param). */
+ *  field (round-tripped from the login/signup page's ?next= query param).
+ *  Re-validates here rather than trusting the client-rendered field by
+ *  itself — a tampered submission still only ever reaches a safe path. */
 function nextFromForm(formData: FormData): string {
-  return sanitizeNext(String(formData.get("next") ?? "")) ?? "/dashboard";
+  return safeNextPath(String(formData.get("next") ?? ""));
 }
 
 /** Absolute site origin for building email redirect links. Prefers the
@@ -34,10 +36,7 @@ async function siteOrigin(): Promise<string> {
   return `${proto}://${host}`;
 }
 
-export async function login(
-  _prev: AuthFormState,
-  formData: FormData,
-): Promise<AuthFormState> {
+export async function login(_prev: AuthFormState, formData: FormData): Promise<AuthFormState> {
   const { email, password } = credentials(formData);
   if (!email || !password) {
     return { error: "Email and password are required." };
@@ -52,10 +51,7 @@ export async function login(
   redirect(nextFromForm(formData));
 }
 
-export async function signup(
-  _prev: AuthFormState,
-  formData: FormData,
-): Promise<AuthFormState> {
+export async function signup(_prev: AuthFormState, formData: FormData): Promise<AuthFormState> {
   const { email, password } = credentials(formData);
   if (!email || !password) {
     return { error: "Email and password are required." };

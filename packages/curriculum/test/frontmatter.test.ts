@@ -20,14 +20,10 @@ describe("lessonFrontmatterSchema", () => {
   });
 
   it("rejects non-kebab-case slugs", () => {
-    expect(() =>
-      lessonFrontmatterSchema.parse({ ...VALID, slug: "Boundary Value!" }),
-    ).toThrow();
+    expect(() => lessonFrontmatterSchema.parse({ ...VALID, slug: "Boundary Value!" })).toThrow();
   });
 
   it("rejects malformed module codes", () => {
-    expect(() =>
-      lessonFrontmatterSchema.parse({ ...VALID, module: "Z9X" }),
-    ).toThrow();
+    expect(() => lessonFrontmatterSchema.parse({ ...VALID, module: "Z9X" })).toThrow();
   });
 });
