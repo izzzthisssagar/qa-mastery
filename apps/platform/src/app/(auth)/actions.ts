@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
+import { safeNextPath } from "@/lib/safe-next-path";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export interface AuthFormState {
@@ -16,22 +17,12 @@ function credentials(formData: FormData) {
   };
 }
 
-/** Resolve the post-auth redirect destination from the ?next= query param.
- *  Validates it is a same-origin relative path to prevent open-redirect. */
-async function safeNext(): Promise<string> {
-  const headersList = await headers();
-  const referer = headersList.get("referer") ?? "";
-  try {
-    const url = new URL(referer);
-    const next = url.searchParams.get("next");
-    // Only allow same-origin relative paths starting with /
-    if (next && next.startsWith("/") && !next.startsWith("//")) {
-      return next;
-    }
-  } catch {
-    // Ignore invalid URLs
-  }
-  return "/dashboard";
+/** Resolve the post-auth redirect destination from the hidden `next` form
+ *  field (round-tripped from the login/signup page's ?next= query param).
+ *  Re-validates here rather than trusting the client-rendered field by
+ *  itself — a tampered submission still only ever reaches a safe path. */
+function nextFromForm(formData: FormData): string {
+  return safeNextPath(String(formData.get("next") ?? ""));
 }
 
 /** Absolute site origin for building email redirect links. Prefers the
@@ -57,7 +48,7 @@ export async function login(_prev: AuthFormState, formData: FormData): Promise<A
     return { error: error.message };
   }
 
-  redirect(await safeNext());
+  redirect(nextFromForm(formData));
 }
 
 export async function signup(_prev: AuthFormState, formData: FormData): Promise<AuthFormState> {
@@ -88,7 +79,7 @@ export async function signup(_prev: AuthFormState, formData: FormData): Promise<
     };
   }
 
-  redirect(await safeNext());
+  redirect(nextFromForm(formData));
 }
 
 /** Send a password-reset email. The link lands on /auth/callback which

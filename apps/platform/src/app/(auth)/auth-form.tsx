@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useActionState } from "react";
 import { Button } from "@qa-mastery/ui";
 import { Reveal, motion } from "@/components/motion";
 import { AuthBrandPanel } from "@/components/auth-brand-panel";
 import { AuthField } from "@/components/auth-field";
+import { safeNextPath } from "@/lib/safe-next-path";
 import type { AuthFormState } from "./actions";
 
 const INITIAL_STATE: AuthFormState = { error: null };
@@ -15,7 +17,8 @@ export interface AuthFormProps {
   submitLabel: string;
   action: (prev: AuthFormState, formData: FormData) => Promise<AuthFormState>;
   altText: string;
-  altHref: string;
+  /** Base path for the login<->signup cross-link; `?next=` is appended when present. */
+  altBaseHref: string;
   altLinkLabel: string;
   /** Show a "Forgot password?" link under the password field (login only). */
   showForgot?: boolean;
@@ -26,11 +29,16 @@ export function AuthForm({
   submitLabel,
   action,
   altText,
-  altHref,
+  altBaseHref,
   altLinkLabel,
   showForgot = false,
 }: AuthFormProps) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  // Best-effort UX only — the Server Action re-validates with safeNextPath
+  // on submit, so a tampered hidden field can never reach an unsafe path.
+  const next = safeNextPath(useSearchParams().get("next"));
+  const altHref =
+    next === "/dashboard" ? altBaseHref : `${altBaseHref}?next=${encodeURIComponent(next)}`;
 
   return (
     <main className="relative flex min-h-full flex-1 lg:items-stretch">
@@ -53,7 +61,7 @@ export function AuthForm({
 
           <Reveal delay={0.05}>
             <p className="font-mono text-xs uppercase tracking-[0.28em] text-accent/80">
-              {altHref === "/login" ? "Create account" : "Welcome back"}
+              {altBaseHref === "/login" ? "Create account" : "Welcome back"}
             </p>
           </Reveal>
 
@@ -64,6 +72,7 @@ export function AuthForm({
           </Reveal>
 
           <form action={formAction} className="mt-9 space-y-5">
+            {next !== "/dashboard" ? <input type="hidden" name="next" value={next} /> : null}
             <Reveal delay={0.2}>
               <AuthField
                 id="email"
@@ -82,7 +91,7 @@ export function AuthForm({
                 name="password"
                 label="Password"
                 type="password"
-                autoComplete={altHref === "/login" ? "new-password" : "current-password"}
+                autoComplete={altBaseHref === "/login" ? "new-password" : "current-password"}
                 required
                 minLength={8}
                 placeholder="••••••••"
