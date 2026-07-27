@@ -1,9 +1,10 @@
 # Deployment
 
-**Status: LIVE.** Both apps run on Vercel and redeploy on every push to `main`
-(`.github/workflows/deploy.yml`). This file is the config reference; the
-operational runbook + the two deploy gotchas are in
-[`docs/09-deployment.md`](./docs/09-deployment.md).
+**Status: LIVE.** Both apps run on Vercel and redeploy after CI finishes
+verifying a commit on `main` — not on the raw push itself
+(`.github/workflows/deploy.yml`, Task 12: deploy only the exact verified
+commit). This file is the config reference; the operational runbook + the two
+deploy gotchas are in [`docs/09-deployment.md`](./docs/09-deployment.md).
 
 State: GitHub `izzzthisssagar/qa-mastery` (private) ✓ · Supabase
 `qa-mastery-staging` (`rnmxbtokqebkqibsjmrt`, ap-south-1) — **all 13 migrations
@@ -88,13 +89,20 @@ In Paddle: create the Pro product + price, point a webhook at
 `https://<platform-url>/api/webhooks/paddle` for `transaction.completed`. The
 handler grants the `pro` entitlement (same row the mock `grantPro` writes).
 
-## 5. CI/CD — automatic Vercel deploy (LIVE)
+## 5. CI/CD — deploy only the exact commit CI verified (LIVE)
 
-`.github/workflows/deploy.yml` ships **both apps to Vercel production on every
-push to `main`**, via the Vercel CLI token (sidesteps the GitHub-account tangle
-— see §1). Vercel runs the real build, so a broken build fails the deploy and
-the live alias stays on the last good build. Quality gates (lint / typecheck /
-unit / e2e) run in parallel in `ci.yml`.
+`.github/workflows/deploy.yml` triggers on CI's own completion
+(`workflow_run: { workflows: [CI], ... }`), not a raw push — a push that
+fails CI can never reach a deploy job, and there's no window where a deploy
+could run against a commit CI hasn't finished checking. Each release job
+re-checks `github.event.workflow_run.conclusion == 'success'` **and**
+`head_branch == 'main'` itself (a `workflow_run` event fires for every CI run
+on every branch and outcome), then checks out and deploys exactly
+`github.event.workflow_run.head_sha` — the same commit CI ran against, not
+whatever HEAD happens to be when the deploy job starts. Vercel runs the real
+build, so a broken build fails the deploy and the live alias stays on the
+last good build. After each deploy, a health-check step curls the app's
+`/api/health` and fails the release if it doesn't return 200.
 
 Already configured on the repo (via `gh secret/variable set` — no action needed):
 
@@ -105,18 +113,24 @@ Already configured on the repo (via `gh secret/variable set` — no action neede
 | variable | `VERCEL_PLATFORM_PROJECT_ID`  | `prj_uel7mjbbm6PuwQWZSc0k3CpCl3xi` |
 | variable | `VERCEL_BUGGYSHOP_PROJECT_ID` | `prj_EJ7hkDillvusf6IJofsMCZZHtRyP` |
 
-The workflow runs `rm -rf .git` before `vercel deploy` so Vercel doesn't block
-on the commit author not being a team member (`TEAM_ACCESS_REQUIRED`).
+The workflow runs `git archive <head_sha> | tar -x` into a scratch directory
+and deploys from that — no git metadata, no stray untracked files, and (same
+as the old blanket delete) Vercel never sees a commit author to block on
+(`TEAM_ACCESS_REQUIRED`); selection is via `VERCEL_ORG_ID`/`VERCEL_PROJECT_ID`.
 
 > Schema changes: new `supabase/migrations/` are NOT auto-applied (no Supabase
 > access token wired). Apply them via the Supabase MCP/CLI, or add a
-> `SUPABASE_ACCESS_TOKEN` secret + a `supabase db push` step later.
+> `SUPABASE_ACCESS_TOKEN` secret + a `supabase db push` step later (§ below —
+> `deploy-staging.yml` does exactly this once those secrets are set, plus a
+> `--dry-run` re-check that nothing is left pending and an optional REST-API
+> smoke check, enabled by also setting the `STAGING_SUPABASE_ANON_KEY`
+> variable).
 
 ## 6. Go-live checklist
 
 - [ ] **Rotate** any API keys shared outside a vault; put real ones only in Vercel/GitHub env.
 - [x] Vercel: both apps deployed via CLI (§1), env vars set, cross-app URLs correct.
-- [x] CI/CD: push to `main` auto-deploys both apps (`.github/workflows/deploy.yml`).
+- [x] CI/CD: a green CI run on `main` auto-deploys both apps, the exact commit CI verified (`.github/workflows/deploy.yml`).
 - [x] Supabase staging: migrations `0001–0013` applied + history repaired (done).
 - [ ] Supabase staging: schemas exposed + auth URLs (§2) — dashboard switches still pending.
 - [ ] Tutor: `GEMINI_API_KEY` set with free-tier quota (§3) — verify a reply.
@@ -129,9 +143,13 @@ on the commit author not being a team member (`TEAM_ACCESS_REQUIRED`).
 ## What stays manual vs automatic
 
 - Every `git push` → CI runs (GitHub Actions: lint/types/tests/builds/e2e
-  against a fresh local Supabase, **seeded via `sync --apply`**) and Vercel
-  builds previews/production.
+  against a fresh local Supabase, **seeded via `sync --apply`**).
+- Only once that CI run finishes with `conclusion: success` on `main` do
+  `deploy.yml` and `deploy-staging.yml` fire (`workflow_run`) — both deploy
+  the exact `head_sha` CI just verified, not whatever HEAD is by the time the
+  deploy job starts.
 - Schema changes: new files in `supabase/migrations/` — auto-applied to staging
-  by `deploy-staging.yml` once §5 secrets are set.
+  by `deploy-staging.yml` once §5 secrets are set, with a `--dry-run`
+  re-check that nothing is left pending afterward.
 - Prod Supabase project: create at launch (M3/M4) — keeps the free-tier slot
   open until then.

@@ -1,7 +1,8 @@
 # 09 — Deployment, CI/CD & the design system
 
-How QA Mastery ships. Both apps are **live** and redeploy automatically on every
-push to `main`.
+How QA Mastery ships. Both apps are **live** and redeploy automatically once
+CI finishes verifying a commit on `main` — not on the raw push itself (Task
+12: deploy only the exact verified commit).
 
 ## Live URLs
 
@@ -29,13 +30,18 @@ its subdirectory — the same way a dashboard monorepo import behaves. Env vars
 (Supabase URL/keys, `SANDBOX_JWT_SECRET`, the cross-app URLs, billing flags) are
 set per project; see `DEPLOYMENT.md` for the inventory.
 
-## CI/CD — auto-deploy on push to main
+## CI/CD — deploy only the exact commit CI verified
 
-`.github/workflows/deploy.yml` runs on every push to `main` and deploys **both
-apps** to Vercel production via the Vercel CLI (a matrix job, one per app).
-Vercel runs the real build, so a broken build fails the deploy and the live
-alias stays on the last good build. Quality gates (lint / typecheck / unit /
-e2e + manifest-leak grep) run in parallel in `ci.yml`.
+`.github/workflows/deploy.yml` triggers on CI's own completion
+(`workflow_run`), not the push itself. Each release job re-checks
+`github.event.workflow_run.conclusion == 'success'` and
+`head_branch == 'main'`, then checks out and deploys exactly
+`github.event.workflow_run.head_sha` — a matrix job, one per app, to Vercel
+production via the Vercel CLI. Vercel runs the real build, so a broken build
+fails the deploy and the live alias stays on the last good build. A
+post-deploy health check (`curl` against `/api/health`) fails the release if
+the new deployment isn't actually serving. Quality gates (lint / typecheck /
+unit / e2e + manifest-leak grep) run first, in `ci.yml`.
 
 Repo secrets/variables it depends on (already configured via `gh`):
 
@@ -61,7 +67,7 @@ To go live:
    `SUPABASE_SERVICE_ROLE_KEY`, `SANDBOX_JWT_SECRET` (must equal the platform's),
    and `NEXT_PUBLIC_BUGGYAPI_WS_URL` once step 5 is done.
 3. **Wire CI**: `gh variable set VERCEL_BUGGYAPI_PROJECT_ID --body <prj_…>` —
-   the next push to main deploys it automatically.
+   the next CI-green push to main deploys it automatically.
 4. **Point the platform at it**: set `NEXT_PUBLIC_BUGGYAPI_URL=https://qa-mastery-buggyapi.vercel.app`
    on the _platform_ Vercel project and redeploy (build-time inline).
 5. **Launch the WS service** (once, manual — see `services/buggyapi-ws/fly.toml`):
