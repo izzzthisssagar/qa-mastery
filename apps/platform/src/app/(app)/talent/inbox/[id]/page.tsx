@@ -14,7 +14,7 @@ export default async function ConversationPage({ params }: Params) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  if (!user) redirect("/login?next=" + encodeURIComponent(`/talent/inbox/${id}`));
 
   // Participant check via RLS: a non-participant can't read the conversation.
   const { data: convo } = await supabase
