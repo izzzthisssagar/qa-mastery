@@ -1,12 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   DOC_FILES,
+  GOVERNANCE_FILES,
   findAppCountViolations,
+  findGovernanceYamlSyntaxViolations,
   findMigrationCountViolations,
+  findMissingGovernanceFiles,
   findNodeVersionViolations,
+  findPlaceholderContactViolations,
+  findPrTemplateFieldViolations,
   findUndocumentedCommandViolations,
   getAppNames,
   getMigrationCount,
@@ -75,6 +82,57 @@ test("findUndocumentedCommandViolations passes a real root script", () => {
 test("findUndocumentedCommandViolations does not flag `pnpm exec` or `pnpm install`", () => {
   assert.deepEqual(
     findUndocumentedCommandViolations("Run `pnpm exec` then `pnpm install`.", ["dev"]),
+    [],
+  );
+});
+
+test("findMissingGovernanceFiles flags a nonexistent root", () => {
+  const missing = findMissingGovernanceFiles("/nonexistent-root-for-test");
+  assert.deepEqual(missing, GOVERNANCE_FILES);
+});
+
+test("findMissingGovernanceFiles passes once every real governance file exists", () => {
+  assert.deepEqual(findMissingGovernanceFiles(), []);
+});
+
+test("findGovernanceYamlSyntaxViolations flags invalid YAML", () => {
+  const dir = mkdtempSync(join(tmpdir(), "gov-yaml-"));
+  mkdirSync(join(dir, ".github", "ISSUE_TEMPLATE"), { recursive: true });
+  writeFileSync(join(dir, ".github", "ISSUE_TEMPLATE", "bug_report.yml"), "name: [unterminated");
+  const violations = findGovernanceYamlSyntaxViolations(dir);
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /invalid YAML/);
+});
+
+test("findGovernanceYamlSyntaxViolations passes on the real repo's templates", () => {
+  assert.deepEqual(findGovernanceYamlSyntaxViolations(), []);
+});
+
+test("findPlaceholderContactViolations flags a generic example.com address", () => {
+  const violations = findPlaceholderContactViolations(
+    "Report to conduct@example.com.",
+    "CODE_OF_CONDUCT.md",
+  );
+  assert.equal(violations.length, 1);
+});
+
+test("findPlaceholderContactViolations passes a real address", () => {
+  assert.deepEqual(
+    findPlaceholderContactViolations("Report to izzzthisssagar@gmail.com.", "CODE_OF_CONDUCT.md"),
+    [],
+  );
+});
+
+test("findPrTemplateFieldViolations flags a template missing the bug-registry field", () => {
+  const violations = findPrTemplateFieldViolations("## Summary\n\n## Tests\n");
+  assert.equal(violations.length, 1);
+});
+
+test("findPrTemplateFieldViolations passes a template with the field", () => {
+  assert.deepEqual(
+    findPrTemplateFieldViolations(
+      "- [ ] Intentional bug registry checked (BS-###/BA-### unaffected)",
+    ),
     [],
   );
 });

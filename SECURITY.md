@@ -6,7 +6,11 @@ Email **izzzthisssagar@gmail.com** with `[security]` in the subject. Please incl
 reproduction steps and impact. We aim to acknowledge within 72 hours. Do not open
 a public issue for a security report.
 
-> Note: **BuggyShop** (`apps/buggyshop`) and **BuggyAPI** (`apps/buggyapi`) are
+This policy covers the platform (`apps/platform`), the two practice apps
+(**BuggyShop** `apps/buggyshop`, **BuggyAPI** `apps/buggyapi`), and BuggyAPI's
+WebSocket practice surface (`services/buggyapi-ws`, deployed to Fly.io).
+
+> Note: **BuggyShop** and **BuggyAPI** (including its WebSocket service) are
 > _deliberately_ flawed practice apps — their bugs are intentional teaching
 > material (`BS-###` / `BA-###`, see each app's seeded-bug manifest). Reports
 > about either app's seeded behaviour are not security issues.

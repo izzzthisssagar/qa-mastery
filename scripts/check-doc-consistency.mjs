@@ -10,7 +10,29 @@
 // every other check-*.mjs gate in this repo. See docs/superpowers/plans/
 // 2026-07-26-release-repository-governance.md Task 13.
 
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { parse as parseYaml } from "yaml";
+
+export const GOVERNANCE_FILES = [
+  "CONTRIBUTING.md",
+  "CODE_OF_CONDUCT.md",
+  ".github/ISSUE_TEMPLATE/bug_report.yml",
+  ".github/ISSUE_TEMPLATE/feature_request.yml",
+  ".github/ISSUE_TEMPLATE/technical_debt.yml",
+  ".github/ISSUE_TEMPLATE/config.yml",
+  ".github/pull_request_template.md",
+];
+
+const PLACEHOLDER_CONTACT_PATTERNS = [
+  /\[INSERT[^\]]*\]/i,
+  /your-?email@example\.com/i,
+  /you@example\.com/i,
+  /INSERT_EMAIL/i,
+  /TODO:?\s*(add|insert|fill in)?\s*contact/i,
+  /conduct@example\.com/i,
+  /security@example\.com/i,
+  /<[^>]*email[^>]*>/i,
+];
 
 export const DOC_FILES = [
   "README.md",
@@ -117,6 +139,74 @@ export function findUndocumentedCommandViolations(text, rootScripts) {
   return violations;
 }
 
+/** Every file a contributor/issue/PR workflow needs is actually present. */
+export function findMissingGovernanceFiles(root = ".") {
+  return GOVERNANCE_FILES.filter((f) => !existsSync(`${root}/${f}`));
+}
+
+/** Every ISSUE_TEMPLATE `.yml` file must be syntactically valid YAML — a
+ *  broken template silently fails to render as a GitHub issue form. */
+export function findGovernanceYamlSyntaxViolations(root = ".") {
+  const violations = [];
+  for (const f of GOVERNANCE_FILES) {
+    if (!f.endsWith(".yml")) continue;
+    const path = `${root}/${f}`;
+    if (!existsSync(path)) continue;
+    try {
+      parseYaml(readFileSync(path, "utf8"));
+    } catch (err) {
+      violations.push(`${f}: invalid YAML (${err.message})`);
+    }
+  }
+  return violations;
+}
+
+/** A governance doc that still carries a generic template placeholder
+ *  (copy-pasted from Contributor Covenant boilerplate, an example.com
+ *  address, etc.) instead of this repo's real enforcement contact. */
+export function findPlaceholderContactViolations(text, fileLabel) {
+  const violations = [];
+  for (const re of PLACEHOLDER_CONTACT_PATTERNS) {
+    if (re.test(text)) {
+      violations.push(`${fileLabel}: contains a placeholder contact value (matched ${re})`);
+    }
+  }
+  return violations;
+}
+
+/** The PR template must carry the intentional-bug-registry field so a
+ *  reviewer can tell a real regression from a seeded BuggyShop/BuggyAPI bug. */
+export function findPrTemplateFieldViolations(text) {
+  const violations = [];
+  if (!/Intentional bug registry checked/i.test(text)) {
+    violations.push(
+      '.github/pull_request_template.md: missing the "Intentional bug registry checked" field',
+    );
+  }
+  return violations;
+}
+
+function checkGovernance(root = ".") {
+  const violations = [];
+  for (const f of findMissingGovernanceFiles(root)) {
+    violations.push(`${f}: required governance file is missing`);
+  }
+  violations.push(...findGovernanceYamlSyntaxViolations(root));
+
+  for (const f of ["CODE_OF_CONDUCT.md", "CONTRIBUTING.md", ".github/ISSUE_TEMPLATE/config.yml"]) {
+    const path = `${root}/${f}`;
+    if (!existsSync(path)) continue;
+    violations.push(...findPlaceholderContactViolations(readFileSync(path, "utf8"), f));
+  }
+
+  const prTemplatePath = `${root}/.github/pull_request_template.md`;
+  if (existsSync(prTemplatePath)) {
+    violations.push(...findPrTemplateFieldViolations(readFileSync(prTemplatePath, "utf8")));
+  }
+
+  return violations;
+}
+
 function main() {
   const appNames = getAppNames();
   const nodeMajor = getNodeMajor();
@@ -134,6 +224,7 @@ function main() {
     ];
     for (const v of violations) allViolations.push(`${file}: ${v}`);
   }
+  allViolations.push(...checkGovernance());
 
   if (allViolations.length > 0) {
     console.error("Documentation drift found (Task 13):");
@@ -143,7 +234,7 @@ function main() {
   }
 
   console.log(
-    `check-doc-consistency: OK (${DOC_FILES.length} doc(s) checked against ${appNames.length} apps, Node >=${nodeMajor}, ${migrationCount} migrations, ${rootScripts.length} root scripts)`,
+    `check-doc-consistency: OK (${DOC_FILES.length} doc(s) checked against ${appNames.length} apps, Node >=${nodeMajor}, ${migrationCount} migrations, ${rootScripts.length} root scripts, ${GOVERNANCE_FILES.length} governance files present)`,
   );
 }
 

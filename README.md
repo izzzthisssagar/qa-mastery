@@ -115,3 +115,11 @@ free `GEMINI_API_KEY` for the tutor, optional Paddle keys. See
 
 **Phase 2 (later):** API/perf/security/DB tracks, richer stateful BuggyShop
 defects, Playwright/JS secondary stack, Android app.
+
+## Contributing
+
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the local setup, the
+`pnpm verify` quality gate, seeded-bug rules, and migration conventions.
+Participation is governed by the
+[Contributor Covenant](./CODE_OF_CONDUCT.md). Found a security issue? Don't
+open a public issue — see [`SECURITY.md`](./SECURITY.md).
