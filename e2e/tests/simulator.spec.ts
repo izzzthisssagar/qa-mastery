@@ -39,13 +39,16 @@ test.describe("coding simulator", () => {
     await expect(page.locator("body")).toContainText('print("Hello, QA!")');
   });
 
-  test("falls back to a plain textarea on touch-only (no fine pointer) devices", async ({ page }) => {
+  test("falls back to a plain textarea on touch-only (no fine pointer) devices", async ({
+    page,
+  }) => {
     // Stubbing matchMedia is deterministic across Chromium AND WebKit, unlike
     // device-emulation presets (isMobile isn't supported on WebKit contexts).
     await page.addInitScript(() => {
       // Cast to `any`: this runs in the browser (DOM lib), but the e2e
       // package's tsconfig has no "dom" lib, so `window`/`MediaQueryList`
       // aren't declared types here.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const win = globalThis as any;
       const real = win.matchMedia.bind(win);
       win.matchMedia = (query: string) =>
