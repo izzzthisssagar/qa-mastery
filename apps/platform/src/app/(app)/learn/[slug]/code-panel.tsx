@@ -7,7 +7,7 @@ import type { RunResult } from "@qa-mastery/grading";
 
 export function CodeRunnerLab({ slug }: { slug: string }) {
   const [code, setCode] = useState(
-    "public class Hello {\n    public static void main(String[] args) {\n        System.out.println(\"Tests starting...\");\n    }\n}"
+    'public class Hello {\n    public static void main(String[] args) {\n        System.out.println("Tests starting...");\n    }\n}',
   );
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<RunResult | null>(null);
@@ -15,7 +15,7 @@ export function CodeRunnerLab({ slug }: { slug: string }) {
 
   // Auto-resize textarea and tab support
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Tab') {
+    if (e.key === "Tab") {
       e.preventDefault();
       const target = e.target as HTMLTextAreaElement;
       const start = target.selectionStart;
@@ -33,9 +33,13 @@ export function CodeRunnerLab({ slug }: { slug: string }) {
     setError(null);
     try {
       const { runId } = await submitCodeLab(slug, code);
-      
+
       let currentResult: RunResult | null = null;
-      while (!currentResult || currentResult.status === "running" || currentResult.status === "queued") {
+      while (
+        !currentResult ||
+        currentResult.status === "running" ||
+        currentResult.status === "queued"
+      ) {
         await new Promise((r) => setTimeout(r, 1000));
         currentResult = await pollCodeRun(slug, runId);
         setResult(currentResult);
@@ -68,15 +72,23 @@ export function CodeRunnerLab({ slug }: { slug: string }) {
         <Button onClick={runCode} loading={running} disabled={!code.trim()} data-testid="run-code">
           {running ? "Running..." : "Run Code"}
         </Button>
-        {result?.status === "passed" && <span className="text-xs font-semibold text-success-text">Execution completed</span>}
+        {result?.status === "passed" && (
+          <span className="text-xs font-semibold text-success-text">Execution completed</span>
+        )}
       </div>
 
-      {error && <p role="alert" className="mt-4 text-sm text-danger-text">{error}</p>}
+      {error && (
+        <p role="alert" className="mt-4 text-sm text-danger-text">
+          {error}
+        </p>
+      )}
 
       {result && (
         <div className="mt-4" role="status" aria-live="polite">
           <p className="text-xs font-semibold text-muted-foreground mb-1">Console Output:</p>
-          <pre className={`w-full bg-black border ${result.passed ? 'border-border' : 'border-red-900/50'} rounded-lg p-4 font-mono text-xs text-foreground overflow-auto whitespace-pre-wrap`}>
+          <pre
+            className={`w-full bg-black border ${result.passed ? "border-border" : "border-red-900/50"} rounded-lg p-4 font-mono text-xs text-foreground overflow-auto whitespace-pre-wrap`}
+          >
             {result.console || "No output."}
           </pre>
         </div>

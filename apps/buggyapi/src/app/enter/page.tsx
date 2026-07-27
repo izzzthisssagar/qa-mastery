@@ -98,8 +98,8 @@ export default function EnterPage() {
         )}
         {status === "missing" && (
           <p>
-            No lab pass found. Open BuggyAPI from a lesson on the QA Mastery
-            platform — it mints your sandbox access automatically.
+            No lab pass found. Open BuggyAPI from a lesson on the QA Mastery platform — it mints
+            your sandbox access automatically.
           </p>
         )}
         {status === "error" && (

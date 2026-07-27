@@ -30,7 +30,13 @@ function SuccessBadge({ show }: { show: boolean }) {
           className="mt-4 flex items-center justify-center gap-2 rounded-lg bg-emerald-500/10 py-3 text-success-text border border-emerald-500/20 shadow-lg shadow-emerald-500/5"
         >
           <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-accent-foreground">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={3}
+            >
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
@@ -58,7 +64,10 @@ export function SeeWidget() {
       <BoundarySlider
         lessonSlug={slug}
         onMilestone={(m) => {
-          if (m === "found-boundary-bug") { markStep("see"); setDone(true); }
+          if (m === "found-boundary-bug") {
+            markStep("see");
+            setDone(true);
+          }
         }}
       />
     </WidgetWrapper>
@@ -73,7 +82,10 @@ export function StateMachineWidget() {
       <StateMachine
         lessonSlug={slug}
         onMilestone={(m) => {
-          if (m === "found-invalid-transition") { markStep("see"); setDone(true); }
+          if (m === "found-invalid-transition") {
+            markStep("see");
+            setDone(true);
+          }
         }}
       />
     </WidgetWrapper>
@@ -88,7 +100,10 @@ export function DecisionTableWidget() {
       <DecisionTable
         lessonSlug={slug}
         onMilestone={(m) => {
-          if (m === "explored-decision-table") { markStep("see"); setDone(true); }
+          if (m === "explored-decision-table") {
+            markStep("see");
+            setDone(true);
+          }
         }}
       />
     </WidgetWrapper>
@@ -103,7 +118,10 @@ export function TriageGridWidget() {
       <TriageGrid
         lessonSlug={slug}
         onMilestone={(m) => {
-          if (m === "triaged-divergent") { markStep("see"); setDone(true); }
+          if (m === "triaged-divergent") {
+            markStep("see");
+            setDone(true);
+          }
         }}
       />
     </WidgetWrapper>
@@ -118,7 +136,10 @@ export function PartitionPickerWidget() {
       <PartitionPicker
         lessonSlug={slug}
         onMilestone={(m) => {
-          if (m === "covered-all-partitions") { markStep("see"); setDone(true); }
+          if (m === "covered-all-partitions") {
+            markStep("see");
+            setDone(true);
+          }
         }}
       />
     </WidgetWrapper>
@@ -132,7 +153,10 @@ export function AutomationPyramidWidget() {
     <WidgetWrapper isDone={done}>
       <AutomationPyramid
         onMilestone={(m) => {
-          if (m === "toggled-ice-cream" || m === "explored-layers") { markStep("see"); setDone(true); }
+          if (m === "toggled-ice-cream" || m === "explored-layers") {
+            markStep("see");
+            setDone(true);
+          }
         }}
       />
     </WidgetWrapper>
@@ -146,7 +170,10 @@ export function WebDriverArchitectureWidget() {
     <WidgetWrapper isDone={done}>
       <WebDriverArchitecture
         onMilestone={(m) => {
-          if (m === "completed-flow") { markStep("see"); setDone(true); }
+          if (m === "completed-flow") {
+            markStep("see");
+            setDone(true);
+          }
         }}
       />
     </WidgetWrapper>
@@ -160,7 +187,10 @@ export function LifecycleVisualizerWidget() {
     <WidgetWrapper isDone={done}>
       <LifecycleVisualizer
         onMilestone={(m) => {
-          if (m === "completed-lifecycle") { markStep("see"); setDone(true); }
+          if (m === "completed-lifecycle") {
+            markStep("see");
+            setDone(true);
+          }
         }}
       />
     </WidgetWrapper>
@@ -174,7 +204,10 @@ export function POMVisualizerWidget() {
     <WidgetWrapper isDone={done}>
       <POMVisualizer
         onMilestone={(m) => {
-          if (m === "completed-pom-flow") { markStep("see"); setDone(true); }
+          if (m === "completed-pom-flow") {
+            markStep("see");
+            setDone(true);
+          }
         }}
       />
     </WidgetWrapper>
@@ -188,7 +221,10 @@ export function SDLCVisualizerWidget() {
     <WidgetWrapper isDone={done}>
       <SDLCVisualizer
         onMilestone={(m) => {
-          if (m === "viewed-production-cost") { markStep("see"); setDone(true); }
+          if (m === "viewed-production-cost") {
+            markStep("see");
+            setDone(true);
+          }
         }}
       />
     </WidgetWrapper>
@@ -202,7 +238,10 @@ export function JiraBoardWidget() {
     <WidgetWrapper isDone={done}>
       <JiraBoard
         onMilestone={(m) => {
-          if (m === "completed-ticket") { markStep("see"); setDone(true); }
+          if (m === "completed-ticket") {
+            markStep("see");
+            setDone(true);
+          }
         }}
       />
     </WidgetWrapper>
@@ -216,7 +255,10 @@ export function ExploratoryTimerWidget() {
     <WidgetWrapper isDone={done}>
       <ExploratoryTimer
         onMilestone={(m) => {
-          if (m === "completed-session") { markStep("see"); setDone(true); }
+          if (m === "completed-session") {
+            markStep("see");
+            setDone(true);
+          }
         }}
       />
     </WidgetWrapper>
@@ -230,7 +272,10 @@ export function TestingTypeSorterWidget() {
     <WidgetWrapper isDone={done}>
       <TestingTypeSorter
         onMilestone={(m) => {
-          if (m === "sorted-all-types") { markStep("see"); setDone(true); }
+          if (m === "sorted-all-types") {
+            markStep("see");
+            setDone(true);
+          }
         }}
       />
     </WidgetWrapper>

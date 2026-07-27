@@ -24,23 +24,23 @@ must be corrected when the first new module completion updates durable state.
 
 ## Queue
 
-| Order | Map module | Current state | Assigned when slot opens |
-|---:|---|---:|---|
-| 1 | M24 Non-functional testing (intro) | 8/20 | fresh module agent |
-| 2 | M25 Automation foundations | 8/16 | fresh module agent |
-| 3 | M26 Selenium WebDriver | 4/16 on existing isolated branch | fresh module agent |
-| 4 | M37 Performance testing | 0/12 | fresh module agent |
-| 5 | M38 Security testing — web | 0/20 | fresh module agent |
-| 6 | M39 API & modern security | 0/20 | fresh module agent |
-| 7 | M40 Accessibility testing | 0/16 | fresh module agent |
-| 8 | M41 Mobile testing | 0/16 | fresh module agent |
-| 9 | M42 Agile & DevOps for testers | 0/12 | fresh module agent |
-| 10 | M43 Test management & reporting | 0/20 | fresh module agent |
-| 11 | M44 AI & the modern tester | 0/16 | fresh module agent |
-| 12 | M45 A portfolio that gets interviews | 0/12 | fresh module agent |
-| 13 | M46 Résumé & applications | 0/12 | fresh module agent |
-| 14 | M47 Interviews | 0/16 | fresh module agent |
-| 15 | M48 Your first 90 days | 0/16 | fresh module agent |
+| Order | Map module                           |                    Current state | Assigned when slot opens |
+| ----: | ------------------------------------ | -------------------------------: | ------------------------ |
+|     1 | M24 Non-functional testing (intro)   |                             8/20 | fresh module agent       |
+|     2 | M25 Automation foundations           |                             8/16 | fresh module agent       |
+|     3 | M26 Selenium WebDriver               | 4/16 on existing isolated branch | fresh module agent       |
+|     4 | M37 Performance testing              |                             0/12 | fresh module agent       |
+|     5 | M38 Security testing — web           |                             0/20 | fresh module agent       |
+|     6 | M39 API & modern security            |                             0/20 | fresh module agent       |
+|     7 | M40 Accessibility testing            |                             0/16 | fresh module agent       |
+|     8 | M41 Mobile testing                   |                             0/16 | fresh module agent       |
+|     9 | M42 Agile & DevOps for testers       |                             0/12 | fresh module agent       |
+|    10 | M43 Test management & reporting      |                             0/20 | fresh module agent       |
+|    11 | M44 AI & the modern tester           |                             0/16 | fresh module agent       |
+|    12 | M45 A portfolio that gets interviews |                             0/12 | fresh module agent       |
+|    13 | M46 Résumé & applications            |                             0/12 | fresh module agent       |
+|    14 | M47 Interviews                       |                             0/16 | fresh module agent       |
+|    15 | M48 Your first 90 days               |                             0/16 | fresh module agent       |
 
 This is a rolling queue, not five rigid batches. Completion of any active module opens the next slot.
 
@@ -83,10 +83,10 @@ Every new topic must follow the established rich-note anatomy:
   Python playground. Item 5 (parity Java) does **not** apply retroactively to them; new modules
   still follow point 5 above.
 
-**Enforcement note:** related-link and prose `[[wikilink]]` *resolvability* is now a hard gate —
+**Enforcement note:** related-link and prose `[[wikilink]]` _resolvability_ is now a hard gate —
 `packages/curriculum/scripts/check-note-links.mjs` and a case in `test/notes.test.ts` fail on any
 link whose `module/chapter/topic` target is not a real note. The zod schema only ever checked link
-*shape*; this closes that gap.
+_shape_; this closes that gap.
 
 Technical topics require current primary documentation. Medical, legal, security, accessibility,
 privacy, AI, and employment claims require scope-safe language and current authoritative sources.

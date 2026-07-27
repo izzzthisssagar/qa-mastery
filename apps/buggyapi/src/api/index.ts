@@ -139,7 +139,10 @@ app.openapi(
         description: "Validation failed.",
         content: { "application/json": { schema: ErrorSchema } },
       },
-      500: { description: "Internal error.", content: { "application/json": { schema: ErrorSchema } } },
+      500: {
+        description: "Internal error.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
     },
   }),
   async (c) => {
@@ -220,8 +223,14 @@ app.openapi(
         description: "All projects in your sandbox.",
         content: { "application/json": { schema: z.array(ProjectSchema) } },
       },
-      401: { description: "Not authenticated.", content: { "application/json": { schema: ErrorSchema } } },
-      500: { description: "Internal error.", content: { "application/json": { schema: ErrorSchema } } },
+      401: {
+        description: "Not authenticated.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
+      500: {
+        description: "Internal error.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
     },
   }),
   async (c) => {
@@ -245,13 +254,22 @@ app.openapi(
     request: { body: { content: { "application/json": { schema: ProjectCreateSchema } } } },
     responses: {
       201: { description: "Created.", content: { "application/json": { schema: ProjectSchema } } },
-      401: { description: "Not authenticated.", content: { "application/json": { schema: ErrorSchema } } },
+      401: {
+        description: "Not authenticated.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
       409: {
         description: "Project key already exists in your sandbox.",
         content: { "application/json": { schema: ErrorSchema } },
       },
-      422: { description: "Validation failed.", content: { "application/json": { schema: ErrorSchema } } },
-      500: { description: "Internal error.", content: { "application/json": { schema: ErrorSchema } } },
+      422: {
+        description: "Validation failed.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
+      500: {
+        description: "Internal error.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
     },
   }),
   async (c) => {
@@ -285,9 +303,18 @@ app.openapi(
     security: SECURITY,
     request: { params: IdParam },
     responses: {
-      200: { description: "The project.", content: { "application/json": { schema: ProjectSchema } } },
-      401: { description: "Not authenticated.", content: { "application/json": { schema: ErrorSchema } } },
-      404: { description: "No such project.", content: { "application/json": { schema: ErrorSchema } } },
+      200: {
+        description: "The project.",
+        content: { "application/json": { schema: ProjectSchema } },
+      },
+      401: {
+        description: "Not authenticated.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
+      404: {
+        description: "No such project.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
     },
   }),
   async (c) => {
@@ -316,9 +343,18 @@ app.openapi(
     },
     responses: {
       200: { description: "Updated.", content: { "application/json": { schema: ProjectSchema } } },
-      401: { description: "Not authenticated.", content: { "application/json": { schema: ErrorSchema } } },
-      404: { description: "No such project.", content: { "application/json": { schema: ErrorSchema } } },
-      422: { description: "Validation failed.", content: { "application/json": { schema: ErrorSchema } } },
+      401: {
+        description: "Not authenticated.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
+      404: {
+        description: "No such project.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
+      422: {
+        description: "Validation failed.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
     },
   }),
   async (c) => {
@@ -346,8 +382,14 @@ app.openapi(
     request: { params: IdParam },
     responses: {
       204: { description: "Deleted — no body, on purpose." },
-      401: { description: "Not authenticated.", content: { "application/json": { schema: ErrorSchema } } },
-      404: { description: "No such project.", content: { "application/json": { schema: ErrorSchema } } },
+      401: {
+        description: "Not authenticated.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
+      404: {
+        description: "No such project.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
     },
   }),
   async (c) => {
@@ -369,6 +411,9 @@ app.openapi(
 const ticketRow =
   "id, project_id, number, title, description, status, priority, assignee_id, labels, due_date, created_at, updated_at, ba_projects!inner(key)";
 
+// TECH_DEBT: `row` is an untyped Supabase select() result with a joined
+// ba_projects row; no generated row type for this shape yet. Tracked by
+// docs/superpowers/plans/2026-07-26-release-repository-governance.md Task 5.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toTicket(row: any) {
   const { ba_projects, ...rest } = row;
@@ -394,9 +439,18 @@ app.openapi(
           "X-Total-Count": z.string().openapi({ description: "Total matching tickets." }),
         }),
       },
-      401: { description: "Not authenticated.", content: { "application/json": { schema: ErrorSchema } } },
-      422: { description: "Validation failed.", content: { "application/json": { schema: ErrorSchema } } },
-      500: { description: "Internal error.", content: { "application/json": { schema: ErrorSchema } } },
+      401: {
+        description: "Not authenticated.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
+      422: {
+        description: "Validation failed.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
+      500: {
+        description: "Internal error.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
     },
   }),
   async (c) => {
@@ -450,13 +504,22 @@ app.openapi(
     request: { body: { content: { "application/json": { schema: TicketCreateSchema } } } },
     responses: {
       201: { description: "Created.", content: { "application/json": { schema: TicketSchema } } },
-      401: { description: "Not authenticated.", content: { "application/json": { schema: ErrorSchema } } },
+      401: {
+        description: "Not authenticated.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
       404: {
         description: "project_id doesn't exist in your sandbox.",
         content: { "application/json": { schema: ErrorSchema } },
       },
-      422: { description: "Validation failed.", content: { "application/json": { schema: ErrorSchema } } },
-      500: { description: "Internal error.", content: { "application/json": { schema: ErrorSchema } } },
+      422: {
+        description: "Validation failed.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
+      500: {
+        description: "Internal error.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
     },
   }),
   async (c) => {
@@ -517,9 +580,18 @@ app.openapi(
     security: SECURITY,
     request: { params: IdParam },
     responses: {
-      200: { description: "The ticket.", content: { "application/json": { schema: TicketSchema } } },
-      401: { description: "Not authenticated.", content: { "application/json": { schema: ErrorSchema } } },
-      404: { description: "No such ticket.", content: { "application/json": { schema: ErrorSchema } } },
+      200: {
+        description: "The ticket.",
+        content: { "application/json": { schema: TicketSchema } },
+      },
+      401: {
+        description: "Not authenticated.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
+      404: {
+        description: "No such ticket.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
     },
   }),
   async (c) => {
@@ -554,9 +626,18 @@ app.openapi(
     },
     responses: {
       200: { description: "Updated.", content: { "application/json": { schema: TicketSchema } } },
-      401: { description: "Not authenticated.", content: { "application/json": { schema: ErrorSchema } } },
-      404: { description: "No such ticket.", content: { "application/json": { schema: ErrorSchema } } },
-      422: { description: "Validation failed.", content: { "application/json": { schema: ErrorSchema } } },
+      401: {
+        description: "Not authenticated.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
+      404: {
+        description: "No such ticket.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
+      422: {
+        description: "Validation failed.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
     },
   }),
   async (c) => {
@@ -584,8 +665,14 @@ app.openapi(
     request: { params: IdParam },
     responses: {
       204: { description: "Deleted." },
-      401: { description: "Not authenticated.", content: { "application/json": { schema: ErrorSchema } } },
-      404: { description: "No such ticket.", content: { "application/json": { schema: ErrorSchema } } },
+      401: {
+        description: "Not authenticated.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
+      404: {
+        description: "No such ticket.",
+        content: { "application/json": { schema: ErrorSchema } },
+      },
     },
   }),
   async (c) => {
@@ -634,8 +721,14 @@ app.doc31("/v1/openapi.json", {
       "SOAP 1.1 at `/api/soap` (WSDL: `/api/soap?wsdl`).",
   },
   tags: [
-    { name: "auth", description: "Login + identity. Schemes: API key, Bearer, Basic (+ OAuth below)." },
-    { name: "oauth", description: "OAuth2: client_credentials & authorization_code (RFC 6749-shaped)." },
+    {
+      name: "auth",
+      description: "Login + identity. Schemes: API key, Bearer, Basic (+ OAuth below).",
+    },
+    {
+      name: "oauth",
+      description: "OAuth2: client_credentials & authorization_code (RFC 6749-shaped).",
+    },
     { name: "projects", description: "TaskFlight projects — simple CRUD." },
     { name: "tickets", description: "Tickets — CRUD plus pagination, filtering, and sorting." },
     { name: "attachments", description: "Multipart uploads to a private bucket → signed URLs." },

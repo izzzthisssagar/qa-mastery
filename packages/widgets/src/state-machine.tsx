@@ -72,7 +72,10 @@ export default function StateMachine({ onMilestone }: WidgetProps) {
       </div>
 
       <p className="mt-3 text-sm text-muted-foreground">
-        Current state: <span data-testid="current-state" className="font-semibold text-foreground">{state}</span>
+        Current state:{" "}
+        <span data-testid="current-state" className="font-semibold text-foreground">
+          {state}
+        </span>
       </p>
 
       <div className="mt-4 flex flex-wrap gap-2">
@@ -103,8 +106,9 @@ export default function StateMachine({ onMilestone }: WidgetProps) {
           className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200"
         >
           🚫 Invalid transition — you can&apos;t <strong>{rejected}</strong> an order that is{" "}
-          <strong>{state}</strong>. A correct system refuses this; a buggy one (like BuggyShop&apos;s
-          BS-014) lets it through. This is exactly what state-transition tests catch.
+          <strong>{state}</strong>. A correct system refuses this; a buggy one (like
+          BuggyShop&apos;s BS-014) lets it through. This is exactly what state-transition tests
+          catch.
         </p>
       ) : (
         <p data-testid="transition-hint" className="mt-4 text-xs text-muted-foreground">

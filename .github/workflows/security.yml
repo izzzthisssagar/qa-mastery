@@ -1,9 +1,16 @@
 name: security
 
+# workflow_call (Task 11) lets ci.yml run this as part of the same commit's
+# checks and read back one aggregate result via security-gate; pull_request/
+# push/workflow_dispatch stay too, so this workflow is still independently
+# runnable for ad hoc diagnostics (a suspected leaked secret, checking a
+# branch before it has a PR) without needing a caller.
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+  workflow_call:
 
 concurrency:
   group: security-${{ github.ref }}
@@ -14,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # full history so gitleaks can scan all commits
       # Run the gitleaks binary directly. The gitleaks-action wrapper posts a
@@ -23,7 +30,7 @@ jobs:
       - name: Secret scan (gitleaks)
         run: |
           docker run --rm -v "${{ github.workspace }}:/repo" \
-            zricethezav/gitleaks:latest detect \
+            zricethezav/gitleaks:v8.30.1@sha256:b109bc5f8f76a38196a3e413704fc5b9e3c32360bce4e4b603bd6f45b3721dbb detect \
             --source=/repo --config=/repo/.gitleaks.toml \
             --redact --no-banner --exit-code 1
 
@@ -31,9 +38,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: pnpm
@@ -48,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Catches a malformed dependabot.yml (bad indentation, unknown
       # ecosystem key, typo'd interval) before it silently stops opening
       # update PRs — python3/PyYAML ship on the ubuntu-latest image already,
@@ -70,3 +77,19 @@ jobs:
               assert u.get('schedule', {}).get('interval'), f'{u.get(\"package-ecosystem\")} update block missing schedule.interval'
           print('dependabot.yml OK:', ecosystems)
           "
+
+  # Aggregate result a caller (ci.yml's release-gate) can depend on with one
+  # `needs:` entry instead of naming all three jobs above individually.
+  security-gate:
+    needs: [secret-scan, dependency-audit, dependabot-config]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Evaluate required jobs
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          [ "${{ needs.secret-scan.result }}" = "success" ] || fail "secret-scan did not succeed"
+          [ "${{ needs.dependency-audit.result }}" = "success" ] || fail "dependency-audit did not succeed"
+          [ "${{ needs.dependabot-config.result }}" = "success" ] || fail "dependabot-config did not succeed"
+          echo "All required jobs passed."

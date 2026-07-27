@@ -64,7 +64,10 @@ export async function launchBuggyApi(
   const baseUrl =
     process.env.NEXT_PUBLIC_BUGGYAPI_URL || (process.env.VERCEL ? null : "http://localhost:3002");
   if (!baseUrl) {
-    return { ok: false, error: "BuggyAPI isn't live yet — it's being provisioned. Check back soon!" };
+    return {
+      ok: false,
+      error: "BuggyAPI isn't live yet — it's being provisioned. Check back soon!",
+    };
   }
   return { ok: true, url: `${baseUrl}/enter#t=${token}` };
 }
@@ -99,9 +102,7 @@ interface ApiManifestRow {
  * writes score/matched (invariant 2). The answer key stays server-side except
  * as post-match feedback (invariant 1).
  */
-export async function submitApiBugReport(
-  report: ApiBugReportInput,
-): Promise<ApiBugReportResult> {
+export async function submitApiBugReport(report: ApiBugReportInput): Promise<ApiBugReportResult> {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },

@@ -70,11 +70,7 @@ export const NOTE_TRACKS: readonly NoteTrack[] = [
     slug: "api-and-services",
     title: "API & Services",
     blurb: "Test the layer under the UI — HTTP by hand, automated API suites, API security.",
-    moduleSlugs: [
-      "api-testing-fundamentals",
-      "api-test-automation",
-      "api-and-modern-security",
-    ],
+    moduleSlugs: ["api-testing-fundamentals", "api-test-automation", "api-and-modern-security"],
   },
   {
     slug: "data",
@@ -112,11 +108,9 @@ export const NOTE_TRACKS: readonly NoteTrack[] = [
   {
     slug: "reporting-and-ai",
     title: "Reporting & AI",
-    blurb: "Communicate the work and use AI critically — metrics, reporting, and the modern tester.",
-    moduleSlugs: [
-      "test-management-and-reporting",
-      "ai-and-the-modern-tester",
-    ],
+    blurb:
+      "Communicate the work and use AI critically — metrics, reporting, and the modern tester.",
+    moduleSlugs: ["test-management-and-reporting", "ai-and-the-modern-tester"],
   },
   {
     slug: "career",

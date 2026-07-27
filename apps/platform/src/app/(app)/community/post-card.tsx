@@ -56,7 +56,9 @@ export function PostCard({ post }: { post: FeedPost }) {
 
       <Link href={`/community/${post.id}`} className="mt-2 block">
         {post.title && <h2 className="text-lg font-semibold text-foreground">{post.title}</h2>}
-        <p className="mt-1 whitespace-pre-wrap text-sm text-foreground/90 line-clamp-6">{post.body}</p>
+        <p className="mt-1 whitespace-pre-wrap text-sm text-foreground/90 line-clamp-6">
+          {post.body}
+        </p>
       </Link>
 
       {image?.path && (
@@ -67,7 +69,11 @@ export function PostCard({ post }: { post: FeedPost }) {
         />
       )}
       {video?.url && (
-        <video src={video.url} controls className="mt-3 max-h-96 w-full rounded-xl border border-border" />
+        <video
+          src={video.url}
+          controls
+          className="mt-3 max-h-96 w-full rounded-xl border border-border"
+        />
       )}
 
       {post.tags.length > 0 && (
@@ -95,7 +101,10 @@ export function PostCard({ post }: { post: FeedPost }) {
           <span aria-hidden>{liked ? "♥" : "♡"}</span>
           {count}
         </button>
-        <Link href={`/community/${post.id}`} className="flex items-center gap-1.5 hover:text-foreground">
+        <Link
+          href={`/community/${post.id}`}
+          className="flex items-center gap-1.5 hover:text-foreground"
+        >
           <span aria-hidden>💬</span>
           {post.commentCount}
         </Link>

@@ -48,13 +48,70 @@ const BUILTIN = /^[a-z]+-(?:50|100|200|300|400|500|600|700|800|900|950)$/;
 const NON_TOKEN_WORDS = new Set(["white", "black", "transparent", "current", "inherit"]);
 // text-/bg-/border- utilities that are not colors at all.
 const NON_COLOR = new Set([
-  "left","center","right","justify","start","end",
-  "xs","sm","base","lg","xl","2xl","3xl","4xl","5xl","6xl","7xl","8xl","9xl",
-  "wrap","nowrap","balance","pretty","ellipsis","clip","clip-text","clip-padding","clip-border","clip-content",
-  "b","t","l","r","x","y","s","e","none","solid","dashed","dotted","double","hidden",
-  "collapse","separate","cover","contain","auto","fixed","local","scroll",
-  "top","bottom","repeat","no-repeat","repeat-x","repeat-y","origin-border","origin-padding","origin-content",
-  "blend-normal","blend-multiply","blend-overlay","blend-screen",
+  "left",
+  "center",
+  "right",
+  "justify",
+  "start",
+  "end",
+  "xs",
+  "sm",
+  "base",
+  "lg",
+  "xl",
+  "2xl",
+  "3xl",
+  "4xl",
+  "5xl",
+  "6xl",
+  "7xl",
+  "8xl",
+  "9xl",
+  "wrap",
+  "nowrap",
+  "balance",
+  "pretty",
+  "ellipsis",
+  "clip",
+  "clip-text",
+  "clip-padding",
+  "clip-border",
+  "clip-content",
+  "b",
+  "t",
+  "l",
+  "r",
+  "x",
+  "y",
+  "s",
+  "e",
+  "none",
+  "solid",
+  "dashed",
+  "dotted",
+  "double",
+  "hidden",
+  "collapse",
+  "separate",
+  "cover",
+  "contain",
+  "auto",
+  "fixed",
+  "local",
+  "scroll",
+  "top",
+  "bottom",
+  "repeat",
+  "no-repeat",
+  "repeat-x",
+  "repeat-y",
+  "origin-border",
+  "origin-padding",
+  "origin-content",
+  "blend-normal",
+  "blend-multiply",
+  "blend-overlay",
+  "blend-screen",
 ]);
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -74,7 +131,8 @@ function walk(dir: string, out: string[] = []): string[] {
    (580 raw zinc classes across 72 files). Decorative accents (emerald/amber/
    sky/…) stay allowed; only the neutral `zinc` ramp is banned. */
 describe("no raw zinc — neutrals must be semantic tokens", () => {
-  const ZINC = /(?:text|bg|border|divide|ring|outline|from|via|to|placeholder|shadow|fill|stroke)-zinc-\d{2,3}(?:\/\d{1,3})?/g;
+  const ZINC =
+    /(?:text|bg|border|divide|ring|outline|from|via|to|placeholder|shadow|fill|stroke)-zinc-\d{2,3}(?:\/\d{1,3})?/g;
   it("src/ contains no raw zinc-* utility", () => {
     const offenders: string[] = [];
     for (const file of walk(join(ROOT, "src"))) {
@@ -94,7 +152,9 @@ describe("color utilities used in src/ resolve to something real", () => {
     const offenders: string[] = [];
     for (const file of walk(join(ROOT, "src"))) {
       const srcText = readFileSync(file, "utf8");
-      for (const m of srcText.matchAll(/(?:^|[\s"'`:!])(text|bg|border)-([a-z][a-z0-9-]*?)(?:\/\d{1,3})?(?=[\s"'`}<)]|$)/gm)) {
+      for (const m of srcText.matchAll(
+        /(?:^|[\s"'`:!])(text|bg|border)-([a-z][a-z0-9-]*?)(?:\/\d{1,3})?(?=[\s"'`}<)]|$)/gm,
+      )) {
         const [, prefix, rawName] = m;
         const name = rawName;
         if (BUILTIN.test(name)) continue;

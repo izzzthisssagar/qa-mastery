@@ -1,7 +1,4 @@
-export {
-  lessonFrontmatterSchema,
-  type LessonFrontmatter,
-} from "./frontmatter";
+export { lessonFrontmatterSchema, type LessonFrontmatter } from "./frontmatter";
 
 export {
   findContentRoot,
@@ -16,13 +13,7 @@ export {
   type QuizQuestionFile,
 } from "./load";
 
-export {
-  TRACKS,
-  MODULES,
-  moduleSlug,
-  type TrackMeta,
-  type ModuleMeta,
-} from "./taxonomy";
+export { TRACKS, MODULES, moduleSlug, type TrackMeta, type ModuleMeta } from "./taxonomy";
 
 export {
   NOTES_TAXONOMY,
@@ -44,12 +35,7 @@ export {
   type NoteSource,
 } from "./notes/load";
 
-export {
-  NOTE_TRACKS,
-  trackForModule,
-  findNoteTrack,
-  type NoteTrack,
-} from "./notes/tracks";
+export { NOTE_TRACKS, trackForModule, findNoteTrack, type NoteTrack } from "./notes/tracks";
 
 export {
   NOTE_LABS,

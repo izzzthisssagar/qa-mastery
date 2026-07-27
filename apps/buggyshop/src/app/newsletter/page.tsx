@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import { readRelease } from "@/lib/catalog";
 import { submissionAllowed } from "@/lib/newsletter";
 
-
 export default function NewsletterPage() {
   const [email, setEmail] = useState("");
   const [termsChecked, setTermsChecked] = useState(false);

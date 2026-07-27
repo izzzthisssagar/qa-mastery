@@ -49,11 +49,13 @@ Root modifies:
 ## Task 1: Preflight and Parallel Ownership
 
 **Files:**
+
 - Read: `/Users/sajanathapa/Desktop/1/My Qa Projecct/Claude Coordination.md`
 - Read: `packages/curriculum/src/notes/taxonomy.ts:1685`
 - Read: `docs/superpowers/specs/2026-07-18-distributed-data-gently-design.md`
 
 **Interfaces:**
+
 - Consumes: approved design, live coordination claims, clean isolated branch.
 - Produces: proven path ownership for Writer A, Writer B, reviewer, and root.
 
@@ -98,12 +100,14 @@ Writer A receives only its four paths, the Global Constraints, and Task 2. Write
 ## Task 2: Writer A — Distribution and Consistency
 
 **Files:**
+
 - Create: `packages/curriculum/content/notes/nosql-and-modern-data/distributed-data-gently/replication-and-sharding.mdx`
 - Create: `packages/curriculum/content/notes/nosql-and-modern-data/distributed-data-gently/eventual-consistency-bugs.mdx`
 - Create: `apps/platform/public/notes/nosql-and-modern-data/distributed-data-gently/replication-and-sharding.jpg`
 - Create: `apps/platform/public/notes/nosql-and-modern-data/distributed-data-gently/eventual-consistency-bugs.jpg`
 
 **Interfaces:**
+
 - Consumes: locked anatomy from the approved spec; adjacent `cap-theorem-in-plain-words.mdx` and completed Redis notes as style references.
 - Produces: two self-contained MDX lessons, two verified images, four executed playgrounds, and a concise evidence report.
 
@@ -164,12 +168,14 @@ Expected: compile succeeds; component and image checks succeed; scan prints noth
 ## Task 3: Writer B — Recovery and Pipelines
 
 **Files:**
+
 - Create: `packages/curriculum/content/notes/nosql-and-modern-data/distributed-data-gently/backups-and-recovery-checks.mdx`
 - Create: `packages/curriculum/content/notes/nosql-and-modern-data/distributed-data-gently/testing-data-pipelines.mdx`
 - Create: `apps/platform/public/notes/nosql-and-modern-data/distributed-data-gently/backups-and-recovery-checks.jpg`
 - Create: `apps/platform/public/notes/nosql-and-modern-data/distributed-data-gently/testing-data-pipelines.jpg`
 
 **Interfaces:**
+
 - Consumes: locked anatomy from the approved spec; completed chapter notes as style references.
 - Produces: two self-contained MDX lessons, two verified images, four executed playgrounds, and a concise evidence report.
 
@@ -216,10 +222,12 @@ Run the same four gate commands from Task 2. Expected: success and an empty land
 ## Task 4: Read-Only Chapter Review and Corrections
 
 **Files:**
+
 - Review: all four new MDX files and four new media files
 - Read: `docs/superpowers/specs/2026-07-18-distributed-data-gently-design.md`
 
 **Interfaces:**
+
 - Consumes: Writer A and Writer B outputs plus their evidence reports.
 - Produces: spec-compliance verdict, quality verdict, and path/line findings; writers correct findings only within their ownership.
 
@@ -242,11 +250,13 @@ Send Writer A findings only for Writer A paths and Writer B findings only for Wr
 ## Task 5: Root Integration, Taxonomy, and Commit
 
 **Files:**
+
 - Modify: `packages/curriculum/src/notes/taxonomy.ts:1688`
 - Stage: four new MDX files, four new JPG files, and taxonomy only
 - Append after commit: `/Users/sajanathapa/Desktop/1/My Qa Projecct/Claude Coordination.md`
 
 **Interfaces:**
+
 - Consumes: approved reviewer verdicts and writer evidence.
 - Produces: active four-note chapter, verified branch commit, and collision-safe coordination handoff.
 

@@ -81,10 +81,13 @@ export function registerOAuthRoutes(app: OpenAPIHono<AuthEnv>) {
           }),
           client_id: z.string().openapi({ param: { name: "client_id", in: "query" } }),
           redirect_uri: z.string().openapi({ param: { name: "redirect_uri", in: "query" } }),
-          state: z.string().optional().openapi({
-            param: { name: "state", in: "query" },
-            description: "Echoed back verbatim — verify it to prevent CSRF.",
-          }),
+          state: z
+            .string()
+            .optional()
+            .openapi({
+              param: { name: "state", in: "query" },
+              description: "Echoed back verbatim — verify it to prevent CSRF.",
+            }),
         }),
       },
       responses: {

@@ -95,9 +95,7 @@ export function TrackSwitch() {
         transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         className="px-5 py-6"
       >
-        <p className="max-w-xl text-base leading-7 text-foreground">
-          {track.blurb}
-        </p>
+        <p className="max-w-xl text-base leading-7 text-foreground">{track.blurb}</p>
         <ul className="mt-5 space-y-3">
           {track.steps.map((s, i) => (
             <li key={s} className="flex items-start gap-3 text-sm text-muted-foreground">

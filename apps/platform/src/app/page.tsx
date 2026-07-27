@@ -91,9 +91,7 @@ export default function HomePage() {
             <Reveal delay={0.08} fade={false}>
               <h1 className="font-display mt-5 text-5xl font-extrabold leading-[1.02] tracking-tight sm:text-6xl lg:text-7xl">
                 Don&apos;t{" "}
-                <span className="font-serif-accent font-normal text-muted-foreground">
-                  watch
-                </span>
+                <span className="font-serif-accent font-normal text-muted-foreground">watch</span>
                 <br />
                 testing.{" "}
                 <span className="relative whitespace-nowrap text-accent text-glow-accent">
@@ -105,10 +103,9 @@ export default function HomePage() {
 
             <Reveal delay={0.16} fade={false}>
               <p className="mt-6 max-w-xl text-lg leading-8 text-muted-foreground">
-                Learn every QA concept on interactive visuals, hunt real seeded
-                bugs in a live practice app, and get your work graded like
-                you&apos;re already on the job — from manual testing all the way
-                to automation.
+                Learn every QA concept on interactive visuals, hunt real seeded bugs in a live
+                practice app, and get your work graded like you&apos;re already on the job — from
+                manual testing all the way to automation.
               </p>
             </Reveal>
 
@@ -125,12 +122,8 @@ export default function HomePage() {
               <dl className="mt-12 grid max-w-lg grid-cols-2 gap-x-6 gap-y-8 border-t border-border pt-6 sm:grid-cols-4">
                 {STATS.map((s) => (
                   <div key={s.label}>
-                    <dt className="font-display text-2xl font-bold text-foreground">
-                      {s.value}
-                    </dt>
-                    <dd className="mt-1 text-xs leading-snug text-muted-foreground">
-                      {s.label}
-                    </dd>
+                    <dt className="font-display text-2xl font-bold text-foreground">{s.value}</dt>
+                    <dd className="mt-1 text-xs leading-snug text-muted-foreground">{s.label}</dd>
                   </div>
                 ))}
               </dl>
@@ -158,19 +151,14 @@ export default function HomePage() {
                     <span className={d.live ? "text-foreground" : "text-muted-foreground"}>
                       {d.name}
                     </span>
-                    {i < DISCIPLINES.length - 1 && (
-                      <span className="ml-3 text-accent/40">/</span>
-                    )}
+                    {i < DISCIPLINES.length - 1 && <span className="ml-3 text-accent/40">/</span>}
                   </span>
                 ))}
               </div>
               <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Every discipline is{" "}
-                <span className="text-accent">live today</span> — manual,
-                automation, API, performance, security, database, CI/CD, and Git.
-                The whole arc a{" "}
-                <span className="font-serif-accent text-foreground">QA lead</span>{" "}
-                owns.
+                Every discipline is <span className="text-accent">live today</span> — manual,
+                automation, API, performance, security, database, CI/CD, and Git. The whole arc a{" "}
+                <span className="font-serif-accent text-foreground">QA lead</span> owns.
               </p>
             </RevealOnView>
           </div>
@@ -184,10 +172,8 @@ export default function HomePage() {
             </p>
             <h2 className="font-display mt-3 max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">
               Three ways this is{" "}
-              <span className="font-serif-accent font-normal text-accent">
-                different
-              </span>{" "}
-              from watching a course.
+              <span className="font-serif-accent font-normal text-accent">different</span> from
+              watching a course.
             </h2>
           </RevealOnView>
 
@@ -231,16 +217,12 @@ export default function HomePage() {
               </p>
               <h2 className="font-display mt-3 max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">
                 Everything a QA lead knows,{" "}
-                <span className="font-serif-accent font-normal text-accent">
-                  written down
-                </span>
-                .
+                <span className="font-serif-accent font-normal text-accent">written down</span>.
               </h2>
               <p className="mt-5 max-w-xl text-base leading-7 text-muted-foreground">
-                From how a computer boots to your first 90 days on the job — a
-                reference library you read on your own terms, not just when
-                it&apos;s your lesson&apos;s turn. Every note links to the
-                ones around it, so one question always leads to the next.
+                From how a computer boots to your first 90 days on the job — a reference library you
+                read on your own terms, not just when it&apos;s your lesson&apos;s turn. Every note
+                links to the ones around it, so one question always leads to the next.
               </p>
             </RevealOnView>
 
@@ -269,9 +251,9 @@ export default function HomePage() {
                 Graduate to automation.
               </h2>
               <p className="mt-5 max-w-md text-base leading-7 text-muted-foreground">
-                You don&apos;t jump straight to code. You learn to test by hand,
-                then watch those same skills become a Selenium + Java suite that
-                runs itself. Switch the panel to see each path.
+                You don&apos;t jump straight to code. You learn to test by hand, then watch those
+                same skills become a Selenium + Java suite that runs itself. Switch the panel to see
+                each path.
               </p>
             </RevealOnView>
 
@@ -337,14 +319,11 @@ export default function HomePage() {
               <div className="relative">
                 <h2 className="font-display mx-auto max-w-2xl text-3xl font-bold tracking-tight sm:text-5xl">
                   The fastest way to learn QA is to break{" "}
-                  <span className="font-serif-accent font-normal text-accent">
-                    something
-                  </span>
-                  .
+                  <span className="font-serif-accent font-normal text-accent">something</span>.
                 </h2>
                 <p className="mx-auto mt-5 max-w-lg text-base leading-7 text-muted-foreground">
-                  Make an account, open the practice app, and file your first bug
-                  in minutes. No card, no fluff.
+                  Make an account, open the practice app, and file your first bug in minutes. No
+                  card, no fluff.
                 </p>
                 <div className="mt-9 flex items-center justify-center gap-4">
                   <CtaLink href="/signup">Start learning free</CtaLink>
@@ -361,9 +340,7 @@ export default function HomePage() {
           <span className="font-display text-sm font-bold tracking-tight text-muted-foreground">
             QA<span className="text-accent">Mastery</span>
           </span>
-          <span>
-            Built in public · Learn QA by doing — free, forever.
-          </span>
+          <span>Built in public · Learn QA by doing — free, forever.</span>
         </div>
       </footer>
     </div>

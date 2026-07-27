@@ -41,8 +41,8 @@ export default function HomePage() {
         TaskFlight — a live API you&apos;re allowed to break
       </h1>
       <p className="mt-3 max-w-xl text-sm text-muted-foreground">
-        A real, documented practice API. Send requests from curl, Postman, or the
-        Swagger console below — everything you create lives in your own sandbox.
+        A real, documented practice API. Send requests from curl, Postman, or the Swagger console
+        below — everything you create lives in your own sandbox.
       </p>
 
       <div className="mt-8 flex flex-wrap gap-3">
@@ -78,11 +78,18 @@ export default function HomePage() {
 
       <section className="mt-10 rounded-lg border border-border bg-surface p-4">
         <p className="text-xs text-muted-foreground">
-          WebSocket practice (separate host — free machines sleep, first connect may take a few seconds)
+          WebSocket practice (separate host — free machines sleep, first connect may take a few
+          seconds)
         </p>
         <ul className="mt-2 space-y-1 break-all font-mono text-xs leading-relaxed">
-          <li>{(process.env.NEXT_PUBLIC_BUGGYAPI_WS_URL ?? "wss://qa-mastery-buggyapi-ws.fly.dev") + "/ws/echo?token=<ba-session>"}</li>
-          <li>{(process.env.NEXT_PUBLIC_BUGGYAPI_WS_URL ?? "wss://qa-mastery-buggyapi-ws.fly.dev") + "/ws/tickets-stream?token=<ba-session>"}</li>
+          <li>
+            {(process.env.NEXT_PUBLIC_BUGGYAPI_WS_URL ?? "wss://qa-mastery-buggyapi-ws.fly.dev") +
+              "/ws/echo?token=<ba-session>"}
+          </li>
+          <li>
+            {(process.env.NEXT_PUBLIC_BUGGYAPI_WS_URL ?? "wss://qa-mastery-buggyapi-ws.fly.dev") +
+              "/ws/tickets-stream?token=<ba-session>"}
+          </li>
         </ul>
         <p className="mt-2 text-xs text-muted-foreground">
           Token = the <code>ba-session</code> value in localStorage after the handoff. Try{" "}
@@ -96,7 +103,9 @@ export default function HomePage() {
         {creds ? (
           <div data-testid="credentials" className="mt-4 space-y-4">
             <div className="rounded-lg border border-border bg-surface p-4">
-              <p className="text-xs text-muted-foreground">Sandbox ID (X-Sandbox-Id header for Basic auth)</p>
+              <p className="text-xs text-muted-foreground">
+                Sandbox ID (X-Sandbox-Id header for Basic auth)
+              </p>
               <code className="mt-1 block break-all font-mono text-sm">{creds.sandboxId}</code>
             </div>
             <div className="rounded-lg border border-border bg-surface p-4">
@@ -106,7 +115,9 @@ export default function HomePage() {
               </code>
             </div>
             <div className="rounded-lg border border-border bg-surface p-4">
-              <p className="text-xs text-muted-foreground">Seeded users (Basic auth / POST /v1/auth/login)</p>
+              <p className="text-xs text-muted-foreground">
+                Seeded users (Basic auth / POST /v1/auth/login)
+              </p>
               <ul className="mt-2 space-y-1 font-mono text-sm">
                 {(creds.users ?? []).map((u) => (
                   <li key={u.email}>
@@ -139,8 +150,8 @@ export default function HomePage() {
           </div>
         ) : (
           <p data-testid="no-credentials" className="mt-3 text-sm text-muted-foreground">
-            No sandbox yet. Open BuggyAPI from a QA Mastery lesson — the handoff
-            provisions your sandbox and your credentials appear here.
+            No sandbox yet. Open BuggyAPI from a QA Mastery lesson — the handoff provisions your
+            sandbox and your credentials appear here.
           </p>
         )}
       </section>

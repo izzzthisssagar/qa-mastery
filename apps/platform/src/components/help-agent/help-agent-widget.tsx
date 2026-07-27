@@ -11,9 +11,7 @@ export function HelpAgentWidget() {
   return (
     <>
       <AnimatePresence>
-        {open && (
-          <HelpAgentPanel key="panel" initialPrompt={initialPrompt} onClose={close} />
-        )}
+        {open && <HelpAgentPanel key="panel" initialPrompt={initialPrompt} onClose={close} />}
       </AnimatePresence>
       <motion.button
         type="button"

@@ -1,14 +1,24 @@
 name: Deploy to Vercel
 
-# Every push to main ships both apps to production. Vercel runs the real build,
-# so a broken build fails the deploy and leaves the live alias on the last good
-# one. Quality gates (lint / typecheck / unit / e2e) run in parallel in ci.yml.
+# Task 12: deploys only the exact commit CI already verified, never a raw
+# push. Triggered by CI's own completion (not `push`), so there is no window
+# where a deploy can run against a commit CI hasn't finished checking, and no
+# way to trigger a deploy from a commit that failed CI. Every job re-checks
+# both the branch and the conclusion itself (workflow_run fires for every CI
+# run regardless of outcome or branch) and checks out the exact
+# `head_sha` CI ran against, not whatever HEAD happens to be when this job
+# starts. Vercel runs the real build, so a broken build fails the deploy and
+# leaves the live alias on the last good one.
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
 
 jobs:
   deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -17,17 +27,22 @@ jobs:
         include:
           - app: platform
             project_id: ${{ vars.VERCEL_PLATFORM_PROJECT_ID }}
+            health_url: https://qa-mastery-platform.vercel.app/api/health
           - app: buggyshop
             project_id: ${{ vars.VERCEL_BUGGYSHOP_PROJECT_ID }}
+            health_url: https://qa-mastery-buggyshop.vercel.app/api/health
           - app: buggyapi
             project_id: ${{ vars.VERCEL_BUGGYAPI_PROJECT_ID }}
+            health_url: https://qa-mastery-buggyapi.vercel.app/api/health
     concurrency:
       group: deploy-${{ matrix.app }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           # This job only runs `npx vercel` — pnpm is never installed here.
@@ -35,26 +50,54 @@ jobs:
           # the pnpm lockfile and fails trying to cache without pnpm on PATH.
           package-manager-cache: false
 
+      # `git archive` only includes what's actually committed at this exact
+      # SHA (no git metadata directory, no stray untracked/ignored files a
+      # plain checkout dir could carry) — a stronger guarantee than the old
+      # blanket delete of the checkout's git metadata ever was, and it's what
+      # sidesteps Vercel's TEAM_ACCESS_REQUIRED block on the commit author
+      # not being a team member (selection is via VERCEL_ORG_ID/
+      # VERCEL_PROJECT_ID, not git).
+      - name: Archive the exact verified commit
+        if: matrix.project_id != ''
+        run: |
+          mkdir -p "$RUNNER_TEMP/deploy-src"
+          git archive ${{ github.event.workflow_run.head_sha }} | tar -x -C "$RUNNER_TEMP/deploy-src"
+
       - name: Deploy ${{ matrix.app }} to Vercel (production)
         # Skip cleanly (job stays green) until the app's Vercel project + repo
         # var exist — lets a new app merge before its infra is provisioned.
         if: matrix.project_id != ''
+        working-directory: ${{ runner.temp }}/deploy-src
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ matrix.project_id }}
+        run: npx --yes vercel@57.0.0 deploy --prod --yes --archive=tgz
+
+      # The alias can take a few seconds to point at the new deployment after
+      # `vercel deploy` returns, so this can't check immediately — a failure
+      # here fails the whole release (not just a warning), the same as a
+      # failed build would.
+      - name: Health check ${{ matrix.app }}
+        if: matrix.project_id != ''
         run: |
-          # Vercel BLOCKS deploys when the git commit author isn't a member of the
-          # team (TEAM_ACCESS_REQUIRED). The runner is ephemeral and the target
-          # project is selected via VERCEL_ORG_ID / VERCEL_PROJECT_ID, not git, so
-          # drop git metadata before deploying.
-          rm -rf .git
-          npx vercel@latest deploy --prod --yes --archive=tgz
+          sleep 10
+          status=$(curl -s -o /tmp/health.json -w '%{http_code}' "${{ matrix.health_url }}")
+          cat /tmp/health.json
+          echo
+          if [ "$status" != "200" ]; then
+            echo "::error::${{ matrix.app }} health check failed: HTTP $status at ${{ matrix.health_url }}"
+            exit 1
+          fi
+          echo "${{ matrix.app }} healthy (200) at ${{ matrix.health_url }}"
 
   # BuggyAPI's WebSocket practice service lives on Fly.io (Vercel serverless
   # can't hold sockets). Skips cleanly until FLY_API_TOKEN is configured and
   # the app has been `flyctl launch`ed once (see services/buggyapi-ws/fly.toml).
   deploy-ws:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
@@ -63,13 +106,28 @@ jobs:
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Set up flyctl
         if: env.FLY_API_TOKEN != ''
-        uses: superfly/flyctl-actions/setup-flyctl@master
+        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # v1.6
+        with:
+          version: 0.4.74
 
       - name: Deploy buggyapi-ws to Fly.io
         if: env.FLY_API_TOKEN != ''
         working-directory: services/buggyapi-ws
         run: flyctl deploy --remote-only
+
+      - name: Health check buggyapi-ws
+        if: env.FLY_API_TOKEN != ''
+        run: |
+          sleep 10
+          status=$(curl -s -o /dev/null -w '%{http_code}' https://qa-mastery-buggyapi-ws.fly.dev/healthz)
+          if [ "$status" != "200" ]; then
+            echo "::error::buggyapi-ws health check failed: HTTP $status"
+            exit 1
+          fi
+          echo "buggyapi-ws healthy (200)."

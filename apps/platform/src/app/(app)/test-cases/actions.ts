@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { getAuthedUserId } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /** Learner-authored test cases. All writes go through the request-scoped
@@ -66,8 +67,9 @@ export async function setTestCaseStatus(formData: FormData): Promise<void> {
   const status = String(formData.get("status") ?? "");
   if (!id || !STATUSES.includes(status as (typeof STATUSES)[number])) return;
 
+  const userId = await getAuthedUserId();
   const supabase = await createSupabaseServerClient();
-  await supabase.from("test_cases").update({ status }).eq("id", id);
+  await supabase.from("test_cases").update({ status }).eq("id", id).eq("user_id", userId);
   revalidatePath("/test-cases");
 }
 
@@ -75,7 +77,8 @@ export async function deleteTestCase(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
 
+  const userId = await getAuthedUserId();
   const supabase = await createSupabaseServerClient();
-  await supabase.from("test_cases").delete().eq("id", id);
+  await supabase.from("test_cases").delete().eq("id", id).eq("user_id", userId);
   revalidatePath("/test-cases");
 }

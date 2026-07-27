@@ -57,10 +57,15 @@ export default async function TalentProfilePage() {
     <div className="space-y-10 py-2">
       <header className="space-y-1">
         <h1 className="font-display text-2xl font-bold tracking-tight">Your tester profile</h1>
-        <p className="text-sm text-muted-foreground">Proof first — this is what teams see when they search.</p>
+        <p className="text-sm text-muted-foreground">
+          Proof first — this is what teams see when they search.
+        </p>
       </header>
 
-      <AvatarUploader userId={user.id} initialPath={(profile?.avatar_path as string | null) ?? null} />
+      <AvatarUploader
+        userId={user.id}
+        initialPath={(profile?.avatar_path as string | null) ?? null}
+      />
 
       <ProfileEditor
         initial={{
@@ -81,7 +86,8 @@ export default async function TalentProfilePage() {
       <section className="space-y-3">
         <h2 className="text-sm font-medium text-foreground">Experience &amp; CV</h2>
         <p className="text-xs text-muted-foreground">
-          Real-world track record — for pros who didn&apos;t come through the labs, this is your proof.
+          Real-world track record — for pros who didn&apos;t come through the labs, this is your
+          proof.
         </p>
         <CvUploader userId={user.id} hasCv={Boolean(profile?.cv_path)} />
         <ExperienceEditor initial={(experience as ExperienceRow[] | null) ?? []} />

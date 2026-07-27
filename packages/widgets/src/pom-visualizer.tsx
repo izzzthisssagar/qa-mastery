@@ -24,8 +24,12 @@ export function POMVisualizer({ onMilestone }: { onMilestone?: (m: string) => vo
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold text-foreground">Page Object Model (POM)</h3>
-          <p className="text-sm text-muted-foreground">Separation of Concerns: Test Intent vs DOM Interactions.</p>
-          <p className="text-xs text-amber-500/80 mt-1 block md:hidden">📱 Rotate your device for the best view.</p>
+          <p className="text-sm text-muted-foreground">
+            Separation of Concerns: Test Intent vs DOM Interactions.
+          </p>
+          <p className="text-xs text-amber-500/80 mt-1 block md:hidden">
+            📱 Rotate your device for the best view.
+          </p>
         </div>
         <button
           onClick={runTest}
@@ -38,24 +42,39 @@ export function POMVisualizer({ onMilestone }: { onMilestone?: (m: string) => vo
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative">
         {/* Test Script Layer */}
-        <div className={`relative rounded-xl border-2 p-6 transition-colors duration-500 ${step === 1 || step === 5 ? "border-emerald-500 bg-emerald-500/5 shadow-lg shadow-emerald-500/10" : "border-border bg-background/50"}`}>
+        <div
+          className={`relative rounded-xl border-2 p-6 transition-colors duration-500 ${step === 1 || step === 5 ? "border-emerald-500 bg-emerald-500/5 shadow-lg shadow-emerald-500/10" : "border-border bg-background/50"}`}
+        >
           <div className="mb-4 flex items-center justify-between border-b border-border pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Test Script</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+              Test Script
+            </span>
             <span className="text-xs text-muted-foreground">LoginTest.java</span>
           </div>
           <div className="font-mono text-sm space-y-2">
             <div className="text-muted-foreground">@Test</div>
             <div className="text-muted-foreground">public void testValidLogin() {"{"}</div>
-            <div className={`pl-4 transition-colors duration-300 ${step === 1 ? "text-emerald-300" : "text-muted-foreground"}`}>
+            <div
+              className={`pl-4 transition-colors duration-300 ${step === 1 ? "text-emerald-300" : "text-muted-foreground"}`}
+            >
               LoginPage loginPage = new LoginPage(driver);
             </div>
-            <div className={`relative pl-4 transition-colors duration-300 ${step >= 1 && step <= 5 ? "text-emerald-300" : "text-muted-foreground"}`}>
+            <div
+              className={`relative pl-4 transition-colors duration-300 ${step >= 1 && step <= 5 ? "text-emerald-300" : "text-muted-foreground"}`}
+            >
               {step > 1 && step < 5 && (
-                <motion.div layoutId="highlight" className="absolute -inset-1 rounded bg-emerald-500/20" />
+                <motion.div
+                  layoutId="highlight"
+                  className="absolute -inset-1 rounded bg-emerald-500/20"
+                />
               )}
-              <span className="relative z-10">loginPage.login("user", "pass");</span>
+              <span className="relative z-10">
+                loginPage.login(&quot;user&quot;, &quot;pass&quot;);
+              </span>
             </div>
-            <div className={`pl-4 transition-colors duration-300 ${step === 5 ? "text-emerald-300" : "text-muted-foreground"}`}>
+            <div
+              className={`pl-4 transition-colors duration-300 ${step === 5 ? "text-emerald-300" : "text-muted-foreground"}`}
+            >
               Assert.assertTrue(homePage.isDisplayed());
             </div>
             <div className="text-muted-foreground">{"}"}</div>
@@ -89,23 +108,35 @@ export function POMVisualizer({ onMilestone }: { onMilestone?: (m: string) => vo
         </div>
 
         {/* Page Object Layer */}
-        <div className={`relative rounded-xl border-2 p-6 transition-colors duration-500 ${step >= 2 && step <= 4 ? "border-accent bg-accent/5 shadow-lg shadow-accent/10" : "border-border bg-background/50"}`}>
+        <div
+          className={`relative rounded-xl border-2 p-6 transition-colors duration-500 ${step >= 2 && step <= 4 ? "border-accent bg-accent/5 shadow-lg shadow-accent/10" : "border-border bg-background/50"}`}
+        >
           <div className="mb-4 flex items-center justify-between border-b border-border pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-accent">Page Object</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-accent">
+              Page Object
+            </span>
             <span className="text-xs text-muted-foreground">LoginPage.java</span>
           </div>
           <div className="font-mono text-sm space-y-2">
-            <div className={`transition-colors duration-300 ${step === 3 ? "text-accent" : "text-muted-foreground"}`}>
-              By userField = By.id("username");<br/>
-              By passField = By.id("password");<br/>
-              By loginBtn = By.id("login-btn");
+            <div
+              className={`transition-colors duration-300 ${step === 3 ? "text-accent" : "text-muted-foreground"}`}
+            >
+              By userField = By.id(&quot;username&quot;);
+              <br />
+              By passField = By.id(&quot;password&quot;);
+              <br />
+              By loginBtn = By.id(&quot;login-btn&quot;);
             </div>
-            <br/>
+            <br />
             <div className="text-muted-foreground">public void login(String u, String p) {"{"}</div>
-            <div className={`pl-4 transition-colors duration-300 ${step >= 3 ? "text-accent" : "text-muted-foreground"}`}>
+            <div
+              className={`pl-4 transition-colors duration-300 ${step >= 3 ? "text-accent" : "text-muted-foreground"}`}
+            >
               <div className={step === 4 ? "bg-accent/20 rounded -mx-1 px-1" : ""}>
-                driver.findElement(userField).sendKeys(u);<br/>
-                driver.findElement(passField).sendKeys(p);<br/>
+                driver.findElement(userField).sendKeys(u);
+                <br />
+                driver.findElement(passField).sendKeys(p);
+                <br />
                 driver.findElement(loginBtn).click();
               </div>
             </div>
@@ -113,7 +144,7 @@ export function POMVisualizer({ onMilestone }: { onMilestone?: (m: string) => vo
           </div>
         </div>
       </div>
-      
+
       <div className="mt-8 text-center text-sm font-medium text-muted-foreground min-h-[24px]">
         <AnimatePresence mode="wait">
           <motion.span

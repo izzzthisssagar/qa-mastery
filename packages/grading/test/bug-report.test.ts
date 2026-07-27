@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  matchBugReport,
-  type BugReportInput,
-  type ManifestBug,
-} from "../src/bug-report";
+import { matchBugReport, type BugReportInput, type ManifestBug } from "../src/bug-report";
 
 // BS-008 from the BuggyShop spec: price filter excludes the max boundary.
 const BS_008: ManifestBug = {

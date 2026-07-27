@@ -4,7 +4,12 @@ import { useEffect, useState } from "react";
 import { Button } from "@qa-mastery/ui";
 import { BugReportLab } from "@/components/bug-report-lab";
 import { useHelpAgent } from "@/components/help-agent/help-agent-context";
-import { getNoteHuntStatus, launchNoteSandbox, submitNoteBugReport, type NoteHuntStatus } from "./bug-hunt-actions";
+import {
+  getNoteHuntStatus,
+  launchNoteSandbox,
+  submitNoteBugReport,
+  type NoteHuntStatus,
+} from "./bug-hunt-actions";
 
 /**
  * The bug-hunt chapter lab. Same shape as the lesson-bound `HuntPanel`
@@ -123,7 +128,10 @@ export function BugHuntPanel({
           />
         </div>
         {complete && (
-          <p data-testid="note-hunt-complete" className="mt-3 text-sm font-semibold text-success-text">
+          <p
+            data-testid="note-hunt-complete"
+            className="mt-3 text-sm font-semibold text-success-text"
+          >
             🏅 Lab passed — you found every required bug.
           </p>
         )}

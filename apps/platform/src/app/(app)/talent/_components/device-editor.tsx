@@ -29,7 +29,12 @@ export function DeviceEditor({ initial }: { initial: DeviceRow[] }) {
     if (!device.trim()) return;
     setError(null);
     startTransition(async () => {
-      const res = await addDevice({ kind, device, os: os || undefined, osVersion: osVersion || undefined });
+      const res = await addDevice({
+        kind,
+        device,
+        os: os || undefined,
+        osVersion: osVersion || undefined,
+      });
       if (!res.ok) {
         setError(res.error);
         return;
@@ -78,7 +83,12 @@ export function DeviceEditor({ initial }: { initial: DeviceRow[] }) {
       )}
 
       <div className="flex flex-wrap items-end gap-2">
-        <select className={field} value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Device kind">
+        <select
+          className={field}
+          value={kind}
+          onChange={(e) => setKind(e.target.value)}
+          aria-label="Device kind"
+        >
           {DEVICE_KINDS.map((k) => (
             <option key={k} value={k}>
               {labelFor(k)}

@@ -138,10 +138,7 @@ export async function* streamChat(
   throw lastErr ?? new Error("All LLM providers failed.");
 }
 
-export async function chat(
-  messages: ChatMessage[],
-  env: LlmEnv = readLlmEnv(),
-): Promise<string> {
+export async function chat(messages: ChatMessage[], env: LlmEnv = readLlmEnv()): Promise<string> {
   const providers = await availableProviders(env);
   let lastErr: unknown;
   for (const provider of providers) {

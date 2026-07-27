@@ -36,9 +36,7 @@ export function TrackBrowser({
           <Reveal key={track.slug} delay={0.05 + trackIndex * 0.04}>
             <section data-testid={`track-${track.slug}`}>
               <div className="flex items-baseline justify-between gap-4">
-                <h2 className="font-display text-xl font-semibold tracking-tight">
-                  {track.title}
-                </h2>
+                <h2 className="font-display text-xl font-semibold tracking-tight">{track.title}</h2>
                 <span
                   data-testid={`track-progress-${track.slug}`}
                   className="shrink-0 font-mono text-xs text-muted-foreground"

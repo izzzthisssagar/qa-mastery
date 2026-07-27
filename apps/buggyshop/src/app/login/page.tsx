@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import { readRelease } from "@/lib/catalog";
 import { authenticate, rememberMeHonored, type AuthResult } from "@/lib/login";
 
-
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,7 +42,10 @@ export default function LoginPage() {
       <main className="mx-auto w-full max-w-md flex-1 px-6 py-12">
         <h1 className="text-2xl font-bold tracking-tight">Log in</h1>
 
-        <form onSubmit={onSubmit} className="mt-6 space-y-4 rounded-xl border border-zinc-200 bg-white p-5">
+        <form
+          onSubmit={onSubmit}
+          className="mt-6 space-y-4 rounded-xl border border-zinc-200 bg-white p-5"
+        >
           <label className="flex flex-col gap-1 text-sm text-zinc-700">
             Email
             <input
@@ -104,7 +106,8 @@ export default function LoginPage() {
         )}
 
         <p className="mt-6 text-xs text-zinc-400">
-          Demo account: shopper@buggyshop.test / password1. Try a wrong password and read the error closely.
+          Demo account: shopper@buggyshop.test / password1. Try a wrong password and read the error
+          closely.
         </p>
       </main>
 
