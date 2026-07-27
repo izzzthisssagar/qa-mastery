@@ -3,11 +3,11 @@ import {
   labForChapter,
   trackCapstoneForChapter,
   findNoteLeaf,
-  getNote,
   type NoteLab,
   type NoteTrackCapstone,
 } from "@qa-mastery/curriculum";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getCachedTopic } from "@/lib/curriculum-cache";
 
 /**
  * Resolve + gate helpers shared by every note-lab kind (code_run, bug_report,
@@ -45,10 +45,13 @@ export async function topicsRemaining(
 ): Promise<number> {
   // A planned stub or a topic with no MDX on disk can't be read, so it must
   // not hold the lab hostage.
-  const readable = topicSlugs.filter((t) => {
+  const readable: string[] = [];
+  for (const t of topicSlugs) {
     const leaf = findNoteLeaf(moduleSlug, chapterSlug, t);
-    return leaf && !leaf.planned && getNote(moduleSlug, chapterSlug, t);
-  });
+    if (leaf && !leaf.planned && (await getCachedTopic(`${moduleSlug}/${chapterSlug}/${t}`))) {
+      readable.push(t);
+    }
+  }
   if (readable.length === 0) return 0;
 
   const slugs = readable.map((t) => `${moduleSlug}/${chapterSlug}/${t}`);

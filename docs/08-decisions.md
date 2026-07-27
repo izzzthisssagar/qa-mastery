@@ -7,7 +7,7 @@ Format: **Context → Decision → Consequences**.
 
 ## ADR-1 — Two separate apps with a cookie-free token handoff
 
-**Context.** BuggyShop is *deliberately broken* — its login/signup contain seeded
+**Context.** BuggyShop is _deliberately broken_ — its login/signup contain seeded
 bugs learners must find. The platform holds the learner's real identity.
 
 **Decision.** Ship two separate apps on separate origins. BuggyShop has its own
@@ -29,7 +29,7 @@ reach the browser, the product is defeated.
 
 **Decision.** Keep keys server-only. Quiz `correct`/`explanation` live in
 `*.quiz.json` read only on the server; the learn page sends a stripped projection
-and the grader returns the key only *after* submission. The bug manifest lives in
+and the grader returns the key only _after_ submission. The bug manifest lives in
 a deny-all schema read server-side.
 
 **Consequences.** Grading must be a server action, not client logic. CI greps the
@@ -53,7 +53,7 @@ can't grant a forged pass. (Invariant 2; [03](./03-data-model.md).)
 
 ## ADR-4 — MDX content with a DB registry mirror
 
-**Context.** Lessons need rich authoring *and* relational integrity (progress,
+**Context.** Lessons need rich authoring _and_ relational integrity (progress,
 attempts, and flashcards reference lessons by id).
 
 **Decision.** Author lessons as MDX files (source of truth); mirror their
@@ -110,14 +110,17 @@ without credentials we won't enter on the user's behalf.
 **Decision.** Deploy with the **Vercel CLI token** instead, which targets a
 project by `VERCEL_ORG_ID`/`VERCEL_PROJECT_ID` and sidesteps GitHub entirely.
 Projects were created via the REST API with `rootDirectory` set (monorepo).
-CI (`deploy.yml`) does the same on every push to `main`.
+CI (`deploy.yml`) does the same, gated on CI's own completion rather than the
+push itself since the release-governance work (deploys exactly the commit CI
+verified — see [09](./09-deployment.md)).
 
 **Consequences.** Fully automated CD without resolving the account tangle. Two
 gotchas had to be handled: Vercel blocks deploys when the git commit author
-isn't a team member (`TEAM_ACCESS_REQUIRED`) → drop git metadata before
-deploying (`rm -rf .git` in CI; move `.git` aside locally); and the multi-GB
-`.turbo` cache + symlinked `node_modules` abort the upload → `.vercelignore` +
-`--archive=tgz`. ([09](./09-deployment.md).)
+isn't a team member (`TEAM_ACCESS_REQUIRED`) → deploy from a `git archive` of
+the exact verified commit, no git metadata at all (in CI; move `.git` aside
+locally for a one-off manual deploy); and the multi-GB `.turbo` cache +
+symlinked `node_modules` abort the upload → `.vercelignore` + `--archive=tgz`.
+([09](./09-deployment.md).)
 
 ---
 
@@ -169,7 +172,7 @@ test surface.
 
 ## ADR-17 — Phase 7 completion: text-tone tokens, axe + visual-regression gates (2026-07-21)
 
-**Context.** ADR-9 shipped the token *scaffold*; light mode itself, the
+**Context.** ADR-9 shipped the token _scaffold_; light mode itself, the
 `zinc-*` sweep, and per-theme contrast verification were deferred to Phase 7.
 Landing Phase 7 found the deferral had a sharper edge than expected: `--accent`
 itself (the flagship token ADR-9 introduced) measured 4.12:1 as small text on
@@ -183,6 +186,7 @@ touched them; they're just as unsafe on light for the same underlying reason.
 
 **Decision.** Two new token families, both added to `globals.css` alongside
 ADR-9's existing set:
+
 1. **`--accent-text`**, distinct from `--accent`. `--accent` is tuned for
    `bg-accent` buttons paired with `--accent-foreground` (4.62:1 there);
    darkening it to fix small-text contrast would have broken that pairing the
@@ -311,7 +315,7 @@ set = an accepted system task; full own-row CRUD via RLS);
 `user_task_grades` (score + pass, **service-role WRITE only — no insert/update
 policy at all**, learner read-own). Grading is a pure `gradeTask(criteria,
 evidence)` in `packages/grading` (DB-free, unit-tested); the server action
-gathers evidence by counting *service-role-scored* rows (valid bug_reports =
+gathers evidence by counting _service-role-scored_ rows (valid bug_reports =
 `matched && !duplicate`, plus authored test_cases), scores, and writes the
 verdict + `xp_events` through the service role.
 

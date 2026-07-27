@@ -11,7 +11,6 @@ import {
   type SortDir,
 } from "@/lib/catalog";
 
-
 export default function ProductsPage() {
   const [maxPriceInput, setMaxPriceInput] = useState("");
   const [search, setSearch] = useState("");

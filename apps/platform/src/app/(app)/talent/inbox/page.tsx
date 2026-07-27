@@ -10,7 +10,9 @@ export default async function InboxPage() {
     <div className="space-y-6 py-2">
       <header className="space-y-1">
         <h1 className="font-display text-2xl font-bold tracking-tight">Inbox</h1>
-        <p className="text-sm text-muted-foreground">Your conversations with clients and testers.</p>
+        <p className="text-sm text-muted-foreground">
+          Your conversations with clients and testers.
+        </p>
       </header>
 
       {convos.length === 0 ? (

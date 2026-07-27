@@ -50,9 +50,7 @@ test.describe("notes v2 — interactive note surface", () => {
     const pinName = (await pin.getAttribute("aria-label"))!.replace(/^Explore: /, "");
     await expect(async () => {
       await pin.click();
-      await expect(
-        page.getByText(pinName, { exact: true }).first(),
-      ).toBeVisible({ timeout: 1000 });
+      await expect(page.getByText(pinName, { exact: true }).first()).toBeVisible({ timeout: 1000 });
     }).toPass({ timeout: 10_000 });
 
     await expect(page.getByText(/^Explored 1 \/ \d+$/).first()).toBeVisible();
@@ -60,9 +58,7 @@ test.describe("notes v2 — interactive note surface", () => {
     await expect(pin).toHaveText("✓");
   });
 
-  test("parts quest: tapping a number reveals the part and counts it as met", async ({
-    page,
-  }) => {
+  test("parts quest: tapping a number reveals the part and counts it as met", async ({ page }) => {
     // The quest legend is the row of small numbered buttons named "1", "2", …
     const legend = page.getByText(/tap a number to meet that part/i);
     await legend.scrollIntoViewIfNeeded();
@@ -113,10 +109,7 @@ test.describe("notes v2 — interactive note surface", () => {
   test("quiz answer gives instant feedback and locks the options", async ({ page }) => {
     // First option = first button after the "Quick check" heading (the heading
     // text includes an emoji, so exact-match container lookups don't work).
-    const option = page
-      .getByText("Quick check")
-      .first()
-      .locator("xpath=following::button[1]");
+    const option = page.getByText("Quick check").first().locator("xpath=following::button[1]");
     await option.scrollIntoViewIfNeeded();
     await expect(async () => {
       await option.click();
@@ -135,9 +128,7 @@ test.describe("notes v2 — interactive note surface", () => {
     await editor.scrollIntoViewIfNeeded();
     await expect(editor).toBeVisible();
     await expect(editor).toBeEditable();
-    await expect(
-      page.getByRole("button", { name: /run/i }).first(),
-    ).toBeVisible();
+    await expect(page.getByRole("button", { name: /run/i }).first()).toBeVisible();
     // No click: e2e never talks to Wandbox.
   });
 
@@ -146,16 +137,14 @@ test.describe("notes v2 — interactive note surface", () => {
     await complete.scrollIntoViewIfNeeded();
     await expect(async () => {
       await complete.click();
-      await expect(
-        page.getByRole("button", { name: /completed .* xp earned/i }),
-      ).toBeVisible({ timeout: 2000 });
+      await expect(page.getByRole("button", { name: /completed .* xp earned/i })).toBeVisible({
+        timeout: 2000,
+      });
     }).toPass({ timeout: 10_000 });
 
     // Reload: completion is server-persisted (note_progress), so the button
     // renders already-completed rather than resetting to its client demo state.
     await page.reload();
-    await expect(
-      page.getByRole("button", { name: /completed .* xp earned/i }),
-    ).toBeVisible();
+    await expect(page.getByRole("button", { name: /completed .* xp earned/i })).toBeVisible();
   });
 });

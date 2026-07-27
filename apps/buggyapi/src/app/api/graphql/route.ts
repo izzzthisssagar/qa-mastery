@@ -31,7 +31,12 @@ const typeDefs = /* GraphQL */ `
     "All projects in your sandbox."
     projects: [Project!]!
     "Tickets, optionally filtered."
-    tickets(status: TicketStatus, priority: TicketPriority, projectId: ID, first: Int = 20): [Ticket!]!
+    tickets(
+      status: TicketStatus
+      priority: TicketPriority
+      projectId: ID
+      first: Int = 20
+    ): [Ticket!]!
     "One ticket by id."
     ticket(id: ID!): Ticket
   }
@@ -51,8 +56,19 @@ const typeDefs = /* GraphQL */ `
     labels: [String!]
   }
 
-  enum TicketStatus { open in_progress blocked done cancelled }
-  enum TicketPriority { low medium high urgent }
+  enum TicketStatus {
+    open
+    in_progress
+    blocked
+    done
+    cancelled
+  }
+  enum TicketPriority {
+    low
+    medium
+    high
+    urgent
+  }
 
   type Me {
     id: ID!
@@ -88,6 +104,9 @@ const typeDefs = /* GraphQL */ `
 const ticketRow =
   "id, project_id, number, title, description, status, priority, labels, ba_projects!inner(id, key, name, description, status)";
 
+// TECH_DEBT: `row` is an untyped Supabase select() result with a joined
+// ba_projects row; no generated row type for this shape yet. Tracked by
+// docs/superpowers/plans/2026-07-26-release-repository-governance.md Task 5.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toTicket(row: any) {
   return {

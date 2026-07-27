@@ -61,9 +61,11 @@ export async function checkRateLimit(
     );
   }
 
-  await db.from("ba_rate_counters").upsert(
-    { sandbox_id: sandboxId, bucket: rule.bucket, window_start: windowStart, count: used + 1 },
-    { onConflict: "sandbox_id,bucket,window_start" },
-  );
+  await db
+    .from("ba_rate_counters")
+    .upsert(
+      { sandbox_id: sandboxId, bucket: rule.bucket, window_start: windowStart, count: used + 1 },
+      { onConflict: "sandbox_id,bucket,window_start" },
+    );
   return undefined;
 }

@@ -46,7 +46,10 @@ export function ApiBugReportForm() {
         category,
         severity: severity as Severity,
         title,
-        steps: steps.split("\n").map((s) => s.trim()).filter(Boolean),
+        steps: steps
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean),
         expected,
         actual,
       });
@@ -78,38 +81,78 @@ export function ApiBugReportForm() {
     >
       <p className="text-sm font-semibold text-foreground">File an API bug report</p>
       <p className="mt-1 text-xs text-muted-foreground">
-        Hunt the contract violations in TaskFlight&apos;s bug-hunt mode, then report each the
-        way a real API tester would. Surface + endpoint must be right to match; category and
-        severity affect your score.
+        Hunt the contract violations in TaskFlight&apos;s bug-hunt mode, then report each the way a
+        real API tester would. Surface + endpoint must be right to match; category and severity
+        affect your score.
       </p>
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Surface
-          <select data-testid="api-bug-surface" className={FIELD} value={surface} onChange={(e) => setSurface(e.target.value)} disabled={!!result}>
+          <select
+            data-testid="api-bug-surface"
+            className={FIELD}
+            value={surface}
+            onChange={(e) => setSurface(e.target.value)}
+            disabled={!!result}
+          >
             <option value="">Select…</option>
-            {API_BUG_SURFACES.map((s) => <option key={s} value={s}>{s}</option>)}
+            {API_BUG_SURFACES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Endpoint
-          <select data-testid="api-bug-endpoint" className={FIELD} value={endpoint} onChange={(e) => setEndpoint(e.target.value)} disabled={!!result}>
+          <select
+            data-testid="api-bug-endpoint"
+            className={FIELD}
+            value={endpoint}
+            onChange={(e) => setEndpoint(e.target.value)}
+            disabled={!!result}
+          >
             <option value="">Select…</option>
-            {API_BUG_ENDPOINTS.map((e2) => <option key={e2} value={e2}>{e2}</option>)}
+            {API_BUG_ENDPOINTS.map((e2) => (
+              <option key={e2} value={e2}>
+                {e2}
+              </option>
+            ))}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Category
-          <select data-testid="api-bug-category" className={FIELD} value={category} onChange={(e) => setCategory(e.target.value)} disabled={!!result}>
+          <select
+            data-testid="api-bug-category"
+            className={FIELD}
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            disabled={!!result}
+          >
             <option value="">Select…</option>
-            {API_BUG_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            {API_BUG_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Severity
-          <select data-testid="api-bug-severity" className={FIELD} value={severity} onChange={(e) => setSeverity(e.target.value as Severity)} disabled={!!result}>
+          <select
+            data-testid="api-bug-severity"
+            className={FIELD}
+            value={severity}
+            onChange={(e) => setSeverity(e.target.value as Severity)}
+            disabled={!!result}
+          >
             <option value="">Select…</option>
-            {SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
+            {SEVERITIES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
           </select>
         </label>
       </div>
@@ -117,20 +160,45 @@ export function ApiBugReportForm() {
       <div className="mt-3 space-y-3">
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Title
-          <input data-testid="api-bug-title" className={FIELD} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="One-line summary" disabled={!!result} />
+          <input
+            data-testid="api-bug-title"
+            className={FIELD}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="One-line summary"
+            disabled={!!result}
+          />
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Steps to reproduce (one per line)
-          <textarea data-testid="api-bug-steps" className={`${FIELD} min-h-16`} value={steps} onChange={(e) => setSteps(e.target.value)} disabled={!!result} />
+          <textarea
+            data-testid="api-bug-steps"
+            className={`${FIELD} min-h-16`}
+            value={steps}
+            onChange={(e) => setSteps(e.target.value)}
+            disabled={!!result}
+          />
         </label>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-xs text-muted-foreground">
             Expected (per the OpenAPI contract)
-            <textarea data-testid="api-bug-expected" className={`${FIELD} min-h-16`} value={expected} onChange={(e) => setExpected(e.target.value)} disabled={!!result} />
+            <textarea
+              data-testid="api-bug-expected"
+              className={`${FIELD} min-h-16`}
+              value={expected}
+              onChange={(e) => setExpected(e.target.value)}
+              disabled={!!result}
+            />
           </label>
           <label className="flex flex-col gap-1 text-xs text-muted-foreground">
             Actual (what the API returned)
-            <textarea data-testid="api-bug-actual" className={`${FIELD} min-h-16`} value={actual} onChange={(e) => setActual(e.target.value)} disabled={!!result} />
+            <textarea
+              data-testid="api-bug-actual"
+              className={`${FIELD} min-h-16`}
+              value={actual}
+              onChange={(e) => setActual(e.target.value)}
+              disabled={!!result}
+            />
           </label>
         </div>
       </div>
@@ -151,13 +219,22 @@ export function ApiBugReportForm() {
                 : `Matched ${result.matchedBugId} · ${result.score} pts`
               : "No match"}
           </p>
-          <ul data-testid="api-bug-feedback" className="mt-2 space-y-1 text-xs text-muted-foreground">
-            {result.feedback.map((line, i) => <li key={i}>• {line}</li>)}
+          <ul
+            data-testid="api-bug-feedback"
+            className="mt-2 space-y-1 text-xs text-muted-foreground"
+          >
+            {result.feedback.map((line, i) => (
+              <li key={i}>• {line}</li>
+            ))}
           </ul>
         </div>
       )}
 
-      {error && <p data-testid="api-bug-error" className="mt-4 text-sm text-danger-text">{error}</p>}
+      {error && (
+        <p data-testid="api-bug-error" className="mt-4 text-sm text-danger-text">
+          {error}
+        </p>
+      )}
 
       <div className="mt-5">
         {result ? (
@@ -165,7 +242,11 @@ export function ApiBugReportForm() {
             File another report
           </Button>
         ) : (
-          <Button onClick={onSubmit} disabled={!complete || submitting} data-testid="api-bug-submit">
+          <Button
+            onClick={onSubmit}
+            disabled={!complete || submitting}
+            data-testid="api-bug-submit"
+          >
             {submitting ? "Submitting…" : "Submit report"}
           </Button>
         )}

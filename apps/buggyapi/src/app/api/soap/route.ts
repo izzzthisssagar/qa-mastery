@@ -1,6 +1,7 @@
 import { XMLParser } from "fast-xml-parser";
 import { resolveAuth } from "@/api/auth";
 import { buggyapiDb } from "@/api/db";
+import { SOAP_NS as NS, parseTicketRef, soapEnvelope, soapFaultXml, xmlEscape } from "@/api/soap";
 
 /**
  * TaskFlight SOAP 1.1 — one deliberately-small legacy endpoint so learners
@@ -14,35 +15,15 @@ import { buggyapiDb } from "@/api/db";
  * wild, but one new concept at a time).
  */
 
-const NS = "urn:taskflight:soap";
-
-function xmlEscape(value: unknown): string {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-function envelope(body: string): string {
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tf="${NS}">
-  <soap:Body>
-${body}
-  </soap:Body>
-</soap:Envelope>`;
-}
-
 function fault(code: string, message: string, status: number): Response {
-  const xml = envelope(`    <soap:Fault>
-      <faultcode>soap:${code}</faultcode>
-      <faultstring>${xmlEscape(message)}</faultstring>
-    </soap:Fault>`);
-  return new Response(xml, { status, headers: { "Content-Type": "text/xml; charset=utf-8" } });
+  return new Response(soapFaultXml(code, message), {
+    status,
+    headers: { "Content-Type": "text/xml; charset=utf-8" },
+  });
 }
 
 function ok(body: string): Response {
-  return new Response(envelope(body), {
+  return new Response(soapEnvelope(body), {
     status: 200,
     headers: { "Content-Type": "text/xml; charset=utf-8" },
   });
@@ -139,6 +120,9 @@ export async function POST(request: Request) {
     return fault("Client", "Malformed XML envelope.", 400);
   }
 
+  // TECH_DEBT: fast-xml-parser has no generated type for this ad-hoc SOAP
+  // envelope shape. Tracked by docs/superpowers/plans/
+  // 2026-07-26-release-repository-governance.md Task 5.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const body = (parsed as any)?.Envelope?.Body;
   if (!body || typeof body !== "object") {
@@ -166,23 +150,26 @@ export async function POST(request: Request) {
   }
 
   if ("GetTicket" in body) {
+    // TECH_DEBT: same untyped SOAP body as above. Tracked by
+    // docs/superpowers/plans/2026-07-26-release-repository-governance.md
+    // Task 5.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ref = String((body as any).GetTicket?.Ref ?? "");
-    const match = /^([A-Z][A-Z0-9]{1,9})-(\d+)$/.exec(ref);
-    if (!match) return fault("Client", `Ref must look like "TF-12" (got "${ref}").`, 400);
+    const parsedRef = parseTicketRef(ref);
+    if (!parsedRef) return fault("Client", `Ref must look like "TF-12" (got "${ref}").`, 400);
 
     const { data: project } = await db
       .from("ba_projects")
       .select("id")
       .eq("sandbox_id", auth.sandboxId)
-      .eq("key", match[1])
+      .eq("key", parsedRef.key)
       .maybeSingle();
     const { data: ticket } = project
       ? await db
           .from("ba_tickets")
           .select("title, status, priority")
           .eq("project_id", project.id)
-          .eq("number", Number(match[2]))
+          .eq("number", parsedRef.number)
           .maybeSingle()
       : { data: null };
     if (!ticket) return fault("Client", `Ticket ${ref} does not exist.`, 404);

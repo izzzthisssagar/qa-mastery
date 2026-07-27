@@ -39,10 +39,7 @@ describe("WandboxRunner.executeSync", () => {
   });
 
   it("surfaces a compile error when the build fails with no output", async () => {
-    vi.stubGlobal(
-      "fetch",
-      mockWandbox({ status: "1", compiler_error: "prog.java:1: error: ;" }),
-    );
+    vi.stubGlobal("fetch", mockWandbox({ status: "1", compiler_error: "prog.java:1: error: ;" }));
     const r = await new WandboxRunner().executeSync(req("java", "public class Main {"));
     expect(r.passed).toBe(false);
     expect(r.console).toContain("error");

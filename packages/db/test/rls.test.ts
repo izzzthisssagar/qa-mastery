@@ -35,9 +35,7 @@ async function signedInClient(email: string): Promise<SupabaseClient> {
 }
 
 describe.skipIf(!hasEnv)("RLS regression", () => {
-  const service = createClient(URL!, SERVICE!, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  let service: SupabaseClient;
 
   const emailA = `rls-a-${randomUUID()}@e2e.local`;
   const emailB = `rls-b-${randomUUID()}@e2e.local`;
@@ -48,6 +46,10 @@ describe.skipIf(!hasEnv)("RLS regression", () => {
   let lessonId = "";
 
   beforeAll(async () => {
+    service = createClient(URL!, SERVICE!, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
     const a = await service.auth.admin.createUser({
       email: emailA,
       password: PASSWORD,
@@ -122,19 +124,13 @@ describe.skipIf(!hasEnv)("RLS regression", () => {
   });
 
   it("a learner reads their own progress", async () => {
-    const { data, error } = await clientA
-      .from("progress")
-      .select("lesson_id")
-      .eq("user_id", userA);
+    const { data, error } = await clientA.from("progress").select("lesson_id").eq("user_id", userA);
     expect(error).toBeNull();
     expect(data?.length).toBe(1);
   });
 
   it("a learner cannot read another learner's progress", async () => {
-    const { data, error } = await clientB
-      .from("progress")
-      .select("lesson_id")
-      .eq("user_id", userA);
+    const { data, error } = await clientB.from("progress").select("lesson_id").eq("user_id", userA);
     expect(error).toBeNull();
     expect(data?.length).toBe(0); // RLS filters the row out
   });

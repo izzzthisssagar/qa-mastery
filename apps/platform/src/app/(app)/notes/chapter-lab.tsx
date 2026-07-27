@@ -85,7 +85,9 @@ export function ChapterLab({ state }: { state: NoteLabState }) {
               className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
             >
               {pending && <Spinner className="size-3.5" />}
-              <span>{pending ? "Grading…" : solved ? "▶ Run again" : "▶ Submit for grading"}</span>
+              <span>
+                {pending ? "Grading…" : solved ? "▶ Run again" : "▶ Submit for grading"}
+              </span>
             </button>
             <span className="text-xs text-muted-foreground">
               {solved

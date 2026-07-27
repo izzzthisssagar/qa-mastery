@@ -21,10 +21,7 @@ describe("gradeTask", () => {
   });
 
   it("requires every threshold met to pass, averages the score", () => {
-    const r = gradeTask(
-      { minValidBugs: 4, minTestCases: 2 },
-      { validBugReports: 4, testCases: 1 },
-    );
+    const r = gradeTask({ minValidBugs: 4, minTestCases: 2 }, { validBugReports: 4, testCases: 1 });
     // bugs 4/4 = 1.0, tests 1/2 = 0.5 → mean 0.75
     expect(r.passed).toBe(false);
     expect(r.score).toBe(75);

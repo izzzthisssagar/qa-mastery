@@ -7,10 +7,11 @@ const CI = !!process.env.CI;
  * (BASE=localhost:3000), so this boots a single webServer — same reasoning
  * as playwright.buggyapi.config.ts / playwright.first-paint.config.ts for why
  * this lives in its own invocation rather than the main config.
- * Gated to `main` pushes + PRs carrying the `full-e2e` label (see ci.yml,
- * P4-3) rather than run on every push: toHaveScreenshot's baselines and
- * axe's full-page scans are the slowest, most environment-sensitive specs in
- * the suite (docs/known-issues/visual-regression-baselines.md).
+ * Gated to `main` pushes + PRs carrying the `full-e2e` label (see
+ * .github/workflows/ci.yml's e2e-full job, Task 10) rather than run on every
+ * push: toHaveScreenshot's baselines and axe's full-page scans are the
+ * slowest, most environment-sensitive specs in the suite (see
+ * docs/known-issues/visual-regression-baselines.md).
  */
 export default defineConfig({
   testDir: "./tests",
@@ -18,6 +19,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: CI,
   retries: CI ? 2 : 0,
+  // CI overrides this to blob via `--reporter=blob` on the command line (see
+  // .github/workflows/e2e-shard.yml) so every suite's report can be merged
+  // into one; this default stays list/html for a plain local run.
   reporter: CI ? [["list"], ["html", { open: "never" }]] : "list",
   expect: {
     toHaveScreenshot: { maxDiffPixelRatio: 0.01 },

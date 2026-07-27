@@ -17,7 +17,9 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
     <div className="space-y-6 py-2">
       <header className="space-y-1">
         <h1 className="font-display text-2xl font-bold tracking-tight">Open projects</h1>
-        <p className="text-sm text-muted-foreground">Testing work looking for QA. Apply to what fits.</p>
+        <p className="text-sm text-muted-foreground">
+          Testing work looking for QA. Apply to what fits.
+        </p>
       </header>
 
       {items.length === 0 ? (

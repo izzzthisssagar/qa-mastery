@@ -4,18 +4,46 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 
 const LIFECYCLE_STEPS = [
-  { id: "suite-start", label: "@BeforeSuite", desc: "Runs once before the entire suite starts (e.g. set up DB connection)." },
-  { id: "test-start", label: "@BeforeTest", desc: "Runs before any test classes inside a <test> tag execute." },
-  { id: "class-start", label: "@BeforeClass", desc: "Runs once before the first method in the current class." },
-  { id: "method-1-pre", label: "@BeforeMethod", desc: "Runs before EACH @Test method (e.g. open browser)." },
+  {
+    id: "suite-start",
+    label: "@BeforeSuite",
+    desc: "Runs once before the entire suite starts (e.g. set up DB connection).",
+  },
+  {
+    id: "test-start",
+    label: "@BeforeTest",
+    desc: "Runs before any test classes inside a <test> tag execute.",
+  },
+  {
+    id: "class-start",
+    label: "@BeforeClass",
+    desc: "Runs once before the first method in the current class.",
+  },
+  {
+    id: "method-1-pre",
+    label: "@BeforeMethod",
+    desc: "Runs before EACH @Test method (e.g. open browser).",
+  },
   { id: "test-1", label: "@Test (1)", desc: "The actual test execution (e.g. verify login)." },
-  { id: "method-1-post", label: "@AfterMethod", desc: "Runs after EACH @Test method (e.g. close browser)." },
+  {
+    id: "method-1-post",
+    label: "@AfterMethod",
+    desc: "Runs after EACH @Test method (e.g. close browser).",
+  },
   { id: "method-2-pre", label: "@BeforeMethod", desc: "Runs before the next @Test method." },
   { id: "test-2", label: "@Test (2)", desc: "The next test execution (e.g. verify logout)." },
   { id: "method-2-post", label: "@AfterMethod", desc: "Runs after the next @Test method." },
-  { id: "class-end", label: "@AfterClass", desc: "Runs once after all tests in the current class finish." },
+  {
+    id: "class-end",
+    label: "@AfterClass",
+    desc: "Runs once after all tests in the current class finish.",
+  },
   { id: "test-end", label: "@AfterTest", desc: "Runs after all test classes in the <test> tag." },
-  { id: "suite-end", label: "@AfterSuite", desc: "Runs once after the entire suite finishes (e.g. close DB)." },
+  {
+    id: "suite-end",
+    label: "@AfterSuite",
+    desc: "Runs once after the entire suite finishes (e.g. close DB).",
+  },
 ];
 
 export function LifecycleVisualizer({ onMilestone }: { onMilestone?: (m: string) => void }) {
@@ -24,7 +52,7 @@ export function LifecycleVisualizer({ onMilestone }: { onMilestone?: (m: string)
 
   const stepForward = () => {
     if (currentStep < LIFECYCLE_STEPS.length - 1) {
-      setCurrentStep(s => {
+      setCurrentStep((s) => {
         const next = s + 1;
         if (next === LIFECYCLE_STEPS.length - 1) onMilestone?.("completed-lifecycle");
         return next;
@@ -58,7 +86,9 @@ export function LifecycleVisualizer({ onMilestone }: { onMilestone?: (m: string)
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
         <div>
           <h3 className="text-lg font-semibold text-foreground">TestNG Execution Lifecycle</h3>
-          <p className="text-sm text-muted-foreground">Step through to see exactly when each annotation fires.</p>
+          <p className="text-sm text-muted-foreground">
+            Step through to see exactly when each annotation fires.
+          </p>
         </div>
         <div className="flex gap-2">
           <button
@@ -89,12 +119,14 @@ export function LifecycleVisualizer({ onMilestone }: { onMilestone?: (m: string)
           const isPast = idx < currentStep;
           const isActive = idx === currentStep;
           const isTest = step.label.includes("@Test");
-          
+
           let colorClass = "text-muted-foreground border-border";
           let bgClass = "bg-surface/50";
-          
+
           if (isActive) {
-            colorClass = isTest ? "text-emerald-400 border-emerald-500" : "text-accent border-accent";
+            colorClass = isTest
+              ? "text-emerald-400 border-emerald-500"
+              : "text-accent border-accent";
             bgClass = isTest ? "bg-emerald-500/10" : "bg-accent/10";
           } else if (isPast) {
             colorClass = "text-muted-foreground border-border";
@@ -107,20 +139,26 @@ export function LifecycleVisualizer({ onMilestone }: { onMilestone?: (m: string)
               animate={{
                 opacity: isActive || isPast ? 1 : 0.3,
                 x: isActive ? 5 : 0,
-                scale: isActive ? 1.02 : 1
+                scale: isActive ? 1.02 : 1,
               }}
               transition={{ duration: 0.3 }}
               className={`relative rounded-xl border ${colorClass} ${bgClass} p-3 sm:p-4 transition-colors`}
             >
               {/* Timeline dot */}
-              <div 
+              <div
                 className={`absolute -left-[31px] top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border-2 transition-colors duration-300 ${
-                  isActive ? "bg-current border-current" : isPast ? "bg-muted-foreground border-border" : "bg-surface border-border"
+                  isActive
+                    ? "bg-current border-current"
+                    : isPast
+                      ? "bg-muted-foreground border-border"
+                      : "bg-surface border-border"
                 }`}
               />
-              
+
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <span className={`font-mono text-sm sm:text-base font-semibold ${isActive && isTest ? "text-emerald-400" : ""}`}>
+                <span
+                  className={`font-mono text-sm sm:text-base font-semibold ${isActive && isTest ? "text-emerald-400" : ""}`}
+                >
                   {step.label}
                 </span>
                 <AnimatePresence>

@@ -80,7 +80,12 @@ function blockquote(text, label) {
   return label ? `> **${label}**\n>\n${prefixed}` : prefixed;
 }
 
-const CALLOUT_LABEL = { tip: "Tip", warn: "Watch out", mistake: "Common mistake", analogy: "In real life" };
+const CALLOUT_LABEL = {
+  tip: "Tip",
+  warn: "Watch out",
+  mistake: "Common mistake",
+  analogy: "In real life",
+};
 
 let imageCopiedThisNote = false;
 
@@ -119,15 +124,18 @@ function convertBody(body, outDir) {
 
   // Figure caption="..." wrapping a plain <img src="..." alt="..."/> — the
   // older, pre-HotspotImage image convention used in the earliest modules.
-  s = s.replace(/<Figure(?:\s+caption="((?:[^"\\]|\\.)*)")?>([\s\S]*?)<\/Figure>/g, (_, caption, content) => {
-    const imgMatch = /<img\s+([^>]*)\/?>/.exec(content);
-    if (!imgMatch) return content.trim() + "\n";
-    const src = attr(imgMatch[1], "src");
-    const alt = attr(imgMatch[1], "alt") ?? "";
-    const localName = copyImage(src, outDir);
-    const img = localName ? `![${alt}](${localName})` : `*(image: ${src})*`;
-    return caption ? `${img}\n\n*${unescape(caption)}*\n` : `${img}\n`;
-  });
+  s = s.replace(
+    /<Figure(?:\s+caption="((?:[^"\\]|\\.)*)")?>([\s\S]*?)<\/Figure>/g,
+    (_, caption, content) => {
+      const imgMatch = /<img\s+([^>]*)\/?>/.exec(content);
+      if (!imgMatch) return content.trim() + "\n";
+      const src = attr(imgMatch[1], "src");
+      const alt = attr(imgMatch[1], "alt") ?? "";
+      const localName = copyImage(src, outDir);
+      const img = localName ? `![${alt}](${localName})` : `*(image: ${src})*`;
+      return caption ? `${img}\n\n*${unescape(caption)}*\n` : `${img}\n`;
+    },
+  );
 
   // FlowAnimation -> numbered progression.
   s = s.replace(/<FlowAnimation\b([\s\S]*?)\/>/g, (_, inner) => {
@@ -151,7 +159,9 @@ function convertBody(body, outDir) {
   s = s.replace(/<StepChecklist\b([\s\S]*?)\/>/g, (_, inner) => {
     const stepsMatch = /steps=\{\[([\s\S]*?)\]\}/.exec(inner);
     const steps = stepsMatch ? extractObjectArray(stepsMatch[1], ["text", "detail"]) : [];
-    return steps.map((st) => `- [ ] ${st.text}${st.detail ? ` — ${st.detail}` : ""}`).join("\n") + "\n";
+    return (
+      steps.map((st) => `- [ ] ${st.text}${st.detail ? ` — ${st.detail}` : ""}`).join("\n") + "\n"
+    );
   });
 
   // WhenItBreaks -> symptom/fix pairs.
@@ -217,14 +227,20 @@ function convertBody(body, outDir) {
   s = s.replace(/<Hook>([\s\S]*?)<\/Hook>/g, (_, content) => blockquote(content) + "\n");
 
   // FirstTime title="..." -> heading, keep inner content (StepChecklist already converted above).
-  s = s.replace(/<FirstTime\s+title="((?:[^"\\]|\\.)*)">([\s\S]*?)<\/FirstTime>/g, (_, title, content) => {
-    return `### Your first time: ${unescape(title)}\n\n${content.trim()}\n`;
-  });
+  s = s.replace(
+    /<FirstTime\s+title="((?:[^"\\]|\\.)*)">([\s\S]*?)<\/FirstTime>/g,
+    (_, title, content) => {
+      return `### Your first time: ${unescape(title)}\n\n${content.trim()}\n`;
+    },
+  );
 
   // WorkedExample title="..." -> heading + content.
-  s = s.replace(/<WorkedExample\s+title="((?:[^"\\]|\\.)*)">([\s\S]*?)<\/WorkedExample>/g, (_, title, content) => {
-    return `### Worked example: ${unescape(title)}\n\n${content.trim()}\n`;
-  });
+  s = s.replace(
+    /<WorkedExample\s+title="((?:[^"\\]|\\.)*)">([\s\S]*?)<\/WorkedExample>/g,
+    (_, title, content) => {
+      return `### Worked example: ${unescape(title)}\n\n${content.trim()}\n`;
+    },
+  );
 
   // WhereToCheck -> heading + content (already plain markdown bullets inside).
   s = s.replace(/<WhereToCheck>([\s\S]*?)<\/WhereToCheck>/g, (_, content) => {
@@ -237,9 +253,12 @@ function convertBody(body, outDir) {
   });
 
   // AskCommunity prompt="..." -> heading + prompt quote + content.
-  s = s.replace(/<AskCommunity\s+prompt="((?:[^"\\]|\\.)*)">([\s\S]*?)<\/AskCommunity>/g, (_, prompt, content) => {
-    return `### Ask the community\n\n> ${unescape(prompt)}\n\n${content.trim()}\n`;
-  });
+  s = s.replace(
+    /<AskCommunity\s+prompt="((?:[^"\\]|\\.)*)">([\s\S]*?)<\/AskCommunity>/g,
+    (_, prompt, content) => {
+      return `### Ask the community\n\n> ${unescape(prompt)}\n\n${content.trim()}\n`;
+    },
+  );
 
   // Complete -> drop (XP tracking has no meaning outside the app).
   s = s.replace(/<Complete\b[^>]*\/>\s*/g, "");
@@ -259,7 +278,9 @@ function convertBody(body, outDir) {
 
 function tripleToWikilink(triple, allLeaves) {
   const [m, c, t] = triple.split("/");
-  const leaf = allLeaves.find((l) => l.moduleSlug === m && l.chapterSlug === c && l.topicSlug === t);
+  const leaf = allLeaves.find(
+    (l) => l.moduleSlug === m && l.chapterSlug === c && l.topicSlug === t,
+  );
   const display = leaf ? leaf.title : t;
   return `[[Notes/${m}/${c}/${t}|${display}]]`;
 }
@@ -280,17 +301,20 @@ function loadTaxonomyTitles() {
   }
   // Simpler and robust: three-pass regex over the whole source respecting nesting depth
   // via a small manual scanner (the taxonomy is a plain nested array literal).
-  const moduleRe = /\{\s*slug:\s*"([a-z0-9-]+)",\s*title:\s*"([^"]*)"[\s\S]*?chapters:\s*\[([\s\S]*?)\n\s{4}\],\s*\n\s{2}\},/g;
+  const moduleRe =
+    /\{\s*slug:\s*"([a-z0-9-]+)",\s*title:\s*"([^"]*)"[\s\S]*?chapters:\s*\[([\s\S]*?)\n\s{4}\],\s*\n\s{2}\},/g;
   let mm;
   while ((mm = moduleRe.exec(src))) {
     const moduleSlug = mm[1];
     const chaptersSrc = mm[3];
-    const chapterRe = /\{\s*slug:\s*"([a-z0-9-]+)",\s*title:\s*"([^"]*)",\s*topics:\s*\[([\s\S]*?)\],\s*\n\s*\},/g;
+    const chapterRe =
+      /\{\s*slug:\s*"([a-z0-9-]+)",\s*title:\s*"([^"]*)",\s*topics:\s*\[([\s\S]*?)\],\s*\n\s*\},/g;
     let cm;
     while ((cm = chapterRe.exec(chaptersSrc))) {
       const chapterSlug = cm[1];
       const topicsSrc = cm[3];
-      const topicRe = /\{\s*slug:\s*"([a-z0-9-]+)",\s*title:\s*"([^"]*)"(,\s*planned:\s*true)?\s*\}/g;
+      const topicRe =
+        /\{\s*slug:\s*"([a-z0-9-]+)",\s*title:\s*"([^"]*)"(,\s*planned:\s*true)?\s*\}/g;
       let tm;
       while ((tm = topicRe.exec(topicsSrc))) {
         leaves.push({ moduleSlug, chapterSlug, topicSlug: tm[1], title: tm[2], planned: !!tm[3] });
@@ -361,7 +385,12 @@ const moduleTitles = (() => {
   return map;
 })();
 
-const indexLines = ["# Curriculum notes index", "", "Auto-generated by `sync-notes-to-vault.mjs` — do not hand-edit.", ""];
+const indexLines = [
+  "# Curriculum notes index",
+  "",
+  "Auto-generated by `sync-notes-to-vault.mjs` — do not hand-edit.",
+  "",
+];
 for (const [moduleSlug, chapters] of [...index.entries()].sort()) {
   indexLines.push(`## ${moduleTitles.get(moduleSlug) ?? moduleSlug}`, "");
   for (const [chapterSlug, topics] of chapters) {
@@ -374,4 +403,6 @@ for (const [moduleSlug, chapters] of [...index.entries()].sort()) {
 }
 fs.writeFileSync(path.join(outRoot, "index.md"), indexLines.join("\n").replace(/\n{3,}/g, "\n\n"));
 
-console.log(`wrote ${written} notes + index.md to ${path.relative(vaultRoot, outRoot)}/ (${skippedNoImage} had no image to copy)`);
+console.log(
+  `wrote ${written} notes + index.md to ${path.relative(vaultRoot, outRoot)}/ (${skippedNoImage} had no image to copy)`,
+);

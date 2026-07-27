@@ -24,7 +24,9 @@ export default async function TestersPage({ searchParams }: { searchParams: Prom
   const res = await searchTesters(filters);
   const items = res.ok ? res.data.items : [];
   const nextCursor = res.ok ? res.data.nextCursor : null;
-  const hasFilters = Boolean(filters.specialties?.length || filters.availability || filters.verifiedOnly);
+  const hasFilters = Boolean(
+    filters.specialties?.length || filters.availability || filters.verifiedOnly,
+  );
 
   // Preserve current filters when paginating.
   const nextParams = new URLSearchParams();
@@ -50,7 +52,11 @@ export default async function TestersPage({ searchParams }: { searchParams: Prom
         <div className="space-y-6">
           {items.length === 0 ? (
             <EmptyState
-              title={hasFilters ? "No testers match those filters" : "The directory is just getting started"}
+              title={
+                hasFilters
+                  ? "No testers match those filters"
+                  : "The directory is just getting started"
+              }
               description={
                 hasFilters
                   ? "Try widening your specialty or availability filters."

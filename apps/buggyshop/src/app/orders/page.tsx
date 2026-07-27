@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import { readRelease } from "@/lib/catalog";
 import { canCancel, paymentStatusFor, type OrderStatus } from "@/lib/orders";
 
-
 export default function OrdersPage() {
   const [status, setStatus] = useState<OrderStatus>("Shipped");
   const [rejected, setRejected] = useState(false);
@@ -58,7 +57,10 @@ export default function OrdersPage() {
           <div className="flex flex-col">
             <span className="font-medium text-zinc-900">Order #1042</span>
             <span className="text-sm text-zinc-500">Annual Membership</span>
-            <span data-testid="order-status" className="mt-2 text-sm font-semibold text-shop-accent">
+            <span
+              data-testid="order-status"
+              className="mt-2 text-sm font-semibold text-shop-accent"
+            >
               {status}
             </span>
           </div>

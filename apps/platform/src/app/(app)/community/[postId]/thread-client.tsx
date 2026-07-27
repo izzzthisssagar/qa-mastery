@@ -52,7 +52,9 @@ function CommentRow({
     <div
       data-testid="thread-comment"
       className={`rounded-xl border p-4 ${
-        comment.isAccepted ? "border-emerald-500/40 bg-emerald-500/[0.06]" : "border-border bg-surface"
+        comment.isAccepted
+          ? "border-emerald-500/40 bg-emerald-500/[0.06]"
+          : "border-border bg-surface"
       }`}
     >
       <div className="flex items-center gap-2 text-sm">
@@ -80,10 +82,12 @@ function CommentRow({
           <button
             type="button"
             data-testid="accept-answer"
-            onClick={() => startTransition(async () => {
-              await acceptAnswer(postId, comment.id);
-              onAccepted(comment.id);
-            })}
+            onClick={() =>
+              startTransition(async () => {
+                await acceptAnswer(postId, comment.id);
+                onAccepted(comment.id);
+              })
+            }
             className="text-success-text hover:underline"
           >
             Accept answer
@@ -168,7 +172,12 @@ export function ThreadClient({ thread }: { thread: PostThread }) {
           className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-accent min-h-24"
         />
         {error && <p className="text-sm text-danger-text">{error}</p>}
-        <Button onClick={submit} loading={pending} disabled={!body.trim()} data-testid="comment-submit">
+        <Button
+          onClick={submit}
+          loading={pending}
+          disabled={!body.trim()}
+          data-testid="comment-submit"
+        >
           {pending ? "Posting…" : isQuestion ? "Post answer" : "Comment"}
         </Button>
       </div>

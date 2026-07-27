@@ -21,11 +21,11 @@ export default defineConfig({
   // else starved the shared 2-core CI runner: tasks.spec.ts's server-action
   // round trip blew its 30s timeout under the contention (checkbox stuck on
   // an unsettled optimistic row — not a product bug, see
-  // docs/known-issues/dashboard-blank-first-paint.md).
-  // visual.spec.ts + a11y.spec.ts also moved out, to their own config
-  // (playwright.full.config.ts) — CI gates that suite to `main` + the
-  // `full-e2e` label instead of running it (and its screenshot/axe cost) on
-  // every push (P4-3).
+  // docs/known-issues/dashboard-blank-first-paint.md). visual.spec.ts and
+  // a11y.spec.ts move to playwright.full.config.ts (Task 10): they're the
+  // slowest, most environment-sensitive specs in the suite (screenshot
+  // diffing, full-page axe scans × 2 themes) and only need to run gated —
+  // on `main` and PRs carrying the `full-e2e` label — not on every core shard.
   testIgnore: [
     "**/buggyapi.spec.ts",
     "**/dashboard-first-paint.spec.ts",

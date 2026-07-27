@@ -37,10 +37,7 @@ export function AuthBrandPanel() {
       />
 
       <motion.div {...rise(0)}>
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-lg font-bold tracking-tight"
-        >
+        <Link href="/" className="inline-flex items-center gap-2 text-lg font-bold tracking-tight">
           <span
             aria-hidden
             className="grid h-7 w-7 place-items-center rounded-md border border-accent/40 bg-accent/10 font-mono text-xs text-accent"
@@ -69,17 +66,11 @@ export function AuthBrandPanel() {
 
         <ul className="mt-10 space-y-5">
           {PROOF.map((item, i) => (
-            <motion.li
-              key={item.k}
-              {...rise(0.24 + i * 0.08)}
-              className="flex gap-4"
-            >
+            <motion.li key={item.k} {...rise(0.24 + i * 0.08)} className="flex gap-4">
               {/* zinc-400, not the muted token: the panel is dark-only
                   (bg-background in both themes) and zinc-500/600 fall below
                   WCAG AA 4.5:1 on it. */}
-              <span className="mt-0.5 font-mono text-xs text-muted-foreground">
-                {item.k}
-              </span>
+              <span className="mt-0.5 font-mono text-xs text-muted-foreground">{item.k}</span>
               <div>
                 <p className="text-sm font-semibold text-foreground">{item.t}</p>
                 <p className="text-sm text-muted-foreground">{item.d}</p>

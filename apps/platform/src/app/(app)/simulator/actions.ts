@@ -1,11 +1,7 @@
 "use server";
 
 import { createServiceClient } from "@qa-mastery/db";
-import {
-  validateCodeSubmission,
-  isSimulatorLanguage,
-  type RunResult,
-} from "@qa-mastery/grading";
+import { validateCodeSubmission, isSimulatorLanguage, type RunResult } from "@qa-mastery/grading";
 import { WandboxRunner } from "@qa-mastery/grading/runners";
 import { getAuthedUserId } from "@/lib/auth";
 import { withLogging } from "@/lib/logging";
@@ -53,10 +49,7 @@ async function assertRunAllowed(
  * return output. Records a `code_runs` row with null lesson_id + the language,
  * reusing the same validation, quota and cooldown as lesson labs.
  */
-export async function runSimulatorCode(
-  language: string,
-  code: string,
-): Promise<RunResult> {
+export async function runSimulatorCode(language: string, code: string): Promise<RunResult> {
   const userId = await getAuthedUserId();
   return withLogging("runSimulatorCode", userId, () => runSimulatorCodeRun(userId, language, code));
 }

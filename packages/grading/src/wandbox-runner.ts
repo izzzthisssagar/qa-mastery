@@ -84,8 +84,7 @@ export class WandboxRunner implements RunnerProvider {
     const exit = Number.parseInt(data.status ?? "0", 10);
     const passed = exit === 0;
     const runtimeOut = (
-      data.program_message ??
-      `${data.program_output ?? ""}${data.program_error ?? ""}`
+      data.program_message ?? `${data.program_output ?? ""}${data.program_error ?? ""}`
     ).trim();
     const compileErr = (data.compiler_error ?? "").trim();
 

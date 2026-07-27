@@ -1,16 +1,22 @@
-import { exec } from "node:child_process";
+import { exec, type ExecException } from "node:child_process";
 import { promisify } from "node:util";
 import { writeFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import os from "node:os";
-import type { RunnerProvider, RunRequest, RunResult, RunStatus } from "./runner";
+import type { RunnerProvider, RunRequest, RunResult } from "./runner";
 
 const execAsync = promisify(exec);
 
+// util.promisify(exec) rejects with the same ExecException node's callback
+// form passes, plus stdout/stderr tacked on ad-hoc (undocumented in the
+// type, but real at runtime -- this is the standard pattern for reading a
+// failed command's output).
+type ExecFailure = ExecException & { stdout?: string; stderr?: string };
+
 export class DockerPlaywrightRunner implements RunnerProvider {
   readonly name = "docker-playwright";
-  
+
   private static results = new Map<string, RunResult>();
 
   async submit(req: RunRequest): Promise<{ runId: string }> {
@@ -37,7 +43,7 @@ export default defineConfig({
     headless: true,
   },
 });
-`
+`,
     );
 
     // Fire and forget the container execution
@@ -46,7 +52,7 @@ export default defineConfig({
     return { runId };
   }
 
-  private async executeInContainer(runId: string, tmpDir: string, lessonSlug: string) {
+  private async executeInContainer(runId: string, tmpDir: string, _lessonSlug: string) {
     DockerPlaywrightRunner.results.set(runId, {
       status: "running",
       passed: false,
@@ -58,12 +64,12 @@ export default defineConfig({
     try {
       const isMac = process.platform === "darwin";
       const networkArg = isMac ? "" : "--network=host";
-      
+
       const cmd = `docker run --rm -v "${tmpDir}:/tests" -w /tests ${networkArg} mcr.microsoft.com/playwright:v1.40.0-jammy npx playwright test student.spec.ts -c playwright.config.ts`;
 
       const { stdout, stderr } = await execAsync(cmd, {
         timeout: 60000, // 60 seconds
-        env: { ...process.env, CI: "true" }
+        env: { ...process.env, CI: "true" },
       });
 
       DockerPlaywrightRunner.results.set(runId, {
@@ -73,8 +79,9 @@ export default defineConfig({
         artifacts: [],
         staticChecks: [],
       });
-    } catch (err: any) {
-      const consoleOutput = err.stdout ? err.stdout : (err.stderr ? err.stderr : err.message);
+    } catch (err) {
+      const execErr = err as ExecFailure;
+      const consoleOutput = execErr.stdout || execErr.stderr || execErr.message;
       DockerPlaywrightRunner.results.set(runId, {
         status: "failed",
         passed: false,
@@ -90,11 +97,17 @@ export default defineConfig({
 
   async getResult(runId: string): Promise<RunResult> {
     const result = DockerPlaywrightRunner.results.get(runId);
-    
+
     if (!result) {
-      return { status: "error", passed: false, console: "Run not found", artifacts: [], staticChecks: [] };
+      return {
+        status: "error",
+        passed: false,
+        console: "Run not found",
+        artifacts: [],
+        staticChecks: [],
+      };
     }
-    
+
     return result;
   }
 }

@@ -63,7 +63,9 @@ export function FilterRail() {
   return (
     <nav aria-label="Tester filters" className="space-y-5">
       <div className="space-y-2">
-        <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Specialty</h2>
+        <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Specialty
+        </h2>
         <div className="flex flex-wrap gap-2">
           {SPECIALTIES.map((s) => (
             <button
@@ -80,7 +82,9 @@ export function FilterRail() {
       </div>
 
       <div className="space-y-2">
-        <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Availability</h2>
+        <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Availability
+        </h2>
         <div className="flex flex-wrap gap-2">
           {AVAILABILITY.map((a) => (
             <button
@@ -96,12 +100,21 @@ export function FilterRail() {
         </div>
       </div>
 
-      <button type="button" aria-pressed={verified} onClick={toggleVerified} className={chip(verified)}>
+      <button
+        type="button"
+        aria-pressed={verified}
+        onClick={toggleVerified}
+        className={chip(verified)}
+      >
         ✓ Verified skills only
       </button>
 
       {hasAny && (
-        <button type="button" onClick={clearAll} className="block text-xs text-muted-foreground hover:text-foreground">
+        <button
+          type="button"
+          onClick={clearAll}
+          className="block text-xs text-muted-foreground hover:text-foreground"
+        >
           Clear filters
         </button>
       )}
