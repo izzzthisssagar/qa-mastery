@@ -14,13 +14,7 @@ export interface PublicQuizQuestion {
   options: string[];
 }
 
-export function QuizPanel({
-  slug,
-  questions,
-}: {
-  slug: string;
-  questions: PublicQuizQuestion[];
-}) {
+export function QuizPanel({ slug, questions }: { slug: string; questions: PublicQuizQuestion[] }) {
   const hydrated = useHydrated();
   const [answers, setAnswers] = useState<Record<string, number[]>>({});
   const [result, setResult] = useState<SubmitQuizResult | null>(null);
@@ -56,7 +50,7 @@ export function QuizPanel({
             particleCount: 100,
             spread: 70,
             origin: { y: 0.6 },
-            colors: ["#10b981", "#f43f5e", "#8b5cf6", "#f59e0b"]
+            colors: ["#10b981", "#f43f5e", "#8b5cf6", "#f59e0b"],
           });
         });
       }
@@ -93,8 +87,9 @@ export function QuizPanel({
           }
         >
           <p className="text-sm font-semibold text-foreground">
-            {result.passed ? "🎉 Passed" : "Not yet — keep going"} · {result.score}/{result.maxScore}{" "}
-            ({result.maxScore > 0 ? Math.round((result.score / result.maxScore) * 100) : 0}%)
+            {result.passed ? "🎉 Passed" : "Not yet — keep going"} · {result.score}/
+            {result.maxScore} (
+            {result.maxScore > 0 ? Math.round((result.score / result.maxScore) * 100) : 0}%)
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {result.passed
@@ -113,7 +108,9 @@ export function QuizPanel({
               <p className="text-sm font-medium text-foreground">
                 <span className="text-muted-foreground">{qi + 1}.</span> {q.prompt}
                 {q.type === "multi" && (
-                  <span className="ml-2 text-xs text-muted-foreground">(select all that apply)</span>
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    (select all that apply)
+                  </span>
                 )}
               </p>
               <div className="mt-3 space-y-2">

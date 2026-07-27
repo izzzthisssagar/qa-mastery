@@ -35,7 +35,7 @@ describe.skipIf(!hasEnv)("Streaks RLS invariants", () => {
 
   beforeAll(async () => {
     service = createClient(URL!, SERVICE!, {
-    auth: { persistSession: false, autoRefreshToken: false },
+      auth: { persistSession: false, autoRefreshToken: false },
     });
 
     const mk = async (email: string) => {
@@ -66,20 +66,16 @@ describe.skipIf(!hasEnv)("Streaks RLS invariants", () => {
     // semantics for UPDATE/DELETE, unlike the WITH CHECK-driven INSERT
     // rejection above) — assert on the row surviving unchanged, not on
     // `error`.
-    await service.from("streaks").upsert({ user_id: aliceId, current_streak: 1, longest_streak: 1 });
-    await asAlice.from("streaks").update({ current_streak: 999 }).eq("user_id", aliceId);
-    const { data } = await service
+    await service
       .from("streaks")
-      .select("current_streak")
-      .eq("user_id", aliceId);
+      .upsert({ user_id: aliceId, current_streak: 1, longest_streak: 1 });
+    await asAlice.from("streaks").update({ current_streak: 999 }).eq("user_id", aliceId);
+    const { data } = await service.from("streaks").select("current_streak").eq("user_id", aliceId);
     expect(data?.[0]?.current_streak).toBe(1);
   });
 
   it("a learner reads their own service-role-written streak", async () => {
-    const { data } = await asAlice
-      .from("streaks")
-      .select("current_streak")
-      .eq("user_id", aliceId);
+    const { data } = await asAlice.from("streaks").select("current_streak").eq("user_id", aliceId);
     expect(data?.[0]?.current_streak).toBe(1);
   });
 

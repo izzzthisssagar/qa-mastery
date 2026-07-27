@@ -53,9 +53,13 @@ export default async function PublicProfilePage({ params }: Params) {
               className="size-14 rounded-full object-cover"
             />
           )}
-          <h1 className="font-display text-3xl font-bold tracking-tight">{profile.handle as string}</h1>
+          <h1 className="font-display text-3xl font-bold tracking-tight">
+            {profile.handle as string}
+          </h1>
           <Badge tone={availabilityTone[availability] ?? "default"}>{labelFor(availability)}</Badge>
-          {(profile.verification_status as string) === "verified" && <Badge tone="success">Verified</Badge>}
+          {(profile.verification_status as string) === "verified" && (
+            <Badge tone="success">Verified</Badge>
+          )}
         </div>
         {(profile.headline as string) && (
           <p className="max-w-2xl text-lg text-foreground">{profile.headline as string}</p>
@@ -101,7 +105,7 @@ export default async function PublicProfilePage({ params }: Params) {
           <div className="flex flex-wrap gap-2">
             {badges.map((b) => (
               <Badge key={b.id as string} tone="success">
-                {(b.skill as string)} · {b.score as number}%
+                {b.skill as string} · {b.score as number}%
               </Badge>
             ))}
           </div>
@@ -143,7 +147,7 @@ export default async function PublicProfilePage({ params }: Params) {
                 key={d.id as string}
                 className="rounded-md border border-border bg-surface/60 px-2 py-1"
               >
-                {(d.device as string)}
+                {d.device as string}
                 {d.os ? ` · ${d.os as string}` : ""}
                 {d.os_version ? ` ${d.os_version as string}` : ""}
               </span>
@@ -196,7 +200,9 @@ export default async function PublicProfilePage({ params }: Params) {
                 </div>
                 <h3 className="font-medium text-foreground">{item.title as string}</h3>
                 {(item.body as string) && (
-                  <p className="mt-1 line-clamp-4 text-sm text-muted-foreground">{item.body as string}</p>
+                  <p className="mt-1 line-clamp-4 text-sm text-muted-foreground">
+                    {item.body as string}
+                  </p>
                 )}
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                   {(item.repo_url as string) && (

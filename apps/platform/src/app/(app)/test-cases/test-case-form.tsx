@@ -22,7 +22,12 @@ export function TestCaseForm() {
         className={field}
       />
       <div className="grid gap-3 sm:grid-cols-2">
-        <textarea name="preconditions" rows={2} placeholder="Preconditions (optional)" className={field} />
+        <textarea
+          name="preconditions"
+          rows={2}
+          placeholder="Preconditions (optional)"
+          className={field}
+        />
         <textarea name="expected" rows={2} placeholder="Expected result" className={field} />
       </div>
       <textarea name="steps" rows={3} placeholder="Steps — one per line" className={field} />

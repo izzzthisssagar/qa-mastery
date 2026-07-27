@@ -6,7 +6,6 @@ import { useParams } from "next/navigation";
 import { readRelease, getProduct, isQuantityAccepted } from "@/lib/catalog";
 import { bugFlag, DEFAULT_RELEASE } from "@qa-mastery/shared";
 
-
 function ShopHeader() {
   return (
     <header
@@ -64,7 +63,7 @@ export default function ProductDetailPage() {
 
   function addToCart() {
     setNetworkError(false);
-    
+
     // BS-022: Chaos Mode (30% chance to fail)
     if (bugFlag("BS-022", release) && Math.random() < 0.3) {
       setNetworkError(true);

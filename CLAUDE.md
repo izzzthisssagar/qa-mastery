@@ -94,8 +94,7 @@ mind when deploying:
   `text-muted-foreground`) — never raw `zinc-*`, and never a raw Tailwind
   pastel (`text-emerald-300`, `text-red-400`, …) as text color either: those
   are tuned for the dark palette only and measure well under AA (as low as
-  1.2:1) against the light background — axe caught this repeatedly in Phase
-  7. Use the **text-tone tokens** instead, each independently AA-verified
+  1.2:1) against the light background — axe caught this repeatedly in Phase 7. Use the **text-tone tokens** instead, each independently AA-verified
   against `--background`/`--surface`/`--surface-raised` on light, unchanged
   (already-safe) pastels on dark: `text-accent-text` (general accent-colored
   copy — labels, inline code, links; distinct from `text-accent`, which is

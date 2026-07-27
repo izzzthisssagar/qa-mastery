@@ -68,7 +68,10 @@ test("checkRuntimeAlignment reports exactly the seeded drift", async () => {
 test("checkRuntimeAlignment returns no violations for an aligned fixture", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "runtime-align-clean-"));
 
-  await writeJson(path.join(root, "package.json"), { name: "qa-mastery", engines: { node: ">=24 <25" } });
+  await writeJson(path.join(root, "package.json"), {
+    name: "qa-mastery",
+    engines: { node: ">=24 <25" },
+  });
   await writeYaml(
     path.join(root, "pnpm-workspace.yaml"),
     "packages:\n  - apps/*\n  - packages/*\noverrides:\n  js-yaml@<3.15.0: 3.15.0\n  sharp@<0.35.0: 0.35.3\n  fast-xml-parser@<5.10.1: 5.10.1\n  postcss@<8.5.18: 8.5.21\n",
@@ -94,7 +97,10 @@ test("checkRuntimeAlignment returns no violations for an aligned fixture", async
 
 test("checkRuntimeAlignment flags a missing or weakened protected override", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "runtime-align-override-"));
-  await writeJson(path.join(root, "package.json"), { name: "qa-mastery", engines: { node: ">=24 <25" } });
+  await writeJson(path.join(root, "package.json"), {
+    name: "qa-mastery",
+    engines: { node: ">=24 <25" },
+  });
   await writeYaml(
     path.join(root, "pnpm-workspace.yaml"),
     "packages:\n  - apps/*\noverrides:\n  js-yaml@<3.15.0: 3.15.0\n  sharp@<0.35.0: 0.35.3\n  fast-xml-parser@<5.10.1: 5.10.1\n",

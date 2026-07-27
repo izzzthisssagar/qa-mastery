@@ -41,8 +41,7 @@ export function FeedbackWidget() {
   function send() {
     setError(null);
     startTransition(async () => {
-      const context =
-        typeof window !== "undefined" ? window.location.pathname : undefined;
+      const context = typeof window !== "undefined" ? window.location.pathname : undefined;
       const res = await submitFeedback({ type, message, rating, context });
       if (res.ok) {
         setDone(true);
@@ -62,7 +61,10 @@ export function FeedbackWidget() {
         aria-label="Send feedback"
         className="fixed bottom-4 left-4 z-50 inline-flex items-center gap-2 rounded-full border border-border bg-surface/80 px-4 py-2.5 text-sm font-medium text-foreground shadow-lg backdrop-blur transition-colors hover:border-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 sm:left-6"
       >
-        <span aria-hidden className="text-accent">✦</span> Feedback
+        <span aria-hidden className="text-accent">
+          ✦
+        </span>{" "}
+        Feedback
       </button>
     );
   }
@@ -70,9 +72,7 @@ export function FeedbackWidget() {
   return (
     <div className="fixed bottom-4 left-4 z-50 w-[min(92vw,22rem)] rounded-2xl border border-border bg-background/95 p-4 shadow-2xl backdrop-blur sm:left-6">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-foreground">
-          Tell us what to build next
-        </h2>
+        <h2 className="text-sm font-semibold text-foreground">Tell us what to build next</h2>
         <button
           type="button"
           onClick={() => {
@@ -89,8 +89,8 @@ export function FeedbackWidget() {
       {done ? (
         <div className="space-y-3 py-2">
           <p className="text-sm text-foreground">
-            <span className="text-accent">Got it.</span> We read every one — and
-            a lot of them turn into things we ship.
+            <span className="text-accent">Got it.</span> We read every one — and a lot of them turn
+            into things we ship.
           </p>
           <button
             type="button"
@@ -125,9 +125,7 @@ export function FeedbackWidget() {
             rows={4}
             maxLength={4000}
             placeholder={
-              type === "praise"
-                ? "What did you love?"
-                : "What do you want, or what went wrong?"
+              type === "praise" ? "What did you love?" : "What do you want, or what went wrong?"
             }
             className="w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
           />
@@ -143,7 +141,9 @@ export function FeedbackWidget() {
                 aria-label={`${n} star${n > 1 ? "s" : ""}`}
                 onClick={() => setRating(rating === n ? undefined : n)}
                 className={`text-base leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                  rating && n <= rating ? "text-bug" : "text-muted-foreground hover:text-muted-foreground"
+                  rating && n <= rating
+                    ? "text-bug"
+                    : "text-muted-foreground hover:text-muted-foreground"
                 }`}
               >
                 ★

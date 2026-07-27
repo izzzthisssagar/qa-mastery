@@ -79,13 +79,34 @@ export function registerAttachmentRoutes(app: OpenAPIHono<AuthEnv>) {
         },
       },
       responses: {
-        201: { description: "Uploaded.", content: { "application/json": { schema: AttachmentSchema } } },
-        401: { description: "Not authenticated.", content: { "application/json": { schema: ErrorSchema } } },
-        404: { description: "No such ticket.", content: { "application/json": { schema: ErrorSchema } } },
-        413: { description: "File too large.", content: { "application/json": { schema: ErrorSchema } } },
-        415: { description: "Unsupported content type.", content: { "application/json": { schema: ErrorSchema } } },
-        422: { description: "No file field.", content: { "application/json": { schema: ErrorSchema } } },
-        500: { description: "Internal error.", content: { "application/json": { schema: ErrorSchema } } },
+        201: {
+          description: "Uploaded.",
+          content: { "application/json": { schema: AttachmentSchema } },
+        },
+        401: {
+          description: "Not authenticated.",
+          content: { "application/json": { schema: ErrorSchema } },
+        },
+        404: {
+          description: "No such ticket.",
+          content: { "application/json": { schema: ErrorSchema } },
+        },
+        413: {
+          description: "File too large.",
+          content: { "application/json": { schema: ErrorSchema } },
+        },
+        415: {
+          description: "Unsupported content type.",
+          content: { "application/json": { schema: ErrorSchema } },
+        },
+        422: {
+          description: "No file field.",
+          content: { "application/json": { schema: ErrorSchema } },
+        },
+        500: {
+          description: "Internal error.",
+          content: { "application/json": { schema: ErrorSchema } },
+        },
       },
     }),
     async (c) => {
@@ -100,20 +121,33 @@ export function registerAttachmentRoutes(app: OpenAPIHono<AuthEnv>) {
         .eq("id", id)
         .maybeSingle();
       if (!ticket) {
-        return c.json({ error: { code: "not_found", message: `Ticket ${id} does not exist.` } }, 404);
+        return c.json(
+          { error: { code: "not_found", message: `Ticket ${id} does not exist.` } },
+          404,
+        );
       }
 
       // The zod-openapi validator already parsed the multipart body.
       const { file } = c.req.valid("form") as { file: unknown };
       if (!(file instanceof File)) {
         return c.json(
-          { error: { code: "validation_failed", message: "Send multipart/form-data with a `file` field." } },
+          {
+            error: {
+              code: "validation_failed",
+              message: "Send multipart/form-data with a `file` field.",
+            },
+          },
           422,
         );
       }
       if (file.size > MAX_BYTES) {
         return c.json(
-          { error: { code: "payload_too_large", message: `Max file size is ${MAX_BYTES / 1024} KB.` } },
+          {
+            error: {
+              code: "payload_too_large",
+              message: `Max file size is ${MAX_BYTES / 1024} KB.`,
+            },
+          },
           413,
         );
       }
@@ -169,8 +203,14 @@ export function registerAttachmentRoutes(app: OpenAPIHono<AuthEnv>) {
           description: "Attachments with freshly-signed download URLs.",
           content: { "application/json": { schema: z.array(AttachmentSchema) } },
         },
-        401: { description: "Not authenticated.", content: { "application/json": { schema: ErrorSchema } } },
-        404: { description: "No such ticket.", content: { "application/json": { schema: ErrorSchema } } },
+        401: {
+          description: "Not authenticated.",
+          content: { "application/json": { schema: ErrorSchema } },
+        },
+        404: {
+          description: "No such ticket.",
+          content: { "application/json": { schema: ErrorSchema } },
+        },
       },
     }),
     async (c) => {
@@ -185,7 +225,10 @@ export function registerAttachmentRoutes(app: OpenAPIHono<AuthEnv>) {
         .eq("id", id)
         .maybeSingle();
       if (!ticket) {
-        return c.json({ error: { code: "not_found", message: `Ticket ${id} does not exist.` } }, 404);
+        return c.json(
+          { error: { code: "not_found", message: `Ticket ${id} does not exist.` } },
+          404,
+        );
       }
 
       const { data } = await db

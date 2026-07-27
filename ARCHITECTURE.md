@@ -42,12 +42,12 @@ graph TD
     agent & db & grading & shared & ui --> config
 ```
 
-| Layer | Packages | Role |
-|---|---|---|
-| 3 — apps | `platform`, `buggyshop` | Next.js App Router; consume packages only |
-| 2 — composite | `curriculum` (MDX→registry), `widgets` (teaching UI) | depend on `shared`/`db` |
-| 1 — domain | `agent` (tutor LLM), `grading`, `db`, `ui`, `shared` | depend on `config` |
-| 0 — leaf | `config` (tsconfig/eslint) | nothing |
+| Layer         | Packages                                             | Role                                      |
+| ------------- | ---------------------------------------------------- | ----------------------------------------- |
+| 3 — apps      | `platform`, `buggyshop`                              | Next.js App Router; consume packages only |
+| 2 — composite | `curriculum` (MDX→registry), `widgets` (teaching UI) | depend on `shared`/`db`                   |
+| 1 — domain    | `agent` (tutor LLM), `grading`, `db`, `ui`, `shared` | depend on `config`                        |
+| 0 — leaf      | `config` (tsconfig/eslint)                           | nothing                                   |
 
 **Pattern:** modular monolith on a shared Postgres — right for a small team +
 rapid iteration. Internal packages ship TS source; apps list them in

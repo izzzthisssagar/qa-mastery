@@ -11,7 +11,7 @@ e-commerce app (**BuggyShop**), and get their work auto-graded. We've transforme
 
 ## Features & Philosophy
 
-- **No "Wall of Text":** Lessons are powered by MDX and broken up by beautiful, interactive React widgets built with Framer Motion. 
+- **No "Wall of Text":** Lessons are powered by MDX and broken up by beautiful, interactive React widgets built with Framer Motion.
 - **Track A (Manual Testing):** Students interact with an SDLC Visualizer, an interactive Kanban Jira Board, a Testing Types sorter, and a Session-Based Exploratory Testing timer.
 - **Track B (Automation):** Students interact with a Boundary Value slider, the Automation Pyramid, WebDriver architecture flows, TestNG Lifecycles, and a Page Object Model (POM) visualizer.
 - **The "Prove it" Loop:** Every lesson ends with a Quiz Panel. Passing (>70%) fires a dopamine-inducing confetti explosion and unlocks Spaced Repetition Flashcards.
@@ -19,18 +19,18 @@ e-commerce app (**BuggyShop**), and get their work auto-graded. We've transforme
 
 ## Layout
 
-| Path | What it is |
-|---|---|
-| `apps/platform` | The learning platform (Next.js, port 3000) — auth, lessons, grading |
-| `apps/buggyshop` | The practice app (Next.js, port 3001) — fake auth, sandboxed data, seeded bugs |
-| `packages/curriculum` | Lesson MDX + frontmatter schema + content→DB sync script |
-| `packages/widgets` | Interactive lesson widgets (registry-validated & animated) |
-| `packages/grading` | Pure scoring functions: quizzes, bug-report matching, runner seam |
-| `packages/shared` | Sandbox token contract (platform ↔ BuggyShop handoff) |
-| `packages/db` | Supabase client factories + generated types |
-| `packages/ui` / `packages/config` | Design-system primitives / shared tsconfig |
-| `supabase/` | Migrations, seed, local-stack config (one DB, `public` + `buggyshop` schemas) |
-| `e2e/` | Cross-app Playwright suite (Chromium + WebKit) |
+| Path                              | What it is                                                                     |
+| --------------------------------- | ------------------------------------------------------------------------------ |
+| `apps/platform`                   | The learning platform (Next.js, port 3000) — auth, lessons, grading            |
+| `apps/buggyshop`                  | The practice app (Next.js, port 3001) — fake auth, sandboxed data, seeded bugs |
+| `packages/curriculum`             | Lesson MDX + frontmatter schema + content→DB sync script                       |
+| `packages/widgets`                | Interactive lesson widgets (registry-validated & animated)                     |
+| `packages/grading`                | Pure scoring functions: quizzes, bug-report matching, runner seam              |
+| `packages/shared`                 | Sandbox token contract (platform ↔ BuggyShop handoff)                         |
+| `packages/db`                     | Supabase client factories + generated types                                    |
+| `packages/ui` / `packages/config` | Design-system primitives / shared tsconfig                                     |
+| `supabase/`                       | Migrations, seed, local-stack config (one DB, `public` + `buggyshop` schemas)  |
+| `e2e/`                            | Cross-app Playwright suite (Chromium + WebKit)                                 |
 
 ## Getting started
 
@@ -75,7 +75,7 @@ full learner loop (signup → lesson → widget → graded quiz → completion +
 confirmed in production, and every push to `main` redeploys automatically. Built:
 
 - **Curriculum** — 59 lessons (Track A manual ×30, Track B automation ×29) as MDX
-  + server-only quiz keys, synced into a Supabase registry.
+  - server-only quiz keys, synced into a Supabase registry.
 - **Interactive widgets** — boundary slider, decision table, state machine,
   pairwise visualiser, automation pyramid, and more (all motion + reduced-motion).
 - **Practice app** — BuggyShop with release-flagged seeded bugs across its pages.

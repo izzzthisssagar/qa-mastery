@@ -49,7 +49,10 @@ for (const file of files) {
     }
 
     if (!MODULES[fm.module]) {
-      problems.push({ file, message: `unknown module code "${fm.module}" (add it to taxonomy.ts)` });
+      problems.push({
+        file,
+        message: `unknown module code "${fm.module}" (add it to taxonomy.ts)`,
+      });
     } else if (MODULES[fm.module].track !== fm.track) {
       problems.push({
         file,
@@ -154,9 +157,7 @@ for (const lesson of lessons) {
 
 // archive lessons that disappeared from the repo (never delete)
 const repoSlugs = new Set(lessons.map((l) => l.frontmatter.slug));
-const { data: dbLessons, error: listError } = await supabase
-  .from("lessons")
-  .select("slug, status");
+const { data: dbLessons, error: listError } = await supabase.from("lessons").select("slug, status");
 if (listError) throw new Error(`listing lessons: ${listError.message}`);
 
 let archived = 0;

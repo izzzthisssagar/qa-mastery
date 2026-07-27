@@ -36,7 +36,9 @@ export function TesterCard({ tester }: { tester: TesterCardData }) {
         </Badge>
       </div>
 
-      {tester.headline && <p className="line-clamp-2 text-sm text-muted-foreground">{tester.headline}</p>}
+      {tester.headline && (
+        <p className="line-clamp-2 text-sm text-muted-foreground">{tester.headline}</p>
+      )}
 
       {tester.badges.length > 0 && (
         <div className="flex flex-wrap gap-1.5">

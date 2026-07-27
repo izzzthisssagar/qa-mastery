@@ -112,10 +112,7 @@ export interface SubmitQuizResult {
 /** Grade a quiz server-side against the answer key (never shipped to the
  *  client), persist the attempt, and on a first pass mark the lesson complete,
  *  award XP, and seed flashcards into the review queue. */
-export async function submitQuiz(
-  slug: string,
-  answers: QuizAnswers,
-): Promise<SubmitQuizResult> {
+export async function submitQuiz(slug: string, answers: QuizAnswers): Promise<SubmitQuizResult> {
   const userId = await getAuthedUserId();
   return withLogging("submitQuiz", userId, () => submitQuizScoring(userId, slug, answers));
 }
@@ -432,10 +429,7 @@ export async function launchSandbox(slug: string): Promise<string> {
 /** Grade a capstone deliverable with the structured auto-checks a reviewer would
  *  tick, then persist it. The capstone is a Pro lesson, so the access check
  *  gates it. Returns the checklist + a 0–100 score. */
-export async function submitCapstone(
-  slug: string,
-  input: CapstoneInput,
-): Promise<CapstoneResult> {
+export async function submitCapstone(slug: string, input: CapstoneInput): Promise<CapstoneResult> {
   const userId = await getAuthedUserId();
   const service = createServiceClient();
   const lesson = await requireAccessibleLesson(service, slug);
@@ -479,8 +473,7 @@ function getRunnerForLesson(slug: string): RunnerProvider {
 
   // Track B (automation) drives a real browser; everything else is plain code.
   // The ladder itself lives in @/lib/code-runs so note labs share it.
-  const browser =
-    lesson.frontmatter.module !== "B0" && lesson.frontmatter.track === "track-b";
+  const browser = lesson.frontmatter.module !== "B0" && lesson.frontmatter.track === "track-b";
   return getCodeRunner({ browser });
 }
 
@@ -489,7 +482,11 @@ export async function submitCodeLab(slug: string, code: string): Promise<{ runId
   return withLogging("submitCodeLab", userId, () => submitCodeLabRun(userId, slug, code));
 }
 
-async function submitCodeLabRun(userId: string, slug: string, code: string): Promise<{ runId: string }> {
+async function submitCodeLabRun(
+  userId: string,
+  slug: string,
+  code: string,
+): Promise<{ runId: string }> {
   const service = createServiceClient();
   const lesson = await requireAccessibleLesson(service, slug);
 

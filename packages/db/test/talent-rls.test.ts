@@ -44,7 +44,7 @@ describe.skipIf(!hasEnv)("Talent RLS invariants", () => {
 
   beforeAll(async () => {
     service = createClient(URL!, SERVICE!, {
-    auth: { persistSession: false, autoRefreshToken: false },
+      auth: { persistSession: false, autoRefreshToken: false },
     });
 
     const mk = async (email: string) => {
@@ -119,10 +119,7 @@ describe.skipIf(!hasEnv)("Talent RLS invariants", () => {
   });
 
   it("3. a non-owner cannot read another tester's NDA portfolio item", async () => {
-    const { data } = await asOutsider
-      .from("talent_portfolio_items")
-      .select("*")
-      .eq("is_nda", true);
+    const { data } = await asOutsider.from("talent_portfolio_items").select("*").eq("is_nda", true);
     expect(data ?? []).toHaveLength(0);
   });
 
@@ -141,10 +138,7 @@ describe.skipIf(!hasEnv)("Talent RLS invariants", () => {
   });
 
   it("5. a non-owner cannot mutate another tester's profile", async () => {
-    await asOutsider
-      .from("talent_profiles")
-      .update({ headline: "hijacked" })
-      .eq("id", testerId);
+    await asOutsider.from("talent_profiles").update({ headline: "hijacked" }).eq("id", testerId);
     const { data } = await service
       .from("talent_profiles")
       .select("headline")

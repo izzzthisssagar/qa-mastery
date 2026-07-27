@@ -15,7 +15,7 @@ export class Judge0Runner implements RunnerProvider {
   readonly name = "judge0";
 
   // RapidAPI URL for Judge0 Extra CE (Java 17 support)
-  // Ensure we use the proper language ID for Java (usually 62 for standard Judge0, 
+  // Ensure we use the proper language ID for Java (usually 62 for standard Judge0,
   // but depends on the rapidapi configuration. For Judge0 CE, Java is 62).
   private readonly API_URL = "https://judge0-ce.p.rapidapi.com";
 
@@ -29,7 +29,7 @@ export class Judge0Runner implements RunnerProvider {
 
   async submit(request: RunRequest): Promise<{ runId: string }> {
     const sourceCode = request.payload.code as string;
-    
+
     if (!process.env.JUDGE0_RAPIDAPI_KEY) {
       console.warn("Missing JUDGE0_RAPIDAPI_KEY, using mock submission.");
       return { runId: "mock-run-id" };

@@ -87,13 +87,17 @@ export function checkRuntimeAlignment(root) {
 
     const nextVersion = pkg.dependencies?.next ?? pkg.devDependencies?.next;
     if (nextVersion) {
-      const eslintNext = pkg.devDependencies?.["eslint-config-next"] ?? pkg.dependencies?.["eslint-config-next"];
+      const eslintNext =
+        pkg.devDependencies?.["eslint-config-next"] ?? pkg.dependencies?.["eslint-config-next"];
       if (nextVersion !== eslintNext || nextVersion !== REQUIRED_NEXT_VERSION) {
-        violations.push(`${rel}/package.json: next and eslint-config-next must both be ${REQUIRED_NEXT_VERSION}`);
+        violations.push(
+          `${rel}/package.json: next and eslint-config-next must both be ${REQUIRED_NEXT_VERSION}`,
+        );
       }
     }
 
-    const fastXmlParser = pkg.dependencies?.["fast-xml-parser"] ?? pkg.devDependencies?.["fast-xml-parser"];
+    const fastXmlParser =
+      pkg.dependencies?.["fast-xml-parser"] ?? pkg.devDependencies?.["fast-xml-parser"];
     if (fastXmlParser) {
       const version = parseSemver(fastXmlParser);
       if (!version || !semverGte(version, [5, 10, 1])) {
@@ -108,7 +112,9 @@ export function checkRuntimeAlignment(root) {
   }
 
   const workspaceFile = path.join(root, "pnpm-workspace.yaml");
-  const workspaceConfig = existsSync(workspaceFile) ? parseYaml(readFileSync(workspaceFile, "utf8")) : {};
+  const workspaceConfig = existsSync(workspaceFile)
+    ? parseYaml(readFileSync(workspaceFile, "utf8"))
+    : {};
   const overrides = workspaceConfig.overrides ?? {};
   const overrideVersions = new Map();
   for (const [key, value] of Object.entries(overrides)) {

@@ -28,10 +28,7 @@ const nextConfig: NextConfig = {
   // workspace marker that findContentRoot() walks up to locate.
   outputFileTracingRoot: repoRoot,
   outputFileTracingIncludes: {
-    "/**": [
-      "../../packages/curriculum/content/**/*",
-      "../../pnpm-workspace.yaml",
-    ],
+    "/**": ["../../packages/curriculum/content/**/*", "../../pnpm-workspace.yaml"],
   },
   // The trace for every function was independently pulling in all of
   // apps/platform/public (330MB+ of note images) — pushing api/help-agent/chat

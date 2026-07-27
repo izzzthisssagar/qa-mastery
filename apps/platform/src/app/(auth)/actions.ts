@@ -45,10 +45,7 @@ async function siteOrigin(): Promise<string> {
   return `${proto}://${host}`;
 }
 
-export async function login(
-  _prev: AuthFormState,
-  formData: FormData,
-): Promise<AuthFormState> {
+export async function login(_prev: AuthFormState, formData: FormData): Promise<AuthFormState> {
   const { email, password } = credentials(formData);
   if (!email || !password) {
     return { error: "Email and password are required." };
@@ -63,10 +60,7 @@ export async function login(
   redirect(await safeNext());
 }
 
-export async function signup(
-  _prev: AuthFormState,
-  formData: FormData,
-): Promise<AuthFormState> {
+export async function signup(_prev: AuthFormState, formData: FormData): Promise<AuthFormState> {
   const { email, password } = credentials(formData);
   if (!email || !password) {
     return { error: "Email and password are required." };

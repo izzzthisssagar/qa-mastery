@@ -85,7 +85,13 @@ server.on("upgrade", async (request, socket, head) => {
 });
 
 function handleEcho(ws: WebSocket) {
-  ws.send(JSON.stringify({ type: "hello", endpoint: "echo", hint: "Send any frame; `ping` gets `pong`." }));
+  ws.send(
+    JSON.stringify({
+      type: "hello",
+      endpoint: "echo",
+      hint: "Send any frame; `ping` gets `pong`.",
+    }),
+  );
   ws.on("message", (data) => {
     const text = data.toString();
     ws.send(text === "ping" ? "pong" : `echo:${text}`);

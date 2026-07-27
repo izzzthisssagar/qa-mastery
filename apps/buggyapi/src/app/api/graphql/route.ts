@@ -31,7 +31,12 @@ const typeDefs = /* GraphQL */ `
     "All projects in your sandbox."
     projects: [Project!]!
     "Tickets, optionally filtered."
-    tickets(status: TicketStatus, priority: TicketPriority, projectId: ID, first: Int = 20): [Ticket!]!
+    tickets(
+      status: TicketStatus
+      priority: TicketPriority
+      projectId: ID
+      first: Int = 20
+    ): [Ticket!]!
     "One ticket by id."
     ticket(id: ID!): Ticket
   }
@@ -51,8 +56,19 @@ const typeDefs = /* GraphQL */ `
     labels: [String!]
   }
 
-  enum TicketStatus { open in_progress blocked done cancelled }
-  enum TicketPriority { low medium high urgent }
+  enum TicketStatus {
+    open
+    in_progress
+    blocked
+    done
+    cancelled
+  }
+  enum TicketPriority {
+    low
+    medium
+    high
+    urgent
+  }
 
   type Me {
     id: ID!

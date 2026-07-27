@@ -18,7 +18,10 @@ function chunkLesson(body: string): string[] {
     .replace(/<\/?[A-Za-z][A-Za-z0-9]*(\s[^>]*)?\/?>/g, " ") // drop <Widget /> tags
     .replace(/\r/g, "")
     .trim();
-  const paras = clean.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  const paras = clean
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean);
 
   const chunks: string[] = [];
   let cur = "";
@@ -53,10 +56,7 @@ for (const lesson of lessons) {
   );
 
   // Replace this lesson's chunks wholesale (slugs are stable; chunk count varies).
-  const { error: delError } = await service
-    .from("lesson_chunks")
-    .delete()
-    .eq("lesson_slug", slug);
+  const { error: delError } = await service.from("lesson_chunks").delete().eq("lesson_slug", slug);
   if (delError) throw new Error(`clear ${slug}: ${delError.message}`);
 
   const { error: insError } = await service.from("lesson_chunks").insert(

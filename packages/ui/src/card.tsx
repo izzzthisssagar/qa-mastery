@@ -14,8 +14,7 @@ export function Card({
     <div
       className={cn(
         "rounded-xl border border-border bg-surface/60 p-6 shadow-sm transition duration-200",
-        interactive &&
-          "hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-md",
+        interactive && "hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-md",
         className,
       )}
       {...props}
@@ -24,9 +23,7 @@ export function Card({
 }
 
 export function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
-  return (
-    <h3 className={cn("mb-2 text-lg font-semibold text-foreground", className)} {...props} />
-  );
+  return <h3 className={cn("mb-2 text-lg font-semibold text-foreground", className)} {...props} />;
 }
 
 export function CardBody({ className, ...props }: HTMLAttributes<HTMLDivElement>) {

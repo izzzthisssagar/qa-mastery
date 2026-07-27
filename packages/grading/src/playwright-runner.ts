@@ -42,7 +42,7 @@ export class PlaywrightRunner implements RunnerProvider {
     // Use the OS temp dir (writable on serverless, where process.cwd() =
     // /var/task is read-only and mkdir would throw EACCES).
     const tmpDir = join(os.tmpdir(), "sandbox-pw", runId);
-    
+
     try {
       await mkdir(tmpDir, { recursive: true });
       const testFile = join(tmpDir, "student.spec.ts");
@@ -50,8 +50,10 @@ export class PlaywrightRunner implements RunnerProvider {
 
       // We ensure the student code imports Playwright if they forgot, or we just run it as-is.
       await writeFile(testFile, code);
-      
-      await writeFile(configFile, `
+
+      await writeFile(
+        configFile,
+        `
 import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: '.',
@@ -59,14 +61,15 @@ export default defineConfig({
   use: { headless: true },
   reporter: 'list',
 });
-`);
+`,
+      );
 
       // Run playwright test on the temporary file, but execute from the current working directory
       // so it can resolve the locally installed @playwright/test dependency.
       const { stdout } = await execAsync(`npx playwright test "${testFile}" -c "${configFile}"`, {
         cwd: process.cwd(),
         timeout: 15000,
-        env: { ...process.env, CI: "true" } // Force CI mode to avoid interactive prompts
+        env: { ...process.env, CI: "true" }, // Force CI mode to avoid interactive prompts
       });
 
       PlaywrightRunner.results.set(runId, {

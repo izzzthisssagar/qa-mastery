@@ -27,17 +27,17 @@ The placeholders in `.env.example` fail fast on purpose.
 
 ## Commands
 
-| Command | What |
-|---|---|
-| `pnpm dev` | Both apps in dev (platform :3000, buggyshop :3001). |
-| `pnpm lint` / `pnpm typecheck` | Turbo-cached across all packages. |
-| `pnpm test` | Unit tests (Vitest) — grading, curriculum, shared. No DB needed. |
-| `pnpm test:rls` | RLS regression suite (`@qa-mastery/db`). Needs the live local stack + a synced lesson; pass the Supabase env vars. |
-| `pnpm build` | Production build of everything. |
-| `pnpm e2e` | `turbo build` then Playwright on **Chromium + WebKit** against `next start` of both apps. |
-| `pnpm db:start` / `db:stop` / `db:status` | Local Supabase stack. |
-| `pnpm db:reset` | Re-apply all migrations + seed (destroys local data). |
-| `pnpm --filter @qa-mastery/curriculum sync [--apply]` | Validate (CI gate) / publish the lesson registry. |
+| Command                                               | What                                                                                                               |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `pnpm dev`                                            | Both apps in dev (platform :3000, buggyshop :3001).                                                                |
+| `pnpm lint` / `pnpm typecheck`                        | Turbo-cached across all packages.                                                                                  |
+| `pnpm test`                                           | Unit tests (Vitest) — grading, curriculum, shared. No DB needed.                                                   |
+| `pnpm test:rls`                                       | RLS regression suite (`@qa-mastery/db`). Needs the live local stack + a synced lesson; pass the Supabase env vars. |
+| `pnpm build`                                          | Production build of everything.                                                                                    |
+| `pnpm e2e`                                            | `turbo build` then Playwright on **Chromium + WebKit** against `next start` of both apps.                          |
+| `pnpm db:start` / `db:stop` / `db:status`             | Local Supabase stack.                                                                                              |
+| `pnpm db:reset`                                       | Re-apply all migrations + seed (destroys local data).                                                              |
+| `pnpm --filter @qa-mastery/curriculum sync [--apply]` | Validate (CI gate) / publish the lesson registry.                                                                  |
 
 ## How to add a lesson
 

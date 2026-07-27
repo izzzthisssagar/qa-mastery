@@ -27,14 +27,14 @@ in place.
 
 ## Tech stack & why
 
-| Choice | Why |
-|---|---|
+| Choice                                                     | Why                                                                                                                                                                                                                                                                                             |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Next.js 16.2.9** (App Router, Turbopack, React Compiler) | Server Components let lesson content + answer keys stay server-side; server actions handle grading without a separate API. ⚠️ Middleware is `src/proxy.ts` (not `middleware.ts`) — this Next differs from older docs; check `apps/*/node_modules/next/dist/docs/` before using unfamiliar APIs. |
-| **Supabase** (Postgres + Auth + RLS) | Row-Level Security *is* the authorization model. The platform's security guarantees (learners can't write scores, can't read other learners) are enforced in the database, not just the app. |
-| **`@supabase/ssr`** | Cookie-based auth across Server Components / actions. Convention: always `getAll`/`setAll` cookie methods; always `auth.getUser()` (never `getSession()`) in server code; one client per request. |
-| **Tailwind v4** | Styling. Workspace package sources need an `@source` line in each app's `globals.css` so their classes are scanned (see the widgets `@source` in `apps/platform/src/app/globals.css`). |
-| **TS-source packages + `transpilePackages`** | No per-package build/watch; edit-and-refresh DX, single type-check graph. |
-| **Turborepo + pnpm** | Cached `build`/`lint`/`typecheck`/`test`; the `e2e` script chains `turbo build` first (cached → cheap). |
+| **Supabase** (Postgres + Auth + RLS)                       | Row-Level Security _is_ the authorization model. The platform's security guarantees (learners can't write scores, can't read other learners) are enforced in the database, not just the app.                                                                                                    |
+| **`@supabase/ssr`**                                        | Cookie-based auth across Server Components / actions. Convention: always `getAll`/`setAll` cookie methods; always `auth.getUser()` (never `getSession()`) in server code; one client per request.                                                                                               |
+| **Tailwind v4**                                            | Styling. Workspace package sources need an `@source` line in each app's `globals.css` so their classes are scanned (see the widgets `@source` in `apps/platform/src/app/globals.css`).                                                                                                          |
+| **TS-source packages + `transpilePackages`**               | No per-package build/watch; edit-and-refresh DX, single type-check graph.                                                                                                                                                                                                                       |
+| **Turborepo + pnpm**                                       | Cached `build`/`lint`/`typecheck`/`test`; the `e2e` script chains `turbo build` first (cached → cheap).                                                                                                                                                                                         |
 
 ## Package dependency graph
 

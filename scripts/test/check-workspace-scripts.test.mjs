@@ -21,7 +21,10 @@ const CLEAN_VERIFY =
 
 test("checkWorkspaceScripts reports every workspace missing lint/typecheck/test", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "workspace-scripts-"));
-  await writeYaml(path.join(root, "pnpm-workspace.yaml"), "packages:\n  - apps/*\n  - packages/*\n");
+  await writeYaml(
+    path.join(root, "pnpm-workspace.yaml"),
+    "packages:\n  - apps/*\n  - packages/*\n",
+  );
   await writeJson(path.join(root, "package.json"), { scripts: { verify: CLEAN_VERIFY } });
 
   await writeJson(path.join(root, "apps/platform/package.json"), {
@@ -39,9 +42,9 @@ test("checkWorkspaceScripts reports every workspace missing lint/typecheck/test"
 
   const violations = checkWorkspaceScripts(root);
   assert.deepEqual(violations, [
-    "apps/buggyshop/package.json: missing non-empty \"test\" script",
-    "packages/db/package.json: missing non-empty \"lint\" script",
-    "packages/db/package.json: missing non-empty \"test\" script",
+    'apps/buggyshop/package.json: missing non-empty "test" script',
+    'packages/db/package.json: missing non-empty "lint" script',
+    'packages/db/package.json: missing non-empty "test" script',
   ]);
 
   await rm(root, { recursive: true, force: true });
@@ -57,7 +60,7 @@ test("checkWorkspaceScripts rejects an empty-string script as not participating"
   });
 
   const violations = checkWorkspaceScripts(root);
-  assert.deepEqual(violations, ["packages/shared/package.json: missing non-empty \"lint\" script"]);
+  assert.deepEqual(violations, ['packages/shared/package.json: missing non-empty "lint" script']);
 
   await rm(root, { recursive: true, force: true });
 });
@@ -107,7 +110,11 @@ test("checkWorkspaceScripts rejects a root verify command that names a gate more
   });
 
   const violations = checkWorkspaceScripts(root);
-  assert.ok(violations.some((v) => v.includes("verify") && v.includes("pnpm lint") && v.includes("more than once")));
+  assert.ok(
+    violations.some(
+      (v) => v.includes("verify") && v.includes("pnpm lint") && v.includes("more than once"),
+    ),
+  );
 
   await rm(root, { recursive: true, force: true });
 });

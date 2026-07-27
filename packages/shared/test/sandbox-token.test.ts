@@ -36,15 +36,11 @@ describe("sandbox tokens", () => {
 
   it("rejects tokens signed with a different secret", async () => {
     const token = await mintHandoffToken(CLAIMS, SECRET);
-    await expect(
-      verifyHandoffToken(token, "another-secret-also-16-chars"),
-    ).rejects.toThrow();
+    await expect(verifyHandoffToken(token, "another-secret-also-16-chars")).rejects.toThrow();
   });
 
   it("refuses to mint with a weak/missing secret", async () => {
-    await expect(mintHandoffToken(CLAIMS, "short")).rejects.toThrow(
-      /SANDBOX_JWT_SECRET/,
-    );
+    await expect(mintHandoffToken(CLAIMS, "short")).rejects.toThrow(/SANDBOX_JWT_SECRET/);
   });
 
   it("buggyapi tokens round-trip, including the mode claim", async () => {
@@ -69,9 +65,7 @@ describe("sandbox tokens", () => {
   it("rejects a token with a malformed mode claim", async () => {
     const bad = { ...CLAIMS, mode: "cheat" as unknown as SandboxClaims["mode"] };
     const token = await mintHandoffToken(bad, SECRET, "buggyapi");
-    await expect(verifyHandoffToken(token, SECRET, "buggyapi")).rejects.toThrow(
-      /Malformed/,
-    );
+    await expect(verifyHandoffToken(token, SECRET, "buggyapi")).rejects.toThrow(/Malformed/);
   });
 });
 

@@ -48,7 +48,13 @@ function moduleProgress(moduleSlug: string, completed: Set<string>): NoteModuleP
       if (completed.has(`${moduleSlug}/${chapter.slug}/${topic.slug}`)) done += 1;
     }
   }
-  return { slug: moduleSlug, title: mod?.title ?? moduleSlug, done, total, pct: total ? Math.round((done / total) * 100) : 0 };
+  return {
+    slug: moduleSlug,
+    title: mod?.title ?? moduleSlug,
+    done,
+    total,
+    pct: total ? Math.round((done / total) * 100) : 0,
+  };
 }
 
 /** The current learner's progress across the whole notes curriculum, grouped by
@@ -57,10 +63,7 @@ function moduleProgress(moduleSlug: string, completed: Set<string>): NoteModuleP
 export async function getNotesCurriculumProgress(): Promise<NoteTrackProgress[]> {
   const userId = await getAuthedUserId();
   const service = createServiceClient();
-  const { data } = await service
-    .from("note_progress")
-    .select("note_slug")
-    .eq("user_id", userId);
+  const { data } = await service.from("note_progress").select("note_slug").eq("user_id", userId);
   const completed = new Set((data ?? []).map((r) => r.note_slug as string));
 
   return NOTE_TRACKS.map((track) => {
@@ -125,9 +128,10 @@ export async function getLearningHome(): Promise<LearningHome> {
   const mostRecent = rows[0]?.note_slug as string | undefined;
   if (mostRecent) {
     const [moduleSlug, chapterSlug, topicSlug] = mostRecent.split("/");
-    const leaf = moduleSlug && chapterSlug && topicSlug
-      ? findNoteLeaf(moduleSlug, chapterSlug, topicSlug)
-      : undefined;
+    const leaf =
+      moduleSlug && chapterSlug && topicSlug
+        ? findNoteLeaf(moduleSlug, chapterSlug, topicSlug)
+        : undefined;
     if (leaf && moduleSlug) {
       continueItem = {
         moduleSlug,
@@ -270,12 +274,15 @@ async function completeNoteSave(
 
   if (alreadyDone) return { ok: true, xp: XP_NOTE_COMPLETED, alreadyDone: true };
 
-  const { error: progressError } = await service
-    .from("note_progress")
-    .upsert(
-      { user_id: userId, note_slug: noteSlug, status: "completed", completed_at: new Date().toISOString() },
-      { onConflict: "user_id,note_slug" },
-    );
+  const { error: progressError } = await service.from("note_progress").upsert(
+    {
+      user_id: userId,
+      note_slug: noteSlug,
+      status: "completed",
+      completed_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id,note_slug" },
+  );
   if (progressError) throw new Error(progressError.message);
 
   await service.from("xp_events").insert({

@@ -53,19 +53,43 @@ export function CapstonePanel({ slug }: { slug: string }) {
       <div className="mt-4 space-y-3">
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Scope (what&apos;s in / out of test)
-          <textarea data-testid="cap-scope" className={`${FIELD} min-h-16`} value={scope} onChange={(e) => setScope(e.target.value)} disabled={!!result} />
+          <textarea
+            data-testid="cap-scope"
+            className={`${FIELD} min-h-16`}
+            value={scope}
+            onChange={(e) => setScope(e.target.value)}
+            disabled={!!result}
+          />
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Risks (one per line, ranked)
-          <textarea data-testid="cap-risks" className={`${FIELD} min-h-20`} value={risks} onChange={(e) => setRisks(e.target.value)} disabled={!!result} />
+          <textarea
+            data-testid="cap-risks"
+            className={`${FIELD} min-h-20`}
+            value={risks}
+            onChange={(e) => setRisks(e.target.value)}
+            disabled={!!result}
+          />
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Approach (name the techniques per requirement)
-          <textarea data-testid="cap-approach" className={`${FIELD} min-h-16`} value={approach} onChange={(e) => setApproach(e.target.value)} disabled={!!result} />
+          <textarea
+            data-testid="cap-approach"
+            className={`${FIELD} min-h-16`}
+            value={approach}
+            onChange={(e) => setApproach(e.target.value)}
+            disabled={!!result}
+          />
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Ship recommendation
-          <select data-testid="cap-recommendation" className={FIELD} value={recommendation} onChange={(e) => setRecommendation(e.target.value as ShipRecommendation)} disabled={!!result}>
+          <select
+            data-testid="cap-recommendation"
+            className={FIELD}
+            value={recommendation}
+            onChange={(e) => setRecommendation(e.target.value as ShipRecommendation)}
+            disabled={!!result}
+          >
             <option value="">Select…</option>
             <option value="go">Go</option>
             <option value="go-with-conditions">Go with conditions</option>

@@ -6,7 +6,7 @@ Email **izzzthisssagar@gmail.com** with `[security]` in the subject. Please incl
 reproduction steps and impact. We aim to acknowledge within 72 hours. Do not open
 a public issue for a security report.
 
-> Note: **BuggyShop** (`apps/buggyshop`) is a *deliberately* flawed practice app —
+> Note: **BuggyShop** (`apps/buggyshop`) is a _deliberately_ flawed practice app —
 > its bugs are intentional teaching material (`BS-###`, see the seeded-bug
 > manifest). Reports about BuggyShop behaviour are not security issues.
 

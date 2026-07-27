@@ -5,9 +5,9 @@ push to `main`.
 
 ## Live URLs
 
-| App | URL |
-|---|---|
-| Platform | https://qa-mastery-platform.vercel.app |
+| App       | URL                                     |
+| --------- | --------------------------------------- |
+| Platform  | https://qa-mastery-platform.vercel.app  |
 | BuggyShop | https://qa-mastery-buggyshop.vercel.app |
 
 Backed by one Supabase cloud project (`qa-mastery-staging`, ref
@@ -18,9 +18,9 @@ curriculum.
 
 Two Vercel projects, one per app, both rooted in this monorepo:
 
-| Vercel project | Root directory | Project ID |
-|---|---|---|
-| `qa-mastery-platform` | `apps/platform` | `prj_uel7mjbbm6PuwQWZSc0k3CpCl3xi` |
+| Vercel project         | Root directory   | Project ID                         |
+| ---------------------- | ---------------- | ---------------------------------- |
+| `qa-mastery-platform`  | `apps/platform`  | `prj_uel7mjbbm6PuwQWZSc0k3CpCl3xi` |
 | `qa-mastery-buggyshop` | `apps/buggyshop` | `prj_EJ7hkDillvusf6IJofsMCZZHtRyP` |
 
 Both were created via the Vercel REST API with `rootDirectory` set, so Vercel
@@ -39,12 +39,12 @@ e2e + manifest-leak grep) run in parallel in `ci.yml`.
 
 Repo secrets/variables it depends on (already configured via `gh`):
 
-| Kind | Name | Value |
-|---|---|---|
-| secret | `VERCEL_TOKEN` | the Vercel deploy token |
-| secret | `VERCEL_ORG_ID` | `team_rQLbEbEW2DZewv9Aklt688bN` |
-| variable | `VERCEL_PLATFORM_PROJECT_ID` | platform project id |
-| variable | `VERCEL_BUGGYSHOP_PROJECT_ID` | buggyshop project id |
+| Kind     | Name                          | Value                           |
+| -------- | ----------------------------- | ------------------------------- |
+| secret   | `VERCEL_TOKEN`                | the Vercel deploy token         |
+| secret   | `VERCEL_ORG_ID`               | `team_rQLbEbEW2DZewv9Aklt688bN` |
+| variable | `VERCEL_PLATFORM_PROJECT_ID`  | platform project id             |
+| variable | `VERCEL_BUGGYSHOP_PROJECT_ID` | buggyshop project id            |
 
 ## BuggyAPI + buggyapi-ws — NOT provisioned yet (learners see "isn't live yet")
 
@@ -63,7 +63,7 @@ To go live:
 3. **Wire CI**: `gh variable set VERCEL_BUGGYAPI_PROJECT_ID --body <prj_…>` —
    the next push to main deploys it automatically.
 4. **Point the platform at it**: set `NEXT_PUBLIC_BUGGYAPI_URL=https://qa-mastery-buggyapi.vercel.app`
-   on the *platform* Vercel project and redeploy (build-time inline).
+   on the _platform_ Vercel project and redeploy (build-time inline).
 5. **Launch the WS service** (once, manual — see `services/buggyapi-ws/fly.toml`):
    `flyctl launch --no-deploy --copy-config --name qa-mastery-buggyapi-ws`, set
    its secrets (`SANDBOX_JWT_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`),

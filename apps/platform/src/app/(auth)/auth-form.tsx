@@ -140,9 +140,7 @@ export function AuthForm({
                     aria-hidden
                     className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent transition-transform duration-700 group-hover:translate-x-full"
                   />
-                  <span className="relative">
-                    {pending ? "Please wait…" : submitLabel}
-                  </span>
+                  <span className="relative">{pending ? "Please wait…" : submitLabel}</span>
                 </Button>
               </motion.div>
             </Reveal>

@@ -60,31 +60,25 @@ export default async function DashboardPage() {
             <p className="text-xs font-medium uppercase tracking-widest text-accent">Dashboard</p>
           </div>
           <h1 className="font-display mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
-            Your{" "}
-            <span className="font-serif-accent font-normal text-accent">
-              learning
-            </span>
+            Your <span className="font-serif-accent font-normal text-accent">learning</span>
           </h1>
           <p className="mt-2 max-w-prose text-sm leading-6 text-muted-foreground">
-            {topicCount} notes across {tracks.length} tracks — the whole QA arc,
-            zero to job-ready. Every note is free.
+            {topicCount} notes across {tracks.length} tracks — the whole QA arc, zero to job-ready.
+            Every note is free.
           </p>
         </Reveal>
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-          <StatCard
-            testId="stat-xp"
-            value={totalXp}
-            label="XP earned"
-            accent
-            delay={0.05}
-          />
+          <StatCard testId="stat-xp" value={totalXp} label="XP earned" accent delay={0.05} />
           <StatCard
             testId="stat-completed"
             value={topicsDone}
             label="notes complete"
             suffix={
-              <span className="font-sans text-lg font-normal text-muted-foreground"> / {topicCount}</span>
+              <span className="font-sans text-lg font-normal text-muted-foreground">
+                {" "}
+                / {topicCount}
+              </span>
             }
             delay={0.12}
           />

@@ -39,7 +39,7 @@ describe.skipIf(!hasEnv)("Note-lab RLS invariants", () => {
 
   beforeAll(async () => {
     service = createClient(URL!, SERVICE!, {
-    auth: { persistSession: false, autoRefreshToken: false },
+      auth: { persistSession: false, autoRefreshToken: false },
     });
 
     const mk = async (email: string) => {
@@ -88,10 +88,7 @@ describe.skipIf(!hasEnv)("Note-lab RLS invariants", () => {
   });
 
   it("a learner never sees another learner's lab runs", async () => {
-    const { data: bobView } = await asBob
-      .from("code_runs")
-      .select("run_id")
-      .eq("user_id", aliceId);
+    const { data: bobView } = await asBob.from("code_runs").select("run_id").eq("user_id", aliceId);
     expect(bobView ?? []).toHaveLength(0);
   });
 

@@ -55,10 +55,12 @@ At module end run `pnpm test`, `pnpm typecheck`, `pnpm --filter @qa-mastery/curr
 ### Task 1: Scaffold M37–M48 Taxonomy and Correct Inventory
 
 **Files:**
+
 - Modify: `packages/curriculum/src/notes/taxonomy.ts`
 - Modify: `/Users/sajanathapa/Desktop/1/My Qa Projecct/Loop/STATE.md`
 
 **Interfaces:**
+
 - Consumes: M37–M48 definitions from `Curriculum/generator-master-map.py`.
 - Produces: twelve append-only module blocks, 188 `planned: true` leaves, and a common base for all unstarted module worktrees.
 
@@ -72,12 +74,14 @@ At module end run `pnpm test`, `pnpm typecheck`, `pnpm --filter @qa-mastery/curr
 ### Task 2: Create Durable Ledger and First Three Isolated Worktrees
 
 **Files:**
+
 - Create: `.superpowers/sdd/progress.md` (git-ignored recovery ledger)
 - Create: `.superpowers/sdd/module-24-report.md`
 - Create: `.superpowers/sdd/module-25-report.md`
 - Use existing: `.worktrees/selenium-webdriver-ch1`
 
 **Interfaces:**
+
 - Consumes: Task 1 scaffold commit and retained M26 commit `4d34d20`.
 - Produces: three non-overlapping workspaces and exact active claims.
 
@@ -91,6 +95,7 @@ At module end run `pnpm test`, `pnpm typecheck`, `pnpm --filter @qa-mastery/curr
 ### Task 3: Finish M24 Non-functional Testing Intro
 
 **Files:**
+
 - Create under: `packages/curriculum/content/notes/non-functional-testing-intro/`
 - Create under: `apps/platform/public/notes/non-functional-testing-intro/`
 - Modify only M24 block: `packages/curriculum/src/notes/taxonomy.ts`
@@ -285,6 +290,7 @@ At module end run `pnpm test`, `pnpm typecheck`, `pnpm --filter @qa-mastery/curr
 ### Task 18: Review, Record, and Prepare Human-Gated Integration
 
 **Files:**
+
 - Update: `.superpowers/sdd/progress.md`
 - Update: `/Users/sajanathapa/Desktop/1/My Qa Projecct/Loop/STATE.md`
 - Append: `/Users/sajanathapa/Desktop/1/My Qa Projecct/Claude Coordination.md`

@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import { readRelease } from "@/lib/catalog";
 import { isZipAccepted } from "@/lib/checkout";
 
-
 export default function CheckoutPage() {
   const [zip, setZip] = useState("");
   const [submitted, setSubmitted] = useState<{ zip: string; accepted: boolean } | null>(null);
@@ -39,7 +38,10 @@ export default function CheckoutPage() {
       <main className="mx-auto w-full max-w-md flex-1 px-6 py-12">
         <h1 className="text-2xl font-bold tracking-tight">Shipping address</h1>
 
-        <form onSubmit={onSubmit} className="mt-6 space-y-4 rounded-xl border border-zinc-200 bg-white p-5">
+        <form
+          onSubmit={onSubmit}
+          className="mt-6 space-y-4 rounded-xl border border-zinc-200 bg-white p-5"
+        >
           <label className="flex flex-col gap-1 text-sm text-zinc-700">
             ZIP / postal code
             <input

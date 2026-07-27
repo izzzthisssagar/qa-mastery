@@ -41,8 +41,12 @@ export function Callout({
 }) {
   const m = CALLOUT_META[type];
   return (
-    <div className={`my-5 flex gap-3 rounded-xl border ${m.ring} bg-surface px-4 py-3.5 text-[15px]`}>
-      <span className="shrink-0 text-lg leading-6" aria-hidden>{m.icon}</span>
+    <div
+      className={`my-5 flex gap-3 rounded-xl border ${m.ring} bg-surface px-4 py-3.5 text-[15px]`}
+    >
+      <span className="shrink-0 text-lg leading-6" aria-hidden>
+        {m.icon}
+      </span>
       <div>
         <span className="mr-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {m.label}
@@ -58,7 +62,11 @@ export function Figure({ caption, children }: { caption?: string; children: Reac
   return (
     <figure className="my-6 rounded-2xl border border-border bg-surface p-5">
       {children}
-      {caption && <figcaption className="mt-3 text-center text-sm text-muted-foreground">{caption}</figcaption>}
+      {caption && (
+        <figcaption className="mt-3 text-center text-sm text-muted-foreground">
+          {caption}
+        </figcaption>
+      )}
     </figure>
   );
 }
@@ -112,7 +120,9 @@ export function Video({ href, title, minutes }: { href: string; title: string; m
         rel="noopener noreferrer"
         className="my-6 flex items-center gap-4 rounded-2xl border border-border bg-surface p-4 transition-colors hover:border-accent/50"
       >
-        <span className="grid size-12 shrink-0 place-items-center rounded-full border border-accent/40 bg-accent/15 text-lg text-accent">▶</span>
+        <span className="grid size-12 shrink-0 place-items-center rounded-full border border-accent/40 bg-accent/15 text-lg text-accent">
+          ▶
+        </span>
         <span>
           <span className="block text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
             Watch{minutes ? ` · ${minutes} min` : ""}
@@ -207,14 +217,15 @@ export function Quiz({
   return (
     <div className="my-7 rounded-2xl border border-border bg-gradient-to-b from-surface-raised to-surface p-5">
       <div className="flex items-center gap-2 text-[17px] font-semibold text-foreground">
-        <span className="text-bug" aria-hidden>🧠</span>
+        <span className="text-bug" aria-hidden>
+          🧠
+        </span>
         <span>Quick check</span>
       </div>
       <p className="mb-3 mt-3 text-[15px] font-medium text-foreground">{question}</p>
       <div className="flex flex-col gap-2">
         {options.map((opt, i) => {
-          const state =
-            !done ? "" : i === answer ? "correct" : i === picked ? "wrong" : "";
+          const state = !done ? "" : i === answer ? "correct" : i === picked ? "wrong" : "";
           const cls =
             state === "correct"
               ? "border-emerald-400 bg-emerald-400/10"
@@ -265,19 +276,39 @@ export function Flashcards({ cards }: { cards: { front: string; back: string }[]
           <span aria-hidden>🃏</span>
           <span>Flashcards</span>
         </span>
-        <span className="text-xs text-muted-foreground">{i + 1} / {cards.length}</span>
+        <span className="text-xs text-muted-foreground">
+          {i + 1} / {cards.length}
+        </span>
       </div>
       <button
         type="button"
         onClick={() => setFlipped((f) => !f)}
         className="flex min-h-28 w-full items-center justify-center rounded-xl border border-border bg-background px-5 py-6 text-center text-[15px] text-foreground transition-colors hover:border-accent/40"
       >
-        {flipped ? <span className="text-muted-foreground">{card.back}</span> : <span className="font-semibold">{card.front}</span>}
+        {flipped ? (
+          <span className="text-muted-foreground">{card.back}</span>
+        ) : (
+          <span className="font-semibold">{card.front}</span>
+        )}
       </button>
       <div className="mt-3 flex items-center justify-between text-sm">
-        <button type="button" onClick={() => go(-1)} className="text-muted-foreground hover:text-foreground">← Prev</button>
-        <span className="text-xs text-muted-foreground">{flipped ? "Showing answer" : "Tap card to flip"}</span>
-        <button type="button" onClick={() => go(1)} className="text-muted-foreground hover:text-foreground">Next →</button>
+        <button
+          type="button"
+          onClick={() => go(-1)}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          ← Prev
+        </button>
+        <span className="text-xs text-muted-foreground">
+          {flipped ? "Showing answer" : "Tap card to flip"}
+        </span>
+        <button
+          type="button"
+          onClick={() => go(1)}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          Next →
+        </button>
       </div>
     </div>
   );
@@ -364,7 +395,13 @@ export function Complete({ xp = 10 }: { xp?: number }) {
 /* ── Mentor sections: the "senior QA in your pocket" anatomy ────────────────*/
 
 /** 🔧 First time? Do this — exact steps, nothing assumed. */
-export function FirstTime({ title = "First time? Do this", children }: { title?: string; children: ReactNode }) {
+export function FirstTime({
+  title = "First time? Do this",
+  children,
+}: {
+  title?: string;
+  children: ReactNode;
+}) {
   return (
     <section className="my-7 rounded-2xl border border-accent/30 bg-surface p-5">
       <h3 className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-foreground">
@@ -699,7 +736,12 @@ function Credit({ credit, creditHref }: { credit?: string; creditHref?: string }
   return (
     <p className="mt-2 text-right text-xs text-muted-foreground">
       {creditHref ? (
-        <a href={creditHref} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-foreground">
+        <a
+          href={creditHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline underline-offset-2 hover:text-foreground"
+        >
           {credit}
         </a>
       ) : (
@@ -763,7 +805,9 @@ export function HotspotImage({
           👆 Tap each numbered dot to explore the parts
         </p>
       )}
-      <p className={`mt-2 text-center text-xs font-medium ${done ? "text-accent-text" : "text-muted-foreground"}`}>
+      <p
+        className={`mt-2 text-center text-xs font-medium ${done ? "text-accent-text" : "text-muted-foreground"}`}
+      >
         {done ? "✓ All parts explored!" : `Explored ${seen.size} / ${pins.length}`}
       </p>
       <Credit credit={credit} creditHref={creditHref} />
@@ -794,7 +838,9 @@ export function PartsQuest({
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={src} alt={alt} loading="lazy" className="w-full rounded-xl bg-white p-2" />
       <p className="mt-3 text-center text-sm text-muted-foreground">
-        {done ? "🏅 You met every part — nicely done!" : "👇 Tap a number to meet that part — can you collect all of them?"}
+        {done
+          ? "🏅 You met every part — nicely done!"
+          : "👇 Tap a number to meet that part — can you collect all of them?"}
       </p>
       <div className="mt-3 flex flex-wrap justify-center gap-1.5">
         {parts.map((p, i) => (
@@ -825,7 +871,9 @@ export function PartsQuest({
           <p className="mt-1 text-sm text-muted-foreground">{parts[active].desc}</p>
         </div>
       )}
-      <p className={`mt-2 text-center text-xs font-medium ${done ? "text-accent-text" : "text-muted-foreground"}`}>
+      <p
+        className={`mt-2 text-center text-xs font-medium ${done ? "text-accent-text" : "text-muted-foreground"}`}
+      >
         {seen.size} / {parts.length} parts met
       </p>
       <Credit credit={credit} creditHref={creditHref} />
@@ -860,28 +908,40 @@ export function StepChecklist({ steps }: { steps: { text: string; detail?: strin
               type="button"
               onClick={() => toggle(i)}
               className={`flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
-                checked.has(i) ? "border-accent/40 bg-accent/10" : "border-border bg-background hover:border-accent/40"
+                checked.has(i)
+                  ? "border-accent/40 bg-accent/10"
+                  : "border-border bg-background hover:border-accent/40"
               }`}
             >
               <span
                 className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border text-xs font-bold ${
-                  checked.has(i) ? "border-accent bg-accent text-accent-foreground" : "border-border text-muted-foreground"
+                  checked.has(i)
+                    ? "border-accent bg-accent text-accent-foreground"
+                    : "border-border text-muted-foreground"
                 }`}
               >
                 {checked.has(i) ? "✓" : i + 1}
               </span>
               <span>
-                <span className={`block text-[15px] ${checked.has(i) ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                <span
+                  className={`block text-[15px] ${checked.has(i) ? "text-muted-foreground line-through" : "text-foreground"}`}
+                >
                   {s.text}
                 </span>
-                {s.detail && <span className="mt-0.5 block text-sm text-muted-foreground">{s.detail}</span>}
+                {s.detail && (
+                  <span className="mt-0.5 block text-sm text-muted-foreground">{s.detail}</span>
+                )}
               </span>
             </button>
           </li>
         ))}
       </ol>
-      <p className={`mt-2 text-center text-xs font-medium ${pct === 100 ? "text-accent-text" : "text-muted-foreground"}`}>
-        {pct === 100 ? "✓ Mission complete — you know your machine!" : `${checked.size} / ${steps.length} done`}
+      <p
+        className={`mt-2 text-center text-xs font-medium ${pct === 100 ? "text-accent-text" : "text-muted-foreground"}`}
+      >
+        {pct === 100
+          ? "✓ Mission complete — you know your machine!"
+          : `${checked.size} / ${steps.length} done`}
       </p>
     </div>
   );

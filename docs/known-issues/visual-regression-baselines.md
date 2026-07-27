@@ -23,7 +23,7 @@ that produced them never drifts out from under them. This also means
 and WebKit preinstalled.
 
 `supabase start` (needs the runner's own Docker daemon) and `pnpm build`
-stay directly on the runner as before — only the Playwright *test execution*
+stay directly on the runner as before — only the Playwright _test execution_
 moves into the container, via `docker run --network host` so it reaches the
 runner's `localhost` Supabase/Next servers transparently, with
 `$GITHUB_WORKSPACE` bind-mounted in and env forwarded through an explicit
@@ -48,7 +48,7 @@ Root cause: `page.addInitScript(...)` (setting `localStorage`) and
 next-themes' own blocking no-flash script are two independently-scheduled
 early-document scripts. Nothing guarantees which runs first — Chromium's
 ordering happened to always favor the test's script in testing, WebKit's
-didn't. This is the same *category* of bug as
+didn't. This is the same _category_ of bug as
 `hydration-double-render.md` and `webkit-save-stall.md` (a real timing race
 exposed right at first paint/navigation, WebKit losing it more often than
 Chromium) — a third instance of it, not a new class of problem.

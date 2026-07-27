@@ -64,7 +64,9 @@ export function HuntPanel({ slug }: { slug: string }) {
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-foreground">Practice Lab</h2>
-          <p className="text-sm text-muted-foreground">Launch your sandbox and hunt for the seeded bugs.</p>
+          <p className="text-sm text-muted-foreground">
+            Launch your sandbox and hunt for the seeded bugs.
+          </p>
         </div>
         <Button onClick={onLaunch} disabled={launching} data-testid="launch-sandbox-btn">
           {launching ? "Provisioning..." : "Launch BuggyShop Sandbox"}
@@ -117,7 +119,10 @@ export function HuntPanel({ slug }: { slug: string }) {
       </div>
 
       <div className="mt-4">
-        <BugReportLab onSubmit={(report) => submitBugReport(slug, report)} onGraded={() => void refresh()} />
+        <BugReportLab
+          onSubmit={(report) => submitBugReport(slug, report)}
+          onGraded={() => void refresh()}
+        />
       </div>
     </section>
   );

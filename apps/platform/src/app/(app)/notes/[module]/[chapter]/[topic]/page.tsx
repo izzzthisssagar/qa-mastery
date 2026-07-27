@@ -110,9 +110,7 @@ export default async function NoteTopicPage({
     ?.topics.filter((t) => !t.planned && getNote(moduleSlug, chapterSlug, t.slug));
   const isLastTopic = chapterTopics?.at(-1)?.slug === topicSlug;
   const labState =
-    isLastTopic && labForChapter(chapterLabSlug)
-      ? await getNoteLabState(chapterLabSlug)
-      : null;
+    isLastTopic && labForChapter(chapterLabSlug) ? await getNoteLabState(chapterLabSlug) : null;
   // A track capstone anchors at the same "last topic of the chapter" position
   // as a chapter lab, on a chapter that has no chapter lab of its own — see
   // notes/track-capstones.ts for why it can't be keyed like a normal lab.
@@ -135,7 +133,9 @@ export default async function NoteTopicPage({
   return (
     <main className="mx-auto max-w-2xl px-4 py-10">
       <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <Link href="/notes" className="hover:text-foreground">Notes</Link>
+        <Link href="/notes" className="hover:text-foreground">
+          Notes
+        </Link>
         <span aria-hidden>/</span>
         <Link href={`/notes/${moduleSlug}`} className="hover:text-foreground">
           {mod?.title ?? moduleSlug}
@@ -147,7 +147,10 @@ export default async function NoteTopicPage({
       {note.frontmatter.tags.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-1.5">
           {note.frontmatter.tags.map((tag) => (
-            <span key={tag} className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
+            <span
+              key={tag}
+              className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground"
+            >
               #{tag}
             </span>
           ))}
@@ -173,7 +176,9 @@ export default async function NoteTopicPage({
 
       {related.length > 0 && (
         <div className="mt-10 border-t border-border pt-6">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Related notes</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Related notes
+          </h2>
           <ul className="mt-3 flex flex-wrap gap-2">
             {related.map((r) => (
               <li key={`${r.moduleSlug}/${r.chapterSlug}/${r.topicSlug}`}>

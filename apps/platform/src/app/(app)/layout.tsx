@@ -12,9 +12,7 @@ import { getUnreadCount } from "./community/actions";
  * Authenticated shell. The proxy already redirects anonymous users, but this
  * server-side check is the real boundary (proxy checks are optimistic only).
  */
-export default async function AppLayout({
-  children,
-}: Readonly<{ children: React.ReactNode }>) {
+export default async function AppLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },

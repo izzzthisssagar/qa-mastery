@@ -37,7 +37,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "how-a-computer-works",
     title: "How a computer works",
-    summary: "Absolute zero — the physical parts of a computer, what each one does, and how software comes alive on them.",
+    summary:
+      "Absolute zero — the physical parts of a computer, what each one does, and how software comes alive on them.",
     chapters: [
       {
         slug: "the-parts-of-a-computer",
@@ -95,7 +96,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "operating-systems-and-files",
     title: "Operating systems & files",
-    summary: "The software that runs the machine — desktops, files, installing things, and your first taste of the command line.",
+    summary:
+      "The software that runs the machine — desktops, files, installing things, and your first taste of the command line.",
     chapters: [
       {
         slug: "what-an-os-does",
@@ -152,7 +154,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "the-internet-and-the-web",
     title: "The internet & the web",
-    summary: "How machines find each other, how a page arrives on your screen, and the request-response conversation underneath every bug you will ever file.",
+    summary:
+      "How machines find each other, how a page arrives on your screen, and the request-response conversation underneath every bug you will ever file.",
     chapters: [
       {
         slug: "how-the-internet-works",
@@ -168,25 +171,25 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "browsers-and-page-loading",
         title: "Browsers & page loading",
         topics: [
-          { slug: "what-a-browser-is", title: "What a browser is"  },
-          { slug: "how-a-page-loads", title: "How a page loads"  },
-          { slug: "tabs-history-bookmarks", title: "Tabs, history & bookmarks"  },
-          { slug: "a-peek-at-dev-tools", title: "A peek at dev tools"  },
+          { slug: "what-a-browser-is", title: "What a browser is" },
+          { slug: "how-a-page-loads", title: "How a page loads" },
+          { slug: "tabs-history-bookmarks", title: "Tabs, history & bookmarks" },
+          { slug: "a-peek-at-dev-tools", title: "A peek at dev tools" },
         ],
       },
       {
         slug: "client-server-and-http",
         title: "Client, server & HTTP",
         topics: [
-          { slug: "client-vs-server", title: "Client vs server"  },
-          { slug: "request-and-response", title: "Request & response"  },
-          { slug: "http-in-plain-words", title: "HTTP in plain words"  },
-          { slug: "what-a-site-is-made-of", title: "What a site is made of"  },
+          { slug: "client-vs-server", title: "Client vs server" },
+          { slug: "request-and-response", title: "Request & response" },
+          { slug: "http-in-plain-words", title: "HTTP in plain words" },
+          { slug: "what-a-site-is-made-of", title: "What a site is made of" },
         ],
       },
       {
         slug: "what-the-cloud-is",
-        title: "What \"the cloud\" is",
+        title: 'What "the cloud" is',
         topics: [
           { slug: "the-cloud-explained", title: "The cloud explained" },
           { slug: "cloud-storage", title: "Cloud storage" },
@@ -209,7 +212,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "the-web-platform-for-testers",
     title: "The web platform for testers",
-    summary: "Reading HTML, CSS and JavaScript is a tester superpower: the DOM is where locators live, the box model is why layouts break, and a stack trace is bug evidence.",
+    summary:
+      "Reading HTML, CSS and JavaScript is a tester superpower: the DOM is where locators live, the box model is why layouts break, and a stack trace is bug evidence.",
     chapters: [
       {
         slug: "html-essentials",
@@ -237,18 +241,18 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         topics: [
           { slug: "what-js-does-on-a-page", title: "What JS does on a page" },
           { slug: "events-and-handlers", title: "Events & handlers" },
-          { slug: "async-and-loading", title: "Async & loading, gently"  },
-          { slug: "reading-errors-and-stack-traces", title: "Reading errors & stack traces"  },
+          { slug: "async-and-loading", title: "Async & loading, gently" },
+          { slug: "reading-errors-and-stack-traces", title: "Reading errors & stack traces" },
         ],
       },
       {
         slug: "how-browsers-render",
         title: "How browsers render",
         topics: [
-          { slug: "dom-and-the-render-tree", title: "DOM & the render tree"  },
-          { slug: "reflow-and-repaint", title: "Reflow & repaint, gently"  },
-          { slug: "network-plus-render", title: "Network + render = page load"  },
-          { slug: "core-web-vitals-awareness", title: "Core Web Vitals awareness"  },
+          { slug: "dom-and-the-render-tree", title: "DOM & the render tree" },
+          { slug: "reflow-and-repaint", title: "Reflow & repaint, gently" },
+          { slug: "network-plus-render", title: "Network + render = page load" },
+          { slug: "core-web-vitals-awareness", title: "Core Web Vitals awareness" },
         ],
       },
     ],
@@ -256,7 +260,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "digital-literacy-and-safety",
     title: "Digital literacy & safety",
-    summary: "Accounts, passwords, phishing, the keyboard and the everyday tools. The unglamorous skills that decide whether you can be trusted with production access.",
+    summary:
+      "Accounts, passwords, phishing, the keyboard and the everyday tools. The unglamorous skills that decide whether you can be trusted with production access.",
     chapters: [
       {
         slug: "accounts-passwords-and-2fa",
@@ -303,7 +308,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "programming-basics",
     title: "Programming basics",
-    summary: "The logic and coding foundation a tester needs before automating — taught in Java and Python side by side.",
+    summary:
+      "The logic and coding foundation a tester needs before automating — taught in Java and Python side by side.",
     chapters: [
       {
         slug: "what-is-code-and-a-program",
@@ -350,7 +356,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "logic-and-control-flow",
     title: "Logic & control flow",
-    summary: "Conditions, loops and functions — the control structures that turn a straight list of statements into a program that decides, repeats and reuses.",
+    summary:
+      "Conditions, loops and functions — the control structures that turn a straight list of statements into a program that decides, repeats and reuses.",
     chapters: [
       {
         slug: "conditions",
@@ -397,7 +404,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "working-with-data",
     title: "Working with data",
-    summary: "The three shapes almost all data comes in — text, lists, and key–value pairs — and the everyday operations and small algorithms a tester uses to pull them apart and check them.",
+    summary:
+      "The three shapes almost all data comes in — text, lists, and key–value pairs — and the everyday operations and small algorithms a tester uses to pull them apart and check them.",
     chapters: [
       {
         slug: "strings-and-text",
@@ -444,7 +452,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "a-first-language-deeper",
     title: "A first language, deeper",
-    summary: "Set up a real development environment and go deeper into Java and Python — syntax, object-oriented basics, collections, and exceptions — the working vocabulary of automation code.",
+    summary:
+      "Set up a real development environment and go deeper into Java and Python — syntax, object-oriented basics, collections, and exceptions — the working vocabulary of automation code.",
     chapters: [
       {
         slug: "setup-and-ide",
@@ -491,7 +500,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "version-control-with-git",
     title: "Version control with Git",
-    summary: "Why version control exists, the everyday Git workflow, GitHub collaboration — and the tester's superpower: reading diffs and spotting risky changes before they ship.",
+    summary:
+      "Why version control exists, the everyday Git workflow, GitHub collaboration — and the tester's superpower: reading diffs and spotting risky changes before they ship.",
     chapters: [
       {
         slug: "why-version-control",
@@ -548,7 +558,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "linux-for-testers",
     title: "Linux for testers",
-    summary: "The server-side survival kit — shell fluency, everyday commands, log investigation, remote servers, permissions and processes, and the first bash scripts that automate a tester's repetitive checks.",
+    summary:
+      "The server-side survival kit — shell fluency, everyday commands, log investigation, remote servers, permissions and processes, and the first bash scripts that automate a tester's repetitive checks.",
     chapters: [
       {
         slug: "linux-essentials",
@@ -620,7 +631,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "qa-foundations",
     title: "QA foundations",
-    summary: "How professional testing thinks — what QA is, where it came from, why it matters, the seven principles, the tester's mind, and where testing fits in how software gets built.",
+    summary:
+      "How professional testing thinks — what QA is, where it came from, why it matters, the seven principles, the tester's mind, and where testing fits in how software gets built.",
     chapters: [
       {
         slug: "what-is-qa",
@@ -637,9 +649,15 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         title: "Where QA came from",
         topics: [
           { slug: "the-1947-moth-story", title: "The 1947 moth story" },
-          { slug: "five-eras-debugging-to-prevention", title: "Five eras: debugging to prevention" },
+          {
+            slug: "five-eras-debugging-to-prevention",
+            title: "Five eras: debugging to prevention",
+          },
           { slug: "the-pioneers-and-their-big-ideas", title: "The pioneers and their big ideas" },
-          { slug: "how-agile-devops-and-ai-reshaped-qa", title: "How agile, DevOps, and AI reshaped QA" },
+          {
+            slug: "how-agile-devops-and-ai-reshaped-qa",
+            title: "How agile, DevOps, and AI reshaped QA",
+          },
         ],
       },
       {
@@ -669,7 +687,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
           { slug: "critical-thinking-for-testers", title: "Critical thinking for testers" },
           { slug: "cognitive-biases", title: "Cognitive biases in testing" },
           { slug: "curiosity-and-questioning", title: "Curiosity and questioning" },
-          { slug: "psychology-of-tester-developer-relations", title: "The psychology of tester-developer relations" },
+          {
+            slug: "psychology-of-tester-developer-relations",
+            title: "The psychology of tester-developer relations",
+          },
         ],
       },
       {
@@ -691,14 +712,16 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
           { slug: "waterfall", title: "Waterfall model" },
           { slug: "agile", title: "Agile model" },
         ],
-      },    ],
+      },
+    ],
   },
   // END qa-foundations
   // BEGIN browser-devtools-mastery
   {
     slug: "browser-devtools-mastery",
     title: "Browser DevTools mastery",
-    summary: "The manual tester's home turf — inspecting the DOM, reading the console, dissecting network requests, throttling and emulation, storage and state, and Lighthouse audits, panel by panel.",
+    summary:
+      "The manual tester's home turf — inspecting the DOM, reading the console, dissecting network requests, throttling and emulation, storage and state, and Lighthouse audits, panel by panel.",
     chapters: [
       {
         slug: "elements-and-styles",
@@ -767,7 +790,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "test-design-techniques",
     title: "Test design techniques",
-    summary: "The five techniques that turn 'test everything' into a manageable, defensible set of cases — equivalence partitioning, boundary value analysis, decision tables, state transition testing, and error guessing, each with a worked example you can reuse verbatim.",
+    summary:
+      "The five techniques that turn 'test everything' into a manageable, defensible set of cases — equivalence partitioning, boundary value analysis, decision tables, state transition testing, and error guessing, each with a worked example you can reuse verbatim.",
     chapters: [
       {
         slug: "equivalence-partitioning",
@@ -826,7 +850,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "test-artifacts",
     title: "Test artifacts",
-    summary: "The documents a professional tester actually produces — scenarios and cases, plans and strategy, a traceability matrix, managed test data, and the discipline of turning an ambiguous requirement into something testable before you write a single case.",
+    summary:
+      "The documents a professional tester actually produces — scenarios and cases, plans and strategy, a traceability matrix, managed test data, and the discipline of turning an ambiguous requirement into something testable before you write a single case.",
     chapters: [
       {
         slug: "scenarios-and-cases",
@@ -885,7 +910,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "levels-and-types-of-testing",
     title: "Levels & types of testing",
-    summary: "The vocabulary that sorts every test you'll ever run — unit through acceptance, functional and regression, smoke and sanity, black-box through gray-box, and the static techniques that find defects before any code runs at all.",
+    summary:
+      "The vocabulary that sorts every test you'll ever run — unit through acceptance, functional and regression, smoke and sanity, black-box through gray-box, and the static techniques that find defects before any code runs at all.",
     chapters: [
       {
         slug: "test-levels",
@@ -932,7 +958,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         title: "Static testing & reviews",
         topics: [
           { slug: "static-vs-dynamic-properly", title: "Static vs dynamic, properly" },
-          { slug: "reviews-informal-to-walkthrough-to-inspection", title: "Reviews: informal → walkthrough → inspection" },
+          {
+            slug: "reviews-informal-to-walkthrough-to-inspection",
+            title: "Reviews: informal → walkthrough → inspection",
+          },
           { slug: "static-analysis-tools", title: "Static analysis tools" },
           { slug: "review-checklists-that-work", title: "Review checklists that work" },
         ],
@@ -943,7 +972,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "exploratory-testing",
     title: "Exploratory Testing",
-    summary: "Testing that designs, executes, and learns in the same breath — the mindset, the session-based discipline that makes it accountable, the heuristics and tours that give it structure, and the reporting habits that turn a session's findings into evidence a team and its managers can actually trust.",
+    summary:
+      "Testing that designs, executes, and learns in the same breath — the mindset, the session-based discipline that makes it accountable, the heuristics and tours that give it structure, and the reporting habits that turn a session's findings into evidence a team and its managers can actually trust.",
     chapters: [
       {
         slug: "the-exploratory-mindset",
@@ -991,7 +1021,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "defect-management",
     title: "Defect Management",
-    summary: "How a reported problem becomes a tracked, resolved defect — the named states and workflow it moves through, how to write a report a developer trusts, how severity and priority get decided, and the tools teams run it all in.",
+    summary:
+      "How a reported problem becomes a tracked, resolved defect — the named states and workflow it moves through, how to write a report a developer trusts, how severity and priority get decided, and the tools teams run it all in.",
     chapters: [
       {
         slug: "the-bug-life-cycle",
@@ -1039,7 +1070,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "testers-toolbox",
     title: "The Tester's Toolbox",
-    summary: "The browser extensions and small free tools working testers actually reach for — organized by tool family (specific tools rotate, the families don't), each taught as how, what, when and why, with its 2026 status verified.",
+    summary:
+      "The browser extensions and small free tools working testers actually reach for — organized by tool family (specific tools rotate, the families don't), each taught as how, what, when and why, with its 2026 status verified.",
     chapters: [
       {
         slug: "edge-case-and-form-data",
@@ -1048,7 +1080,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
           { slug: "bug-magnet-tricky-inputs", title: "Bug Magnet & tricky inputs" },
           { slug: "form-fillers", title: "Form fillers" },
           { slug: "test-credit-cards-and-emails", title: "Test credit cards & emails" },
-          { slug: "generating-data-mockaroo-and-faker", title: "Generating data: Mockaroo & Faker" },
+          {
+            slug: "generating-data-mockaroo-and-faker",
+            title: "Generating data: Mockaroo & Faker",
+          },
         ],
       },
       {
@@ -1058,7 +1093,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
           { slug: "check-my-links", title: "Check My Links" },
           { slug: "gofullpage-and-screenshots", title: "GoFullPage & screenshot tools" },
           { slug: "window-resizer-responsive-checks", title: "Window Resizer & responsive checks" },
-          { slug: "whatfont-perfectpixel-page-ruler", title: "WhatFont, PerfectPixel & Page Ruler" },
+          {
+            slug: "whatfont-perfectpixel-page-ruler",
+            title: "WhatFont, PerfectPixel & Page Ruler",
+          },
         ],
       },
       {
@@ -1117,7 +1155,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "ui-ux-design-qa",
     title: "UI/UX Design QA",
-    summary: "Verifying the design, not just the function — the laws of usability that explain WHY something feels wrong, the color and type rules that make an interface readable, and the concrete discipline of checking a build against its Figma spec and flagging what devs will actually respect.",
+    summary:
+      "Verifying the design, not just the function — the laws of usability that explain WHY something feels wrong, the color and type rules that make an interface readable, and the concrete discipline of checking a build against its Figma spec and flagging what devs will actually respect.",
     chapters: [
       {
         slug: "design-principles-and-the-laws-of-ux",
@@ -1155,7 +1194,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         topics: [
           { slug: "reading-a-figma-spec", title: "Reading a Figma spec" },
           { slug: "pixel-perfect-vs-pragmatic", title: "Pixel-perfect vs pragmatic" },
-          { slug: "checking-spacing-states-and-breakpoints", title: "Checking spacing, states & breakpoints" },
+          {
+            slug: "checking-spacing-states-and-breakpoints",
+            title: "Checking spacing, states & breakpoints",
+          },
           { slug: "design-bugs-devs-respect", title: "Design bugs devs respect" },
         ],
       },
@@ -1175,7 +1217,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "api-testing-fundamentals",
     title: "API Testing Fundamentals",
-    summary: "Manual API testing as a core skill, not an automation prerequisite — reading HTTP itself, the status-code/REST vocabulary, driving requests by hand with curl and Postman, the four auth shapes a tester actually meets, and hunting bugs with no UI in front of you.",
+    summary:
+      "Manual API testing as a core skill, not an automation prerequisite — reading HTTP itself, the status-code/REST vocabulary, driving requests by hand with curl and Postman, the four auth shapes a tester actually meets, and hunting bugs with no UI in front of you.",
     chapters: [
       {
         slug: "http-for-testers",
@@ -1233,7 +1276,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "test-frameworks",
     title: "Test frameworks",
-    summary: "The runner-level scaffolding underneath any automation suite — lifecycle hooks and annotations, real assertions vs soft ones, grouping and parameterizing tests, and feeding the same test real data from outside the code.",
+    summary:
+      "The runner-level scaffolding underneath any automation suite — lifecycle hooks and annotations, real assertions vs soft ones, grouping and parameterizing tests, and feeding the same test real data from outside the code.",
     chapters: [
       {
         slug: "lifecycle-and-annotations",
@@ -1281,7 +1325,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "framework-design",
     title: "Framework design",
-    summary: "Structuring an automation suite so it survives contact with a real, changing application — the Page Object Model, reusable base classes and driver factories, externalized config and test data, and logging/reporting that actually helps when a test fails.",
+    summary:
+      "Structuring an automation suite so it survives contact with a real, changing application — the Page Object Model, reusable base classes and driver factories, externalized config and test data, and logging/reporting that actually helps when a test fails.",
     chapters: [
       {
         slug: "page-object-model",
@@ -1329,7 +1374,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "bdd-with-cucumber",
     title: "BDD with Cucumber",
-    summary: "Turning shared understanding into executable specification — Given/When/Then, Gherkin feature files, step definitions in Java and Python, and when living documentation actually earns its keep versus when it becomes overhead.",
+    summary:
+      "Turning shared understanding into executable specification — Given/When/Then, Gherkin feature files, step definitions in Java and Python, and when living documentation actually earns its keep versus when it becomes overhead.",
     chapters: [
       {
         slug: "bdd-in-plain-words",
@@ -1377,7 +1423,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "playwright",
     title: "Playwright",
-    summary: "Modern end-to-end browser automation in TypeScript — auto-waiting instead of manual sleeps, resilient user-facing locators, first-class tracing and debugging, real parallel/cross-browser runs, and visual regression testing.",
+    summary:
+      "Modern end-to-end browser automation in TypeScript — auto-waiting instead of manual sleeps, resilient user-facing locators, first-class tracing and debugging, real parallel/cross-browser runs, and visual regression testing.",
     chapters: [
       {
         slug: "setup-and-auto-waiting",
@@ -1435,7 +1482,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "automation-in-cicd",
     title: "Automation in CI/CD",
-    summary: "Make automated tests useful to the whole team — run them reliably in CI, configure GitHub Actions, Jenkins and GitLab pipelines, publish evidence, enforce quality gates, and manage flakes without hiding failures.",
+    summary:
+      "Make automated tests useful to the whole team — run them reliably in CI, configure GitHub Actions, Jenkins and GitLab pipelines, publish evidence, enforce quality gates, and manage flakes without hiding failures.",
     chapters: [
       {
         slug: "running-tests-in-ci",
@@ -1503,7 +1551,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "api-test-automation",
     title: "API Test Automation",
-    summary: "Move from manual API checks to maintainable automation with REST Assured, pytest and Requests, schema and contract testing, GraphQL and SOAP, Newman in CI, production-shaped suites, and controlled service virtualization.",
+    summary:
+      "Move from manual API checks to maintainable automation with REST Assured, pytest and Requests, schema and contract testing, GraphQL and SOAP, Newman in CI, production-shaped suites, and controlled service virtualization.",
     chapters: [
       {
         slug: "rest-assured-java",
@@ -1549,7 +1598,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "api-tests-in-ci-newman",
         title: "API tests in CI (Newman)",
         topics: [
-          { slug: "running-postman-collections-headlessly", title: "Running Postman collections headlessly" },
+          {
+            slug: "running-postman-collections-headlessly",
+            title: "Running Postman collections headlessly",
+          },
           { slug: "newman-and-ci-pipeline", title: "Newman + CI pipeline" },
           { slug: "scheduled-api-regression", title: "Scheduled API regression" },
           { slug: "reporting-api-results", title: "Reporting API results" },
@@ -1572,7 +1624,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
           { slug: "stubs-mocks-and-fakes", title: "Stubs, mocks & fakes" },
           { slug: "wiremock-hands-on", title: "WireMock hands-on" },
           { slug: "record-and-playback", title: "Record & playback" },
-          { slug: "simulating-errors-latency-and-chaos", title: "Simulating errors, latency & chaos" },
+          {
+            slug: "simulating-errors-latency-and-chaos",
+            title: "Simulating errors, latency & chaos",
+          },
         ],
       },
     ],
@@ -1581,7 +1636,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "relational-databases-engineer-level",
     title: "Relational Databases, Engineer-Level",
-    summary: "Build production-grade relational database judgment through advanced SQL, schema design, indexing and execution plans, transaction concurrency, programmable database objects, and integrity verification at scale.",
+    summary:
+      "Build production-grade relational database judgment through advanced SQL, schema design, indexing and execution plans, transaction concurrency, programmable database objects, and integrity verification at scale.",
     chapters: [
       {
         slug: "sql-mastery",
@@ -1609,8 +1665,14 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         topics: [
           { slug: "how-an-index-works", title: "How an index works" },
           { slug: "clustered-vs-non-clustered", title: "Clustered vs non-clustered" },
-          { slug: "reading-explain-and-execution-plans", title: "Reading EXPLAIN & execution plans" },
-          { slug: "query-tuning-and-over-indexing-writes", title: "Query tuning & over-indexing writes" },
+          {
+            slug: "reading-explain-and-execution-plans",
+            title: "Reading EXPLAIN & execution plans",
+          },
+          {
+            slug: "query-tuning-and-over-indexing-writes",
+            title: "Query tuning & over-indexing writes",
+          },
         ],
       },
       {
@@ -1637,7 +1699,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "data-integrity-at-scale",
         title: "Data integrity at scale",
         topics: [
-          { slug: "constraints-and-referential-integrity", title: "Constraints & referential integrity" },
+          {
+            slug: "constraints-and-referential-integrity",
+            title: "Constraints & referential integrity",
+          },
           { slug: "finding-orphans-and-duplicates", title: "Finding orphans & duplicates" },
           { slug: "migrations-and-etl-verification", title: "Migrations & ETL verification" },
           { slug: "auditing-data-changes", title: "Auditing data changes" },
@@ -1649,13 +1714,17 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "nosql-and-modern-data",
     title: "NoSQL & Modern Data",
-    summary: "Choose and test non-relational data models honestly: document, key-value, graph, and wide-column trade-offs; MongoDB modeling; Redis cache failure modes; and distributed-data behavior.",
+    summary:
+      "Choose and test non-relational data models honestly: document, key-value, graph, and wide-column trade-offs; MongoDB modeling; Redis cache failure modes; and distributed-data behavior.",
     chapters: [
       {
         slug: "the-nosql-landscape",
         title: "The NoSQL landscape",
         topics: [
-          { slug: "document-key-value-graph-columnar", title: "Document, key-value, graph & columnar" },
+          {
+            slug: "document-key-value-graph-columnar",
+            title: "Document, key-value, graph & columnar",
+          },
           { slug: "sql-vs-nosql-choosing-honestly", title: "SQL vs NoSQL: choosing honestly" },
           { slug: "cap-theorem-in-plain-words", title: "CAP theorem in plain words" },
           { slug: "where-each-shines", title: "Where each shines" },
@@ -1677,7 +1746,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         topics: [
           { slug: "what-caching-solves", title: "What caching solves" },
           { slug: "ttls-and-eviction", title: "TTLs & eviction" },
-          { slug: "stale-data-bugs-and-cache-invalidation", title: "Stale-data bugs & cache invalidation" },
+          {
+            slug: "stale-data-bugs-and-cache-invalidation",
+            title: "Stale-data bugs & cache invalidation",
+          },
           { slug: "testing-around-a-cache", title: "Testing around a cache" },
         ],
       },
@@ -1697,7 +1769,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "docker-and-containers-for-testers",
     title: "Docker & Containers for Testers",
-    summary: "Eliminate environment guesswork with container fundamentals, practical Docker diagnostics, reproducible Dockerfiles and Compose stacks, and disposable infrastructure for automated tests and CI.",
+    summary:
+      "Eliminate environment guesswork with container fundamentals, practical Docker diagnostics, reproducible Dockerfiles and Compose stacks, and disposable infrastructure for automated tests and CI.",
     chapters: [
       {
         slug: "containers-in-plain-words",
@@ -1735,7 +1808,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         topics: [
           { slug: "selenium-grid-in-docker", title: "Selenium Grid in Docker" },
           { slug: "running-your-suite-in-a-container", title: "Running your suite in a container" },
-          { slug: "testcontainers-for-database-fixtures", title: "Testcontainers for database fixtures" },
+          {
+            slug: "testcontainers-for-database-fixtures",
+            title: "Testcontainers for database fixtures",
+          },
           { slug: "containers-in-ci", title: "Containers in CI" },
         ],
       },
@@ -1749,7 +1825,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "system-design-for-testers",
     title: "How systems are built — system design for testers",
-    summary: "Testers must know the system they test, not just its screens — the big picture, architecture styles, scaling building blocks, where bugs live by layer, and turning architecture into test strategy.",
+    summary:
+      "Testers must know the system they test, not just its screens — the big picture, architecture styles, scaling building blocks, where bugs live by layer, and turning architecture into test strategy.",
     chapters: [
       {
         slug: "the-big-picture",
@@ -1757,7 +1834,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         topics: [
           { slug: "frontend-backend-and-the-database", title: "Frontend, backend & the database" },
           { slug: "life-of-a-request-end-to-end", title: "Life of a request, end to end" },
-          { slug: "client-side-vs-server-side-rendering", title: "Client-side vs server-side rendering" },
+          {
+            slug: "client-side-vs-server-side-rendering",
+            title: "Client-side vs server-side rendering",
+          },
           { slug: "reading-an-architecture-diagram", title: "Reading an architecture diagram" },
         ],
       },
@@ -1798,7 +1878,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
           { slug: "what-to-test-at-which-layer", title: "What to test at which layer" },
           { slug: "integration-points-are-risk", title: "Integration points = risk" },
           { slug: "asking-devs-the-right-questions", title: "Asking devs the right questions" },
-          { slug: "drawing-the-system-before-testing-it", title: "Drawing the system before testing it" },
+          {
+            slug: "drawing-the-system-before-testing-it",
+            title: "Drawing the system before testing it",
+          },
         ],
       },
     ],
@@ -1806,7 +1889,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "sql-and-databases-for-testers",
     title: "SQL & databases for testers",
-    summary: "SQL comes before automation — verifying data is daily manual-QA work. Reading data, verifying the app against the DB, and the tools/habits that keep a tester's queries safe.",
+    summary:
+      "SQL comes before automation — verifying data is daily manual-QA work. Reading data, verifying the app against the DB, and the tools/habits that keep a tester's queries safe.",
     chapters: [
       {
         slug: "databases-in-plain-words",
@@ -1853,7 +1937,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "non-functional-testing-intro",
     title: "Non-functional testing (intro)",
-    summary: "Beyond does-it-work: performance, security, usability & accessibility, compatibility, and localization — the five non-functional dimensions every tester should recognize even before specializing in one.",
+    summary:
+      "Beyond does-it-work: performance, security, usability & accessibility, compatibility, and localization — the five non-functional dimensions every tester should recognize even before specializing in one.",
     chapters: [
       {
         slug: "performance",
@@ -1910,7 +1995,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "automation-foundations",
     title: "Automation foundations",
-    summary: "Turning manual know-how into code starts before the first script: why and when to automate, the automation pyramid, the tool landscape, and the pitfalls that sink suites early.",
+    summary:
+      "Turning manual know-how into code starts before the first script: why and when to automate, the automation pyramid, the tool landscape, and the pitfalls that sink suites early.",
     chapters: [
       {
         slug: "why-and-when-to-automate",
@@ -1957,7 +2043,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "selenium-webdriver",
     title: "Selenium WebDriver",
-    summary: "WebDriver architecture, locators, waits and synchronization, and the actions/navigation API — the hands-on core every Java/Python automation engineer builds on.",
+    summary:
+      "WebDriver architecture, locators, waits and synchronization, and the actions/navigation API — the hands-on core every Java/Python automation engineer builds on.",
     chapters: [
       {
         slug: "setup-and-architecture",
@@ -2004,7 +2091,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "kubernetes-and-test-infrastructure",
     title: "Kubernetes & test infrastructure",
-    summary: "Intro-level on purpose — enough to work with real deployments and stand out in interviews, not to become a cluster admin. Pods and kubectl, running test workloads on a cluster, and what QA verifies around a release.",
+    summary:
+      "Intro-level on purpose — enough to work with real deployments and stand out in interviews, not to become a cluster admin. Pods and kubectl, running test workloads on a cluster, and what QA verifies around a release.",
     chapters: [
       {
         slug: "kubernetes-in-plain-words",
@@ -2041,7 +2129,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "performance-testing",
     title: "Performance testing",
-    summary: "Load, stress, and soak testing; the metrics that reveal system behavior; and practical introductions to JMeter and k6.",
+    summary:
+      "Load, stress, and soak testing; the metrics that reveal system behavior; and practical introductions to JMeter and k6.",
     chapters: [
       {
         slug: "load-vs-stress-vs-soak",
@@ -2078,7 +2167,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "security-testing-web",
     title: "Security testing — web",
-    summary: "Hands-on, authorization-bounded web security testing across OWASP risks, injection, authentication, authorization, tools, and reporting.",
+    summary:
+      "Hands-on, authorization-bounded web security testing across OWASP risks, injection, authentication, authorization, tools, and reporting.",
     chapters: [
       {
         slug: "owasp-top-10-properly",
@@ -2104,7 +2194,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "authentication-testing",
         title: "Authentication testing",
         topics: [
-          { slug: "auth-vs-authorization-distinct-skills", title: "Auth vs authorization (distinct skills)" },
+          {
+            slug: "auth-vs-authorization-distinct-skills",
+            title: "Auth vs authorization (distinct skills)",
+          },
           { slug: "session-and-cookie-attacks", title: "Session & cookie attacks" },
           { slug: "password-and-reset-flows", title: "Password & reset flows" },
           { slug: "mfa-bypass-patterns", title: "MFA bypass patterns" },
@@ -2126,7 +2219,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         topics: [
           { slug: "burp-suite-basics", title: "Burp Suite basics" },
           { slug: "owasp-zap", title: "OWASP ZAP" },
-          { slug: "writing-a-security-finding-devs-act-on", title: "Writing a security finding devs act on" },
+          {
+            slug: "writing-a-security-finding-devs-act-on",
+            title: "Writing a security finding devs act on",
+          },
           { slug: "responsible-disclosure", title: "Responsible disclosure" },
         ],
       },
@@ -2135,7 +2231,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "api-and-modern-security",
     title: "API & modern security",
-    summary: "Authorization-bounded testing for REST, tokens, GraphQL, and complete API security audits using modern threat models.",
+    summary:
+      "Authorization-bounded testing for REST, tokens, GraphQL, and complete API security audits using modern threat models.",
     chapters: [
       {
         slug: "owasp-api-security-top-10-2023",
@@ -2174,7 +2271,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
           { slug: "introspection-leakage", title: "Introspection leakage" },
           { slug: "query-depth-and-complexity-dos", title: "Query depth & complexity DoS" },
           { slug: "batching-and-alias-abuse", title: "Batching & alias abuse" },
-          { slug: "field-level-auth-and-mutation-mass-assignment", title: "Field-level auth & mutation mass assignment" },
+          {
+            slug: "field-level-auth-and-mutation-mass-assignment",
+            title: "Field-level auth & mutation mass assignment",
+          },
         ],
       },
       {
@@ -2192,14 +2292,18 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "accessibility-testing",
     title: "Accessibility testing",
-    summary: "Manual and automated accessibility testing grounded in WCAG 2.2, assistive technology, semantic HTML, and actionable reporting.",
+    summary:
+      "Manual and automated accessibility testing grounded in WCAG 2.2, assistive technology, semantic HTML, and actionable reporting.",
     chapters: [
       {
         slug: "why-accessibility-matters",
         title: "Why accessibility matters",
         topics: [
           { slug: "disabilities-and-assistive-tech", title: "Disabilities & assistive tech" },
-          { slug: "the-business-and-legal-case-ada-eaa", title: "The business & legal case (ADA/EAA)" },
+          {
+            slug: "the-business-and-legal-case-ada-eaa",
+            title: "The business & legal case (ADA/EAA)",
+          },
           { slug: "wcag-2-2-a-aa-aaa", title: "WCAG 2.2 A / AA / AAA" },
           { slug: "pour-principles", title: "POUR principles" },
         ],
@@ -2239,7 +2343,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "mobile-testing",
     title: "Mobile testing",
-    summary: "Device matrices, mobile interactions, Appium fundamentals, and the lifecycle, permission, performance, and store checks unique to mobile apps.",
+    summary:
+      "Device matrices, mobile interactions, Appium fundamentals, and the lifecycle, permission, performance, and store checks unique to mobile apps.",
     chapters: [
       {
         slug: "device-and-os-matrix",
@@ -2286,7 +2391,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "agile-and-devops-for-testers",
     title: "Agile & DevOps for testers",
-    summary: "How testers contribute in Scrum and Kanban, work inside a sprint, and build quality into continuous delivery pipelines.",
+    summary:
+      "How testers contribute in Scrum and Kanban, work inside a sprint, and build quality into continuous delivery pipelines.",
     chapters: [
       {
         slug: "scrum-and-kanban",
@@ -2323,7 +2429,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "test-management-and-reporting",
     title: "Test management & reporting",
-    summary: "The tools, metrics, communication, environment controls, and risk decisions that make testing visible and actionable across a team.",
+    summary:
+      "The tools, metrics, communication, environment controls, and risk decisions that make testing visible and actionable across a team.",
     chapters: [
       {
         slug: "test-management-tools",
@@ -2361,7 +2468,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         topics: [
           { slug: "dev-qa-staging-prod", title: "Dev / QA / staging / prod" },
           { slug: "environment-parity-and-config", title: "Environment parity & config" },
-          { slug: "test-data-management-and-anonymization", title: "Test data management & anonymization" },
+          {
+            slug: "test-data-management-and-anonymization",
+            title: "Test data management & anonymization",
+          },
           { slug: "gdpr-and-sensitive-data-in-tests", title: "GDPR & sensitive data in tests" },
         ],
       },
@@ -2380,7 +2490,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "ai-and-the-modern-tester",
     title: "AI & the modern tester",
-    summary: "Using AI critically in testing, automating with AI, evaluating AI systems, and building durable tester judgment as tools change.",
+    summary:
+      "Using AI critically in testing, automating with AI, evaluating AI systems, and building durable tester judgment as tools change.",
     chapters: [
       {
         slug: "ai-as-your-testing-copilot",
@@ -2407,7 +2518,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         title: "Testing AI systems",
         topics: [
           { slug: "why-ai-apps-break-differently", title: "Why AI apps break differently" },
-          { slug: "evaluating-llm-outputs", title: "Evaluating LLM outputs (DeepEval / RAGAS ideas)" },
+          {
+            slug: "evaluating-llm-outputs",
+            title: "Evaluating LLM outputs (DeepEval / RAGAS ideas)",
+          },
           { slug: "hallucinations-bias-and-safety", title: "Hallucinations, bias & safety" },
           { slug: "regression-for-prompts-and-models", title: "Regression for prompts & models" },
         ],
@@ -2427,7 +2541,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "a-portfolio-that-gets-interviews",
     title: "A portfolio that gets interviews",
-    summary: "Three focused repositories, clear evidence of QA work, and credible public profiles that make practical skills easy to inspect.",
+    summary:
+      "Three focused repositories, clear evidence of QA work, and credible public profiles that make practical skills easy to inspect.",
     chapters: [
       {
         slug: "the-3-repo-portfolio",
@@ -2443,7 +2558,10 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
         slug: "show-your-work",
         title: "Show your work",
         topics: [
-          { slug: "packaging-buggyshop-and-buggyapi-work", title: "Packaging BuggyShop / BuggyAPI work" },
+          {
+            slug: "packaging-buggyshop-and-buggyapi-work",
+            title: "Packaging BuggyShop / BuggyAPI work",
+          },
           { slug: "architecture-diagrams", title: "Architecture diagrams" },
           { slug: "demo-gifs-and-reports", title: "Demo GIFs & reports" },
           { slug: "what-recruiters-actually-open", title: "What recruiters actually open" },
@@ -2464,7 +2582,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "resume-and-applications",
     title: "Résumé & applications",
-    summary: "Evidence-led QA résumés, targeted applications, and an honest framework for deciding whether certifications support a specific goal.",
+    summary:
+      "Evidence-led QA résumés, targeted applications, and an honest framework for deciding whether certifications support a specific goal.",
     chapters: [
       {
         slug: "the-qa-resume",
@@ -2501,7 +2620,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "interviews",
     title: "Interviews",
-    summary: "Practical preparation for manual, technical, behavioral, and mock interview rounds without pretending one answer fits every employer.",
+    summary:
+      "Practical preparation for manual, technical, behavioral, and mock interview rounds without pretending one answer fits every employer.",
     chapters: [
       {
         slug: "manual-qa-questions",
@@ -2548,7 +2668,8 @@ export const NOTES_TAXONOMY: readonly NoteModule[] = [
   {
     slug: "your-first-90-days",
     title: "Your first 90 days",
-    summary: "A practical path through onboarding, solo-QA constraints, continued growth, and deliberate exploration of testing specializations.",
+    summary:
+      "A practical path through onboarding, solo-QA constraints, continued growth, and deliberate exploration of testing specializations.",
     chapters: [
       {
         slug: "landing-well",
@@ -2631,6 +2752,7 @@ export function findNoteLeaf(
   topicSlug: string,
 ): NoteLeaf | undefined {
   return allNoteLeaves().find(
-    (l) => l.moduleSlug === moduleSlug && l.chapterSlug === chapterSlug && l.topicSlug === topicSlug,
+    (l) =>
+      l.moduleSlug === moduleSlug && l.chapterSlug === chapterSlug && l.topicSlug === topicSlug,
   );
 }

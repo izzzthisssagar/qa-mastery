@@ -25,9 +25,7 @@ test.describe("auth", () => {
       }
       await expect(page).toHaveURL(/\/dashboard/, { timeout: 4000 });
     }).toPass({ timeout: 20_000 });
-    await expect(
-      page.getByRole("heading", { name: /your learning/i }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: /your learning/i })).toBeVisible();
 
     // sign out (now inside the avatar menu) lands back on the marketing homepage
     await page.getByRole("button", { name: /account menu/i }).click();
@@ -42,9 +40,7 @@ test.describe("auth", () => {
     await expect(page).toHaveURL(/\/dashboard/);
   });
 
-  test("anonymous visitor is redirected from dashboard to login", async ({
-    page,
-  }) => {
+  test("anonymous visitor is redirected from dashboard to login", async ({ page }) => {
     await page.goto("http://localhost:3000/dashboard");
     await expect(page).toHaveURL(/\/login/);
   });

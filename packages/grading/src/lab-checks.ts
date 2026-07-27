@@ -75,17 +75,29 @@ function evaluate(check: LabCheck, evidence: LabRunEvidence): LabCheckResult {
   if (check.equals != null) {
     const want = normalize(check.equals, cs);
     if (out !== want) {
-      return { label: check.label, passed: false, detail: `Expected exactly "${check.equals.trim()}".` };
+      return {
+        label: check.label,
+        passed: false,
+        detail: `Expected exactly "${check.equals.trim()}".`,
+      };
     }
   }
   if (check.contains != null) {
     if (!out.includes(normalize(check.contains, cs))) {
-      return { label: check.label, passed: false, detail: `Output should contain "${check.contains}".` };
+      return {
+        label: check.label,
+        passed: false,
+        detail: `Output should contain "${check.contains}".`,
+      };
     }
   }
   if (check.absent != null) {
     if (out.includes(normalize(check.absent, cs))) {
-      return { label: check.label, passed: false, detail: `Output should not contain "${check.absent}".` };
+      return {
+        label: check.label,
+        passed: false,
+        detail: `Output should not contain "${check.absent}".`,
+      };
     }
   }
   if (check.matches != null) {

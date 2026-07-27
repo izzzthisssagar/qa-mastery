@@ -2,8 +2,8 @@
 
 These seven rules come from `CLAUDE.md` and are **non-negotiable**. Each is a
 security or correctness guarantee the product depends on. Read this before
-changing data access, content, or BuggyShop. For each: *what it is*, *why it
-matters*, *how it's enforced*.
+changing data access, content, or BuggyShop. For each: _what it is_, _why it
+matters_, _how it's enforced_.
 
 ---
 
@@ -40,7 +40,7 @@ The learner's JWT physically cannot insert a row.
 
 ## 3. BuggyShop auth is fake
 
-**What.** BuggyShop's signup/login are *curriculum subjects* (seeded bugs live
+**What.** BuggyShop's signup/login are _curriculum subjects_ (seeded bugs live
 there) writing `bs_users` / `bs_sessions` sandbox rows. Real identity arrives
 only via the handoff token (`packages/shared`) in the `/enter#t=…` URL fragment
 → `localStorage`. **No cookies in that path.**

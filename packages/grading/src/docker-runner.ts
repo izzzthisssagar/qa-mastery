@@ -16,7 +16,7 @@ type ExecFailure = ExecException & { stdout?: string; stderr?: string };
 
 export class DockerPlaywrightRunner implements RunnerProvider {
   readonly name = "docker-playwright";
-  
+
   private static results = new Map<string, RunResult>();
 
   async submit(req: RunRequest): Promise<{ runId: string }> {
@@ -43,7 +43,7 @@ export default defineConfig({
     headless: true,
   },
 });
-`
+`,
     );
 
     // Fire and forget the container execution
@@ -64,12 +64,12 @@ export default defineConfig({
     try {
       const isMac = process.platform === "darwin";
       const networkArg = isMac ? "" : "--network=host";
-      
+
       const cmd = `docker run --rm -v "${tmpDir}:/tests" -w /tests ${networkArg} mcr.microsoft.com/playwright:v1.40.0-jammy npx playwright test student.spec.ts -c playwright.config.ts`;
 
       const { stdout, stderr } = await execAsync(cmd, {
         timeout: 60000, // 60 seconds
-        env: { ...process.env, CI: "true" }
+        env: { ...process.env, CI: "true" },
       });
 
       DockerPlaywrightRunner.results.set(runId, {
@@ -97,11 +97,17 @@ export default defineConfig({
 
   async getResult(runId: string): Promise<RunResult> {
     const result = DockerPlaywrightRunner.results.get(runId);
-    
+
     if (!result) {
-      return { status: "error", passed: false, console: "Run not found", artifacts: [], staticChecks: [] };
+      return {
+        status: "error",
+        passed: false,
+        console: "Run not found",
+        artifacts: [],
+        staticChecks: [],
+      };
     }
-    
+
     return result;
   }
 }

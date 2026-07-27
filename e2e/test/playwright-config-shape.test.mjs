@@ -36,7 +36,11 @@ test("playwright.first-paint.config.ts runs single-worker for stable throttled t
 });
 
 test("no config file hardcodes a non-CI-conditional retry count above 0", () => {
-  for (const name of ["playwright.config.ts", "playwright.buggyapi.config.ts", "playwright.first-paint.config.ts"]) {
+  for (const name of [
+    "playwright.config.ts",
+    "playwright.buggyapi.config.ts",
+    "playwright.first-paint.config.ts",
+  ]) {
     const text = readConfig(name);
     const retriesMatch = text.match(/retries:\s*([^,\n]+)/);
     if (retriesMatch) {

@@ -49,10 +49,7 @@ export async function buildAgentContext(input: BuildContextInput): Promise<{
   }
 
   if (memories.length > 0) {
-    parts.push(
-      "Episodic memories:",
-      ...memories.map((m) => `- [${m.kind}] ${m.content}`),
-    );
+    parts.push("Episodic memories:", ...memories.map((m) => `- [${m.kind}] ${m.content}`));
   }
 
   if (recentMessages.length > 0) {
@@ -103,9 +100,7 @@ async function loadRetrievedChunks(
       min_similarity: 0.45,
     });
     if (error || !data) return [];
-    return (data as RetrievedChunk[]).map(
-      (r) => `[${r.title} · ${r.lesson_slug}] ${r.content}`,
-    );
+    return (data as RetrievedChunk[]).map((r) => `[${r.title} · ${r.lesson_slug}] ${r.content}`);
   } catch (err) {
     console.error("RAG retrieval skipped:", (err as Error).message);
     return [];
@@ -210,10 +205,7 @@ async function loadLessonBlock(
   return block.join("\n\n");
 }
 
-async function lessonIdForSlug(
-  service: SupabaseClient,
-  slug: string,
-): Promise<string | null> {
+async function lessonIdForSlug(service: SupabaseClient, slug: string): Promise<string | null> {
   const { data } = await service
     .from("lessons")
     .select("id")

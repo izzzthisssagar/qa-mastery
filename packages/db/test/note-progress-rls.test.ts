@@ -38,7 +38,7 @@ describe.skipIf(!hasEnv)("Note-progress RLS invariants", () => {
 
   beforeAll(async () => {
     service = createClient(URL!, SERVICE!, {
-    auth: { persistSession: false, autoRefreshToken: false },
+      auth: { persistSession: false, autoRefreshToken: false },
     });
 
     const mk = async (email: string) => {

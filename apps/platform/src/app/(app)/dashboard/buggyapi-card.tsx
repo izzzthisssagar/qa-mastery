@@ -35,7 +35,9 @@ export function BuggyApiCard() {
       className="mt-4 flex w-full flex-col gap-4 rounded-2xl border border-cyan-500/25 bg-cyan-500/[0.05] px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
     >
       <div>
-        <p className="text-xs font-medium uppercase tracking-widest text-cyan-700 dark:text-cyan-400">BuggyAPI</p>
+        <p className="text-xs font-medium uppercase tracking-widest text-cyan-700 dark:text-cyan-400">
+          BuggyAPI
+        </p>
         <p className="mt-1 font-medium text-foreground">
           Practice API testing on a live, documented API →
         </p>

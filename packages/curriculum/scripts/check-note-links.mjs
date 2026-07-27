@@ -34,9 +34,7 @@ function walk(dir) {
 const files = walk(notesRoot).sort();
 
 // The valid-target set: "module/chapter/topic" for every note file on disk.
-const validLeaves = new Set(
-  files.map((f) => path.relative(notesRoot, f).replace(/\.mdx$/, "")),
-);
+const validLeaves = new Set(files.map((f) => path.relative(notesRoot, f).replace(/\.mdx$/, "")));
 
 // Split frontmatter from body without a YAML lib: related: is a simple list.
 function splitFrontmatter(src) {
