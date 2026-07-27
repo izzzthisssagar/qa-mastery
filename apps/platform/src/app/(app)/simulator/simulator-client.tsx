@@ -6,8 +6,12 @@ import { useTheme } from "next-themes";
 import { Button, Skeleton } from "@qa-mastery/ui";
 import { SIMULATOR_LANGUAGES, findSimulatorLanguage, type RunResult } from "@qa-mastery/grading";
 import { runSimulatorCode } from "./actions";
+import { usePointerFine } from "@/hooks/use-pointer-fine";
 
-// Monaco can't SSR (needs window). Load it client-only with a skeleton.
+// Monaco can't SSR (needs window), and it's heavy + touch-hostile — only
+// load it for fine-pointer (mouse/trackpad) devices. Touch devices get a
+// plain textarea below instead; both feed the same `code` state into the
+// same RunnerProvider seam, so grading is identical.
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
   ssr: false,
   loading: () => <Skeleton className="h-[420px] w-full rounded-xl" />,
@@ -17,6 +21,7 @@ const DEFAULT_LANG = "java";
 
 export function SimulatorClient() {
   const { resolvedTheme } = useTheme();
+  const pointerFine = usePointerFine();
   const [langId, setLangId] = useState(DEFAULT_LANG);
   const lang = findSimulatorLanguage(langId)!;
   const [code, setCode] = useState(lang.starter);
@@ -72,20 +77,33 @@ export function SimulatorClient() {
         </div>
 
         <div className="overflow-hidden rounded-xl border border-border">
-          <MonacoEditor
-            height="420px"
-            language={lang.monaco}
-            theme={resolvedTheme === "light" ? "light" : "vs-dark"}
-            value={code}
-            onChange={(v) => setCode(v ?? "")}
-            options={{
-              minimap: { enabled: false },
-              fontSize: 13,
-              scrollBeyondLastLine: false,
-              automaticLayout: true,
-              tabSize: 2,
-            }}
-          />
+          {pointerFine ? (
+            <MonacoEditor
+              height="420px"
+              language={lang.monaco}
+              theme={resolvedTheme === "light" ? "light" : "vs-dark"}
+              value={code}
+              onChange={(v) => setCode(v ?? "")}
+              options={{
+                minimap: { enabled: false },
+                fontSize: 13,
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                tabSize: 2,
+              }}
+            />
+          ) : (
+            <textarea
+              data-testid="simulator-editor-fallback"
+              aria-label="Code editor"
+              spellCheck={false}
+              autoCapitalize="off"
+              autoCorrect="off"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              className="h-[420px] w-full resize-none bg-surface p-4 font-mono text-sm text-foreground outline-none"
+            />
+          )}
         </div>
       </div>
 
