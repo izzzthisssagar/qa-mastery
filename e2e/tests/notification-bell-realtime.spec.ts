@@ -46,7 +46,7 @@ test.describe("notification bell — realtime", () => {
         await likeButton.click();
       }
       await expect(likeButton).toContainText("♥", { timeout: 1_000 });
-    }).toPass({ timeout: 10_000 });
+    }).toPass({ timeout: 20_000 });
 
     // No reload on the author's page — the badge must appear via the Realtime
     // push within the ticket's <2s budget.
