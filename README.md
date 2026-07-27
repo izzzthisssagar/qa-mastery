@@ -123,3 +123,7 @@ See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the local setup, the
 Participation is governed by the
 [Contributor Covenant](./CODE_OF_CONDUCT.md). Found a security issue? Don't
 open a public issue — see [`SECURITY.md`](./SECURITY.md).
+
+## License
+
+[MIT](./LICENSE)
