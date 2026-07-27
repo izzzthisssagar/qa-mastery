@@ -110,14 +110,17 @@ without credentials we won't enter on the user's behalf.
 **Decision.** Deploy with the **Vercel CLI token** instead, which targets a
 project by `VERCEL_ORG_ID`/`VERCEL_PROJECT_ID` and sidesteps GitHub entirely.
 Projects were created via the REST API with `rootDirectory` set (monorepo).
-CI (`deploy.yml`) does the same on every push to `main`.
+CI (`deploy.yml`) does the same, gated on CI's own completion rather than the
+push itself since the release-governance work (deploys exactly the commit CI
+verified — see [09](./09-deployment.md)).
 
 **Consequences.** Fully automated CD without resolving the account tangle. Two
 gotchas had to be handled: Vercel blocks deploys when the git commit author
-isn't a team member (`TEAM_ACCESS_REQUIRED`) → drop git metadata before
-deploying (`rm -rf .git` in CI; move `.git` aside locally); and the multi-GB
-`.turbo` cache + symlinked `node_modules` abort the upload → `.vercelignore` +
-`--archive=tgz`. ([09](./09-deployment.md).)
+isn't a team member (`TEAM_ACCESS_REQUIRED`) → deploy from a `git archive` of
+the exact verified commit, no git metadata at all (in CI; move `.git` aside
+locally for a one-off manual deploy); and the multi-GB `.turbo` cache +
+symlinked `node_modules` abort the upload → `.vercelignore` + `--archive=tgz`.
+([09](./09-deployment.md).)
 
 ---
 

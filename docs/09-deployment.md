@@ -1,8 +1,9 @@
 # 09 — Deployment, CI/CD & the design system
 
-How QA Mastery ships. Both apps are **live** and redeploy automatically once
-CI finishes verifying a commit on `main` — not on the raw push itself (Task
-12: deploy only the exact verified commit).
+How QA Mastery ships. Platform and BuggyShop are **live** (BuggyAPI's infra
+isn't provisioned yet — see below) and redeploy automatically once CI finishes
+verifying a commit on `main` — not on the raw push itself (Task 12: deploy
+only the exact verified commit).
 
 ## Live URLs
 
@@ -158,9 +159,11 @@ learner.
 
 ## Ops
 
-- Health probes: `GET /api/health` on both apps (platform returns
-  `{status:ok,db:up}` / 503 if the DB is unreachable; buggyshop is a liveness
-  ping). Point an uptime monitor at them.
+- Health probes: `GET /api/health` on every app (platform returns
+  `{status:ok,db:up}` / 503 if the DB is unreachable; buggyshop and buggyapi
+  are liveness pings). `deploy.yml` curls these after every deploy and fails
+  the release on anything but 200; point an uptime monitor at the live ones
+  (platform, buggyshop) too.
 - Remaining config toggles (owner action) live in `DEPLOYMENT.md` §2–§4:
   Supabase email-confirm, the tutor `GEMINI_API_KEY`, and optional Paddle keys.
 

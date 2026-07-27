@@ -1,17 +1,22 @@
 # Deployment
 
-**Status: LIVE.** Both apps run on Vercel and redeploy after CI finishes
-verifying a commit on `main` — not on the raw push itself
-(`.github/workflows/deploy.yml`, Task 12: deploy only the exact verified
-commit). This file is the config reference; the operational runbook + the two
-deploy gotchas are in [`docs/09-deployment.md`](./docs/09-deployment.md).
+**Status: LIVE.** The repo has three apps (`platform`, `buggyshop`,
+`buggyapi`) plus one Fly.io WebSocket service (`buggyapi-ws`); platform and
+buggyshop are the two currently deployed to Vercel (buggyapi's infra isn't
+provisioned yet — see `docs/09-deployment.md` §"NOT provisioned yet"). Both
+redeploy after CI finishes verifying a commit on `main` — not on the raw push
+itself (`.github/workflows/deploy.yml`, Task 12: deploy only the exact
+verified commit). This file is the config reference; the operational runbook
+and the deploy gotchas are in
+[`docs/09-deployment.md`](./docs/09-deployment.md).
 
 State: GitHub `izzzthisssagar/qa-mastery` (private) ✓ · Supabase
-`qa-mastery-staging` (`rnmxbtokqebkqibsjmrt`, ap-south-1) — **all 13 migrations
-applied + `schema_migrations` repaired to file-versions** ✓ · Curriculum registry
-synced to staging (59 lessons) ✓ · `buggyshop` schema exposed to the API ✓ ·
-Vercel: **both apps deployed via CLI** ✓ · CI/CD auto-deploy ✓ · Prod Supabase:
-deferred to launch.
+`qa-mastery-staging` (`rnmxbtokqebkqibsjmrt`, ap-south-1) — all migrations
+applied + `schema_migrations` repaired to file-versions ✓ · Curriculum
+registry synced to staging (count grows with content — see
+`packages/curriculum/content/`) ✓ · `buggyshop` schema exposed to the API ✓ ·
+Vercel: the two live apps deployed via CLI ✓ · CI/CD auto-deploy ✓ · Prod
+Supabase: deferred to launch.
 
 > **Why CLI, not dashboard import:** Vercel's GitHub integration is connected to
 > account `temporary-fun111`, but the repo is owned by `izzzthisssagar` — so the
@@ -129,8 +134,8 @@ as the old blanket delete) Vercel never sees a commit author to block on
 ## 6. Go-live checklist
 
 - [ ] **Rotate** any API keys shared outside a vault; put real ones only in Vercel/GitHub env.
-- [x] Vercel: both apps deployed via CLI (§1), env vars set, cross-app URLs correct.
-- [x] CI/CD: a green CI run on `main` auto-deploys both apps, the exact commit CI verified (`.github/workflows/deploy.yml`).
+- [x] Vercel: platform + buggyshop deployed via CLI (§1), env vars set, cross-app URLs correct.
+- [x] CI/CD: a green CI run on `main` auto-deploys every provisioned app, the exact commit CI verified (`.github/workflows/deploy.yml`).
 - [x] Supabase staging: migrations `0001–0013` applied + history repaired (done).
 - [ ] Supabase staging: schemas exposed + auth URLs (§2) — dashboard switches still pending.
 - [ ] Tutor: `GEMINI_API_KEY` set with free-tier quota (§3) — verify a reply.

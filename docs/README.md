@@ -3,15 +3,17 @@
 > Maintained by **Sagar** (izzzthisssagar). Last updated June 2026.
 
 This folder documents the **QA Mastery** monorepo: the learning platform
-(`apps/platform`), the deliberately-buggy practice app (`apps/buggyshop`), the
-shared packages, and the Supabase data model. It answers _what / why / how_ for
-every major part so a new engineer can understand and extend the system.
+(`apps/platform`), the deliberately-buggy practice apps (`apps/buggyshop`,
+`apps/buggyapi` — the latter not yet deployed), the shared packages, and the
+Supabase data model. It answers _what / why / how_ for every major part so a
+new engineer can understand and extend the system.
 
 These docs describe **what the code actually does today**. Phase 1 is built and
-**live** — both apps run on Vercel and the full learner loop is verified in
-production; entitlements, the BuggyShop lab, grading, and the code runner all
-ship. The source of engineering truth is the code; the product "why" comes from
-the sibling notes repo (`../QA-Learning-Platform-Plan.md`, `../Product/`).
+**live** — platform and BuggyShop run on Vercel and the full learner loop is
+verified in production; entitlements, the notes wiki, grading, and the code
+runner all ship. The source of engineering truth is the code; the product
+"why" comes from the sibling notes repo
+(`../My Qa Projecct/QA-Learning-Platform-Plan.md`, `../My Qa Projecct/Product/`).
 
 ## Start here
 
@@ -25,18 +27,18 @@ New to the codebase? Read in this order:
 
 ## Index
 
-| Doc                                                            | What it covers                                                                                                                                                                            |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [01-overview.md](./01-overview.md)                             | Product, audience, the two-app model, the two tracks, the See/Try/Do/Prove pedagogy.                                                                                                      |
-| [02-architecture.md](./02-architecture.md)                     | Monorepo layout, tech stack + rationale, package graph, the three-layer auth boundary.                                                                                                    |
-| [03-data-model.md](./03-data-model.md)                         | Every table by domain: registry, learner progress, BuggyShop sandbox, profiles. RLS + who writes.                                                                                         |
-| [04-invariants.md](./04-invariants.md)                         | The 7 invariants from `CLAUDE.md` — what, why, and how each is enforced.                                                                                                                  |
-| [05-curriculum-and-content.md](./05-curriculum-and-content.md) | MDX + frontmatter, server-only quiz keys, the registry sync, taxonomy, flashcards.                                                                                                        |
-| [06-learn-feature.md](./06-learn-feature.md)                   | Deep dive on the M1 learn route: RSC MDX, the lesson flow, server actions, answer-key secrecy.                                                                                            |
-| [07-development.md](./07-development.md)                       | Runbook: prerequisites, commands, env setup, adding a lesson/widget, the testing bar.                                                                                                     |
-| [08-decisions.md](./08-decisions.md)                           | ADR-style records for the notable engineering decisions.                                                                                                                                  |
-| [09-deployment.md](./09-deployment.md)                         | Live URLs, the Vercel CLI-token deploy, CI/CD auto-deploy, the two deploy gotchas, the design system, and ops.                                                                            |
-| [10-caching.md](./10-caching.md)                               | Cache policy by data class — lesson content (tag-by-slug), per-user progress/score data, tutor retrieval vs. generation, static assets — and the never-cache-per-user-data-globally rule. |
+| Doc                                                            | What it covers                                                                                                                                                                         |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [01-overview.md](./01-overview.md)                             | Product, audience, the app/service surface, the two tracks, the See/Try/Do/Prove pedagogy.                                                                                             |
+| [02-architecture.md](./02-architecture.md)                     | Monorepo layout, tech stack + rationale, package graph, the three-layer auth boundary.                                                                                                 |
+| [03-data-model.md](./03-data-model.md)                         | Every table by domain: registry, learner progress, BuggyShop sandbox, profiles. RLS + who writes.                                                                                      |
+| [04-invariants.md](./04-invariants.md)                         | The 7 invariants from `CLAUDE.md` — what, why, and how each is enforced.                                                                                                               |
+| [05-curriculum-and-content.md](./05-curriculum-and-content.md) | MDX + frontmatter, server-only quiz keys, the registry sync, taxonomy, flashcards.                                                                                                     |
+| [06-learn-feature.md](./06-learn-feature.md)                   | Deep dive on the M1 learn route: RSC MDX, the lesson flow, server actions, answer-key secrecy.                                                                                         |
+| [07-development.md](./07-development.md)                       | Runbook: prerequisites, commands, env setup, adding a lesson/widget, the testing bar.                                                                                                  |
+| [08-decisions.md](./08-decisions.md)                           | ADR-style records for the notable engineering decisions.                                                                                                                               |
+| [09-deployment.md](./09-deployment.md)                         | Live URLs, the Vercel CLI-token deploy gated on CI's exact verified commit, the deploy gotchas, the design system, and ops.                                                            |
+| [10-caching.md](./10-caching.md)                               | Cache policy by data class — public curriculum content, per-user progress/score data, tutor retrieval vs. generation, static assets — and the never-cache-per-user-data-globally rule. |
 
 ## Conventions in these docs
 
