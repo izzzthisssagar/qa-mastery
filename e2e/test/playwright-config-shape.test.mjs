@@ -22,6 +22,16 @@ test("playwright.config.ts declares a testDir and excludes the specialized suite
   assert.match(text, /testIgnore:/);
   assert.match(text, /buggyapi\.spec\.ts/);
   assert.match(text, /dashboard-first-paint\.spec\.ts/);
+  // Task 10: visual/a11y run gated, via playwright.full.config.ts, not here.
+  assert.match(text, /visual\.spec\.ts/);
+  assert.match(text, /a11y\.spec\.ts/);
+});
+
+test("playwright.full.config.ts exists and matches exactly the visual + a11y suites", () => {
+  const text = readConfig("playwright.full.config.ts");
+  assert.match(text, /defineConfig/);
+  assert.match(text, /testMatch:\s*\[[^\]]*visual\.spec\.ts/);
+  assert.match(text, /testMatch:\s*\[[^\]]*a11y\.spec\.ts/);
 });
 
 test("playwright.buggyapi.config.ts exists and defines its own config", () => {
@@ -40,6 +50,7 @@ test("no config file hardcodes a non-CI-conditional retry count above 0", () => 
     "playwright.config.ts",
     "playwright.buggyapi.config.ts",
     "playwright.first-paint.config.ts",
+    "playwright.full.config.ts",
   ]) {
     const text = readConfig(name);
     const retriesMatch = text.match(/retries:\s*([^,\n]+)/);
