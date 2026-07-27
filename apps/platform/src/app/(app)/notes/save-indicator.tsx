@@ -10,13 +10,7 @@ const COPY: Record<Exclude<SaveStatus, "idle">, string> = {
 
 /** Tri-state honesty about a background save — never lands on a silent
  *  "saved" that isn't true, and always offers a way out of "error". */
-export function SaveIndicator({
-  status,
-  onRetry,
-}: {
-  status: SaveStatus;
-  onRetry?: () => void;
-}) {
+export function SaveIndicator({ status, onRetry }: { status: SaveStatus; onRetry?: () => void }) {
   if (status === "idle") return null;
   return (
     <span

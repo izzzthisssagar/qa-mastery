@@ -14,7 +14,11 @@ describe("createAutosave", () => {
     const statuses: SaveStatus[] = [];
     const persistLocal = vi.fn().mockResolvedValue(undefined);
     const sync = vi.fn().mockResolvedValue(undefined);
-    const controller = createAutosave({ persistLocal, sync, onStatusChange: (s) => statuses.push(s) });
+    const controller = createAutosave({
+      persistLocal,
+      sync,
+      onStatusChange: (s) => statuses.push(s),
+    });
 
     controller.run();
     expect(persistLocal).toHaveBeenCalledTimes(1);
@@ -28,7 +32,12 @@ describe("createAutosave", () => {
     const statuses: SaveStatus[] = [];
     const persistLocal = vi.fn().mockResolvedValue(undefined);
     const sync = vi.fn().mockResolvedValue(undefined);
-    const controller = createAutosave({ persistLocal, sync, onStatusChange: (s) => statuses.push(s), debounceMs: 800 });
+    const controller = createAutosave({
+      persistLocal,
+      sync,
+      onStatusChange: (s) => statuses.push(s),
+      debounceMs: 800,
+    });
 
     controller.run();
     expect(persistLocal).toHaveBeenCalledTimes(1);
@@ -49,8 +58,15 @@ describe("createAutosave", () => {
   it("reports 'error' on a failed sync, not a silent success, and retry() can recover it", async () => {
     const statuses: SaveStatus[] = [];
     const persistLocal = vi.fn().mockResolvedValue(undefined);
-    const sync = vi.fn().mockRejectedValueOnce(new Error("network down")).mockResolvedValueOnce(undefined);
-    const controller = createAutosave({ persistLocal, sync, onStatusChange: (s) => statuses.push(s) });
+    const sync = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("network down"))
+      .mockResolvedValueOnce(undefined);
+    const controller = createAutosave({
+      persistLocal,
+      sync,
+      onStatusChange: (s) => statuses.push(s),
+    });
 
     controller.run();
     await vi.runAllTimersAsync();
@@ -67,7 +83,11 @@ describe("createAutosave", () => {
     const persistLocal = vi.fn().mockResolvedValue(undefined);
     let resolveSync: () => void = () => {};
     const sync = vi.fn(() => new Promise<void>((resolve) => (resolveSync = resolve)));
-    const controller = createAutosave({ persistLocal, sync, onStatusChange: (s) => statuses.push(s) });
+    const controller = createAutosave({
+      persistLocal,
+      sync,
+      onStatusChange: (s) => statuses.push(s),
+    });
 
     controller.run();
     controller.dispose();
