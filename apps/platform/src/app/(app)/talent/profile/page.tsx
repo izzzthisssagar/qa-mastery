@@ -16,7 +16,7 @@ export default async function TalentProfilePage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  if (!user) redirect("/login?next=" + encodeURIComponent("/talent/profile"));
 
   const [
     { data: profile },
