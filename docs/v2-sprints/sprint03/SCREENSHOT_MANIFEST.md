@@ -28,3 +28,9 @@ Captured 2026-10-10 in real headless installed Chrome against production-mode lo
 **Test authority:** `e2e/tests/manual-bva-v2-browser.spec.ts` and `e2e/playwright.manual-bva-v2.config.ts` (6/6 passing), with `webcmd` unavailable on this Mac so the installed Playwright+Chrome runner was used. The screenshots were created by that runner and byte-copied from its result directory.
 
 **Caveat:** The seeded BuggyShop release is intentionally imperfect. Do not infer correctness of all boundaries from this screenshot, publish hidden seeded bug IDs, or mark the exercise passed from a screenshot. The local development server on port 3001 rendered but did not respond to an immediate quantity click during an early capture; a separately built production-mode instance on port 3011 was used after diagnosing that limitation. An independent learner run is still required.
+
+## Signed-in CI screenshots — separate private QA artifacts, 2026-10-10
+
+The first authenticated WebKit result came from GitHub CI run `38038368128`, artifact `blob-report-core-core-4`. Inspected twelve real `Figure` and tall-checklist PNGs; images have not been altered or republished as learner references. The large checklist captures visibly repeat fixed navigation and Feedback UI over text due to Playwright stitching past viewport boundaries. They are **unsuitable for visual acceptance**, though the authenticated UI automation itself passed.
+
+The proposed next run will produce **36 genuine element-scoped images per browser**: each of six viewport/theme combinations has a Figure and five individual step screenshots, physically positioned between the normal viewport's fixed header and bottom controls. The browser must verify the actual element coordinates and fail if an item cannot fit. Original Figure/lesson asset and old GitHub artifacts remain intact. **New screenshots have not yet been generated or reviewed.**

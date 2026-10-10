@@ -41,3 +41,11 @@
 ## QA disposition
 
 The 6/6 public cart browser checks pass **within their own defined scope**. That does not clear the two UX/accessibility observations or unlock authenticated lesson testing. No seeded manifest, grading, database, login or production code was changed by this investigation.
+
+## VIS-S03-005 — Authenticated CI capture contaminated by viewport-fixed controls
+
+- **Status:** REPRODUCED IN SCREENSHOT / NEXT EVIDENCE METHOD PENDING. Do **not** classify as a true product occlusion without a separate ordinary scrolling/viewport reproduction.
+- **CI evidence:** run `38038368128` core4 WebKit Playwright blob screenshots. Mobile 390px figure shows the Feedback floating action partially over its caption; long five-step checklist screenshots show repeated fixed header and Feedback controls over content.
+- **Interpretation:** Playwright stitches screenshots of elements taller than 900px while fixed elements remain viewport-anchored, producing artificial overlaps at seemingly arbitrary points. A user at one scroll position might not experience the stitched overlap.
+- **Scope-controlled correction:** capture actual Figure and each checklist step individually after scrolling to safe viewport coordinates; no CSS/DOM masking, no account metadata or screenshot transformation. Fail if geometry cannot avoid fixed header/footer overlays.
+- **Evidence acceptance:** new screenshots manually reviewed at 390/768/1440 in both themes and both browser engines. If true user-visible occlusion persists, open a separate UI accessibility defect with interactive reproduction rather than hiding it in test code.

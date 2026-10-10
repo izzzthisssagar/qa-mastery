@@ -17,7 +17,7 @@
 ## Test-only fixes applied to PR #163's isolated worktree
 
 1. `e2e/tests/manual-bva-v2-browser.spec.ts`: resolve `BVA_PUBLIC_ORIGIN` (standalone) or `NEXT_PUBLIC_BUGGYSHOP_URL` (existing CI's `http://localhost:3001`) with a `http://127.0.0.1:3011` local fallback. Enforce HTTP loopback hostname and navigate by absolute `${BUGGYSHOP}/cart` in all four call sites. Do not call hosted endpoints.
-2. `e2e/tests/manual-bva-v2-auth.spec.ts`: keep the real local learner signup and all lesson/worksheet/checklist/theme/responsiveness assertions; stop taking a giant `article.screenshot()`. Capture **two genuine DOM subsections** per width/theme: the exact BuggyShop Figure and the five-step mission section. These are real untouched browser screenshots, clipped by element scope, not altered or fabricated. There will be **12 attachments per browser** (6 responsive/theme combinations × 2 regions), with no account header or email. The test retains `trace:off`, `video:off`, automatic `screenshot:off` to avoid leaking test-session data.
+2. `e2e/tests/manual-bva-v2-auth.spec.ts`: keep the real local learner signup and all lesson/worksheet/checklist/theme/responsiveness assertions; stop taking a giant `article.screenshot()`. Capture **two genuine DOM subsections** per width/theme: the exact BuggyShop Figure and the five-step mission section. These are real untouched browser screenshots, clipped by element scope, not altered or fabricated. The first corrected CI run produced **12 attachments per browser** (six responsive/theme combinations × Figure + long checklist); reviewers discovered fixed-position overlays in the long-checklist captures, so a later follow-up changes these to **36 shorter element captures per browser**, with no account header or email. The test retains `trace:off`, `video:off`, automatic `screenshot:off` to avoid leaking test-session data.
 3. `e2e/tests/release-switch.spec.ts`: use production network-idle navigation, explicitly wait for public release selector to show v1.1, verify quantity input is 0 before clicking, and assert rejection with no accepted cart line. The test never fakes bug flags, intercepts requests, touches product logic or suppresses failed assertions.
 4. `e2e/test/manual-bva-v2-auth-ci.test.mjs`: add **red-first contract tests** proving the public browser target is local and absolute and that authenticated screenshots are bounded to the practice regions. Tests moved from 3/5 to 5/5 as intended.
 
@@ -38,3 +38,26 @@
 2. Confirm **core E2E shard 1/3/4** pass on fresh GitHub Actions, including the non-flaky WebKit release assertion. Inspect actual bounded screenshot attachments from both browsers for mobile light/dark.
 3. Resolve security dependency merge ordering through separate explicit approval; do not silently merge PR #164 or downgrade PR #163's audit requirements.
 4. Keep PR #163 **draft**; no production deploy, grading changes or human-signoff claims.
+
+## CI #409: All technical E2E shards green; screenshot evidence requires another iteration
+
+**Follow-up SHA:** `8a857dd5667ecd7f4207ecb883ff7f8ea270a7e6` · GitHub CI run `38038368128`.
+
+All four core E2E shards **passed** and the existing real Supabase-backed authenticated lesson executed in both Chromium and WebKit. The original relative-URL and oversize WebKit screenshot failures were resolved. Shard 4 showed **39 pass / one unrelated flaky** WebKit Talent "Title" selector strict-mode violation; one retry passed. This is an independent test-quality backlog, not a QA Mastery BVA failure. Security and overall release gates remain **red** because this branch uses vulnerable base `main`; security PR #164 is green but unmerged.
+
+### Visual evidence review (actual WebKit blob report, not mocked images)
+
+Downloaded raw `blob-report-core-core-4` artifact from this exact CI run and inspected the genuine images. The 12 bounded screenshots from the first improvement are authentic but **not suitable as clean visual acceptance evidence**:
+
+- The Figure capture at 390px includes a fixed **Feedback** floating control crossing its lower caption.
+- The five-step checklist `section` is still taller than the 900px mobile viewport. Playwright's stitched element screenshot includes fixed header/navigation and **Feedback** controls over instructional text. This is evidence contamination and **not proof that a learner cannot scroll to see the content in a normal viewport**.
+- Original unmodified CI artifacts remain retained by GitHub (run `38038368128`); do not discard or repaint evidence.
+
+### Second evidence-design improvement (not yet tested on CI)
+
+- Keep the real `Figure` screenshot and capture each of the **five individual interactive checklist `<li>` elements** in place, rather than a single tall checklist `section`.
+- Scroll each element into a **normal 900px viewport** with generous top/bottom space outside fixed controls, then assert its measured rectangle fits **between y=95 and y=785**, with height at most 620 CSS px. If that cannot be achieved the test must **fail**, not silently crop the obstruction.
+- Capture the real DOM with untouched CSS, no Playwright `mask`/`style` option and no generated or edited screenshots. The resulting target is **36 element screenshots per browser**: 390, 768 and 1440 × light/dark × (1 Figure + 5 steps).
+- After a contract test went red, the implemented new method passed source contract and E2E TypeScript checks, but full browser acceptance and image inspection **remain pending CI**.
+
+**Other release gates remain unchanged:** no seeded bug/XP/grader/source product edits; no security-bypass; independent human BVA worksheet acceptance NOT RUN; separate security PR #164 cannot be implicitly merged.

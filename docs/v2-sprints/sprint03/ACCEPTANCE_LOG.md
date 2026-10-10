@@ -58,3 +58,13 @@ The pre-publication entries above remain an historical record. **Current status:
 - Actual independent beginner BVA learning acceptance remains **NOT RUN**. No changes to learner XP/grading, auth, seeded bug manifests, SQL/RLS, or hosted services.
 
 The old release and deployment status in the preflight table is superseded by this dated PR update. The next step is a new additive commit and draft-PR CI rerun, with **no merge**.
+
+## CI #409 and visual-review follow-up — 2026-10-10
+
+- **Technical GitHub core CI:** run `38038368128`, commit `8a857dd`: core shards **1/2/3/4 PASS**, authenticated note WebKit and Chromium test PASS; E2E BuggyAPI, first-paint and RLS PASS; **one unrelated flaky** Talent Title locator in WebKit shard 4, which succeeded on retry.
+- **Security gate:** failed on inherited old-main dependency graph; separate security draft PR #164 has green GitHub audit/CI but is **not merged**. Do not suppress audit or claim PR #163 release-ready.
+- **Evidence review:** examined the actual core4 Playwright artifact ZIP and twelve WebKit screenshots. Long checklist element screenshot contains floating nav/Feedback controls over text because screenshot stitching traverses a taller-than-viewport section. Short Figure image also shows Feedback overlay. This is **visual acceptance FAIL/INCONCLUSIVE**, not automatically a user-facing product defect.
+- **Second screenshot capture candidate:** choose the real Figure and **five individual checklist steps**, scroll each into the unobscured center of a normal 900px viewport, and fail unless each actual element's measured bounding box stays clear of header/footer controls. Capture **36 genuine unmodified element screenshots per browser** across light/dark and 390/768/1440. **NOT RUN on CI yet**; needs fresh Chromium/WebKit screenshots and manual inspection.
+- **Unaffected:** no modified app UI, seeded bugs, grading, DB, auth; no production deployment, no merge. Independent beginner manual-QA practice remains **NOT RUN**.
+
+More detail: `CI_FAILURES_AND_REMEDIATION.md` and updated `CI_AUTHENTICATED_ACCEPTANCE.md`.

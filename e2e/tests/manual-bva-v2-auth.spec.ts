@@ -110,23 +110,45 @@ test.describe("Sprint 03 BVA manual-first lesson — disposable CI learner", () 
           `page overflows at ${width}px in ${theme} theme`,
         ).toBeLessThanOrEqual(width + 1);
 
-        // The complete original MDX article exceeds WebKit's 32,767px
-        // screenshot limit. Capture the authentic practice regions separately
-        // without manipulating styles or including the signed-in account chrome.
+        // A whole-article screenshot exceeds WebKit's 32,767px limit.
+        // The entire checklist is also taller than a mobile viewport, so
+        // stitched element screenshots repeat fixed nav/Feedback over text.
+        // Preserve unmodified UI and capture each shorter practice element
+        // within the normal viewport, clear of those fixed controls.
+        const evidenceItems = await mission.getByRole("listitem").all();
+        expect(evidenceItems).toHaveLength(5);
         for (const region of [
           { name: "reference-figure", locator: figure },
-          { name: "guided-checklist", locator: mission },
+          ...evidenceItems.map((locator, index) => ({
+            name: `checklist-step-${index + 1}`,
+            locator,
+          })),
         ]) {
-          await expect(region.locator).toBeVisible();
-          const bounds = await region.locator.boundingBox();
-          expect(bounds, "practice region must have a measurable rectangle").not.toBeNull();
+          const target = region.locator;
+          await expect(target).toBeVisible();
+          await target.scrollIntoViewIfNeeded();
+          await target.evaluate((element) => {
+            const view = element.ownerDocument.defaultView;
+            if (!view) throw new Error("Browser viewport unavailable");
+            const top = element.getBoundingClientRect().top + view.scrollY;
+            view.scrollTo({ top: Math.max(0, top - 155), behavior: "auto" });
+          });
+          const bounds = await target.boundingBox();
+          expect(bounds, "practice element must have a measurable rectangle").not.toBeNull();
           expect(
             bounds!.height,
-            "practice region is safely below browser image limit",
-          ).toBeLessThan(16_000);
+            "practice element must fit in a normal viewport",
+          ).toBeLessThanOrEqual(620);
+          expect(bounds!.y, "practice element must clear the fixed header").toBeGreaterThanOrEqual(
+            95,
+          );
+          expect(
+            bounds!.y + bounds!.height,
+            "practice element must clear the fixed footer UI",
+          ).toBeLessThanOrEqual(785);
           const attachmentName = `bva-${region.name}-${theme}-${width}`;
           const file = testInfo.outputPath(`${attachmentName}.png`);
-          await region.locator.screenshot({
+          await target.screenshot({
             path: file,
             animations: "disabled",
             timeout: 15_000,

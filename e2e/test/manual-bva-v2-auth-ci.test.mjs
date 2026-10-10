@@ -71,8 +71,15 @@ test("Sprint 03 public cart tests resolve a safe, explicit BuggyShop origin in t
 test("authenticated visual evidence is bounded to the practice figure and mission, never the tall article", () => {
   const spec = source("e2e/tests/manual-bva-v2-auth.spec.ts");
   assert.match(spec, /picture\.locator\("xpath=ancestor::figure"\)/);
-  assert.match(spec, /name: "guided-checklist", locator: mission/);
-  assert.match(spec, /region\.locator\.screenshot\(/);
+  // Real WebKit artifacts showed fixed Feedback and navigation chrome over a
+  // full, taller-than-viewport checklist. Use individual bounded steps at a
+  // safe scroll position; never hide/mask or style-modify the captured UI.
+  assert.match(spec, /const evidenceItems = await mission\.getByRole\("listitem"\)\.all\(\)/);
+  assert.match(spec, /scrollTo\(\{ top:/);
+  assert.match(spec, /getBoundingClientRect/);
+  assert.match(spec, /target\.screenshot\(/);
+  assert.doesNotMatch(spec, /region\.locator\.screenshot\(/);
+  assert.doesNotMatch(spec, /\bstyle:\s*["'`]/);
   assert.match(spec, /testInfo\.attach\(/);
   assert.doesNotMatch(spec, /article\.screenshot\(/);
   assert.match(spec, /screenshot:\s*"off"/);
