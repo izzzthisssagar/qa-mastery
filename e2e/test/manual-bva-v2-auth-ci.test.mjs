@@ -85,3 +85,22 @@ test("authenticated visual evidence is bounded to the practice figure and missio
   assert.match(spec, /screenshot:\s*"off"/);
   assert.match(spec, /trace:\s*"off"/);
 });
+
+test("mobile learners can open the actual cart screenshot at full resolution", () => {
+  const mdx = source(
+    "packages/curriculum/content/notes/test-design-techniques/boundary-value-analysis/bva-worked-example.mdx",
+  );
+  const spec = source("e2e/tests/manual-bva-v2-auth.spec.ts");
+  assert.match(
+    mdx,
+    /\[View full-size BuggyShop cart screenshot\]\(\/notes\/test-design-techniques\/boundary-value-analysis\/buggyshop-cart-v2-original\.png\)/,
+  );
+  const caption = mdx.match(/<Figure caption="([^"]+)">/);
+  assert.ok(caption, "Figure must have a plain-text evidence caption");
+  assert.ok(
+    caption[1].length <= 130,
+    "Mobile image caption should be brief enough not to dominate the viewport",
+  );
+  assert.match(spec, /name: "View full-size BuggyShop cart screenshot"/);
+  assert.match(spec, /toHaveAttribute\("href", imagePath\)/);
+});

@@ -34,3 +34,19 @@ Captured 2026-10-10 in real headless installed Chrome against production-mode lo
 The first authenticated WebKit result came from GitHub CI run `38038368128`, artifact `blob-report-core-core-4`. Inspected twelve real `Figure` and tall-checklist PNGs; images have not been altered or republished as learner references. The large checklist captures visibly repeat fixed navigation and Feedback UI over text due to Playwright stitching past viewport boundaries. They are **unsuitable for visual acceptance**, though the authenticated UI automation itself passed.
 
 The proposed next run will produce **36 genuine element-scoped images per browser**: each of six viewport/theme combinations has a Figure and five individual step screenshots, physically positioned between the normal viewport's fixed header and bottom controls. The browser must verify the actual element coordinates and fail if an item cannot fit. Original Figure/lesson asset and old GitHub artifacts remain intact. **New screenshots have not yet been generated or reviewed.**
+
+## GitHub CI visual audit — PR #163, run #410 (2026-10-10)
+
+**Source of truth:** [GitHub Actions run 38039360646](https://github.com/izzzthisssagar/qa-mastery/actions/runs/38039360646), merged `playwright-report` artifact (artifact ID `11665531060`). GitHub listed its expiry as **2026-10-17**; this is temporary CI evidence, not a permanent copy of learner submissions.
+
+Downloaded the official report for **read-only visual and structural review**. Decoded the Playwright attachment manifest and independently checked:
+
+- **Chromium:** authenticated BVA lesson **PASS**, **36/36 authentic** PNG attachments. Six viewport/theme combinations (390/768/1440 × light/dark), each with one genuine BuggyShop `Figure` and five separate ungraded checklist-step element captures.
+- **WebKit:** authenticated BVA lesson **PASS**, **36/36 authentic** PNG attachments following the exact same matrix. Files use device-pixel-ratio scaling; bounded element height never exceeds 978 px.
+- **72/72 attachment references resolve** to real image files, with unique names in each browser test. Artifact deduplication yields 62 distinct PNG binaries; a duplicate byte-identical image is not missing evidence.
+- Reviewed **representative original WebKit and Chromium light/dark/mobile/desktop screenshots**. The fixed navigation and feedback overlays previously seen in tall-element captures do not appear in the reviewed bounded examples; no personal account header/credentials appear in those reviewed examples.
+- **New learning-UX finding:** the original **1440px BuggyShop screenshot is physically too small to read when scaled down on a 390px mobile viewport**. The underlying authentic asset is correct. To improve accessibility without altering BuggyShop, the MDX note now includes a plainly labeled **full-resolution image link** and a concise caption. That change was developed using a red-first regression guard and has not yet run in GitHub CI.
+
+The screenshot set validates automated visual evidence presence and representative layout at the stated widths. It **does not** prove every learner understands the exercise, that all seeded bug boundaries are correct, or that WCAG accessibility is certified.
+
+**Merge status:** Draft PR #163 remains unmerged. All four core shards in CI run #410 passed; its security audit still fails because PR #164's patched dependency baseline has not been merged into `main`. Do not suppress the gate.

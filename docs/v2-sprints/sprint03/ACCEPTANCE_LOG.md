@@ -68,3 +68,11 @@ The old release and deployment status in the preflight table is superseded by th
 - **Unaffected:** no modified app UI, seeded bugs, grading, DB, auth; no production deployment, no merge. Independent beginner manual-QA practice remains **NOT RUN**.
 
 More detail: `CI_FAILURES_AND_REMEDIATION.md` and updated `CI_AUTHENTICATED_ACCEPTANCE.md`.
+
+## Sprint 03 authenticated acceptance update — CI run #410
+
+- All four core E2E shard jobs, RLS, first-paint, and BuggyAPI jobs **PASS** at `cdfa6f9`; the two authenticated manual BVA browser tests passed in Chromium and WebKit.
+- Verified **72 real scoped Playwright screenshots** (36 per browser), six light/dark × viewport combinations and six components per combination, with real source files and representative manual visual inspection. See `SCREENSHOT_MANIFEST.md`.
+- Mobile readability improvement made after reviewing actual artifacts: shorten authentic Figure caption and link to full 1440px source PNG for zoom. Guarded by a **red-first test**; it passed 6/6 locally with E2E TypeScript. CI still needs to run this new content and link.
+- Security gate **FAILS due inherited clean-main vulnerabilities**, not the BVA changes; the separate security-only PR #164 has a successful audit and E2E run but is still draft/unmerged.
+- Independent novice manual QA exercise remains **NOT RUN**, and no XP, grader, seeded product behavior or hosted learner data has been changed.

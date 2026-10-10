@@ -61,6 +61,16 @@ test.describe("Sprint 03 BVA manual-first lesson — disposable CI learner", () 
     const figure = picture.locator("xpath=ancestor::figure");
     await expect(figure.getByText(/genuine BuggyShop cart captured/i)).toBeVisible();
 
+    // The 1440px authentic reference image is intentionally small on phones:
+    // learners must have a working original-resolution image they can zoom.
+    const fullImageLink = article.getByRole("link", {
+      name: "View full-size BuggyShop cart screenshot",
+    });
+    await expect(fullImageLink).toHaveAttribute("href", imagePath);
+    const fullImageResponse = await page.request.get(BASE + imagePath);
+    expect(fullImageResponse.status()).toBe(200);
+    expect(fullImageResponse.headers()["content-type"]).toContain("image/png");
+
     const template = article.getByRole("link", {
       name: "blank BVA test-case and evidence template",
     });
