@@ -9,15 +9,16 @@
 
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
 
 const REQUIRED_NODE_ENGINE = ">=24 <25";
 const REQUIRED_TYPES_NODE = "^24";
-const REQUIRED_NEXT_VERSION = "16.2.11";
+const REQUIRED_NEXT_VERSION = "16.3.8";
 
 const PROTECTED_OVERRIDES = [
-  { name: "js-yaml", floor: [3, 15, 0] },
-  { name: "sharp", floor: [0, 35, 0] },
+  { name: "js-yaml", floor: [3, 15, 2] },
+  { name: "sharp", floor: [0, 35, 5] },
   { name: "fast-xml-parser", floor: [5, 10, 1] },
   { name: "postcss", floor: [8, 5, 18] },
 ];
@@ -146,4 +147,4 @@ function main() {
   console.log("Runtime alignment OK.");
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main();
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) main();
