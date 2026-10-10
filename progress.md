@@ -26,3 +26,26 @@ Task 13: CI #418 verified the test-bearing head `e21a374b4b226fcb4153aafbbb6086b
 Task 14: docs-only CI #419 verified head `46e5220`; the test code remained unchanged from #418. Checks, live RLS, first-paint, BuggyAPI, all four core shards, and Playwright report aggregation passed: 183 E2E tests total and no E2E failures. `e2e-full` was skipped by workflow policy. The production dependency audit again reported 47 findings (7 low, 27 moderate, 10 high, 3 critical), so security/release gates remain red; secret scan and Dependabot validation passed. AI code-scanning workflow #13 failed to create a review after its monthly quota was exceeded (HTTP 402); its log reported no vulnerabilities in the changed regions. Human learner acceptance remains NOT RUN, local Supabase remains blocked by disk safety, and the #418 screenshot artifact remains unreviewed.
 
 Task 15: CI #420 verified docs-only correction head `6a71b2e7013ff8ddba1614d60e2a1302d8b50e07`; checks, live RLS, first-paint, BuggyAPI, all four core shards and Playwright report aggregation passed, with no E2E failures. `e2e-full` was skipped by workflow policy. Secret scanning and Dependabot validation passed; the production dependency audit remained at 47 findings (7 low, 27 moderate, 10 high, 3 critical), so security/release gates remained red. The tested code is unchanged from `e21a374`; beginner acceptance remains NOT RUN, and the #418 screenshots remain undecoded.
+---
+## Security hotfix ledger
+
+The following SEC-01 through SEC-07 snapshot was recorded before the final CI/review results and merge. Its SEC-05 and SEC-07 entries are historical; the update below records later outcomes.
+
+## Historical security hotfix plan: docs/security/2026-10-10-dependency-hotfix-plan.md
+
+Task SEC-01: complete — clean-main baseline c1ba7c5 and 3 critical / 10 high prod audit reproduced.
+Task SEC-02: complete — Next.js and eslint-config-next 16.3.8 in all 3 apps; GraphQL Yoga 5.24.4 (same major) in BuggyAPI.
+Task SEC-03: complete — patched transitive overrides constrained within their supported majors; single pnpm lockfile regenerated and frozen-installable; no suppressed advisories.
+Task SEC-04: complete for production — production audit 0 critical and 0 high; whole development audit 1 unresolved high in braces@3.0.3 (no published patched 3.0.4 on npm), 0 critical; semantic security+runtime tests 10/10 pass and enforced by pnpm verify + GitHub checks.
+Task SEC-05: complete for local scope — production HTTP smoke across patched BuggyAPI GraphQL/REST, QA platform auth/image optimizer and real Chrome BuggyShop cart at 390/768/1440; synthetic authenticated GraphQL CI-only E2E prepared, not yet executed.
+Task SEC-06: complete for local scope — fresh pnpm verify exit 0 after reviewer-fix (runtime policy confirmed executing), frozen pnpm install, full pnpm build 3/3 production apps; audit and docs recorded in docs/security/2026-10-10-hotfix-acceptance.md. User's Mac kept >2.2 GiB free; no Docker/Supabase/hosted modifications.
+Task SEC-07: in progress — focused read-only re-review, then security-only draft GitHub PR + CI run. Do not merge or deploy; separate Sprint 03 PR #163 still blocked by independent E2E failures, and its branch is untouched.
+
+### Updated status after PR #164 merge
+
+- PR #164 was merged to `main` as squash commit `fdb33c2738788ac7fc05ddacdaebb6e306c50e52` on 2026-10-10. Its branch CI #408 and security #376 passed; independent read-only reviews found no concrete code-level blocker.
+- The disclosed `braces@3.0.3` high advisory remains in the development graph, with no patched upstream version; the user accepted that residual risk. It remains unsuppressed. The production audit on PR #164 reported zero high and critical findings.
+- On merged commit `fdb33c2`, security run #390 passed. Main CI #422 is running its checks, RLS, full E2E, first-paint, BuggyAPI, and core shards; deployment workflows had not started as of the latest post-merge inspection.
+- CI #408 executed the authenticated BuggyAPI suite and passed 26/26 tests against disposable local Supabase. The earlier SEC-05 note that this was only prepared is superseded by this result.
+- At the time this status entry was written, PR #163 remained draft/unmerged. Its #421 audit failure reflects the pre-hotfix base; a merge commit to bring `main` into `work/v2-sprint03` and reconcile both `progress.md` ledgers had been prepared, but no fresh pull-request run had yet been triggered.
+- Independent beginner acceptance is still NOT RUN; the authorized resettable learner sandbox is unconfirmed. The #418 screenshot artifact still has not been visually inspected because this runtime could not extract the ZIP and the browser blocked the artifact URL.
