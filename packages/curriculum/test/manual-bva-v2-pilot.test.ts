@@ -22,6 +22,9 @@ describe("Sprint 03 — manual-first BVA pilot", () => {
     expect(body).toContain("without writing Python");
     expect(body).toContain("Create three test cases");
     expect(body).toContain("record observed results");
+    expect(body).toContain(
+      "All five steps are marked; this does not verify test execution or understanding.",
+    );
     expect(body).toContain("cannot reach");
     expect(body).toContain("ung raded".replace(" ", ""));
     expect(body).toContain("CodePlayground");

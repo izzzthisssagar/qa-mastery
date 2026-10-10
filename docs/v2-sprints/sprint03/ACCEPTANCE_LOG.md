@@ -1,6 +1,10 @@
 # WEB-S03 — Acceptance and regression record
 
-**Status (2026-10-10):** DRAFT PR #163 / CI #418 TEST-HEAD PASS + CI #419 DOCS-ONLY E2E RECHECK PASS / SECURITY AND RELEASE GATES FAIL / NOT DEPLOYED / LEARNER ACCEPTANCE NOT RUN
+**Latest completed baseline before this follow-up (2026-10-10):** PR #163 remains open, draft and unmerged. At head `93b44a8` against `main` at `fdb33c2`, fresh CI #423 and security #391 passed; CI reported 187 E2E cases, one WebKit retry, no final failures, and `e2e-full` skipped by PR policy. Security #391's production audit found 29 items (6 low, 23 moderate, zero high/critical); the separately accepted, unsuppressed development-only `braces@3.0.3` advisory remains open.
+**Open acceptance gates:** #418 screenshot visual review is still NOT DONE (artifact `11670103530` retained through 2026-10-17 13:03 UTC); independent beginner acceptance is NOT RUN; no authorized resettable learner sandbox or preview URL is confirmed. Live aliases use shared Supabase data and are not an acceptance sandbox without a verified reset boundary. Keep PR #163 draft until evidence is recorded, then make a separate merge/deployment decision.
+**Separate main deployment:** PR #164 is merged at `fdb33c2`; its production platform, BuggyShop and BuggyAPI deployments and health checks passed. Staging and Fly.io were skipped; PR #163 has not been deployed.
+**This follow-up:** The checklist now exposes toggle state and uses completion copy that does not claim mastery; focused E2E checks cover keyboard toggle state and completion wording. Fresh CI/security results on this update are pending.
+**Historical note:** Run-specific entries below preserve their state at the time. Later statuses supersede old security/release blockers, but do not close the two open learner-evidence gates.
 **Worktree:** `work/v2-sprint03`, starting commit `c1ba7c5d5037b3f52be72ed06e1ec57832eca3b1`.
 **Runtime:** macOS, Next.js 16.2.12, BuggyShop local isolated production build; no live data or hosted learner account.
 
@@ -18,7 +22,7 @@
 | Public BuggyShop responsive/keyboard E2E             | PASS (6/6)                              | `pnpm --filter @qa-mastery/e2e exec playwright test --config playwright.manual-bva-v2.config.ts`; real installed Chrome at 390/768/1440, quantity update, no overflow, keyboard Enter/Space, products route, visible policy; e2e TypeScript passed |
 | Public responsive screenshot evidence                | PASS                                    | Three original, unedited full-page Chrome captures preserved under `assets/buggyshop-cart-responsive-{390,768,1440}.png`, checksums in `SCREENSHOT_MANIFEST.md`                                                                                    |
 | New UX/accessibility candidate findings              | OPEN                                    | Footer/release control overlap reproduced at 390; quantity controls need more descriptive accessible names; see `BUG_BACKLOG.md`                                                                                                                   |
-| Branch publication / merge / deploy              | PARTIAL / NOT MERGED     | Draft PR #163 is updated by the explicitly authorized additive commit; no merge or production deploy is authorized or performed |
+| Branch publication / merge / deploy | PR #163: OPEN / DRAFT / UNMERGED | Latest completed head before this follow-up `93b44a8`; CI #423/security #391 passed, but #418 visual review and independent learner acceptance remain open. PR #164 is merged separately; no PR #163 deployment is confirmed. |
 
 **Observed environment issue:** Development-mode BuggyShop port 3001 cart was server-rendered but click failed to update quantity (also logged HMR WebSocket handshake errors); production-mode build port 3011 accepted the click. This difference is a test-environment finding, not proven product defect.
 

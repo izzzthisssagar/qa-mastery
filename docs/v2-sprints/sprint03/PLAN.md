@@ -1,8 +1,8 @@
 # QA Mastery V2 — Sprint 03, Manual QA to BuggyShop Practice
 
 **Record:** WEB-S03 / MANUAL-BVA-V2-P01 | **Date:** 2026-10-10
-**Source base:** GitHub main commit `c1ba7c5d5037b3f52be72ed06e1ec57832eca3b1`; isolated worktree `work/v2-sprint03`.
-**Status (2026-10-10):** draft PR #163's test-bearing head `e21a374b4b226fcb4153aafbbb6086ba6940fdb0` passed CI #418. A docs-only follow-up head `46e5220` passed CI #419 with 183 E2E tests and report aggregation; all four core shards and the first-paint/BuggyAPI suites passed. The production dependency audit and security/release gates still fail. Not signed off, merged, or deployed.
+**Initial source base:** GitHub main commit `c1ba7c5d5037b3f52be72ed06e1ec57832eca3b1`; isolated worktree `work/v2-sprint03`.
+**Latest completed baseline before this follow-up (2026-10-10):** PR #163 remains open, draft and unmerged. At head `93b44a8` against `main` `fdb33c2`, CI #423 and security #391 passed; `e2e-full` was skipped by PR policy. Production audit: 29 findings (6 low, 23 moderate, zero high/critical); the separate development-only `braces@3.0.3` advisory remains accepted and unsuppressed. Open gates: visual inspection of #418 artifact `11670103530` and a real independent beginner run in an authorized resettable sandbox. Neither is complete; no PR #163 deployment or learner preview is confirmed. PR #164 merged separately and its production health checks passed; staging/Fly were skipped. Run-specific records below preserve historical results. This follow-up adds accessible checklist toggle/progress semantics and truthful completion copy; fresh CI/security runs on the updated branch are pending.
 
 ## Problem and user outcome
 
@@ -12,7 +12,7 @@ V2 must support genuine manual QA learning before automation. In the existing `t
 
 - Web-first; mobile application out of scope. Preserve 876-note taxonomy and all old topic slugs/content; do not replace the notes renderer or XP completion semantics.
 - Do not query hidden BuggyShop truth/manifest as a learner, reveal internal seeded IDs/expected defects, or advertise a graded result for an ungraded worksheet.
-- No DB migration, production access, app defect-flags, authentication or grading edits, or production deployment. The user separately approved additive test/status updates to draft PR #163; merge remains unauthorized.
+- No DB migration, production-data access, app defect-flags, authentication or grading edits, or deployment from the Sprint 03 branch. PR #164 was a separate security hotfix merged to main and deployed to production. PR #163 remains draft/unmerged pending the documented screenshot and independent-learner evidence gates; make a separate merge/deployment decision afterward.
 - The screenshot is an actual local BuggyShop production-mode UI at quantity two, not a mock; label it a reference, not evidence of learner execution. Keep original unedited; do not paste tokens/account data.
 - A value that cannot be reached through supported UI controls is **BLOCKED / NOT RUN**, not fabricated PASS/FAIL.
 

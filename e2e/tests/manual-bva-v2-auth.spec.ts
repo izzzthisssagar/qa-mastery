@@ -114,15 +114,22 @@ test.describe("Sprint 03 BVA manual-first lesson — disposable CI learner", () 
     await expect(mission).toBeVisible();
     const progress = mission.getByText(/^0 \/ 5 done$/);
     await expect(progress).toBeVisible();
+    const progressBar = mission.getByRole("progressbar", { name: "Checklist completion" });
+    await expect(progressBar).toHaveAttribute("aria-valuenow", "0");
     const firstStep = mission.getByRole("listitem").first().getByRole("button");
+    await expect(firstStep).toHaveAttribute("aria-pressed", "false");
     await firstStep.focus();
     await expect(firstStep).toBeFocused();
-    await expect(async () => {
-      if ((await mission.getByText(/^\d+ \/ 5 done$/).innerText()).startsWith("0")) {
-        await firstStep.press("Enter");
-      }
-      await expect(mission.getByText(/^1 \/ 5 done$/)).toBeVisible({ timeout: 1200 });
-    }).toPass({ timeout: 10_000 });
+    await firstStep.press("Enter");
+    await expect(firstStep).toHaveAttribute("aria-pressed", "true");
+    await expect(mission.getByText(/^1 \/ 5 done$/)).toBeVisible();
+    await expect(progressBar).toHaveAttribute("aria-valuenow", "1");
+    await firstStep.press("Space");
+    await expect(firstStep).toHaveAttribute("aria-pressed", "false");
+    await expect(mission.getByText(/^0 \/ 5 done$/)).toBeVisible();
+    await firstStep.press("Enter");
+    await expect(firstStep).toHaveAttribute("aria-pressed", "true");
+    await expect(mission.getByText(/^1 \/ 5 done$/)).toBeVisible();
 
     async function validateAndCapture(theme: "light" | "dark") {
       await waitForTheme(page, theme);
@@ -202,7 +209,18 @@ test.describe("Sprint 03 BVA manual-first lesson — disposable CI learner", () 
     await page.getByRole("menuitem", { name: /Dark mode/i }).click();
     await validateAndCapture("dark");
 
-    // No completion clicks, XP awards, hidden bug-manifest access or grading.
+    // This checks the progress UI only; toggling every item is not learner acceptance.
+    for (let index = 1; index < 5; index += 1) {
+      const step = mission.getByRole("listitem").nth(index).getByRole("button");
+      await step.click();
+      await expect(step).toHaveAttribute("aria-pressed", "true");
+    }
+    await expect(progressBar).toHaveAttribute("aria-valuenow", "5");
+    await expect(mission.getByRole("status")).toHaveText(
+      "All five steps are marked; this does not verify test execution or understanding.",
+    );
+
+    // No lesson-completion/XP clicks, hidden bug-manifest access or grading.
     await expect(page.getByRole("button", { name: /mark complete.*xp/i })).toBeVisible();
   });
 });

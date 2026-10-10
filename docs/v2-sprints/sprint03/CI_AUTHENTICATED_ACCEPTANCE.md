@@ -1,7 +1,10 @@
 # Sprint 03 — CI-backed authenticated acceptance plan (WEB-S03-07)
 
 **Date:** 2026-10-10 · **Candidate branch:** `work/v2-sprint03`
-**Scope:** existing QA Mastery GitHub Actions CI, without adding hosted infrastructure or a new database. **Current status (2026-10-10):** CI run #418 [38053684497](https://github.com/izzzthisssagar/qa-mastery/actions/runs/38053684497) tested code/test head `e21a374b4b226fcb4153aafbbb6086ba6940fdb0`. All four core shards passed, including the authenticated image-link Enter activation in Chromium and WebKit. Three unrelated WebKit tests passed on retry (notes bug-hunt, notes capstone, notification bell). Checks, live RLS, first-paint and BuggyAPI passed; `e2e-full` was skipped by workflow policy. The production dependency audit still found 47 items (7 low, 27 moderate, 10 high, 3 critical), so the security and release gates failed. The mobile keyboard activation test passed in both browser projects. The docs-only head `46e5220` passed CI #419 with 183 E2E tests and Playwright report aggregation; the test code remains unchanged from #418's verified head. Local Supabase on the Mac remains blocked by the recorded disk-safety limit; CI uses disposable local Supabase on hosted runners.
+**Scope:** existing QA Mastery GitHub Actions CI, without adding hosted infrastructure or a new database.
+**Latest completed baseline before this follow-up (2026-10-10):** PR #163 remains draft/unmerged. At head `93b44a8` against `main` `fdb33c2`, CI #423 and security #391 passed: all required CI jobs, RLS, first-paint, BuggyAPI, four core shards, report aggregation, and release gate are green; `e2e-full` is skipped by PR policy. The run reported 187 E2E cases, one WebKit retry, and no final failures. Security #391 passed the production dependency audit with 29 findings (6 low, 23 moderate, zero high/critical); the separately accepted development-only `braces@3.0.3` advisory remains disclosed and unsuppressed.
+
+**Still open:** #418 artifact `11670103530` has not had its screenshot count or images visually reviewed here. Independent beginner acceptance remains NOT RUN. CI's local Supabase exists only inside the hosted test runner; it does not provide a human-accessible learner URL. No authorized resettable learner sandbox or verified PR preview has been confirmed. Do not use live aliases backed by shared Supabase data without a reset boundary. PR #164 merged separately and its production health checks passed; staging/Fly were skipped. The #418/#419 sections below are historical run records; use this as the latest completed baseline. This follow-up adds accessible checklist state and truthful completion copy; fresh CI/security runs are pending.
 
 ## Existing CI resources, verified from source
 
@@ -33,15 +36,15 @@ The test then checks layout width at **390, 768, 1440px in both light and dark t
 | Human beginner test and release acceptance | **NOT RUN**             | Auth CI can verify UI contract, not usability/mastery                                                                                                                                                                                                 |
 | Production service/database                | UNCHANGED               | A feature branch/PR was pushed; no production merge, hosted schema modification or application deployment was initiated by this work                                                                                                                  |
 
-## CI #418 result and remaining gates
+## Historical CI #418 result and continuing acceptance gates
 
 - CI run #418 [38053684497](https://github.com/izzzthisssagar/qa-mastery/actions/runs/38053684497) tested code/test head `e21a374b4b226fcb4153aafbbb6086ba6940fdb0`. All four core shards passed, including the authenticated image-link Enter activation in Chromium and WebKit. Three unrelated WebKit tests passed on retry (notes bug-hunt, notes capstone, notification bell). Checks, live RLS, first-paint and BuggyAPI passed; `e2e-full` was skipped by workflow policy. The production dependency audit still found 47 items (7 low, 27 moderate, 10 high, 3 critical), so the security and release gates failed.
 - The full-size image anchor is visible and keyboard-focusable at 390px; Enter activates a same-origin navigation with a 200 `image/png` response, then the test returns to the lesson and completes its remaining assertions. Chromium and WebKit both passed.
 - The merged `playwright-report` artifact (ID `11670103530`) is retained through 2026-10-17. It has not been decoded for direct screenshot-count or visual review; #410 remains the manually reviewed screenshot baseline.
-- Keep the separate security PR #164 as an unresolved release prerequisite. Do not suppress the inherited dependency audit or copy the security lockfile into Sprint 03.
+- At the time of #418, security PR #164 was still open and unmerged. It later merged as `fdb33c2`; current production/security status is recorded above. The development-only `braces@3.0.3` advisory remains disclosed and unsuppressed. No security lockfile was copied into Sprint 03.
 - Retain independent beginner acceptance as a separate human-learning gate. Scripted browser success does not certify grading, user comprehension or WCAG conformance.
 
-## Docs-only CI recheck — CI #419 (2026-10-10)
+## Historical docs-only CI recheck — CI #419 (2026-10-10)
 
 CI run [#419](https://github.com/izzzthisssagar/qa-mastery/actions/runs/38054501484) tested docs-only head `46e5220`; the application and test code were unchanged from the `e21a374` head validated by #418. Checks, live RLS, first-paint, BuggyAPI, all four core shards, and report aggregation passed: 183 E2E tests total, with no E2E failures. `e2e-full` was skipped by workflow policy. The production dependency audit reported 47 findings (7 low, 27 moderate, 10 high, 3 critical), so security and release gates failed downstream; secret scan and Dependabot validation passed.
 
@@ -56,4 +59,4 @@ The separate AI code-scanning workflow #13 could not create its review because t
 
 ### Remote-branch publication caveat
 
-Read-only workflow audit confirmed `.github/workflows/deploy.yml` and `deploy-staging.yml` run after CI only when `head_branch == 'main'`, so a feature PR is not eligible for those two production/staging deploy jobs. However, `deploy-staging.yml` itself notes that Vercel's **separate Git integration** may auto-deploy preview builds on branch pushes. No preview-deployment setting was inspected or changed here. A branch push may create a Vercel preview. The user explicitly authorized this additive update to draft PR #163; preview settings were not inspected or changed.
+Read-only workflow audit confirmed `.github/workflows/deploy.yml` and `deploy-staging.yml` run only for `head_branch == 'main'`; PR #163 is not eligible for those production/staging jobs. Repository notes disagree about whether Vercel's separate Git integration can deploy this repository, and the connected deployment view provides no verifiable preview URL for head `93b44a8`. Treat preview availability as unconfirmed. The documented live aliases use shared `qa-mastery-staging` Supabase data and have no verified reset boundary, so they are not approved for learner acceptance.

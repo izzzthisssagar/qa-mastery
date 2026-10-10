@@ -32,6 +32,9 @@ test("new protected note contract signs up only a disposable learner, preserves 
   assert.match(spec, /manual-qa-v2\/BVA_EVIDENCE_TEMPLATE\.md/);
   assert.match(spec, /buggyshop-cart-v2-original\.png/);
   assert.match(spec, /getByRole\("article"\)/);
+  assert.match(spec, /getByRole\("progressbar"/);
+  assert.match(spec, /toHaveAttribute\("aria-pressed"/);
+  assert.match(spec, /All five steps are marked; this does not verify test execution or understanding\./);
   assert.match(spec, /testInfo\.attach\(/);
   assert.match(spec, /\b390\b/);
   assert.match(spec, /\b768\b/);
