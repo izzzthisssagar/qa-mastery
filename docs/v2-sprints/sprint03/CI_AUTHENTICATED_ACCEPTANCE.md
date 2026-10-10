@@ -1,7 +1,7 @@
 # Sprint 03 — CI-backed authenticated acceptance plan (WEB-S03-07)
 
 **Date:** 2026-10-10 · **Candidate branch:** `work/v2-sprint03`
-**Scope:** existing QA Mastery GitHub Actions CI, without adding hosted infrastructure or a new database. **Current status (2026-10-10):** CI run #418 [38053684497](https://github.com/izzzthisssagar/qa-mastery/actions/runs/38053684497) tested code/test head `e21a374b4b226fcb4153aafbbb6086ba6940fdb0`. All four core shards passed, including the authenticated image-link Enter activation in Chromium and WebKit. Three unrelated WebKit tests passed on retry (notes bug-hunt, notes capstone, notification bell). Checks, live RLS, first-paint and BuggyAPI passed; `e2e-full` was skipped by workflow policy. The production dependency audit still found 47 items (7 low, 27 moderate, 10 high, 3 critical), so the security and release gates failed. The mobile keyboard activation test passed in both browser projects. The status-document follow-up does not change the tested code. Local Supabase on the Mac remains blocked by the recorded disk-safety limit; CI uses disposable local Supabase on hosted runners.
+**Scope:** existing QA Mastery GitHub Actions CI, without adding hosted infrastructure or a new database. **Current status (2026-10-10):** CI run #418 [38053684497](https://github.com/izzzthisssagar/qa-mastery/actions/runs/38053684497) tested code/test head `e21a374b4b226fcb4153aafbbb6086ba6940fdb0`. All four core shards passed, including the authenticated image-link Enter activation in Chromium and WebKit. Three unrelated WebKit tests passed on retry (notes bug-hunt, notes capstone, notification bell). Checks, live RLS, first-paint and BuggyAPI passed; `e2e-full` was skipped by workflow policy. The production dependency audit still found 47 items (7 low, 27 moderate, 10 high, 3 critical), so the security and release gates failed. The mobile keyboard activation test passed in both browser projects. The docs-only head `46e5220` passed CI #419 with 183 E2E tests and Playwright report aggregation; the test code remains unchanged from #418's verified head. Local Supabase on the Mac remains blocked by the recorded disk-safety limit; CI uses disposable local Supabase on hosted runners.
 
 ## Existing CI resources, verified from source
 
@@ -41,10 +41,16 @@ The test then checks layout width at **390, 768, 1440px in both light and dark t
 - Keep the separate security PR #164 as an unresolved release prerequisite. Do not suppress the inherited dependency audit or copy the security lockfile into Sprint 03.
 - Retain independent beginner acceptance as a separate human-learning gate. Scripted browser success does not certify grading, user comprehension or WCAG conformance.
 
+## Docs-only CI recheck — CI #419 (2026-10-10)
+
+CI run [#419](https://github.com/izzzthisssagar/qa-mastery/actions/runs/38054501484) tested docs-only head `46e5220`; the application and test code were unchanged from the `e21a374` head validated by #418. Checks, live RLS, first-paint, BuggyAPI, all four core shards, and report aggregation passed: 183 E2E tests total, with no E2E failures. `e2e-full` was skipped by workflow policy. The production dependency audit reported 47 findings (7 low, 27 moderate, 10 high, 3 critical), so security and release gates failed downstream; secret scan and Dependabot validation passed.
+
+The separate AI code-scanning workflow #13 could not create its review because the monthly quota was exhausted (HTTP 402). Its log reported no vulnerabilities in the changed documentation/static regions before that tooling failure. The #418 screenshots have not been decoded, local authenticated setup remains blocked by disk safety, and independent beginner acceptance remains NOT RUN.
+
 ## Constraints
 
 - The existing preflight had only ~5.1 GiB free on Mac after successful recovery. Re-running local Supabase/Colima on that Mac is disallowed until there is adequate disk (recommend 12–15 GiB) or a disposable CI runner.
-- A successful CI run would establish **authenticated rendering and scripted interactions**; it would not certify WCAG conformance, independent learner comprehension, graded test-case quality or hosted BuggyShop provisioning.
+- CI #418 establishes **authenticated rendering and scripted interactions** for test-bearing head `e21a374`; those same tests passed again in CI #419 on docs-only head `46e5220`. These runs do not certify WCAG conformance, independent learner comprehension, graded test-case quality or hosted BuggyShop provisioning.
 - Do not store access tokens, authenticated storage state, real email or personal account metadata in CI screenshot artifacts. Do not upload trace files of the auth flow.
 - Existing CI is automatic for PRs and creates local disposable users/DBs; it is not a remote Supabase data reset. The mobile keyboard activation check passed in CI #418 at code/test head `e21a374`; the current follow-up only records that result.
 

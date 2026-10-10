@@ -2,7 +2,7 @@
 
 **Record:** WEB-S03 / MANUAL-BVA-V2-P01 | **Date:** 2026-10-10
 **Source base:** GitHub main commit `c1ba7c5d5037b3f52be72ed06e1ec57832eca3b1`; isolated worktree `work/v2-sprint03`.
-**Status (2026-10-10):** pilot implementation is in draft PR #163. The test-bearing head `e21a374b4b226fcb4153aafbbb6086ba6940fdb0` passed all four core E2E shards in CI #418, including mobile Enter activation of the full-size image link in Chromium and WebKit. The production dependency audit/security-release gates still fail. Not signed off, merged, or deployed.
+**Status (2026-10-10):** draft PR #163's test-bearing head `e21a374b4b226fcb4153aafbbb6086ba6940fdb0` passed CI #418. A docs-only follow-up head `46e5220` passed CI #419 with 183 E2E tests and report aggregation; all four core shards and the first-paint/BuggyAPI suites passed. The production dependency audit and security/release gates still fail. Not signed off, merged, or deployed.
 
 ## Problem and user outcome
 
@@ -47,7 +47,7 @@ The existing analogy worked example had contradictory wording about equality at 
 
 - A screenshot showing the seeded threshold mismatch would leak the answer, so the reference was captured with quantity two and assessed visually.
 - Real BuggyShop dev mode displayed an unresponsive quantity button. A separate Next production build (localhost:3011) returned 200, hydrated and updated quantity 1 → 2 correctly, with no page errors. Do not infer a production product defect from the dev-only observation.
-- No live user has independently followed the three-case exercise. Protected QA Mastery MDX route screenshot/accessibility remains blocked by local Supabase unavailable; no Docker/Colima startup or database side effects approved.
+- Local protected-route setup and screenshot capture remain blocked by the Mac disk-safety limit; no Docker/Colima startup or database side effects were approved. Scripted authenticated route and keyboard checks passed in CI #418 and were re-run on docs-only head #419; the #418 screenshots have not been decoded. Independent learner acceptance remains NOT RUN, and neither CI run certifies WCAG conformance.
 - Release criteria: curriculum/test and platform checks pass, static download resolves, authenticated note page verified at multiple widths/theme/keyboard, independent learner evidence and SDLC/STLC sign-off. Until then **NOT RELEASE-READY**.
 
 ## Next bounded iteration after pilot

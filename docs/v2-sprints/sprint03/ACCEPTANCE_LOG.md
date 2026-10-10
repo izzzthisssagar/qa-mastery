@@ -1,6 +1,6 @@
 # WEB-S03 — Acceptance and regression record
 
-**Status (2026-10-10):** DRAFT PR #163 / CI #418 CORE E2E AND MOBILE IMAGE-LINK KEYBOARD CHECK PASS / SECURITY AND RELEASE GATES FAIL / NOT DEPLOYED / LEARNER ACCEPTANCE NOT RUN
+**Status (2026-10-10):** DRAFT PR #163 / CI #418 TEST-HEAD PASS + CI #419 DOCS-ONLY E2E RECHECK PASS / SECURITY AND RELEASE GATES FAIL / NOT DEPLOYED / LEARNER ACCEPTANCE NOT RUN
 **Worktree:** `work/v2-sprint03`, starting commit `c1ba7c5d5037b3f52be72ed06e1ec57832eca3b1`.
 **Runtime:** macOS, Next.js 16.2.12, BuggyShop local isolated production build; no live data or hosted learner account.
 
@@ -22,7 +22,7 @@
 
 **Observed environment issue:** Development-mode BuggyShop port 3001 cart was server-rendered but click failed to update quantity (also logged HMR WebSocket handshake errors); production-mode build port 3011 accepted the click. This difference is a test-environment finding, not proven product defect.
 
-**Next:** Candidate has passed its automated code/content and public browser checks. Authenticated page QA requires a disposable test stack with **at least 12–15 GiB available disk** or an ephemeral test runner; independent human learner acceptance is a separate gate. Do not infer authenticated correctness or graded mastery from public Chrome screenshots. No XP/grader/hosted DB mutation. New finding triage in `BUG_BACKLOG.md`.
+**Next:** Automated authenticated QA passed on test-bearing head `e21a374` in CI #418 and was re-run on docs-only head `46e5220` in CI #419. Local authenticated setup remains BLOCKED by the Mac disk-safety limit. The #418 Playwright artifact (ID `11670103530`) has not had its screenshots decoded; #410's 72/72 screenshot set remains the directly reviewed visual baseline. Independent human learner acceptance remains NOT RUN; automated runs do not establish learner comprehension, grading correctness or WCAG conformance. Public Chrome screenshots document unauthenticated cart behavior and do not establish protected-route behavior. No XP/grader/hosted DB mutation. New finding triage in `BUG_BACKLOG.md`.
 
 ## Final runtime cleanup and commands
 
