@@ -125,7 +125,8 @@ test.describe("notes v2 — interactive note surface", () => {
   test("code playground renders editable code and a run affordance (render-only)", async ({
     page,
   }) => {
-    const editor = page.getByLabel("Editable code");
+    // Hydration can briefly duplicate this identical editor under CI.
+    const editor = page.getByLabel("Editable code").first();
     await editor.scrollIntoViewIfNeeded();
     await expect(editor).toBeVisible();
     await expect(editor).toBeEditable();
@@ -135,13 +136,13 @@ test.describe("notes v2 — interactive note surface", () => {
 
   test("marking a note complete persists across a reload (real XP)", async ({ page }) => {
     const complete = page.getByRole("button", { name: /mark complete/i });
+    const done = page.getByRole("button", { name: /completed .* xp earned/i });
     await complete.scrollIntoViewIfNeeded();
     await expect(async () => {
       await complete.click();
-      await expect(page.getByRole("button", { name: /completed .* xp earned/i })).toBeVisible({
-        timeout: 2000,
-      });
+      await expect(done).toBeVisible({ timeout: 2000 });
     }).toPass({ timeout: 10_000 });
+    await expect(done.locator("xpath=..").getByRole("status")).toHaveText("Saved");
 
     // Reload: completion is server-persisted (note_progress), so the button
     // renders already-completed rather than resetting to its client demo state.

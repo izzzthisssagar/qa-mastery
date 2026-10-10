@@ -21,6 +21,10 @@ test.describe("curriculum content tracing", () => {
     expect(response?.status()).toBe(200);
 
     await expect(page.getByRole("heading", { name: "Why edges fail", level: 1 })).toBeVisible();
-    await expect(page.getByText(/cluster at the exact edges of input ranges/i)).toBeVisible();
+    // Hydration can briefly duplicate this paragraph; either identical copy
+    // is sufficient to prove the MDX body was traced into the production build.
+    await expect(
+      page.getByText(/cluster at the exact edges of input ranges/i).first(),
+    ).toBeVisible();
   });
 });
