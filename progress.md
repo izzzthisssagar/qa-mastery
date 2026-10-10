@@ -50,9 +50,9 @@ Task SEC-07: in progress — focused read-only re-review, then security-only dra
 - This snapshot predates the branch reconciliation and fresh PR runs. Later, PR #163 was advanced to merge commit `93b44a8` against `main` `fdb33c2`; fresh CI #423 and security #391 passed. The earlier #421 audit failure is historical and was against the pre-hotfix base.
 - Independent beginner acceptance is still NOT RUN; no authorized resettable learner sandbox or verified preview is confirmed. The #418 screenshot artifact still has not been visually inspected; #410's 72/72 review is a separate baseline.
 
-## Current verification checkpoint — checklist follow-up
+## Verified checklist follow-up checkpoint — before status refresh
 
 - PR #164 is merged at `fdb33c2`. Main CI #422/security #390 passed; production deploy #184 and all three health checks passed. Staging steps and Fly deployment were skipped. The dev-only `braces@3.0.3` advisory remains accepted, disclosed, and unsuppressed.
-- PR #163 is open, draft, and unmerged. Its latest completed baseline was head `93b44a8` against base `fdb33c2`; CI #423 and security #391 passed, with 187 E2E cases, one WebKit retry, no final failures, and `e2e-full` skipped by policy. The production audit found 29 findings: 6 low, 23 moderate, zero high/critical.
-- This follow-up corrects the BVA checklist completion claim and exposes toggle/progress state to assistive technology. Fresh CI/security results on the updated branch are pending.
+- PR #163 was open, draft, and unmerged at head `1576c53` against base `fdb33c2`. CI #426 passed checks, RLS, BuggyAPI, first-paint, all four core shards, report aggregation and release gate; `e2e-full` was skipped by policy. Security #394 passed dependency audit, secret scan, Dependabot validation and security gate.
+- This follow-up corrects the BVA checklist completion claim and exposes toggle/progress state to assistive technology. The status-only refresh creates a newer head; current-head checks are linked from the PR body.
 - Acceptance remains open: artifact `11670103530` is not visually reviewed (retained until 2026-10-17 13:03 UTC); an independent beginner has not run the lesson; no authorized resettable sandbox or verified learner preview is confirmed. Documented live aliases use shared `qa-mastery-staging` Supabase data without a verified reset boundary.
