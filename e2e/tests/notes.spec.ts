@@ -23,7 +23,9 @@ test.describe("notes wiki", () => {
     await expect(page.getByRole("heading", { name: /notes wiki/i })).toBeVisible();
 
     // Drill into QA foundations → a written topic.
-    await page.getByTestId("notes-module-qa-foundations").click();
+    // Hydration can briefly duplicate identical module entries under CI; both
+    // point to the same route (docs/known-issues/hydration-double-render.md).
+    await page.getByTestId("notes-module-qa-foundations").first().click();
     await expect(page).toHaveURL(/\/notes\/qa-foundations/);
     await page.getByTestId("notes-topic-qa-vs-qc-vs-testing").click();
     await expect(page.getByRole("heading", { name: /qa vs qc vs testing/i })).toBeVisible();

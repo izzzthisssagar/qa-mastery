@@ -60,7 +60,8 @@ test.describe("notes v2 — interactive note surface", () => {
 
   test("parts quest: tapping a number reveals the part and counts it as met", async ({ page }) => {
     // The quest legend is the row of small numbered buttons named "1", "2", …
-    const legend = page.getByText(/tap a number to meet that part/i);
+    // Hydration can briefly duplicate identical server-rendered copy under CI.
+    const legend = page.getByText(/tap a number to meet that part/i).first();
     await legend.scrollIntoViewIfNeeded();
     const quest = legend.locator("xpath=ancestor::div[contains(@class,'rounded-2xl')]");
     await expect(async () => {

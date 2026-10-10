@@ -33,6 +33,9 @@ export default defineConfig({
     "**/a11y.spec.ts",
   ],
   fullyParallel: true,
+  // The two production servers and local Supabase share the 2-core CI runner.
+  // One browser worker avoids starving server actions (issue #165).
+  workers: CI ? 1 : undefined,
   forbidOnly: CI,
   retries: CI ? 2 : 0,
   reporter: CI ? [["list"], ["html", { open: "never" }]] : "list",

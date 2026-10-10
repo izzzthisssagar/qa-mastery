@@ -23,12 +23,20 @@ async function completeNote(page: Page, url: string): Promise<void> {
   const done = page.getByRole("button", { name: /completed .* xp earned/i });
   const complete = page.getByRole("button", { name: /mark complete/i });
   await complete.scrollIntoViewIfNeeded();
+  let completedHere = false;
   await expect(async () => {
     if ((await done.count()) === 0) {
       await complete.click();
+      completedHere = true;
     }
     await expect(done).toBeVisible({ timeout: 2000 });
   }).toPass({ timeout: 15_000 });
+
+  // The button updates optimistically; chapter unlocks depend on persisted
+  // progress, so wait for the completion request to finish before navigating.
+  if (completedHere) {
+    await expect(done.locator("xpath=..").getByRole("status")).toHaveText("Saved");
+  }
 }
 
 test.describe("track capstone", () => {
