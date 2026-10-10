@@ -28,7 +28,7 @@ test.describe("notes wiki", () => {
     await page.getByTestId("notes-module-qa-foundations").first().click();
     await expect(page).toHaveURL(/\/notes\/qa-foundations/);
 
-    const topicUrl = /\/notes\/qa-foundations\/qa-vs-qc-vs-testing/;
+    const topicUrl = /\/notes\/qa-foundations\/what-is-qa\/qa-vs-qc-vs-testing/;
     const topic = page.getByTestId("notes-topic-qa-vs-qc-vs-testing").first();
     // A click immediately after client navigation can land before hydration.
     // Repeat only until the URL proves that the topic link took effect.
