@@ -5,7 +5,6 @@ import { findContentRoot } from "../src/load";
 import { getNote } from "../src/notes/load";
 
 const root = path.resolve(findContentRoot(), "../../..");
-const slug = "test-design-techniques/boundary-value-analysis/bva-worked-example";
 const publicShot = path.join(
   root,
   "apps/platform/public/notes/test-design-techniques/boundary-value-analysis/buggyshop-cart-v2-original.png",
@@ -26,7 +25,7 @@ describe("Sprint 03 — manual-first BVA pilot", () => {
       "All five steps are marked; this does not verify test execution or understanding.",
     );
     expect(body).toContain("cannot reach");
-    expect(body).toContain("ung raded".replace(" ", ""));
+    expect(body).toContain("ungraded");
     expect(body).toContain("CodePlayground");
     expect(body).toContain("<Complete xp={10} />");
   });
