@@ -27,7 +27,17 @@ test.describe("notes wiki", () => {
     // point to the same route (docs/known-issues/hydration-double-render.md).
     await page.getByTestId("notes-module-qa-foundations").first().click();
     await expect(page).toHaveURL(/\/notes\/qa-foundations/);
-    await page.getByTestId("notes-topic-qa-vs-qc-vs-testing").click();
+
+    const topicUrl = /\/notes\/qa-foundations\/qa-vs-qc-vs-testing/;
+    const topic = page.getByTestId("notes-topic-qa-vs-qc-vs-testing").first();
+    // A click immediately after client navigation can land before hydration.
+    // Repeat only until the URL proves that the topic link took effect.
+    await expect(async () => {
+      if (!topicUrl.test(page.url())) {
+        await topic.click();
+      }
+      await expect(page).toHaveURL(topicUrl, { timeout: 1000 });
+    }).toPass({ timeout: 10_000 });
     await expect(page.getByRole("heading", { name: /qa vs qc vs testing/i })).toBeVisible();
     await expect(page.getByText(/quality assurance/i).first()).toBeVisible();
 
