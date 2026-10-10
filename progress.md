@@ -1,0 +1,10 @@
+# QA Mastery V2 Sprint 03 ledger — docs/v2-sprints/sprint03/PLAN.md
+
+Task 1: complete — new ignored Git worktree `work/v2-sprint03`, clean baseline at `c1ba7c5`, 25/25 curriculum tests and typecheck PASS.
+Task 2: complete — real BuggyShop Cart local production screenshot at qty 2, byte-identical public asset; manifest recorded.
+Task 3: complete — existing BVA lesson receives manual-first guided practice before Python/Java, blank evidence template, original code/grader remains.
+Task 4: complete for automated checks — focused RED 3 failures then GREEN 3/3, full curriculum 28/28, BuggyShop 44/44, all 876 notes link and MDX compile checks, curriculum/platform typechecks, production platform build exit 0 after final MDX edit; public HTTP 200 image/template with byte identity and git diff --check PASS. Remaining acceptance in Task 5.
+Task 5: PARTIAL — local isolated Supabase attempt stopped for disk safety; test-only DB container, volume and downloaded images cleaned, Colima returned to stopped state, pre-existing Docker resource inventory unchanged. Authenticated note and human learner acceptance still BLOCKED / NOT RUN. See docs/v2-sprints/sprint03/LOCAL_AUTH_ENVIRONMENT_REPORT.md.
+Task 6: complete for public scope — real Chrome E2E 6/6 PASS at 390/768/1440 including keyboard, navigation, 3 authentic responsive screenshots. Two UX/a11y findings reproduced and logged in docs/v2-sprints/sprint03/BUG_BACKLOG.md. No commit, push, merge or deploy.
+
+Task 7: implementation prepared — existing GitHub Actions e2e-core identified as the suitable isolated CI runner. New `e2e/tests/manual-bva-v2-auth.spec.ts` auto-collected in Chromium+WebKit; new Node CI contract RED then GREEN 3/3, full E2E Node tests 10/10, E2E TS PASS, CI shape PASS, curriculum 28/28, no diff whitespace errors. The authenticated spec has **not executed** (no local Supabase or pushed PR). Six in-article light/dark 390/768/1440 captures are defined but NOT CAPTURED until CI. See docs/v2-sprints/sprint03/CI_AUTHENTICATED_ACCEPTANCE.md. No commit, push or deploy.
