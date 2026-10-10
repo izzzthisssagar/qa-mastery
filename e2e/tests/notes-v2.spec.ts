@@ -73,7 +73,7 @@ test.describe("notes v2 — interactive note surface", () => {
   });
 
   test("step checklist check-off updates the progress line", async ({ page }) => {
-    const progress = page.getByText(/^\d+ \/ \d+ done$/);
+    const progress = page.getByText(/^\d+ \/ \d+ done$/).first();
     await progress.scrollIntoViewIfNeeded();
     const before = (await progress.textContent())!;
     const list = progress.locator("xpath=preceding-sibling::ol[1]");
