@@ -2,7 +2,7 @@
 
 **Record:** WEB-S03 / MANUAL-BVA-V2-P01 | **Date:** 2026-10-10
 **Source base:** GitHub main commit `c1ba7c5d5037b3f52be72ed06e1ec57832eca3b1`; isolated worktree `work/v2-sprint03`.
-**Status (2026-10-10):** pilot implementation is committed in draft PR #163. CI #411 passed all four core E2E shards at its prior head, while the production dependency audit/security-release gates failed. The current mobile keyboard test update is pending fresh CI. Not signed off, merged, or deployed.
+**Status (2026-10-10):** pilot implementation is in draft PR #163. The test-bearing head `e21a374b4b226fcb4153aafbbb6086ba6940fdb0` passed all four core E2E shards in CI #418, including mobile Enter activation of the full-size image link in Chromium and WebKit. The production dependency audit/security-release gates still fail. Not signed off, merged, or deployed.
 
 ## Problem and user outcome
 

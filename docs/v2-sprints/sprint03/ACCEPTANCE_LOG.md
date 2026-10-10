@@ -1,6 +1,6 @@
 # WEB-S03 — Acceptance and regression record
 
-**Status (2026-10-10):** DRAFT PR #163 / CI #411 CORE E2E PASS AT PRIOR HEAD / SECURITY AND RELEASE GATES FAIL / NOT DEPLOYED / LEARNER ACCEPTANCE NOT RUN
+**Status (2026-10-10):** DRAFT PR #163 / CI #418 CORE E2E AND MOBILE IMAGE-LINK KEYBOARD CHECK PASS / SECURITY AND RELEASE GATES FAIL / NOT DEPLOYED / LEARNER ACCEPTANCE NOT RUN
 **Worktree:** `work/v2-sprint03`, starting commit `c1ba7c5d5037b3f52be72ed06e1ec57832eca3b1`.
 **Runtime:** macOS, Next.js 16.2.12, BuggyShop local isolated production build; no live data or hosted learner account.
 
@@ -11,8 +11,8 @@
 | Manual-first text/asset regression                   | PASS                                    | Focused `manual-bva-v2-pilot.test.ts` RED 3 failed before integration (missing subsection/template/reference); GREEN 3/3 after                                                                                                                     |
 | Existing code path preserved                         | PASS (source review)                    | Original Python + Java CodePlayground examples and exactly one `<Complete xp={10} />` remain. Existing chapter Python code_run XP lab intentionally untouched, and worksheet explicitly ungraded                                                   |
 | All curriculum/MDX/link checks                       | PASS (fresh final run)                  | 28/28 curriculum tests, 44/44 BuggyShop tests, all 876 notes link-checked and MDX compiled, curriculum and platform typechecks exited 0 after final MDX edit                                                                                       |
-| Platform build and public image/template delivery    | PASS (build rerun after final MDX edit) | Next 16.2.12 platform production build exit 0 with dummy env; local HTTP 200 for image/png (36,580 bytes) and text/markdown (2,945 bytes), both byte-identical to public source files. Authenticated note UI remains BLOCKED                       |
-| Authenticated note responsive/dark-light/keyboard QA | PARTIAL — CI #411 core pass at prior head | Core E2E passed on prior PR head; the #411 report artifact was not decoded here. Local Supabase remains blocked by disk safety, and this update's mobile Enter-activation check awaits fresh CI |
+| Platform build and public image/template delivery    | PASS (build rerun after final MDX edit) | Next 16.2.12 platform production build exit 0 with dummy env; local HTTP 200 for image/png (36,580 bytes) and text/markdown (2,945 bytes), both byte-identical to public source files. Local authenticated note setup remains BLOCKED by disk safety; CI #418 core authenticated tests passed                       |
+| Authenticated note responsive/dark-light/keyboard QA | CI PASS (#418) / LOCAL BLOCKED | Core E2E and the Enter-activation check passed in Chromium and WebKit. Local Supabase remains blocked by disk safety; #418 screenshots were not decoded here |
 | Independent beginner exercise                        | NOT RUN                                 | Needs real learner to write, execute and explain three cases without coaching                                                                                                                                                                      |
 | Hosted BuggyShop student environment                 | NOT VERIFIED                            | Local run only; do not assume public provision                                                                                                                                                                                                     |
 | Public BuggyShop responsive/keyboard E2E             | PASS (6/6)                              | `pnpm --filter @qa-mastery/e2e exec playwright test --config playwright.manual-bva-v2.config.ts`; real installed Chrome at 390/768/1440, quantity update, no overflow, keyboard Enter/Space, products route, visible policy; e2e TypeScript passed |
@@ -48,7 +48,7 @@ See `CI_AUTHENTICATED_ACCEPTANCE.md` for exact CI paths, safe scope and next gat
 
 ## PR #163 initial GitHub CI and remediation — 2026-10-10
 
-The pre-publication entries above remain an historical record. **Current status: published draft PR #163, initial GitHub Actions run `38033582326` failed, no merge/deploy**. Exact failure logs and test-only corrections are documented in `CI_FAILURES_AND_REMEDIATION.md`.
+The pre-publication entries above remain an historical record. **At the time of this entry, draft PR #163 had been published and initial GitHub Actions run `38033582326` failed; no merge/deploy**. Exact failure logs and test-only corrections are documented in `CI_FAILURES_AND_REMEDIATION.md`.
 
 - Core shard 1 (Chromium) and shard 3 (WebKit): six new BuggyShop cart tests each failed from relative `page.goto("/cart")` because the **existing core Playwright config deliberately has no baseURL**. Now use explicit localhost/127.0.0.1 BuggyShop origin, preferring `BVA_PUBLIC_ORIGIN` for standalone tests and the existing CI `NEXT_PUBLIC_BUGGYSHOP_URL` for core runs.
 - Core shard 4 (WebKit): the complete note's screenshot exceeded WebKit's maximum 32,767-pixel dimension. Now capture only the **actual BuggyShop Figure and the guided manual QA checklist** separately for each viewport/theme (12 element-only images per browser). No fake UI, CSS changes or account chrome.
@@ -57,14 +57,14 @@ The pre-publication entries above remain an historical record. **Current status:
 - **WebKit authenticated capture, WebKit release-switch and new 12-per-browser screenshot attachments remain NOT VERIFIED** until the next GitHub CI run; WebKit's local binary was absent on the Mac. The PR's separate security gate remains blocked by inherited vulnerable `main` until independently reviewed security draft PR #164 is accepted and merged.
 - Actual independent beginner BVA learning acceptance remains **NOT RUN**. No changes to learner XP/grading, auth, seeded bug manifests, SQL/RLS, or hosted services.
 
-The old release and deployment status in the preflight table is superseded by this dated PR update. The next step is a new additive commit and draft-PR CI rerun, with **no merge**.
+The old release and deployment status in the preflight table is superseded by this dated PR update. Its next-step statement is historical and was superseded by CI #409, #410, #411 and #418. PR #163 remains draft and unmerged.
 
 ## CI #409 and visual-review follow-up — 2026-10-10
 
 - **Technical GitHub core CI:** run `38038368128`, commit `8a857dd`: core shards **1/2/3/4 PASS**, authenticated note WebKit and Chromium test PASS; E2E BuggyAPI, first-paint and RLS PASS; **one unrelated flaky** Talent Title locator in WebKit shard 4, which succeeded on retry.
 - **Security gate:** failed on inherited old-main dependency graph; separate security draft PR #164 has green GitHub audit/CI but is **not merged**. Do not suppress audit or claim PR #163 release-ready.
 - **Evidence review:** examined the actual core4 Playwright artifact ZIP and twelve WebKit screenshots. Long checklist element screenshot contains floating nav/Feedback controls over text because screenshot stitching traverses a taller-than-viewport section. Short Figure image also shows Feedback overlay. This is **visual acceptance FAIL/INCONCLUSIVE**, not automatically a user-facing product defect.
-- **Second screenshot capture candidate:** choose the real Figure and **five individual checklist steps**, scroll each into the unobscured center of a normal 900px viewport, and fail unless each actual element's measured bounding box stays clear of header/footer controls. Capture **36 genuine unmodified element screenshots per browser** across light/dark and 390/768/1440. **NOT RUN on CI yet**; needs fresh Chromium/WebKit screenshots and manual inspection.
+- **Second screenshot capture candidate at #409:** choose the real Figure and **five individual checklist steps**, scroll each into the unobscured center of a normal 900px viewport, and fail unless each actual element's measured bounding box stays clear of header/footer controls. Capture **36 genuine unmodified element screenshots per browser** across light/dark and 390/768/1440. **At the time of #409, this had not run; CI #410 later generated the set and its 72/72 evidence was manually verified** as recorded in `SCREENSHOT_MANIFEST.md`.
 - **Unaffected:** no modified app UI, seeded bugs, grading, DB, auth; no production deployment, no merge. Independent beginner manual-QA practice remains **NOT RUN**.
 
 More detail: `CI_FAILURES_AND_REMEDIATION.md` and updated `CI_AUTHENTICATED_ACCEPTANCE.md`.
@@ -73,16 +73,27 @@ More detail: `CI_FAILURES_AND_REMEDIATION.md` and updated `CI_AUTHENTICATED_ACCE
 
 - All four core E2E shard jobs, RLS, first-paint, and BuggyAPI jobs **PASS** at `cdfa6f9`; the two authenticated manual BVA browser tests passed in Chromium and WebKit.
 - Verified **72 real scoped Playwright screenshots** (36 per browser), six light/dark × viewport combinations and six components per combination, with real source files and representative manual visual inspection. See `SCREENSHOT_MANIFEST.md`.
-- Mobile readability improvement made after reviewing actual artifacts: shorten authentic Figure caption and link to full 1440px source PNG for zoom. The **red-first test** passed 6/6 locally with E2E TypeScript; CI #411 later ran with the link and its URL/resource checks but did not include the mobile Enter-activation assertion added in the current update.
+- Mobile readability improvement made after reviewing actual artifacts: shorten authentic Figure caption and link to full 1440px source PNG for zoom. The **red-first test** passed 6/6 locally with E2E TypeScript; CI #411 ran the link URL/resource checks, and CI #418 passed mobile Enter activation in Chromium and WebKit.
 - Security gate **FAILS due inherited clean-main vulnerabilities**, not the BVA changes; the separate security-only PR #164 has a successful audit and E2E run but is still draft/unmerged.
 - Independent novice manual QA exercise remains **NOT RUN**, and no XP, grader, seeded product behavior or hosted learner data has been changed.
 
 
-## Sprint 03 authenticated acceptance update — CI #411 and mobile link test iteration (2026-10-10)
+## Sprint 03 authenticated acceptance update — CI #411 (historical; followed by #418)
 
 - CI run `38044152969` passed all four core E2E shards at prior PR head `3e0db7195bfd1087870f777c3e80b586fb09b59d`. This predates the mobile keyboard activation test in the current authorized update.
 - The production dependency audit reported 47 findings: 7 low, 27 moderate, 10 high and 3 critical. The security and release gates failed downstream; `e2e-full` was skipped by workflow policy. PR #164 remains a separate draft and unmerged; no audit suppression or security lockfile copying.
 - A merged `playwright-report` artifact (ID `11666901713`, listed expiry 2026-10-17) exists for #411, but its ZIP contents were not decoded here. The PR description's 72/72 screenshot claim for #411 is **not independently verified**; #410's 72/72 and representative review remain verified in `SCREENSHOT_MANIFEST.md`.
-- The current update adds an authenticated 390px keyboard path: focus the full-size image anchor, press Enter, verify the navigation response is 200 `image/png`, then return to the lesson and continue its checks. A fresh exact-head CI run is required to verify the added test in Chromium and WebKit.
+- The authorized follow-up added an authenticated 390px keyboard path: focus the full-size image anchor, press Enter, verify the navigation response is 200 `image/png`, then return to the lesson and continue its checks. CI #418 passed the test in Chromium and WebKit.
 - Local isolated Supabase remains **BLOCKED** by the Mac disk-safety limit. Independent beginner BVA acceptance remains **NOT RUN**. No learner XP/grading, seeded bug behavior, database, production service or deployment changed.
 
+
+
+## Sprint 03 authenticated acceptance update — CI #418 (2026-10-10)
+
+CI run #418 [38053684497](https://github.com/izzzthisssagar/qa-mastery/actions/runs/38053684497) tested code/test head `e21a374b4b226fcb4153aafbbb6086ba6940fdb0`. All four core shards passed, including the authenticated image-link Enter activation in Chromium and WebKit. Three unrelated WebKit tests passed on retry (notes bug-hunt, notes capstone, notification bell). Checks, live RLS, first-paint and BuggyAPI passed; `e2e-full` was skipped by workflow policy. The production dependency audit still found 47 items (7 low, 27 moderate, 10 high, 3 critical), so the security and release gates failed.
+
+- Core shard summaries: 40 passed (core-1), 40 passed (core-2), 38 passed (core-3), and 39 passed (core-4). Three unrelated WebKit tests passed after retries; none concerned the new image link or authenticated lesson.
+- The mobile full-size image link is visible at 390px, receives keyboard focus, and opens the same-origin PNG on Enter with a 200 `image/png` response in both Chromium and WebKit. The test returns to the lesson and completes the remaining assertions.
+- The merged `playwright-report` artifact (ID `11670103530`, expiry 2026-10-17) exists but was not decoded for direct visual screenshot review. The #410 visual review remains the verified screenshot baseline.
+- Security run #386 failed the production dependency audit with the same 47 findings; secret scan and Dependabot validation passed. The security and release gates remain blocked. PR #164 remains separate, draft and unmerged.
+- Local Supabase remains **BLOCKED** by disk safety, and independent beginner BVA acceptance remains **NOT RUN**. No learner XP/grading, seeded bug behavior, database, production service or deployment changed.
