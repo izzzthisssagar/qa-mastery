@@ -60,7 +60,8 @@ test.describe("notes v2 — interactive note surface", () => {
 
   test("parts quest: tapping a number reveals the part and counts it as met", async ({ page }) => {
     // The quest legend is the row of small numbered buttons named "1", "2", …
-    const legend = page.getByText(/tap a number to meet that part/i);
+    // Hydration can briefly duplicate identical server-rendered copy under CI.
+    const legend = page.getByText(/tap a number to meet that part/i).first();
     await legend.scrollIntoViewIfNeeded();
     const quest = legend.locator("xpath=ancestor::div[contains(@class,'rounded-2xl')]");
     await expect(async () => {
@@ -72,7 +73,7 @@ test.describe("notes v2 — interactive note surface", () => {
   });
 
   test("step checklist check-off updates the progress line", async ({ page }) => {
-    const progress = page.getByText(/^\d+ \/ \d+ done$/);
+    const progress = page.getByText(/^\d+ \/ \d+ done$/).first();
     await progress.scrollIntoViewIfNeeded();
     const before = (await progress.textContent())!;
     const list = progress.locator("xpath=preceding-sibling::ol[1]");
@@ -124,7 +125,8 @@ test.describe("notes v2 — interactive note surface", () => {
   test("code playground renders editable code and a run affordance (render-only)", async ({
     page,
   }) => {
-    const editor = page.getByLabel("Editable code");
+    // Hydration can briefly duplicate this identical editor under CI.
+    const editor = page.getByLabel("Editable code").first();
     await editor.scrollIntoViewIfNeeded();
     await expect(editor).toBeVisible();
     await expect(editor).toBeEditable();
@@ -134,13 +136,13 @@ test.describe("notes v2 — interactive note surface", () => {
 
   test("marking a note complete persists across a reload (real XP)", async ({ page }) => {
     const complete = page.getByRole("button", { name: /mark complete/i });
+    const done = page.getByRole("button", { name: /completed .* xp earned/i });
     await complete.scrollIntoViewIfNeeded();
     await expect(async () => {
       await complete.click();
-      await expect(page.getByRole("button", { name: /completed .* xp earned/i })).toBeVisible({
-        timeout: 2000,
-      });
+      await expect(done).toBeVisible({ timeout: 2000 });
     }).toPass({ timeout: 10_000 });
+    await expect(done.locator("xpath=..").getByRole("status")).toHaveText("Saved");
 
     // Reload: completion is server-persisted (note_progress), so the button
     // renders already-completed rather than resetting to its client demo state.

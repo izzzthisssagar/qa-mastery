@@ -24,8 +24,15 @@ test.describe("community feed", () => {
 
     const body = `e2e post ${randomUUID().slice(0, 8)}`;
     await page.goto("http://localhost:3000/community/new");
-    await page.getByTestId("composer-body").fill(body);
-    await page.getByTestId("composer-submit").click();
+    const composer = page.getByTestId("composer-body").first();
+    const submit = page.getByTestId("composer-submit").first();
+    // Refill inside the retry: React can discard a fill that lands before
+    // this new route hydrates, leaving the controlled submit button disabled.
+    await expect(async () => {
+      await composer.fill(body);
+      await expect(submit).toBeEnabled({ timeout: 1000 });
+    }).toPass({ timeout: 10_000 });
+    await submit.click();
 
     // Lands on the new post's thread page.
     await expect(page.getByText(body)).toBeVisible({ timeout: 10_000 });
