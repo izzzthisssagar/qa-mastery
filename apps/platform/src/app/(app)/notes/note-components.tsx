@@ -939,7 +939,13 @@ export function PartsQuest({
 }
 
 /* ── StepChecklist: interactive check-off steps with progress ───────────────*/
-export function StepChecklist({ steps }: { steps: { text: string; detail?: string }[] }) {
+export function StepChecklist({
+  steps,
+  completionMessage = "✓ Mission complete — you know your machine!",
+}: {
+  steps: { text: string; detail?: string }[];
+  completionMessage?: string;
+}) {
   const [checked, setChecked] = useState<Set<number>>(new Set());
   const toggle = (i: number) =>
     setChecked((s) => {
@@ -952,8 +958,16 @@ export function StepChecklist({ steps }: { steps: { text: string; detail?: strin
 
   return (
     <div>
-      <div className="mb-3 h-2 overflow-hidden rounded-full bg-muted">
+      <div
+        className="mb-3 h-2 overflow-hidden rounded-full bg-muted"
+        role="progressbar"
+        aria-label="Checklist completion"
+        aria-valuemin={0}
+        aria-valuemax={steps.length}
+        aria-valuenow={checked.size}
+      >
         <div
+          aria-hidden="true"
           className="h-full rounded-full bg-accent transition-all duration-300"
           style={{ width: `${pct}%` }}
         />
@@ -963,6 +977,7 @@ export function StepChecklist({ steps }: { steps: { text: string; detail?: strin
           <li key={i}>
             <button
               type="button"
+              aria-pressed={checked.has(i)}
               onClick={() => toggle(i)}
               className={`flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
                 checked.has(i)
@@ -976,6 +991,7 @@ export function StepChecklist({ steps }: { steps: { text: string; detail?: strin
                     ? "border-accent bg-accent text-accent-foreground"
                     : "border-border text-muted-foreground"
                 }`}
+                aria-hidden="true"
               >
                 {checked.has(i) ? "✓" : i + 1}
               </span>
@@ -994,11 +1010,11 @@ export function StepChecklist({ steps }: { steps: { text: string; detail?: strin
         ))}
       </ol>
       <p
+        role="status"
+        aria-live="polite"
         className={`mt-2 text-center text-xs font-medium ${pct === 100 ? "text-accent-text" : "text-muted-foreground"}`}
       >
-        {pct === 100
-          ? "✓ Mission complete — you know your machine!"
-          : `${checked.size} / ${steps.length} done`}
+        {pct === 100 ? completionMessage : `${checked.size} / ${steps.length} done`}
       </p>
     </div>
   );
