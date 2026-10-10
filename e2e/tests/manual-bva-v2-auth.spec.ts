@@ -71,6 +71,30 @@ test.describe("Sprint 03 BVA manual-first lesson — disposable CI learner", () 
     expect(fullImageResponse.status()).toBe(200);
     expect(fullImageResponse.headers()["content-type"]).toContain("image/png");
 
+    // Verify the full-resolution link itself works at a mobile viewport by keyboard.
+    const imageUrl = new URL(imagePath, BASE).href;
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expect(fullImageLink).toBeVisible();
+    await fullImageLink.focus();
+    await expect(fullImageLink).toBeFocused();
+    const [imageNavigation] = await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.url() === imageUrl && response.request().isNavigationRequest(),
+      ),
+      page.waitForURL(imageUrl),
+      fullImageLink.press("Enter"),
+    ]);
+    expect(imageNavigation.status()).toBe(200);
+    expect(imageNavigation.headers()["content-type"]).toContain("image/png");
+    await expect(page).toHaveURL(imageUrl);
+
+    // Return to the authenticated lesson so the remaining lesson checks can continue.
+    const lessonResponse = await page.goto(NOTE, { waitUntil: "domcontentloaded" });
+    expect(lessonResponse?.status()).toBe(200);
+    await expect(page).toHaveURL(NOTE);
+    await expect(article).toBeVisible();
+
     const template = article.getByRole("link", {
       name: "blank BVA test-case and evidence template",
     });

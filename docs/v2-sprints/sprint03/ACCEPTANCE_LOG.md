@@ -1,6 +1,6 @@
 # WEB-S03 — Acceptance and regression record
 
-**Status:** ISOLATED PILOT / NOT DEPLOYED / LEARNER ACCEPTANCE NOT RUN
+**Status (2026-10-10):** DRAFT PR #163 / CI #411 CORE E2E PASS AT PRIOR HEAD / SECURITY AND RELEASE GATES FAIL / NOT DEPLOYED / LEARNER ACCEPTANCE NOT RUN
 **Worktree:** `work/v2-sprint03`, starting commit `c1ba7c5d5037b3f52be72ed06e1ec57832eca3b1`.
 **Runtime:** macOS, Next.js 16.2.12, BuggyShop local isolated production build; no live data or hosted learner account.
 
@@ -12,13 +12,13 @@
 | Existing code path preserved                         | PASS (source review)                    | Original Python + Java CodePlayground examples and exactly one `<Complete xp={10} />` remain. Existing chapter Python code_run XP lab intentionally untouched, and worksheet explicitly ungraded                                                   |
 | All curriculum/MDX/link checks                       | PASS (fresh final run)                  | 28/28 curriculum tests, 44/44 BuggyShop tests, all 876 notes link-checked and MDX compiled, curriculum and platform typechecks exited 0 after final MDX edit                                                                                       |
 | Platform build and public image/template delivery    | PASS (build rerun after final MDX edit) | Next 16.2.12 platform production build exit 0 with dummy env; local HTTP 200 for image/png (36,580 bytes) and text/markdown (2,945 bytes), both byte-identical to public source files. Authenticated note UI remains BLOCKED                       |
-| Authenticated note responsive/dark-light/keyboard QA | BLOCKED                                 | Local Supabase 2.106.0 isolated stack attempted; disk fell under 1 GiB during Docker image pulls. All test-only DB resources were removed, VM stopped, source untouched; no learner session was created. See `LOCAL_AUTH_ENVIRONMENT_REPORT.md`    |
+| Authenticated note responsive/dark-light/keyboard QA | PARTIAL — CI #411 core pass at prior head | Core E2E passed on prior PR head; the #411 report artifact was not decoded here. Local Supabase remains blocked by disk safety, and this update's mobile Enter-activation check awaits fresh CI |
 | Independent beginner exercise                        | NOT RUN                                 | Needs real learner to write, execute and explain three cases without coaching                                                                                                                                                                      |
 | Hosted BuggyShop student environment                 | NOT VERIFIED                            | Local run only; do not assume public provision                                                                                                                                                                                                     |
 | Public BuggyShop responsive/keyboard E2E             | PASS (6/6)                              | `pnpm --filter @qa-mastery/e2e exec playwright test --config playwright.manual-bva-v2.config.ts`; real installed Chrome at 390/768/1440, quantity update, no overflow, keyboard Enter/Space, products route, visible policy; e2e TypeScript passed |
 | Public responsive screenshot evidence                | PASS                                    | Three original, unedited full-page Chrome captures preserved under `assets/buggyshop-cart-responsive-{390,768,1440}.png`, checksums in `SCREENSHOT_MANIFEST.md`                                                                                    |
 | New UX/accessibility candidate findings              | OPEN                                    | Footer/release control overlap reproduced at 390; quantity controls need more descriptive accessible names; see `BUG_BACKLOG.md`                                                                                                                   |
-| Git commit/merge/deploy                              | NOT RUN                                 | Explicit approval gate                                                                                                                                                                                                                             |
+| Branch publication / merge / deploy              | PARTIAL / NOT MERGED     | Draft PR #163 is updated by the explicitly authorized additive commit; no merge or production deploy is authorized or performed |
 
 **Observed environment issue:** Development-mode BuggyShop port 3001 cart was server-rendered but click failed to update quantity (also logged HMR WebSocket handshake errors); production-mode build port 3011 accepted the click. This difference is a test-environment finding, not proven product defect.
 
@@ -73,6 +73,16 @@ More detail: `CI_FAILURES_AND_REMEDIATION.md` and updated `CI_AUTHENTICATED_ACCE
 
 - All four core E2E shard jobs, RLS, first-paint, and BuggyAPI jobs **PASS** at `cdfa6f9`; the two authenticated manual BVA browser tests passed in Chromium and WebKit.
 - Verified **72 real scoped Playwright screenshots** (36 per browser), six light/dark × viewport combinations and six components per combination, with real source files and representative manual visual inspection. See `SCREENSHOT_MANIFEST.md`.
-- Mobile readability improvement made after reviewing actual artifacts: shorten authentic Figure caption and link to full 1440px source PNG for zoom. Guarded by a **red-first test**; it passed 6/6 locally with E2E TypeScript. CI still needs to run this new content and link.
+- Mobile readability improvement made after reviewing actual artifacts: shorten authentic Figure caption and link to full 1440px source PNG for zoom. The **red-first test** passed 6/6 locally with E2E TypeScript; CI #411 later ran with the link and its URL/resource checks but did not include the mobile Enter-activation assertion added in the current update.
 - Security gate **FAILS due inherited clean-main vulnerabilities**, not the BVA changes; the separate security-only PR #164 has a successful audit and E2E run but is still draft/unmerged.
 - Independent novice manual QA exercise remains **NOT RUN**, and no XP, grader, seeded product behavior or hosted learner data has been changed.
+
+
+## Sprint 03 authenticated acceptance update — CI #411 and mobile link test iteration (2026-10-10)
+
+- CI run `38044152969` passed all four core E2E shards at prior PR head `3e0db7195bfd1087870f777c3e80b586fb09b59d`. This predates the mobile keyboard activation test in the current authorized update.
+- The production dependency audit reported 47 findings: 7 low, 27 moderate, 10 high and 3 critical. The security and release gates failed downstream; `e2e-full` was skipped by workflow policy. PR #164 remains a separate draft and unmerged; no audit suppression or security lockfile copying.
+- A merged `playwright-report` artifact (ID `11666901713`, listed expiry 2026-10-17) exists for #411, but its ZIP contents were not decoded here. The PR description's 72/72 screenshot claim for #411 is **not independently verified**; #410's 72/72 and representative review remain verified in `SCREENSHOT_MANIFEST.md`.
+- The current update adds an authenticated 390px keyboard path: focus the full-size image anchor, press Enter, verify the navigation response is 200 `image/png`, then return to the lesson and continue its checks. A fresh exact-head CI run is required to verify the added test in Chromium and WebKit.
+- Local isolated Supabase remains **BLOCKED** by the Mac disk-safety limit. Independent beginner BVA acceptance remains **NOT RUN**. No learner XP/grading, seeded bug behavior, database, production service or deployment changed.
+

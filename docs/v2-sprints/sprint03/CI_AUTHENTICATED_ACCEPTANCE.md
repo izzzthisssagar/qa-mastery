@@ -1,7 +1,7 @@
 # Sprint 03 — CI-backed authenticated acceptance plan (WEB-S03-07)
 
 **Date:** 2026-10-10 · **Candidate branch:** `work/v2-sprint03`
-**Scope:** existing QA Mastery GitHub Actions CI, without adding hosted infrastructure or a new database. **Published in draft PR #163; initial CI failed, test-only fixes pending a follow-up run.**
+**Scope:** existing QA Mastery GitHub Actions CI, without adding hosted infrastructure or a new database. **Current status (2026-10-10):** draft PR #163's run #411 (`38044152969`) passed all four core E2E shards on prior head `3e0db7195bfd1087870f777c3e80b586fb09b59d`; its production dependency audit and downstream security/release gates failed. This update adds a mobile keyboard activation assertion for the full-size PNG link, so that change requires a fresh exact-head CI run. Local Supabase on the Mac remains blocked by the recorded disk-safety limit; CI uses disposable local Supabase on hosted runners.
 
 ## Existing CI resources, verified from source
 
@@ -28,26 +28,26 @@ The test then checks layout width at **390, 768, 1440px in both light and dark t
 | Guard GREEN                                | PASS                    | 5/5 contract checks after two red-first CI-failure regression cases                                                                                                                                                                                   |
 | E2E TypeScript                             | PASS                    | `pnpm --filter @qa-mastery/e2e typecheck` after fixing browser type                                                                                                                                                                                   |
 | Playwright collection                      | PASS                    | `playwright test --list --config playwright.config.ts manual-bva-v2-auth.spec.ts`, 2 tests collected: Chromium + WebKit                                                                                                                               |
-| Authenticated CI execution                 | **PARTIAL / FAILED CI** | Initial PR #163: authenticated Chromium ran; WebKit exceeded 32,767px on full-article screenshot. Bounded capture fix pending fresh CI                                                                                                                |
-| Screenshot visual/keyboard review          | **PENDING RERUN**       | Second iteration captures six genuine viewport-sized practice regions at each of six viewport/theme combinations (36 per browser); previous long-checklist screenshots were contaminated by fixed navigation/Feedback overlays; pending new CI review |
+| Authenticated CI execution                 | **CORE CI PASS (#411)** | All four core shards passed at prior PR head; the merged Playwright report exists but the per-spec report was not decoded in this review. Current mobile Enter-activation assertion is pending a fresh run |
+| Screenshot visual/keyboard review          | **PARTIAL / UNVERIFIED** | #410's 72/72 screenshot references and representative images were verified; #411's report artifact (ID 11666901713) exists but was not decoded. Mobile keyboard activation is pending the current commit's CI |
 | Human beginner test and release acceptance | **NOT RUN**             | Auth CI can verify UI contract, not usability/mastery                                                                                                                                                                                                 |
 | Production service/database                | UNCHANGED               | A feature branch/PR was pushed; no production merge, hosted schema modification or application deployment was initiated by this work                                                                                                                  |
 
 ## Next gated CI verification
 
-1. Commit the scoped CI failure fixes to the existing `work/v2-sprint03` branch and push an additive commit to **draft PR #163**; do not force-push or merge.
-2. Inspect the new `ci.yml` run's **core shards 1, 3 and 4**. All six public cart tests must work without depending on a Playwright `baseURL`, the bounded WebKit screenshots must complete, and the v1.1 quantity-zero test must pass without an intermittent retry.
-3. Open the merged Playwright report and inspect **36 authentic bounded figure/individual-step screenshots per browser**, covering 390/768/1440 in light/dark. No credentials, account chrome or invented screenshots.
-4. Keep the separate security PR #164 as a prerequisite. PR #163 is based on the unpatched original `main`, so its security gate will remain red until that hotfix is separately approved and merged/rebased. Do not suppress the audit or copy the security lockfile into Sprint 03.
-5. Retain one independent beginner exercise as a distinct human-learning acceptance gate. Scripted browser success does not certify grading, user comprehension or WCAG conformance.
+1. Allow the authorized additive update to draft PR #163 to trigger a fresh exact-head CI run; keep the PR in draft and do not merge.
+2. Confirm the full-size image link is visible at 390px, receives keyboard focus, and Enter navigates to the same-origin PNG with a successful `image/png` response in both Chromium and WebKit. Confirm the lesson checks continue after returning to the note.
+3. Inspect the merged Playwright report and screenshot attachments if the available artifact can be decoded. The #411 artifact is retained through 2026-10-17 but was not decoded in this review; do not treat its PR-body 72/72 count as independently verified.
+4. Keep the separate security PR #164 as an unresolved release prerequisite. PR #163 remains based on the vulnerable production dependency graph; do not suppress the audit or copy the security lockfile into Sprint 03.
+5. Retain independent beginner acceptance as a separate human-learning gate. Scripted browser success does not certify grading, user comprehension or WCAG conformance.
 
 ## Constraints
 
 - The existing preflight had only ~5.1 GiB free on Mac after successful recovery. Re-running local Supabase/Colima on that Mac is disallowed until there is adequate disk (recommend 12–15 GiB) or a disposable CI runner.
 - A successful CI run would establish **authenticated rendering and scripted interactions**; it would not certify WCAG conformance, independent learner comprehension, graded test-case quality or hosted BuggyShop provisioning.
 - Do not store access tokens, authenticated storage state, real email or personal account metadata in CI screenshot artifacts. Do not upload trace files of the auth flow.
-- Existing CI is automatic for PRs and creates local disposable users/DBs; it is not a remote Supabase data reset. The original PR CI run happened. Re-execution of the corrected cases is pending a new commit to the existing draft PR.
+- Existing CI is automatic for PRs and creates local disposable users/DBs; it is not a remote Supabase data reset. Run #411 tested the prior PR head. The mobile keyboard activation assertion in this update is pending its own fresh CI result.
 
 ### Remote-branch publication caveat
 
-Read-only workflow audit confirmed `.github/workflows/deploy.yml` and `deploy-staging.yml` run after CI only when `head_branch == 'main'`, so a feature PR is not eligible for those two production/staging deploy jobs. However, `deploy-staging.yml` itself notes that Vercel's **separate Git integration** may auto-deploy preview builds on branch pushes. No preview-deployment setting was inspected or changed here. Branch push/PR is therefore an explicit external-action approval gate, not a zero-side-effect action; check Vercel preview settings before publication.
+Read-only workflow audit confirmed `.github/workflows/deploy.yml` and `deploy-staging.yml` run after CI only when `head_branch == 'main'`, so a feature PR is not eligible for those two production/staging deploy jobs. However, `deploy-staging.yml` itself notes that Vercel's **separate Git integration** may auto-deploy preview builds on branch pushes. No preview-deployment setting was inspected or changed here. A branch push may create a Vercel preview. The user explicitly authorized this additive update to draft PR #163; preview settings were not inspected or changed.

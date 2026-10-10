@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-10 · **PR:** [#163](https://github.com/izzzthisssagar/qa-mastery/pull/163)
 **Original SHA:** `0a2304981b5baa5715ef3f41e44d34564ccfcbf2`
-**Failed CI run:** `38033582326` · **Status of corrections:** local GREEN, awaiting updated GitHub CI.
+**Failed CI run:** `38033582326` · **Historical status:** corrected changes later passed the core E2E workflow in CI #411 at the prior PR head. The mobile Enter-activation assertion added in the current PR update still needs fresh CI.
 
 ## Failure evidence from actual GitHub Actions logs
 
@@ -28,7 +28,7 @@
 - **Standalone public Chrome:** `BVA_PUBLIC_ORIGIN=http://127.0.0.1:3011 pnpm --filter @qa-mastery/e2e exec playwright test --config playwright.manual-bva-v2.config.ts` **6/6 PASS**, with real local Next production-mode BuggyShop.
 - **Release-switch:** 30/30 Chrome fresh-page original behavior observed rejecting zero under v1.1, plus **10/10 Chrome runs** with explicit release/hydration assertions. Neither result proves WebKit compatibility.
 - **WebKit on Mac:** **NOT RUN**; the locally installed Playwright package has no WebKit executable and the machine has only ~4.8 GiB free. The GitHub runner contains pinned WebKit and will rerun.
-- **Authenticated note page in CI:** actual first PR Chromium route/test passed; WebKit screenshot too tall. Both browsers' new bounded figure+checklist screenshots and full acceptance test are **NOT YET VERIFIED** and must be reviewed after the new CI run.
+- **Authenticated note page in CI:** the later CI #411 run passed all four core E2E shards at the prior PR head. Its Playwright report artifact is available but was not decoded here, so screenshot count/appearance was not independently verified. The mobile Enter-activation assertion in the current update has not yet run in CI.
 - **Security:** PR [#164](https://github.com/izzzthisssagar/qa-mastery/pull/164) has green GitHub security/CI and a zero critical/high _production_ audit; it remains **draft/unmerged**, so PR #163 still inherits the old vulnerable `main` baseline.
 - **Human learning acceptance:** **NOT RUN**, regardless of future green technical CI. A beginner still must write and execute test cases independently and provide reviewed evidence.
 
@@ -53,11 +53,20 @@ Downloaded raw `blob-report-core-core-4` artifact from this exact CI run and ins
 - The five-step checklist `section` is still taller than the 900px mobile viewport. Playwright's stitched element screenshot includes fixed header/navigation and **Feedback** controls over instructional text. This is evidence contamination and **not proof that a learner cannot scroll to see the content in a normal viewport**.
 - Original unmodified CI artifacts remain retained by GitHub (run `38038368128`); do not discard or repaint evidence.
 
-### Second evidence-design improvement (not yet tested on CI)
+### Second evidence-design improvement — CI #411 ran on the prior head
 
 - Keep the real `Figure` screenshot and capture each of the **five individual interactive checklist `<li>` elements** in place, rather than a single tall checklist `section`.
 - Scroll each element into a **normal 900px viewport** with generous top/bottom space outside fixed controls, then assert its measured rectangle fits **between y=95 and y=785**, with height at most 620 CSS px. If that cannot be achieved the test must **fail**, not silently crop the obstruction.
 - Capture the real DOM with untouched CSS, no Playwright `mask`/`style` option and no generated or edited screenshots. The resulting target is **36 element screenshots per browser**: 390, 768 and 1440 × light/dark × (1 Figure + 5 steps).
-- After a contract test went red, the implemented new method passed source contract and E2E TypeScript checks, but full browser acceptance and image inspection **remain pending CI**.
+- After a contract test went red, the implemented method passed source contract and E2E TypeScript checks. CI #411 later passed all core shards at the prior head; its report artifact exists but was not decoded for direct screenshot verification. The mobile keyboard activation assertion added in the current update remains pending CI.
 
 **Other release gates remain unchanged:** no seeded bug/XP/grader/source product edits; no security-bypass; independent human BVA worksheet acceptance NOT RUN; separate security PR #164 cannot be implicitly merged.
+
+
+## CI #411 follow-up — 2026-10-10
+
+Run `38044152969` tested PR #163 head `3e0db7195bfd1087870f777c3e80b586fb09b59d`. All four core E2E shards passed. The production dependency audit reported 47 findings (7 low, 27 moderate, 10 high, 3 critical); the security/release gates failed downstream, while `e2e-full` was skipped by workflow policy. The separate security PR #164 remains draft and unmerged.
+
+A merged `playwright-report` artifact (ID `11666901713`) is available until 2026-10-17. Its ZIP contents could not be inspected through the available connector, so the PR description's 72/72 screenshot count and visual appearance for #411 remain unverified in this review. CI #410's verified 72/72 evidence remains documented separately in `SCREENSHOT_MANIFEST.md`.
+
+The present authorized update strengthens the authenticated spec by verifying mobile-width focus and Enter activation of the full-size image link. This test change was not included in #411 and needs a fresh exact-head run. Local Supabase remains unrun on the Mac because of the documented disk-space safety limit. Independent beginner acceptance remains **NOT RUN**.

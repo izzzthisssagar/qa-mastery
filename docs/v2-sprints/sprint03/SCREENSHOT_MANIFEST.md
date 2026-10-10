@@ -1,5 +1,7 @@
 # Sprint 03 — Authentic BuggyShop screenshot provenance
 
+**Current status — 2026-10-10:** Draft PR #163 remains open and unmerged. GitHub CI run #411 (`38044152969`) passed all four core E2E shards at the prior PR head `3e0db7195bfd1087870f777c3e80b586fb09b59d`; its production dependency audit found 7 low, 27 moderate, 10 high and 3 critical findings, so the security/release gates failed downstream. The mobile Enter-activation assertion added in the current PR update was not part of #411 and is pending fresh exact-head CI. The merged `playwright-report` artifact (ID `11666901713`, expiry 2026-10-17) is available, but its contents were not decoded here; the PR description's 72/72 attachment claim for #411 is therefore not independently verified. The #410 count and representative visual review below remain verified.
+
 | Field                      | Verified value                                                                                                                             |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | Screenshot                 | `assets/buggyshop-cart-original.png`                                                                                                       |
@@ -33,7 +35,7 @@ Captured 2026-10-10 in real headless installed Chrome against production-mode lo
 
 The first authenticated WebKit result came from GitHub CI run `38038368128`, artifact `blob-report-core-core-4`. Inspected twelve real `Figure` and tall-checklist PNGs; images have not been altered or republished as learner references. The large checklist captures visibly repeat fixed navigation and Feedback UI over text due to Playwright stitching past viewport boundaries. They are **unsuitable for visual acceptance**, though the authenticated UI automation itself passed.
 
-The proposed next run will produce **36 genuine element-scoped images per browser**: each of six viewport/theme combinations has a Figure and five individual step screenshots, physically positioned between the normal viewport's fixed header and bottom controls. The browser must verify the actual element coordinates and fail if an item cannot fit. Original Figure/lesson asset and old GitHub artifacts remain intact. **New screenshots have not yet been generated or reviewed.**
+Historical status before CI #410: the proposed run targeted **36 genuine element-scoped images per browser** across six viewport/theme combinations, with a Figure and five individual checklist-step captures positioned between fixed controls. This was subsequently executed and visually reviewed for CI #410 below; the statement that screenshots were still pending is retained here only as a point-in-time record.
 
 ## GitHub CI visual audit — PR #163, run #410 (2026-10-10)
 
@@ -45,8 +47,8 @@ Downloaded the official report for **read-only visual and structural review**. D
 - **WebKit:** authenticated BVA lesson **PASS**, **36/36 authentic** PNG attachments following the exact same matrix. Files use device-pixel-ratio scaling; bounded element height never exceeds 978 px.
 - **72/72 attachment references resolve** to real image files, with unique names in each browser test. Artifact deduplication yields 62 distinct PNG binaries; a duplicate byte-identical image is not missing evidence.
 - Reviewed **representative original WebKit and Chromium light/dark/mobile/desktop screenshots**. The fixed navigation and feedback overlays previously seen in tall-element captures do not appear in the reviewed bounded examples; no personal account header/credentials appear in those reviewed examples.
-- **New learning-UX finding:** the original **1440px BuggyShop screenshot is physically too small to read when scaled down on a 390px mobile viewport**. The underlying authentic asset is correct. To improve accessibility without altering BuggyShop, the MDX note now includes a plainly labeled **full-resolution image link** and a concise caption. That change was developed using a red-first regression guard and has not yet run in GitHub CI.
+- **New learning-UX finding:** the original **1440px BuggyShop screenshot is physically too small to read when scaled down on a 390px mobile viewport**. The underlying authentic asset is correct. To improve accessibility without altering BuggyShop, the MDX note now includes a plainly labeled **full-resolution image link** and a concise caption. That change was developed using a red-first regression guard. CI #411 later ran on a head that included the link and its URL/resource checks, but not the mobile Enter-activation assertion added in the current PR update.
 
 The screenshot set validates automated visual evidence presence and representative layout at the stated widths. It **does not** prove every learner understands the exercise, that all seeded bug boundaries are correct, or that WCAG accessibility is certified.
 
-**Merge status:** Draft PR #163 remains unmerged. All four core shards in CI run #410 passed; its security audit still fails because PR #164's patched dependency baseline has not been merged into `main`. Do not suppress the gate.
+**Merge status:** Draft PR #163 remains unmerged. Run #411 passed all four core E2E shards at the prior head, while its production dependency audit and downstream security/release gates failed. PR #164 remains a separate draft and unmerged; do not suppress the audit. The mobile keyboard activation assertion in the current update still needs fresh CI.
