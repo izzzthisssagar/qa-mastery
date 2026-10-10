@@ -58,3 +58,23 @@ test("new test routes and content tie to the actual ungraded Sprint 03 BVA pilot
     /\/notes\/test-design-techniques\/boundary-value-analysis\/buggyshop-cart-v2-original\.png/,
   );
 });
+
+test("Sprint 03 public cart tests resolve a safe, explicit BuggyShop origin in the core shard", () => {
+  const spec = source("e2e/tests/manual-bva-v2-browser.spec.ts");
+  assert.match(spec, /process\.env\.NEXT_PUBLIC_BUGGYSHOP_URL/);
+  assert.match(spec, /process\.env\.BVA_PUBLIC_ORIGIN/);
+  assert.match(spec, /localhost.*127\.0\.0\.1|127\.0\.0\.1.*localhost/);
+  assert.match(spec, /page\.goto\(\`?\$\{BUGGYSHOP\}\/cart/);
+  assert.doesNotMatch(spec, /page\.goto\(["']\/cart["']/);
+});
+
+test("authenticated visual evidence is bounded to the practice figure and mission, never the tall article", () => {
+  const spec = source("e2e/tests/manual-bva-v2-auth.spec.ts");
+  assert.match(spec, /picture\.locator\("xpath=ancestor::figure"\)/);
+  assert.match(spec, /name: "guided-checklist", locator: mission/);
+  assert.match(spec, /region\.locator\.screenshot\(/);
+  assert.match(spec, /testInfo\.attach\(/);
+  assert.doesNotMatch(spec, /article\.screenshot\(/);
+  assert.match(spec, /screenshot:\s*"off"/);
+  assert.match(spec, /trace:\s*"off"/);
+});

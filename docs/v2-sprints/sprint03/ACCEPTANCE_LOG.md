@@ -45,3 +45,16 @@ Final automated re-run after the new browser test was added: curriculum **28/28*
 - **To execute:** Review and approve branch publication/PR, then examine the existing e2e-core jobs, merged Playwright report and attached screenshots. Keep deployment/merge as separate explicit decisions.
 
 See `CI_AUTHENTICATED_ACCEPTANCE.md` for exact CI paths, safe scope and next gate.
+
+## PR #163 initial GitHub CI and remediation — 2026-10-10
+
+The pre-publication entries above remain an historical record. **Current status: published draft PR #163, initial GitHub Actions run `38033582326` failed, no merge/deploy**. Exact failure logs and test-only corrections are documented in `CI_FAILURES_AND_REMEDIATION.md`.
+
+- Core shard 1 (Chromium) and shard 3 (WebKit): six new BuggyShop cart tests each failed from relative `page.goto("/cart")` because the **existing core Playwright config deliberately has no baseURL**. Now use explicit localhost/127.0.0.1 BuggyShop origin, preferring `BVA_PUBLIC_ORIGIN` for standalone tests and the existing CI `NEXT_PUBLIC_BUGGYSHOP_URL` for core runs.
+- Core shard 4 (WebKit): the complete note's screenshot exceeded WebKit's maximum 32,767-pixel dimension. Now capture only the **actual BuggyShop Figure and the guided manual QA checklist** separately for each viewport/theme (12 element-only images per browser). No fake UI, CSS changes or account chrome.
+- Core shard 4 existing v1.1 release-switch quantity-zero test had a flaky failure, passed on retry. It now waits for release v1.1 hydration, checks the input before clicking and asserts both rejection and absence of an accepted cart line. **Seeded product behavior untouched**.
+- New contract guards were **RED 2/2 before changes and GREEN 5/5 overall** after fixes. E2E TypeScript pass. Standalone local Chrome cart tests **6/6 pass** at widths 390, 768 and 1440; 10/10 additional Chrome fresh-page trials passed after the release-switch sync guard (previous unsynchronized Chrome observation 30/30).
+- **WebKit authenticated capture, WebKit release-switch and new 12-per-browser screenshot attachments remain NOT VERIFIED** until the next GitHub CI run; WebKit's local binary was absent on the Mac. The PR's separate security gate remains blocked by inherited vulnerable `main` until independently reviewed security draft PR #164 is accepted and merged.
+- Actual independent beginner BVA learning acceptance remains **NOT RUN**. No changes to learner XP/grading, auth, seeded bug manifests, SQL/RLS, or hosted services.
+
+The old release and deployment status in the preflight table is superseded by this dated PR update. The next step is a new additive commit and draft-PR CI rerun, with **no merge**.

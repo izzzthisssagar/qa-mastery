@@ -24,10 +24,19 @@ test.describe("buggyshop — release switch & retest", () => {
 
   test("v1.1 fixes BS-007: quantity 0 is rejected", async ({ page }) => {
     await page.addInitScript('localStorage.setItem("bs-release", "1.1")');
-    await page.goto("http://localhost:3001/products/tester-mug");
-    await page.getByTestId("qty-input").fill("0");
+    await page.goto("http://localhost:3001/products/tester-mug", {
+      waitUntil: "networkidle",
+    });
+    // On busy WebKit CI runners the product page can be visible before the
+    // release hydration effect has committed. Wait for the public release UI
+    // to confirm the fixture is running v1.1 before asserting its bug fix.
+    await expect(page.getByTestId("release-select")).toHaveValue("1.1");
+    const qty = page.getByTestId("qty-input");
+    await qty.fill("0");
+    await expect(qty).toHaveValue("0");
     await page.getByTestId("add-to-cart").click();
     await expect(page.getByTestId("qty-rejected")).toBeVisible();
+    await expect(page.getByTestId("cart-line")).toHaveCount(0);
   });
 
   test("switching the dropdown to v1.1 takes effect after reload", async ({ page }) => {

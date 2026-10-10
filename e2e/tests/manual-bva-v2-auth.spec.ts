@@ -58,9 +58,8 @@ test.describe("Sprint 03 BVA manual-first lesson — disposable CI learner", () 
         }),
       )
       .toBe(true);
-    await expect(
-      picture.locator("xpath=ancestor::figure").getByText(/genuine BuggyShop cart captured/i),
-    ).toBeVisible();
+    const figure = picture.locator("xpath=ancestor::figure");
+    await expect(figure.getByText(/genuine BuggyShop cart captured/i)).toBeVisible();
 
     const template = article.getByRole("link", {
       name: "blank BVA test-case and evidence template",
@@ -111,12 +110,32 @@ test.describe("Sprint 03 BVA manual-first lesson — disposable CI learner", () 
           `page overflows at ${width}px in ${theme} theme`,
         ).toBeLessThanOrEqual(width + 1);
 
-        const file = testInfo.outputPath(`bva-article-${theme}-${width}.png`);
-        await article.screenshot({ path: file, animations: "disabled", timeout: 15_000 });
-        await testInfo.attach(`bva-article-${theme}-${width}`, {
-          path: file,
-          contentType: "image/png",
-        });
+        // The complete original MDX article exceeds WebKit's 32,767px
+        // screenshot limit. Capture the authentic practice regions separately
+        // without manipulating styles or including the signed-in account chrome.
+        for (const region of [
+          { name: "reference-figure", locator: figure },
+          { name: "guided-checklist", locator: mission },
+        ]) {
+          await expect(region.locator).toBeVisible();
+          const bounds = await region.locator.boundingBox();
+          expect(bounds, "practice region must have a measurable rectangle").not.toBeNull();
+          expect(
+            bounds!.height,
+            "practice region is safely below browser image limit",
+          ).toBeLessThan(16_000);
+          const attachmentName = `bva-${region.name}-${theme}-${width}`;
+          const file = testInfo.outputPath(`${attachmentName}.png`);
+          await region.locator.screenshot({
+            path: file,
+            animations: "disabled",
+            timeout: 15_000,
+          });
+          await testInfo.attach(attachmentName, {
+            path: file,
+            contentType: "image/png",
+          });
+        }
       }
     }
 

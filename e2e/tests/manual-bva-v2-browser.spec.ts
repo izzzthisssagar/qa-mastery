@@ -1,5 +1,20 @@
 import { expect, test } from "@playwright/test";
 
+// Core CI intentionally has no Playwright baseURL. The BuggyShop webServer runs
+// separately on :3001; the standalone local pilot uses :3011. Select only a
+// loopback origin to avoid ever running the intentionally buggy QA tests on a
+// hosted service or accidentally navigating to a bare relative path.
+const configuredOrigin =
+  process.env.BVA_PUBLIC_ORIGIN ?? process.env.NEXT_PUBLIC_BUGGYSHOP_URL ?? "http://127.0.0.1:3011";
+const parsedOrigin = new URL(configuredOrigin);
+if (
+  parsedOrigin.protocol !== "http:" ||
+  !["localhost", "127.0.0.1"].includes(parsedOrigin.hostname)
+) {
+  throw new Error("Sprint 03 public BuggyShop tests only allow local origins");
+}
+const BUGGYSHOP = parsedOrigin.origin;
+
 /**
  * Smoke the real public BuggyShop production-mode cart, which is safe to
  * visit without a logged-in QA Mastery learner. This is NOT an authenticated
@@ -13,7 +28,7 @@ test.describe("Sprint 03 BVA browser evidence — public BuggyShop only", () => 
       const errors: string[] = [];
       page.on("pageerror", (error) => errors.push(error.message));
       await page.setViewportSize({ width, height: 900 });
-      const response = await page.goto("/cart", { waitUntil: "networkidle" });
+      const response = await page.goto(`${BUGGYSHOP}/cart`, { waitUntil: "networkidle" });
       expect(response?.status()).toBe(200);
       await expect(page.getByRole("heading", { name: "Cart", exact: true })).toBeVisible();
       await expect(page.getByTestId("cart-qty")).toHaveText("1");
@@ -43,7 +58,7 @@ test.describe("Sprint 03 BVA browser evidence — public BuggyShop only", () => 
   }
 
   test("quantity buttons respond to keyboard Enter and Space", async ({ page }) => {
-    await page.goto("/cart", { waitUntil: "networkidle" });
+    await page.goto(`${BUGGYSHOP}/cart`, { waitUntil: "networkidle" });
     const increment = page.getByTestId("cart-qty-increment");
     const decrement = page.getByTestId("cart-qty-decrement");
     await increment.focus();
@@ -57,14 +72,14 @@ test.describe("Sprint 03 BVA browser evidence — public BuggyShop only", () => 
   });
 
   test("products navigation is visible and navigable from the cart", async ({ page }) => {
-    await page.goto("/cart", { waitUntil: "networkidle" });
+    await page.goto(`${BUGGYSHOP}/cart`, { waitUntil: "networkidle" });
     await expect(page.getByTestId("nav-products")).toBeVisible();
     await page.getByTestId("nav-products").click();
     await expect(page).toHaveURL(/\/products$/);
   });
 
   test("written shipping requirement is visible without logging in", async ({ page }) => {
-    const response = await page.goto("/cart", { waitUntil: "networkidle" });
+    const response = await page.goto(`${BUGGYSHOP}/cart`, { waitUntil: "networkidle" });
     expect(response?.status()).toBe(200);
     await expect(
       page.getByText("Free shipping on orders over $999.", { exact: true }),
